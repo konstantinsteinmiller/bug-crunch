@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!', 'desktop': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Açıldı!'
+
+  },
+
   'result': {
     'stageClear': 'Bölüm tamamlandı!',
     'wipedOut': 'Ekip yok edildi',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Sonraki bölüm',
     'tryAgain': 'Tekrar dene',
     'upgrade': 'Geliştir',
-    'rankOf': '{n} içinde'
+    'upgradeHint': 'Takımını geliştir!',
+    'rankOf': '{n} içinde',
+    'upNext': 'Sırada: Bölüm {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': '{n} oyuncu içinde'
   },
 
+  'skills': {
+
+    'grenade': 'El Bombası',
+
+    'shield': 'Kalkan'
+
+  },
+
   'upgrades': {
     'title': 'Geliştirmeler',
     'spotlight': 'Harca!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Ateş gücü',
       'rate': 'Atış hızı',
       'range': 'Menzil',
-      'scavenge': 'Toplayıcılık'
+      'scavenge': 'Toplayıcılık',
+      'grenade': 'El Bombası',
+      'shield': 'Kalkan'
     },
     'descriptions': {
       'squad': 'Her bölüme daha çok hayatta kalanla başla.',
       'power': 'Her hayatta kalan atış başına daha çok hasar verir.',
       'rate': 'Her hayatta kalan daha hızlı ateş eder.',
       'range': 'Takımın yolda daha ileriden ateş açar.',
-      'scavenge': 'Her turdan daha çok altın kazan.'
+      'scavenge': 'Her turdan daha çok altın kazan.',
+      'grenade': 'Ağır hasar için el bombası at.',
+      'shield': 'Birkaç saniye boyunca alınan hasarı yarıya indirir.'
     }
   },
 

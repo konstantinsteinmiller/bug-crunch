@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Tarcza w górze — strzały nic nie robią. UCIEKAJ!', 'desktop': 'Tarcza w górze — strzały nic nie robią. UCIEKAJ!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Odblokowano!'
+
+  },
+
   'result': {
     'stageClear': 'Etap ukończony!',
     'wipedOut': 'Oddział wybity',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Następny etap',
     'tryAgain': 'Spróbuj ponownie',
     'upgrade': 'Ulepsz',
-    'rankOf': 'z {n}'
+    'upgradeHint': 'Ulepsz swój oddział!',
+    'rankOf': 'z {n}',
+    'upNext': 'Dalej: Poziom {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'z {n} graczy'
   },
 
+  'skills': {
+
+    'grenade': 'Granat',
+
+    'shield': 'Tarcza'
+
+  },
+
   'upgrades': {
     'title': 'Ulepszenia',
     'spotlight': 'Wydaj!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Siła ognia',
       'rate': 'Szybkostrzelność',
       'range': 'Zasięg',
-      'scavenge': 'Zbieractwo'
+      'scavenge': 'Zbieractwo',
+      'grenade': 'Granat',
+      'shield': 'Tarcza'
     },
     'descriptions': {
       'squad': 'Zaczynaj każdy etap z większą liczbą ocalałych.',
       'power': 'Każdy ocalały zadaje większe obrażenia na strzał.',
       'rate': 'Każdy ocalały strzela szybciej.',
       'range': 'Twój oddział otwiera ogień dalej na drodze.',
-      'scavenge': 'Zdobywaj więcej monet w każdej rundzie.'
+      'scavenge': 'Zdobywaj więcej monet w każdej rundzie.',
+      'grenade': 'Rzuć granat, by zadać potężne obrażenia.',
+      'shield': 'Zmniejsz o połowę obrażenia oddziału na kilka sekund.'
     }
   },
 

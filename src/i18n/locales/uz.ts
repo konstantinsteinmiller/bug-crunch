@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!', 'desktop': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Ochildi!'
+
+  },
+
   'result': {
     'stageClear': 'Bosqich tugadi!',
     'wipedOut': 'Guruh yo‘q qilindi',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Keyingi bosqich',
     'tryAgain': 'Qayta urinish',
     'upgrade': 'Yaxshilash',
-    'rankOf': '{n} dan'
+    'upgradeHint': 'Otryadingizni yaxshilang!',
+    'rankOf': '{n} dan',
+    'upNext': 'Keyingi: {n}-bosqich'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': '{n} o‘yinchidan'
   },
 
+  'skills': {
+
+    'grenade': 'Granata',
+
+    'shield': 'Qalqon'
+
+  },
+
   'upgrades': {
     'title': 'Yaxshilashlar',
     'spotlight': 'Sarflang!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Otish kuchi',
       'rate': 'Otish tezligi',
       'range': 'Masofa',
-      'scavenge': 'Yig‘ish'
+      'scavenge': 'Yig‘ish',
+      'grenade': 'Granata',
+      'shield': 'Qalqon'
     },
     'descriptions': {
       'squad': 'Har bosqichni ko‘proq omon qolgan bilan boshlang.',
       'power': 'Har bir omon qolgan har otishda ko‘proq zarar beradi.',
       'rate': 'Har bir omon qolgan tezroq otadi.',
       'range': 'Otryading yo‘lda uzoqroqdan o‘q ochadi.',
-      'scavenge': 'Har o‘yindan ko‘proq tanga oling.'
+      'scavenge': 'Har o‘yindan ko‘proq tanga oling.',
+      'grenade': "Og'ir zarar uchun granata uloqtiring.",
+      'shield': 'Bir necha soniya otryadga zararni yarmiga kamaytiradi.'
     }
   },
 

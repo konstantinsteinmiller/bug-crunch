@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': '护盾开启——射击无效，快躲开！', 'desktop': '护盾开启——射击无效，快躲开！' }
   },
 
+  'flow': {
+
+    'unlocked': '已解锁！'
+
+  },
+
   'result': {
     'stageClear': '通关！',
     'wipedOut': '小队全灭',
@@ -60,7 +66,9 @@ export default {
     'nextStage': '下一关',
     'tryAgain': '再试一次',
     'upgrade': '升级',
-    'rankOf': '共 {n} 人'
+    'upgradeHint': '升级你的队伍！',
+    'rankOf': '共 {n} 人',
+    'upNext': '下一关：第 {n} 关'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': '共 {n} 人'
   },
 
+  'skills': {
+
+    'grenade': '手雷',
+
+    'shield': '护盾'
+
+  },
+
   'upgrades': {
     'title': '升级',
     'spotlight': '去花费！',
@@ -87,14 +103,18 @@ export default {
       'power': '火力',
       'rate': '射速',
       'range': '射程',
-      'scavenge': '拾荒'
+      'scavenge': '拾荒',
+      'grenade': '手雷',
+      'shield': '护盾'
     },
     'descriptions': {
       'squad': '每关开局的幸存者更多。',
       'power': '每名幸存者每发伤害更高。',
       'rate': '每名幸存者射击更快。',
       'range': '你的小队能在更远处开火。',
-      'scavenge': '每局获得更多金币。'
+      'scavenge': '每局获得更多金币。',
+      'grenade': '投掷手雷造成大量伤害。',
+      'shield': '数秒内使队伍受到的伤害减半。'
     }
   },
 

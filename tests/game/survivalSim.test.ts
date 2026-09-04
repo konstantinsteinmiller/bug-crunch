@@ -3,7 +3,7 @@ import {
   BASE_DAMAGE, BASE_FIRE_RATE, CRATE_DAMAGE_GAIN, CRATE_RATE_GAIN, GATE_LEAF_X,
   GATE_TICK_MS, LANE_HALF, MAX_FIRE_RATE, RETRY_HP_RELIEF
 } from '@/game/survival'
-import { buildTrack } from '@/game/track'
+import { buildTrack, CRATE_DETOUR_X } from '@/game/track'
 import { foeDef } from '@/game/foes'
 import { drainFx, type FxEvent } from '@/use/useVfx'
 
@@ -154,8 +154,14 @@ describe('a +N gate is a decision about TIME, not about firepower', () => {
 
     const stamps: number[] = []
     let last = -1
+    // Pin to ONE leaf by id. Watching "any leaf left of centre" silently spans
+    // two banks the moment a stage has a second one in view — the gap it then
+    // reports is the crowd's travel time between banks, not a pump tick.
+    let watched = -1
     for (let i = 0; i < 300; i++) {
-      const leaf = game.getGates().find((g) => g.x < 0)
+      const gates = game.getGates()
+      if (watched < 0) watched = gates.find((g) => g.x < 0)?.id ?? -1
+      const leaf = gates.find((g) => g.id === watched)
       if (leaf && leaf.value !== last) {
         if (last >= 0) stamps.push(game.nowMs())
         last = leaf.value
@@ -246,10 +252,28 @@ describe('everything you failed to destroy kills you', () => {
 
   it('kills survivors that walk into an unbroken crate', async () => {
     const game = await importGame()
-    game.startStage(1)
+    // Stage 10 and a HEAVY box, rather than stage 1 and the first box.
+    //
+    // Stage 1 now opens with the teaching wall, whose crates are pinned to 1 HP
+    // precisely so the first crate in the game can never bill anybody — it is
+    // there to show that a box is a reward. That makes it useless as a subject
+    // here, and it also makes everything behind it useless: the wall hands the
+    // squad enough fire rate that it shoots the next crate down at range.
+    //
+    // The rule under test is the other half of "a crate is an obstacle that
+    // becomes a reward if you shoot it", so it needs a box still standing when
+    // the crowd arrives — which means one priced beyond what the squad can clear
+    // in the two units of road it gets after the swerve commits.
+    game.startStage(10)
 
-    const mark = swerveIntoFirst(game, -GATE_LEAF_X, () => game.getCrates()[0], 2.4)
+    const heaviestAhead = () => game.getCrates()
+      .filter((c) => c.hp >= 12)
+      .sort((a, b) => b.hp - a.hp)[0]
+
+    const mark = swerveIntoFirst(game, -GATE_LEAF_X, heaviestAhead, 2.4)
     expect(mark, 'no crate streamed in').not.toBeNull()
+    expect(game.squadCount.value, 'the squad wiped, so the cause is not isolated')
+      .toBeGreaterThan(0)
 
     const deaths = game.deathBreakdown()
     // A `crate` death IS the proof that the crate was live: `stepCrates` skips
@@ -326,7 +350,7 @@ describe('a ÷N leaf halves the crowd that walked into it', () => {
   // and it has to take a REAL, arithmetic bite — "some survivors died" would be
   // indistinguishable from a foe biting, and the player would learn nothing.
 
-  it('leaves floor(n / 2) of the survivors that went through, tallied as a trap', async () => {
+  it('leaves floor(n / value) of the survivors that went through, tallied as a trap', async () => {
     const game = await importGame()
     // Stage 2's second bank is `+6 | ÷2`, and the ÷2 is the right-hand leaf.
     game.startStage(2)
@@ -335,9 +359,17 @@ describe('a ÷N leaf halves the crowd that walked into it', () => {
 
     let before = 0
     let trapDelta = 0
+    // The divisor is READ, not assumed. A trap pumps under fire now, and a crowd
+    // driving into one is by definition shooting it — so by the time they arrive
+    // the door says more than the `÷2` it was authored as. That is the mechanic,
+    // not a discrepancy: the rule is "keep a `value`-th of who walked in", and
+    // `value` is whatever the player has pumped it to.
+    let divisor = 2
     for (let i = 0; i < 3000; i++) {
       const squadBefore = game.squadCount.value
       const trapBefore = game.deathBreakdown().trap
+      const live = game.getGates().find((g) => g.op === 'div' && !g.used)
+      if (live) divisor = live.value
       game.step(STEP_MS)
       const trapAfter = game.deathBreakdown().trap
       if (trapAfter > trapBefore) {
@@ -349,10 +381,15 @@ describe('a ÷N leaf halves the crowd that walked into it', () => {
     }
 
     expect(before, 'the crowd never reached a ÷ leaf').toBeGreaterThan(1)
-    // Half the crowd, rounded DOWN, walks back out. The loss is a `trap`, not a
-    // `divider` — the leaf itself did this, not the pillar beside it.
-    expect(trapDelta).toBe(before - Math.floor(before / 2))
-    expect(game.squadCount.value).toBe(Math.floor(before / 2))
+    expect(divisor, 'the trap never pumped, so this is not testing the live rule')
+      .toBeGreaterThan(2)
+
+    // A `value`-th of the crowd, rounded DOWN, walks back out. The loss is a
+    // `trap`, not a `divider` — the leaf itself did this, not the pillar beside
+    // it.
+    const kept = Math.floor(before / Math.max(2, divisor))
+    expect(trapDelta).toBe(before - kept)
+    expect(game.squadCount.value).toBe(kept)
     expect(game.deathBreakdown().divider).toBe(0)
   })
 })
@@ -362,10 +399,20 @@ describe('fire rate is earned in the run', () => {
   // every other stat feel good. It starts crawling, it never moves on its own,
   // and the only thing that raises it is a rate crate — which the generator
   // always parks off the straight line.
+  //
+  // These run on stage 2, not stage 1, and the reason is deliberate rather than
+  // incidental: stage 1 now opens with the teaching wall, whose boxes carry an
+  // explicit `gain` so that the whole seven-box row is worth about one ordinary
+  // crate (see `TUTORIAL_WALL_RATE_TOTAL`). That is the one place in the game
+  // where "a rate crate is worth CRATE_RATE_GAIN" is deliberately untrue, so it
+  // is the one place that cannot be used to test the rule. Stage 2 is the first
+  // stage priced at the ordinary economy.
+  //
+  // `firstPickup.test.ts` owns the wall's own pricing.
 
   it('starts at the meta value and moves only when a crate pays out', async () => {
     const game = await importGame()
-    game.startStage(1)
+    game.startStage(2)
     expect(game.runFireRate.value).toBe(BASE_FIRE_RATE)
     expect(game.damage.value).toBe(BASE_DAMAGE)
     drainFx()
@@ -391,17 +438,17 @@ describe('fire rate is earned in the run', () => {
 
   it('rises by exactly CRATE_RATE_GAIN per rate crate, and nothing else', async () => {
     const game = await importGame()
-    game.startStage(1)
+    game.startStage(2)
     game.debugAddUnits(30)
     game.steerTo(-GATE_LEAF_X)
     drainFx()
 
-    // Stage 1 parks a rate crate dead centre at y = 27. Swing onto its line once
-    // the opening bank is behind the crowd (gates eat rounds, so nothing beyond
-    // one can be shot until it is spent) and shoot it down.
+    // Stage 2's split pair parks a rate crate on the left shoulder at y = 26.
+    // Swing onto its line once the opening bank is behind the crowd (gates eat
+    // rounds, so nothing beyond one can be shot until it is spent).
     let rateBreaks = 0
     for (let i = 0; i < 900; i++) {
-      if (game.anchor().y > 18) game.steerTo(0)
+      if (game.anchor().y > 18) game.steerTo(-CRATE_DETOUR_X - 0.3)
       game.step(STEP_MS)
       for (const e of drainFx()) {
         if (e.kind === 'crateBreak' && e.crate === 'rate') rateBreaks++
@@ -418,7 +465,7 @@ describe('fire rate is earned in the run', () => {
 
   it('never climbs past MAX_FIRE_RATE', async () => {
     const game = await importGame()
-    game.startStage(1)
+    game.startStage(2)
     game.debugAddUnits(30)
     // Half a crate short of the ceiling: the next one has to clamp, not overshoot.
     game.debugAddFireRate(MAX_FIRE_RATE - BASE_FIRE_RATE - CRATE_RATE_GAIN / 2)
@@ -427,7 +474,7 @@ describe('fire rate is earned in the run', () => {
 
     let rateBreaks = 0
     for (let i = 0; i < 900; i++) {
-      if (game.anchor().y > 18) game.steerTo(0)
+      if (game.anchor().y > 18) game.steerTo(-CRATE_DETOUR_X - 0.3)
       game.step(STEP_MS)
       for (const e of drainFx()) {
         if (e.kind === 'crateBreak' && e.crate === 'rate') rateBreaks++
@@ -444,10 +491,11 @@ describe('fire rate is earned in the run', () => {
 
   it('gives damage crates to damage and nothing to fire rate', async () => {
     const game = await importGame()
-    game.startStage(1)
+    game.startStage(2)
     game.debugAddUnits(30)
-    // Stage 1's damage crates both sit at x = 2.45; hold that line for the run.
-    game.steerTo(2.45)
+    // Stage 2's split pair puts the damage crate on the right shoulder; hold
+    // that line for the run.
+    game.steerTo(CRATE_DETOUR_X + 0.3)
     drainFx()
 
     let rateBreaks = 0
@@ -476,8 +524,10 @@ describe('minibosses are the midpoint win, not the climax', () => {
   // the way there — and a wipe that costs a third of a stage instead of all of
   // it. Which only works if beating one does NOT end the stage.
 
-  it('puts at least one elite on every stage past the first', () => {
-    expect(buildTrack(1).events.some((e) => e.kind === 'miniboss')).toBe(false)
+  it('puts at least one elite on every stage, including the first', () => {
+    // Stage 1 gained one — a weakened `tutorial` elite standing in for the boss
+    // it no longer has, so the opening still ends on a fight the player wins.
+    expect(buildTrack(1).events.filter((e) => e.kind === 'miniboss')).toHaveLength(1)
     for (let stage = 2; stage <= 25; stage++) {
       const elites = buildTrack(stage).events.filter((e) => e.kind === 'miniboss')
       expect(elites.length, `stage ${stage} has no miniboss`).toBeGreaterThanOrEqual(1)
@@ -559,7 +609,10 @@ describe('the boss can actually reach the crowd', () => {
 
   it('kills survivors of a stationary crowd within a few slam cycles', async () => {
     const game = await importGame()
-    game.startStage(1)
+    // Stage 2: stage 1's boss swings for a token share of the crowd
+    // (`TUTORIAL_SLAM_FRACTION`, a body or two), which is the wrong road to
+    // measure "a stationary crowd gets punished" on.
+    game.startStage(2)
     // Enough bodies to survive the road, and deliberately NO extra damage: the
     // boss has to live long enough to swing.
     game.debugAddUnits(60)

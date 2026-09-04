@@ -87,6 +87,27 @@ export const ONBOARDED_KEY = 'ts_onboarded'
 export const TUTORIAL_KEY = 'ts_tutorial_seen'
 /** One-time "you can afford an upgrade" spotlight on the shop button. */
 export const SHOP_SPOTLIGHT_KEY = 'ts_shop_spotlight_seen'
+
+/**
+ * How many result screens the player has seen — death and stage-clear alike.
+ *
+ * Drives the one-off pointer at the upgrade button: a 500-player Poki fit test
+ * had 64 % of sessions ending inside two minutes, and the shop is the thing that
+ * makes the next run different from the last one. A player who never notices it
+ * is playing the same losing run over and over. Shown on the first few screens
+ * only — after that it is nagging.
+ */
+export const RESULTS_SEEN_KEY = 'ts_results_seen'
+
+/**
+ * When each active skill next comes off cooldown, as absolute epoch ms.
+ *
+ * Absolute timestamps, and stored in the save blob, because the cooldown is
+ * meant to run ACROSS runs: a player who could reset a thirty-second clock by
+ * dying and retrying would have no reason not to, and the skill would stop
+ * being a decision about when to spend it.
+ */
+export const SKILL_READY_KEY = 'ts_skill_ready'
 /**
  * One-time "the boss shielded and your fire stopped working" primer.
  *

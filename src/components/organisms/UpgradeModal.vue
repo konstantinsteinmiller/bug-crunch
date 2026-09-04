@@ -41,7 +41,12 @@ const TRACK_ICONS: Partial<Record<UpgradeId, GameIconName>> = {
   squad: 'squad',
   power: 'bolt',
   rate: 'rate',
-  range: 'range'
+  range: 'range',
+  // The two ACTIVE tracks. They carry the same glyphs the in-run buttons do, so
+  // the thing bought here and the thing pressed there are recognisably one
+  // object — see `SkillBar.vue`.
+  grenade: 'bomb',
+  shield: 'shield'
 }
 
 /** Bumped on every purchase so the computed rows re-read the level refs. */
@@ -208,6 +213,12 @@ const suffix = (id: UpgradeId): string => (id === 'scavenge' || id === 'range' ?
     color: #c8a6ff
   &.is-scavenge
     color: #ffd93c
+  // Warm for the one that deals damage, cool for the one that prevents it —
+  // matching the button tints in the HUD.
+  &.is-grenade
+    color: #ff9a5a
+  &.is-shield
+    color: #7fe3ff
 
 .upgrade__body
   display: flex

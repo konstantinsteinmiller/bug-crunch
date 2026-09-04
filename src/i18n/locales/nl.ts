@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Schild op — je schoten doen niets. WEGWEZEN!', 'desktop': 'Schild op — je schoten doen niets. WEGWEZEN!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Vrijgespeeld!'
+
+  },
+
   'result': {
     'stageClear': 'Level gehaald!',
     'wipedOut': 'Team weggevaagd',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Volgend level',
     'tryAgain': 'Opnieuw',
     'upgrade': 'Upgraden',
-    'rankOf': 'van {n}'
+    'upgradeHint': 'Upgrade je team!',
+    'rankOf': 'van {n}',
+    'upNext': 'Hierna: Level {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'van {n} spelers'
   },
 
+  'skills': {
+
+    'grenade': 'Granaat',
+
+    'shield': 'Schild'
+
+  },
+
   'upgrades': {
     'title': 'Upgrades',
     'spotlight': 'Uitgeven!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Vuurkracht',
       'rate': 'Vuursnelheid',
       'range': 'Bereik',
-      'scavenge': 'Sprokkelen'
+      'scavenge': 'Sprokkelen',
+      'grenade': 'Granaat',
+      'shield': 'Schild'
     },
     'descriptions': {
       'squad': 'Begin elk level met meer overlevenden.',
       'power': 'Elke overlevende doet meer schade per schot.',
       'rate': 'Elke overlevende schiet sneller.',
       'range': 'Je team opent verder op de weg het vuur.',
-      'scavenge': 'Verdien meer munten per run.'
+      'scavenge': 'Verdien meer munten per run.',
+      'grenade': 'Gooi een granaat voor een uitbarsting van schade.',
+      'shield': 'Halveer de schade aan je team voor enkele seconden.'
     }
   },
 

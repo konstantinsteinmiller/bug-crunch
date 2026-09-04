@@ -113,7 +113,13 @@ describe('the crowd behaves like a swarm against the rail, not a ghost through i
     // on the anchor either way, so it still ends up inside the formation, but
     // the centre line is where a passage rib stands and driving into stone
     // would end the run long before the leash ever expired.
-    game.startStage(14)
+    // Stage 10 rather than 14. These are tests about crowd physics, and stage 14
+    // is now an authored weave (chicane, pincer, passage, chicane) that kills an
+    // under-gunned crowd long before it ever meets the elite — the fixture has
+    // to be a road this squad survives, not a road that proves a point about
+    // difficulty. Stage 10's elite is still unkillable by forty survivors with no
+    // upgrades, which is the condition the test actually needs.
+    game.startStage(10)
     game.debugAddUnits(40)
     game.steerTo(GATE_LEAF_X)
 
@@ -365,7 +371,12 @@ describe('a monster knocks a rank down, not a column', () => {
     try {
       const game = await importGame()
       const { FOE_COLLIDE_IFRAMES_MS } = await import('@/game/survival')
-      game.startStage(10)
+      // Stage 13 — the open-road herd. This test needs a COLLISION SURVIVOR, so
+      // the fixture has to be weak bodies met early with no layout in the way:
+      // stage 10 opens with brutes (a collision there kills outright) and the
+      // authored stages either side put chicanes and ribs before their first
+      // pack. Stage 13 is creeps at a sixth of the road with nothing else on it.
+      game.startStage(13)
       game.debugAddUnits(30)
 
       let sawInv = false
@@ -518,11 +529,11 @@ describe('a passage takes the choice away before the bank, not at it', () => {
       // Drive a full-size crowd down one corridor and out the far door. The
       // rib is lethal, so "the crowd fits" is not a matter of taste: without
       // the funnel squeezing it to fit, this bleeds the whole flank.
-      const t = buildTrack(9)
+      const t = buildTrack(6)
       const rib = t.events.find((e) => e.kind === 'rocks' && e.passage === true)
-      expect(rib, 'stage 9 printed no passage').toBeDefined()
+      expect(rib, 'stage 6 printed no passage').toBeDefined()
 
-      game.startStage(9)
+      game.startStage(6)
       game.debugAddUnits(300)
       const before = game.squadCount.value
       for (let i = 0; i < 4000; i++) {
@@ -543,8 +554,8 @@ describe('a passage squeezes the crowd and gives it back', () => {
     const { CROWD_MAX_R, GATE_LEAF_X } = await import('@/game/survival')
     const restore = withSeed(20260815)
     try {
-      const rib = buildTrack(9).events.find((e) => e.kind === 'rocks' && e.passage === true)!
-      game.startStage(9)
+      const rib = buildTrack(6).events.find((e) => e.kind === 'rocks' && e.passage === true)!
+      game.startStage(6)
       game.debugAddUnits(300)
 
       let inside = CROWD_MAX_R

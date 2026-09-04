@@ -101,6 +101,9 @@ export default {
   },
 
   // ─── Result / stage summary ───────────────────────────────────────────────
+  'flow': {
+    'unlocked': 'Unlocked!'
+  },
   'result': {
     'stageClear': 'Stage Clear!',
     'wipedOut': 'Squad Wiped Out',
@@ -124,7 +127,9 @@ export default {
     'nextStage': 'Next stage',
     'tryAgain': 'Try again',
     'upgrade': 'Upgrade',
-    'rankOf': 'of {n}'
+    'upgradeHint': 'Upgrade your squad!',
+    'rankOf': 'of {n}',
+    'upNext': 'Up next: Stage {n}'
   },
 
   // ─── Leaderboard ──────────────────────────────────────────────────────────
@@ -150,6 +155,10 @@ export default {
   },
 
   // ─── Upgrades ─────────────────────────────────────────────────────────────
+  'skills': {
+    'grenade': 'Grenade',
+    'shield': 'Shield'
+  },
   'upgrades': {
     'title': 'Upgrades',
     'spotlight': 'Spend!',
@@ -160,14 +169,18 @@ export default {
       'power': 'Firepower',
       'rate': 'Fire Rate',
       'range': 'Reach',
-      'scavenge': 'Scavenging'
+      'scavenge': 'Scavenging',
+      'grenade': 'Grenade',
+      'shield': 'Shield'
     },
     'descriptions': {
       'squad': 'Start every stage with more survivors.',
       'power': 'Every survivor deals more damage per shot.',
       'rate': 'Every survivor shoots faster.',
       'range': 'Your squad opens fire further up the road.',
-      'scavenge': 'Earn more coins from every run.'
+      'scavenge': 'Earn more coins from every run.',
+      'grenade': 'Throw a grenade for a burst of heavy damage.',
+      'shield': 'Halve the damage your squad takes for a few seconds.'
     }
   },
 

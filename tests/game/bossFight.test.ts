@@ -127,15 +127,20 @@ describe('the boss cannot be skipped', () => {
 describe('a long fight is a losing fight', () => {
   it('brings each swing sooner and further than the last', async () => {
     const game = await importGame()
-    // Stage 1, because it is the only stage with no miniboss on it: an elite
-    // that plants and blocks the road turns "how long does this run take" into
-    // a coin flip, and this test is about the boss's cadence, not the road.
+    // Stage 2, and a big crowd. This used to run on stage 1 because that was the
+    // only road with no miniboss on it — an elite that plants and blocks the way
+    // turns "how long does this run take" into a coin flip, and this test is
+    // about the boss's cadence, not the road. Stage 1 has an elite of its own
+    // AND a boss, but that boss is a tutorial piece — one guard gate instead of
+    // two, a token swing (`TUTORIAL_SLAM_FRACTION`) — so its cadence is
+    // deliberately not the game's. Stage 2 is the first ordinary one; the crowd
+    // is oversized so its one elite is walked through rather than fought.
     //
     // The boss is then held open — its health pinned — for the same reason the
     // elite tests pin theirs. The rule under test is "a long fight gets worse",
     // so the fight has to be long by construction rather than by luck.
-    game.startStage(1)
-    game.debugAddUnits(150)
+    game.startStage(2)
+    game.debugAddUnits(220)
 
     let firstSpan = -1
     let lastSpan = -1

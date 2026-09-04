@@ -32,7 +32,9 @@ export const GAME_ICON_NAMES = [
   // `UpgradeModal.vue`, which is the exact duplication this module exists to
   // end. Geometry moved verbatim from those call sites — they are tuned against
   // each other's weight in the HUD strip, so redraw them together or not at all.
-  'squad', 'bolt', 'rate', 'range', 'flame', 'skull'
+  'squad', 'bolt', 'rate', 'range', 'flame', 'skull',
+  // Active skills — see `SkillBar.vue`.
+  'bomb', 'shield'
 ] as const
 
 export type GameIconName = (typeof GAME_ICON_NAMES)[number]

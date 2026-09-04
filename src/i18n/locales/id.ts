@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!', 'desktop': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Terbuka!'
+
+  },
+
   'result': {
     'stageClear': 'Tahap selesai!',
     'wipedOut': 'Regu habis',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Tahap berikutnya',
     'tryAgain': 'Coba lagi',
     'upgrade': 'Tingkatkan',
-    'rankOf': 'dari {n}'
+    'upgradeHint': 'Tingkatkan pasukanmu!',
+    'rankOf': 'dari {n}',
+    'upNext': 'Berikutnya: Level {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'dari {n} pemain'
   },
 
+  'skills': {
+
+    'grenade': 'Granat',
+
+    'shield': 'Perisai'
+
+  },
+
   'upgrades': {
     'title': 'Peningkatan',
     'spotlight': 'Belanja!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Daya tembak',
       'rate': 'Laju tembak',
       'range': 'Jangkauan',
-      'scavenge': 'Pemulungan'
+      'scavenge': 'Pemulungan',
+      'grenade': 'Granat',
+      'shield': 'Perisai'
     },
     'descriptions': {
       'squad': 'Mulai tiap tahap dengan lebih banyak penyintas.',
       'power': 'Tiap penyintas memberi damage lebih besar per tembakan.',
       'rate': 'Tiap penyintas menembak lebih cepat.',
       'range': 'Pasukanmu melepas tembakan lebih jauh di jalan.',
-      'scavenge': 'Dapatkan lebih banyak koin tiap ronde.'
+      'scavenge': 'Dapatkan lebih banyak koin tiap ronde.',
+      'grenade': 'Lempar granat untuk ledakan kerusakan besar.',
+      'shield': 'Kurangi setengah kerusakan pada pasukan beberapa detik.'
     }
   },
 

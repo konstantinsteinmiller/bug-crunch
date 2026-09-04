@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': '실드 전개 — 공격이 통하지 않는다. 피해!', 'desktop': '실드 전개 — 공격이 통하지 않는다. 피해!' }
   },
 
+  'flow': {
+
+    'unlocked': '해금!'
+
+  },
+
   'result': {
     'stageClear': '스테이지 클리어!',
     'wipedOut': '부대 전멸',
@@ -60,7 +66,9 @@ export default {
     'nextStage': '다음 스테이지',
     'tryAgain': '다시 시도',
     'upgrade': '업그레이드',
-    'rankOf': '{n}명 중'
+    'upgradeHint': '부대를 강화하세요!',
+    'rankOf': '{n}명 중',
+    'upNext': '다음: 스테이지 {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': '{n}명 중'
   },
 
+  'skills': {
+
+    'grenade': '수류탄',
+
+    'shield': '방패'
+
+  },
+
   'upgrades': {
     'title': '업그레이드',
     'spotlight': '사용!',
@@ -87,14 +103,18 @@ export default {
       'power': '화력',
       'rate': '연사 속도',
       'range': '사거리',
-      'scavenge': '수집'
+      'scavenge': '수집',
+      'grenade': '수류탄',
+      'shield': '방패'
     },
     'descriptions': {
       'squad': '더 많은 생존자로 스테이지를 시작합니다.',
       'power': '생존자마다 한 발당 피해량이 증가합니다.',
       'rate': '모든 생존자가 더 빠르게 사격합니다.',
       'range': '부대가 더 멀리서 사격을 시작합니다.',
-      'scavenge': '한 판마다 더 많은 코인을 얻습니다.'
+      'scavenge': '한 판마다 더 많은 코인을 얻습니다.',
+      'grenade': '수류탄을 던져 큰 피해를 줍니다.',
+      'shield': '몇 초 동안 부대가 받는 피해를 절반으로 줄입니다.'
     }
   },
 

@@ -1,6 +1,6 @@
 {
   "name": "survivalist",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,6 +23,7 @@
     "deploy": "vite build && surge dist/ --domain survivalist.surge.sh",
     "validated-build": "vue-tsc -b && vite build",
     "type-check": "vue-tsc --build",
+    "perf:ab": "node scripts/perf-ab.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

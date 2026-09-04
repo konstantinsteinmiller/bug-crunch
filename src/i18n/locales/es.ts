@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!', 'desktop': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!' }
   },
 
+  'flow': {
+
+    'unlocked': '¡Desbloqueado!'
+
+  },
+
   'result': {
     'stageClear': '¡Nivel superado!',
     'wipedOut': 'Escuadrón aniquilado',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Siguiente nivel',
     'tryAgain': 'Reintentar',
     'upgrade': 'Mejorar',
-    'rankOf': 'de {n}'
+    'upgradeHint': '¡Mejora tu escuadrón!',
+    'rankOf': 'de {n}',
+    'upNext': 'A continuación: Nivel {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'de {n} jugadores'
   },
 
+  'skills': {
+
+    'grenade': 'Granada',
+
+    'shield': 'Escudo'
+
+  },
+
   'upgrades': {
     'title': 'Mejoras',
     'spotlight': '¡Gasta!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Potencia',
       'rate': 'Cadencia',
       'range': 'Alcance',
-      'scavenge': 'Carroñeo'
+      'scavenge': 'Carroñeo',
+      'grenade': 'Granada',
+      'shield': 'Escudo'
     },
     'descriptions': {
       'squad': 'Empieza cada nivel con más supervivientes.',
       'power': 'Cada superviviente hace más daño por disparo.',
       'rate': 'Cada superviviente dispara más rápido.',
       'range': 'Tu escuadrón abre fuego más lejos en la carretera.',
-      'scavenge': 'Gana más monedas en cada partida.'
+      'scavenge': 'Gana más monedas en cada partida.',
+      'grenade': 'Lanza una granada para un estallido de daño.',
+      'shield': 'Reduce a la mitad el daño a tu escuadrón unos segundos.'
     }
   },
 

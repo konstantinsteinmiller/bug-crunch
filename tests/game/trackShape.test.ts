@@ -6,7 +6,9 @@ import {
   crateHp,
   maxTriples,
   minDamageCrates,
+  minibossHp,
   minRateCrates,
+  tutorialBossHp,
   MIN_RUN_GAP,
   SUB_EARLIEST,
   MINIBOSS_STAGE_THIRD,
@@ -19,6 +21,10 @@ import {
   type Track,
   type TrackEvent
 } from '@/game/track'
+import { bossDesign, foeDef } from '@/game/foes'
+import {
+  BOSS_BASE_HP, bossGuardGates, gateMulOpen, SLAM_MAX_FRACTION, TUTORIAL_SLAM_FRACTION
+} from '@/game/survival'
 import {
   CROWD_MAX_R,
   GATE3_DIVIDER_X,
@@ -324,18 +330,51 @@ describe('the three-leaf bank is a spike, not the default', () => {
 })
 
 describe('traps and multipliers arrive on schedule', () => {
-  it('never puts a trap or a multiplier on stage 1', () => {
-    for (const bank of gateBanks(1)) {
-      for (const leaf of bank.leaves) expect(leaf.op).toBe('add')
+  it('never puts anything on stage 1 that can take from the player', () => {
+    // Stage 1 used to be adds and nothing else. It now closes on a x2 — see the
+    // swell in `stageOne` — because a stage that only ever teaches is a stage
+    // nobody stays for, and the crowd exploding is what this genre is FOR.
+    //
+    // What must never appear there is a leaf that costs: no trap, no bill. The
+    // multiplier is allowed precisely because both leaves of that bank are good,
+    // so the door cannot be answered wrongly.
+    const banks = gateBanks(1)
+    for (const bank of banks) {
+      for (const leaf of bank.leaves) {
+        expect(['add', 'mul'], `stage 1 offered ${leaf.op}${leaf.value}`).toContain(leaf.op)
+      }
     }
+
+    // Every multiplier is a x2 — stage 1 never sees a x3 — and no bank offers
+    // two of them: a x2 against a x2 is the same non-decision as `+7 | +8`,
+    // which is the shape rule 4b in `legalise` exists to remove.
+    const muls = banks.flatMap((b) => b.leaves.filter((l) => l.op === 'mul'))
+    expect(muls.length).toBeGreaterThan(0)
+    // The OPEN value of a x2 door, not the headline: a multiplier arrives at
+    // four fifths of what it is called and is pumped back up (`gateMulOpen`).
+    for (const m of muls) expect(m.value).toBe(gateMulOpen(2))
+    for (const bank of banks) {
+      expect(bank.leaves.filter((l) => l.op === 'mul').length).toBeLessThanOrEqual(1)
+    }
+
+    // And one of them lands late: the swell is the pay-off the stage builds to.
+    const swell = banks.filter((b) => b.leaves.some((l) => l.op === 'mul')).at(-1)!
+    expect(swell.y).toBeGreaterThan(track(1).arenaY * 0.6)
   })
 
   it('holds ÷3 until stage 4, ÷5 until stage 6 and ×3 until stage 8', () => {
     for (const stage of STAGES) {
       for (const bank of gateBanks(stage)) {
         for (const leaf of bank.leaves) {
-          if (leaf.op === 'mul') expect(leaf.value === 2 || leaf.value === 3).toBe(true)
-          if (leaf.op === 'mul' && leaf.value >= 3) expect(stage).toBeGreaterThanOrEqual(8)
+          // Doors are on the road at their OPEN value, so the schedule is
+          // asserted there: a `x3` is a `x2.4` until the crowd shoots it.
+          if (leaf.op === 'mul') {
+            expect([gateMulOpen(2), gateMulOpen(3)], `stage ${stage} rolled ×${leaf.value}`)
+              .toContain(leaf.value)
+          }
+          if (leaf.op === 'mul' && leaf.value >= gateMulOpen(3)) {
+            expect(stage).toBeGreaterThanOrEqual(8)
+          }
           // Three rungs of trap, each with its own unlock. `÷3` is the middle
           // one — harsh enough to be a real decision, survivable enough to be
           // worth offering against something good.
@@ -430,8 +469,63 @@ describe('a stage gives the run what it needs', () => {
     }
   })
 
+  it('gives stage 1 exactly one weakened elite and no boss', () => {
+    // The opening used to be a full stage plus a full boss. A 500-player Poki
+    // fit test put 64 % of sessions under two minutes against a gate wanting
+    // 25 % past three, so stage 1 is a ~30 s teach: one elite the player cannot
+    // really lose to, then the same creature again at boss size.
+    //
+    // It briefly had no boss at all, and that was worse — a level that simply
+    // stops reads as unfinished. The fix was the boss's PRICE, not its absence.
+    const elites = track(1).events.filter((e) => e.kind === 'miniboss')
+    expect(elites).toHaveLength(1)
+
+    const elite = elites[0]!
+    expect(elite.kind === 'miniboss' && elite.hpScale).toBeGreaterThan(0)
+    // Last thing on the road, but with road left after it: the player beats the
+    // small one, runs, and then meets the big one in the arena.
+    expect(elite.y).toBeGreaterThan(track(1).arenaY * 0.7)
+    expect(elite.y).toBeLessThan(track(1).arenaY)
+  })
+
+  it('makes the stage-1 boss the same body as the elite on that road', () => {
+    // Same rule as stage 2, one stage earlier: the first big thing a player
+    // ever meets is not a new silhouette. They beat a small one at the end of
+    // the road and meet it again, bigger, in the arena — "I know what that is"
+    // rather than "what is that".
+    const elite = track(1).events.find((e) => e.kind === 'miniboss')
+    expect(elite).toBeDefined()
+    const typeId = elite && elite.kind === 'miniboss' ? elite.typeId : ''
+    expect(foeDef(typeId).designs[0]).toBe(bossDesign(1))
+  })
+
+  it('prices the stage-1 boss as a victory lap, not as a test', () => {
+    // It has to fall over. A first-time player arrives with a squad they only
+    // half understand, and the beat exists to end the level on a win.
+    expect(tutorialBossHp()).toBeLessThan(BOSS_BASE_HP * 0.2)
+    // …and still be worth more than the elite they just beat, or it is not a
+    // climax, it is a straggler.
+    expect(tutorialBossHp()).toBeGreaterThan(minibossHp(1, false, 'tutorial'))
+
+    // One guard phase, not the usual two: the gate is what stops a well-played
+    // squad deleting it in half a second, and two is where the slams came from.
+    expect(bossGuardGates(1)).toHaveLength(1)
+    expect(bossGuardGates(2)).toHaveLength(2)
+    // And its swing is a token against the ordinary one.
+    expect(TUTORIAL_SLAM_FRACTION).toBeLessThan(SLAM_MAX_FRACTION / 2)
+  })
+
+  it('makes the stage-2 boss the same body as the elite on that road', () => {
+    // The first boss a player ever meets is not a new silhouette: they beat a
+    // small one halfway down stage 2 and meet it again, bigger, at the end.
+    const elite = track(2).events.find((e) => e.kind === 'miniboss')
+    expect(elite).toBeDefined()
+    const typeId = elite && elite.kind === 'miniboss' ? elite.typeId : ''
+    // Minibosses spawn as `designs[0]` of their archetype.
+    expect(foeDef(typeId).designs[0]).toBe(bossDesign(2))
+  })
+
   it('puts a miniboss on every stage from 2, a second from 6 and a third from 20', () => {
-    expect(track(1).events.filter((e) => e.kind === 'miniboss')).toHaveLength(0)
     for (const stage of STAGES) {
       if (stage < 2) continue
       const want = stage >= MINIBOSS_STAGE_THIRD ? 3 : stage >= 6 ? 2 : 1

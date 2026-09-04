@@ -50,13 +50,19 @@ describe('useFirstStartInterstitial', () => {
     expect(showMidgameAd).toHaveBeenCalledTimes(1)
   })
 
-  it('shows on Poki too — this is its preroll, fired before the first gameplayStart', async () => {
+  it('does NOT fire on Poki — nothing stands between a stranger and the game', async () => {
+    // It used to, so that Poki's implicitly-positioned commercialBreak would be
+    // counted as a preroll rather than a midroll. That is an accounting win paid
+    // for with a video ad in front of the first thing a new player came to do,
+    // at exactly the moment Poki grades conversion-to-play (the first
+    // gameplayStart). GM/GD keep it because their moderation requires it; Poki
+    // requires no preroll at all.
     const { mod } = await load({ poki: true })
     await mod.playFirstStartInterstitial()
-    expect(showMidgameAd).toHaveBeenCalledTimes(1)
+    expect(showMidgameAd).not.toHaveBeenCalled()
   })
 
-  it('never fires on a non-GM/GD/Poki build', async () => {
+  it('never fires on a non-GM/GD build', async () => {
     const { mod } = await load({})
     await mod.playFirstStartInterstitial()
     expect(showMidgameAd).not.toHaveBeenCalled()

@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!', 'desktop': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Desbloqueado!'
+
+  },
+
   'result': {
     'stageClear': 'Fase concluída!',
     'wipedOut': 'Esquadrão dizimado',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Próxima fase',
     'tryAgain': 'Tentar de novo',
     'upgrade': 'Melhorar',
-    'rankOf': 'de {n}'
+    'upgradeHint': 'Melhore seu esquadrão!',
+    'rankOf': 'de {n}',
+    'upNext': 'A seguir: Nível {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'de {n} jogadores'
   },
 
+  'skills': {
+
+    'grenade': 'Granada',
+
+    'shield': 'Escudo'
+
+  },
+
   'upgrades': {
     'title': 'Melhorias',
     'spotlight': 'Gaste!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Poder de fogo',
       'rate': 'Cadência',
       'range': 'Alcance',
-      'scavenge': 'Coleta'
+      'scavenge': 'Coleta',
+      'grenade': 'Granada',
+      'shield': 'Escudo'
     },
     'descriptions': {
       'squad': 'Comece cada fase com mais sobreviventes.',
       'power': 'Cada sobrevivente causa mais dano por tiro.',
       'rate': 'Cada sobrevivente atira mais rápido.',
       'range': 'Seu esquadrão abre fogo mais adiante na estrada.',
-      'scavenge': 'Ganhe mais moedas em cada partida.'
+      'scavenge': 'Ganhe mais moedas em cada partida.',
+      'grenade': 'Lance uma granada para causar dano pesado.',
+      'shield': 'Reduza pela metade o dano ao esquadrão por alguns segundos.'
     }
   },
 

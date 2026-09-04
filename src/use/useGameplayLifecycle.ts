@@ -29,6 +29,7 @@
 
 import { syncGameplayLifecycle as syncCrazyGameplay } from '@/use/useCrazyGames'
 import { pokiGameplayStart, pokiGameplayStop } from '@/utils/pokiPlugin'
+import { setMonsterBakeAllowed } from '@/game/monsterSprites'
 
 /**
  * Report whether gameplay is live. Idempotent on every platform: each portal
@@ -36,6 +37,12 @@ import { pokiGameplayStart, pokiGameplayStop } from '@/utils/pokiPlugin'
  * as often as their reactive source changes.
  */
 export const syncGameplayLifecycle = (live: boolean): void => {
+  // Sprite baking rides the same edge. A monster frame costs up to ~12 ms and
+  // cannot be sliced smaller, so it must never run while the player is playing;
+  // every break this signal reports — the result screen, a modal, an ad, the
+  // loading screen — is a moment nothing is animating and the baker is free.
+  setMonsterBakeAllowed(!live)
+
   syncCrazyGameplay(live)
 
   if (import.meta.env.VITE_APP_POKI === 'true') {

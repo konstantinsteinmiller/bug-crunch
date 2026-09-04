@@ -20,6 +20,8 @@ import { SaveManager } from '@/utils/save/SaveManager'
 import { resolveSaveStrategy } from '@/platforms/resolveSaveStrategy'
 import { installSaveStatus } from '@/use/useSaveStatus'
 import { bootstrapVConsoleFromUrl } from '@/use/useVConsole'
+import { installPerfProbe } from '@/use/usePerfProbe'
+import { activeVariants } from '@/use/perfVariants'
 
 // Build-config self-check moved inline below — the previous top-level
 // `looksLikeCrazyGamesPortal` helper baked `crazygames.com` /
@@ -434,6 +436,15 @@ const bootstrap = async () => {
   app.use(i18n)
 
   app.mount('#app')
+
+  // Publish the performance probe on `window.__perf` for the A/B runner
+  // (`scripts/perf-ab.mjs`). No-ops entirely unless `?perfprobe=1` is set, so a
+  // player's session attaches nothing to `window`. The frame budget comes from
+  // the URL so one harness invocation can ask for a longer or shorter run.
+  installPerfProbe(
+    activeVariants(),
+    Number(new URLSearchParams(window.location.search).get('perfframes') ?? 600)
+  )
 
   // Kick off the ad provider's init after mount. For CrazyGames the
   // SDK is already up (initCrazyGames ran above) so this is a no-op;

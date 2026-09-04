@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  BARRICADE_COIN_MAX, BARRICADE_COIN_MIN, COIN_MAGNET_BASE,
+  BARRICADE_COIN_MAX, BARRICADE_COIN_MIN, COIN_MAGNET_BASE, CRATE_R,
   ELITE_HOLD_AHEAD, ELITE_HOLD_MAX, ELITE_SWEEP_FRACTION, ELITE_SWEEP_REACH,
   ELITE_TELEGRAPH, LANE_HALF, ROCK_H, UNIT_R
 } from '@/game/survival'
@@ -629,5 +629,47 @@ describe('a passage rib divides the crowd instead of eating it', () => {
       .toBeGreaterThan(30)
     expect(game.anchor().x, 'the crowd never actually tried to cross')
       .toBeGreaterThan(1)
+  })
+})
+
+describe('no two crates share a spot', () => {
+  // Reported from stage 5: two damage crates 0.33 units apart, which at
+  // `CRATE_R` across is one box drawn on top of another — the player shoots what
+  // looks like a single prop and a second identical one is still standing behind
+  // it with its own health bar.
+  //
+  // The cause was that `nudgeClear` only ever avoided gates, barricades and
+  // elites, so the supply top-up — which is placed blind at fixed fractions of
+  // the road — could drop a box exactly where an authored one already was.
+  it('keeps every crate clear of every other crate, all the way out', () => {
+    for (let stage = 1; stage <= 60; stage++) {
+      const items: Array<{ x: number; y: number; kind: string }> = []
+      for (const e of buildTrack(stage).events) {
+        if (e.kind !== 'crates') continue
+        for (const c of e.crates) items.push({ x: c.x, y: e.y, kind: c.kind })
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i]!
+          const b = items[j]!
+          const d = Math.hypot(a.x - b.x, a.y - b.y)
+          const where =
+            `stage ${stage}: ${a.kind}@(${a.x}, ${a.y}) and ${b.kind}@(${b.x}, ${b.y}) are ${d.toFixed(2)} apart`
+
+          // Two rules, because a deliberate ROW and an accidental STACK are not
+          // the same shape and only one of them is the bug.
+          //
+          // Nothing may ever overlap: that is the stage 5 report, where the
+          // hidden box kept its own health bar. A row authored at one y is
+          // allowed to sit box-to-box — stage 1's teaching wall is exactly that,
+          // and every box in it is separately visible and separately shootable.
+          // Crates on DIFFERENT rows still owe each other real road, because
+          // there they are competing offers rather than one prop.
+          if (Math.abs(a.y - b.y) < 0.01) expect(d, where).toBeGreaterThanOrEqual(CRATE_R * 2)
+          else expect(d, where).toBeGreaterThan(1.5)
+        }
+      }
+    }
   })
 })

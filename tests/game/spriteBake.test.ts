@@ -145,7 +145,7 @@ describe('the loading screen waits for the strips', () => {
   it('reports assets loaded only once BOTH casts are baked', async () => {
     const { survivorsReady } = await import('@/game/heroSprites')
     const { monstersReady } = await import('@/game/monsterSprites')
-    const { allFoeDesigns } = await import('@/game/foes')
+    const { stageDesigns, allFoeDesigns } = await import('@/game/foes')
     const useAssets = (await import('@/use/useAssets')).default
     const { preloadAssets, areAllAssetsLoaded, loadingProgress } = useAssets()
 
@@ -163,9 +163,16 @@ describe('the loading screen waits for the strips', () => {
     // without one draws as a coloured capsule and a foe as a red ellipse, which
     // is exactly what players saw.
     expect(survivorsReady()).toBe(true)
-    expect(monstersReady(allFoeDesigns())).toBe(true)
+    // The designs THIS stage can put on screen — not the whole cast. A fresh
+    // save resumes to stage 1, whose roster is the creeps plus one boss.
+    expect(monstersReady(stageDesigns(1))).toBe(true)
     expect(areAllAssetsLoaded.value).toBe(true)
     expect(loadingProgress.value).toBe(100)
+
+    // And deliberately NOT the full cast: gating on all thirteen designs is what
+    // made a throttled phone spend 11 s loading and still start a run with most
+    // strips missing. The rest bake between stages, with a lookahead.
+    expect(stageDesigns(1).length).toBeLessThan(allFoeDesigns().length)
   })
 
   it('bakes without ever being handed an idle slot', async () => {
@@ -180,5 +187,75 @@ describe('the loading screen waits for the strips', () => {
     await preloadAssets()
 
     expect(survivorsReady()).toBe(true)
+  })
+})
+
+describe('monster strips — the red fallback ellipse', () => {
+  it('bakes only what a stage can actually spawn, not the whole cast', async () => {
+    const { stageDesigns, allFoeDesigns, foeRoster } = await import('@/game/foes')
+
+    // Stage 1 is creeps plus one boss; the cast is thirteen designs at sixteen
+    // frames each. Gating the splash on all of it took 11 s on a throttled phone
+    // and still started the run 81 % unbaked.
+    expect(stageDesigns(1).length).toBeLessThanOrEqual(4)
+    expect(allFoeDesigns().length).toBeGreaterThan(stageDesigns(1).length * 2)
+
+    // The roster is cumulative, so the set only ever grows with the stage.
+    expect(foeRoster(1)).toEqual(['creep'])
+    expect(stageDesigns(9).length).toBeGreaterThan(stageDesigns(1).length)
+  })
+
+  it('includes the stage boss — same baker', async () => {
+    const { stageDesigns, bossDesign, foeRoster, foeDef } = await import('@/game/foes')
+    for (const stage of [1, 2, 5, 7, 13]) {
+      expect(stageDesigns(stage)).toContain(bossDesign(stage))
+    }
+
+    // Stage 1's boss costs NOTHING extra to bake, and that is not a coincidence:
+    // it is the same body as the creep already on that road (`bossDesign`), so
+    // adding a climax to the opening did not add a frame strip to the stage most
+    // sensitive to load time.
+    const rosterDesigns = new Set(foeRoster(1).flatMap((id) => foeDef(id).designs))
+    expect(rosterDesigns.has(bossDesign(1))).toBe(true)
+    expect(stageDesigns(1).length).toBe(rosterDesigns.size)
+  })
+
+  it('the idle baker stands down while gameplay is live', async () => {
+    // A monster frame costs up to ~12 ms and cannot be sliced smaller, so the
+    // only safe lever is WHEN. Free-running during a stage produced 114 long
+    // tasks totalling 8.7 s in a 20 s window on a throttled phone.
+    const { primeMonsterSprites, setMonsterBakeAllowed, monsterBakeProgress01 } =
+      await import('@/game/monsterSprites')
+    const { stageDesigns } = await import('@/game/foes')
+    const ids = stageDesigns(1)
+
+    setMonsterBakeAllowed(false)
+    primeMonsterSprites(ids)
+    // Nothing was queued for an idle slot while gameplay is live.
+    expect(queued.length).toBe(0)
+    expect(monsterBakeProgress01(ids)).toBe(0)
+
+    // The break resumes it.
+    setMonsterBakeAllowed(true)
+    expect(queued.length).toBeGreaterThan(0)
+    queued.shift()!({ timeRemaining: () => 50 })
+    expect(monsterBakeProgress01(ids)).toBeGreaterThan(0)
+  })
+
+  it('the per-frame top-up bakes even when the idle baker is switched off', async () => {
+    // The last hole: a stage can open with a design still missing if the break
+    // before it was too short. The renderer tops up regardless of the gate.
+    const { primeMonsterSprites, setMonsterBakeAllowed, bakeMonsterSlice, monstersReady } =
+      await import('@/game/monsterSprites')
+    const { stageDesigns } = await import('@/game/foes')
+    const ids = stageDesigns(1)
+
+    setMonsterBakeAllowed(false)
+    primeMonsterSprites(ids)
+    expect(monstersReady(ids)).toBe(false)
+
+    for (let i = 0; i < 200 && !monstersReady(ids); i++) bakeMonsterSlice(6)
+
+    expect(monstersReady(ids)).toBe(true)
   })
 })

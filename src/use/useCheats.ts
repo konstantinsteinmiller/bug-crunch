@@ -63,6 +63,15 @@ const useCheats = () => {
   // the three things a reviewer needs to reach a late stage in ten seconds —
   // survivors, damage, and a stage skip.
   //
+  //   Ctrl+Alt+Shift+K   +3000 coins
+  //   Ctrl+Alt+Shift+G   +40 survivors
+  //   Ctrl+Alt+Shift+D   +5 damage
+  //   Ctrl+Alt+Shift+F   +2 shots/s
+  //   Ctrl+Alt+Shift+N   next stage
+  //   Ctrl+Alt+Shift+R   restart this stage
+  //   Ctrl+Alt+Shift+<n> jump to stage n — type the digits, e.g. 1 then 5 for
+  //                      stage 15 (see the buffer below).
+  //
   // The simulation is reached through a DYNAMIC import, never a static one.
   // `useCheats` is called from `App.vue`, which is on the eager boot path — a
   // static import would drag the whole game model (track generator, foes,
@@ -142,8 +151,62 @@ const useCheats = () => {
     return parts.join('+')
   }
 
+  // ─── Stage jump: Ctrl+Alt+Shift and then the number ──────────────────────
+  //
+  // Type the digits while the three modifiers are held: `Ctrl+Alt+Shift` then
+  // `1`, `5` lands on stage 15. Released or left alone for a moment, it jumps.
+  //
+  // Deliberately a TYPED BUFFER rather than another entry in `cheatsMap`. The
+  // shortcut builder sorts the keys it is holding, so a simultaneous
+  // `Ctrl+Alt+Shift+1+5` and `…+5+1` are the same string — stage 51 would be
+  // unreachable, and holding two digits down at once to ask for a two-digit
+  // number is a strange thing to make anyone do. A buffer reads digits in the
+  // order they were pressed, so any stage is reachable, including three-digit
+  // ones out in the endless run.
+  const STAGE_COMMIT_MS = 700
+  let stageBuffer = ''
+  let stageTimer: ReturnType<typeof setTimeout> | null = null
+
+  const cancelStageTimer = (): void => {
+    if (stageTimer === null) return
+    clearTimeout(stageTimer)
+    stageTimer = null
+  }
+
+  const commitStageJump = (): void => {
+    cancelStageTimer()
+    const typed = stageBuffer
+    stageBuffer = ''
+    if (typed === '') return
+
+    const target = Number.parseInt(typed, 10)
+    if (!Number.isFinite(target) || target < 1) return
+
+    withGame((game) => {
+      game.startStage(target)
+      console.warn(`[CHEAT] Jumped to stage ${target}.`)
+    })
+  }
+
+  /** All three modifiers down — the gesture that arms the digit buffer. */
+  const stageJumpArmed = (e: KeyboardEvent): boolean =>
+    (e.ctrlKey || e.metaKey) && e.altKey && e.shiftKey
+
   const handleKeyDown = (e: KeyboardEvent) => {
     const key = normalizeKey(e)
+
+    // Digits under the full modifier set feed the stage buffer and go no
+    // further — they must not also be matched as a `cheatsMap` shortcut.
+    if (key !== null && stageJumpArmed(e) && /^[0-9]$/.test(key)) {
+      e.preventDefault()
+      // Cap the length so a leaned-on key cannot build a number that overflows
+      // into nonsense; four digits is well past the end of any real run.
+      if (stageBuffer.length < 4) stageBuffer += key
+      cancelStageTimer()
+      stageTimer = setTimeout(commitStageJump, STAGE_COMMIT_MS)
+      return
+    }
+
     if (key) heldKeys.add(key)
     const shortcut = buildShortcut(e)
     if (cheatsMap[shortcut]) {
@@ -155,10 +218,21 @@ const useCheats = () => {
   const handleKeyUp = (e: KeyboardEvent) => {
     const key = normalizeKey(e)
     if (key) heldKeys.delete(key)
+
+    // Letting go of the gesture commits immediately, so the jump feels like the
+    // release of a chord rather than a wait. The timer above is the fallback for
+    // someone who types the number and keeps holding the keys.
+    const k = e.key.toLowerCase()
+    if (stageBuffer !== '' && (k === 'control' || k === 'meta' || k === 'alt' || k === 'shift')) {
+      commitStageJump()
+    }
   }
 
   const handleBlur = () => {
     heldKeys.clear()
+    // A half-typed number must not fire when the window comes back.
+    cancelStageTimer()
+    stageBuffer = ''
   }
 
   onMounted(() => {
@@ -168,6 +242,7 @@ const useCheats = () => {
   })
 
   onUnmounted(() => {
+    cancelStageTimer()
     window.removeEventListener('keydown', handleKeyDown)
     window.removeEventListener('keyup', handleKeyUp)
     window.removeEventListener('blur', handleBlur)

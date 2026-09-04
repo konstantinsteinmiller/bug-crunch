@@ -326,6 +326,20 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
   ],
   // Win streak. Kept clearly wider at the base than `bolt` is anywhere, since
   // the two can share a HUD row.
+  // ── Active skills ──
+  // A round bomb with a lit fuse. Solid body, fuse wound clockwise into it so it
+  // reads as one shape, and a spark at the tip that survives being 16px tall.
+  'bomb': [
+    'M10.5 21a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z',
+    'M15.2 8.2c-.5-.6-1.1-1.1-1.8-1.5l1.1-1.6c.9-1.3 2.5-1.8 3.9-1.2l.6.3-.8 1.8-.6-.3c-.6-.3-1.3-.1-1.7.5l-.7 1Z',
+    'M19.4 2.6l1.9-.6-.6 1.9 1.9.6-1.9.6.6 1.9-1.9-.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6-.6-1.9 1.8.6Z'
+  ],
+  // A heater shield with a raised boss. The centre band is wound the other way
+  // so it punches through rather than sitting on top as a second fill.
+  'shield': [
+    'M12 2 4 5v6.5c0 4.6 3.2 8.4 8 10.5 4.8-2.1 8-5.9 8-10.5V5l-8-3Z',
+    'M12 6.6 8 8.1v3.6c0 2.6 1.6 4.8 4 6.1 2.4-1.3 4-3.5 4-6.1V8.1l-4-1.5Z'
+  ],
   'flame': [
     'M12 2c1.5 3.5.5 5.5-1 7-1.7 1.7-3 3.2-3 5.5A5.5 5.5 0 0 0 13.5 20 5.5 5.5 0 0 0 19 14.5c0-3.5-2.5-5-3.5-7.5-.6 1-1.3 1.6-2 2 .3-2.4-.6-4.9-1.5-7Z'
   ],

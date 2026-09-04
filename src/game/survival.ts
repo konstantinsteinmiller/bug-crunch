@@ -241,6 +241,85 @@ export const BULLET_LIFE_MS = 900
 export const GATE_TICK_MS = 500
 
 /**
+ * ─── The scale doors pump too ───────────────────────────────────────────────
+ *
+ * `+N` and `-N` have always grown while the crowd fires at them. `xN` and `/N`
+ * were fixed numbers, and that was the single biggest source of dead banks.
+ *
+ * A bank is only a decision if the player's own fire changes the answer. When a
+ * door reads `x2` and will still read `x2` at the moment of crossing, there is
+ * nothing to do about it but arrive — so a bank offering `+7 | +8` is not a
+ * question, it is arithmetic with one right answer, and the player learns within
+ * three stages that the game is asking them nothing.
+ *
+ * With the scale ops pumping, every door is an INVESTMENT and the crowd only has
+ * one stream of fire to invest. Commit early to the `x2` and it is a `x3` by the
+ * time you reach it. Straddle the pillar and you have pumped neither. And a `/N`
+ * pumps in the direction that hurts — shooting a trap makes it worse, which is
+ * what finally puts a price on not choosing.
+ *
+ * Deliberately a tenth per tick rather than a whole one: `x2 -> x3` across a
+ * long approach is already a doubling of the door's worth, where `+8 -> +18` is
+ * merely more of the same.
+ */
+export const GATE_SCALE_STEP = 0.1
+/** A pumped `xN` tops out where the hand-authored ceiling always was. */
+export const GATE_MUL_MAX = 3
+
+/**
+ * …and it OPENS below its headline, at four fifths of it: a `x2` door is a
+ * `x1.6` until somebody shoots it.
+ *
+ * This is what makes a multiplier a decision rather than a gift. At a flat `x2`
+ * the door is already worth more than the `+N` beside it for any crowd above
+ * that `+N`, so the player takes it without thinking and the bank is dead in a
+ * different way from `+7 | +8`. At `x1.6` against `+9` the crossover sits at
+ * fifteen survivors — so at rest the multiplier is usually the WORSE deal, and
+ * the only thing that turns it into the better one is the player having spent
+ * their fire on it instead of on the door opposite.
+ *
+ * The headline still ranks the doors: a `x3` opens at 2.4 and a `x2` at 1.6, so
+ * the big one is still visibly the big one. It just has to be earned.
+ */
+export const GATE_MUL_OPEN_SCALE = 0.8
+
+/** The value a `xN` door opens at, given the headline the author asked for. */
+export const gateMulOpen = (headline: number): number =>
+  Math.round(headline * GATE_MUL_OPEN_SCALE * 10) / 10
+/** …and a pumped `/N` bottoms out at the harshest trap in the game. */
+export const GATE_DIV_MAX = 5
+
+/**
+ * The ceiling a door of this op can be pumped to.
+ *
+ * ONE definition, because there used to be two and they disagreed. The pump in
+ * `stepGates` knew that `xN` and `/N` had ceilings; the bullet that marks a gate
+ * hot still only recognised `+N` and `-N`, so a multiplier was never flagged as
+ * being shot at and the pump it was entitled to never ran. The doors shipped
+ * frozen at `x1.6` — the worse half of a deal whose better half was unreachable.
+ *
+ * Anything that needs to ask "can this door still grow?" asks here.
+ */
+export const gatePumpCap = (op: GateOp): number =>
+  op === 'sub' ? GATE_SUB_MAX
+    : op === 'mul' ? GATE_MUL_MAX
+      : op === 'div' ? GATE_DIV_MAX
+        : GATE_MAX_VALUE
+
+/** True for the ops whose value moves in tenths rather than whole numbers. */
+export const isScaleOp = (op: GateOp): boolean => op === 'mul' || op === 'div'
+
+/**
+ * A gate's number, printed.
+ *
+ * One decimal only while it is actually fractional: `x2` reads as `x2`, and
+ * `x2.4` reads as `x2.4`. A door that said `x2.0` before anyone had shot it
+ * would look like a bug.
+ */
+export const gateValueLabel = (value: number): string =>
+  Number.isInteger(value) ? String(value) : value.toFixed(1)
+
+/**
  * A gate stops climbing here so a player who parks on one cannot break the
  * economy — and so the number always fits its frame.
  *
@@ -445,7 +524,83 @@ export const BOSS_BASE_HP = 1000
  * Together they turn "not enough damage" from *slow* into *fatal*, which is the
  * check this genre is missing when the crowd is the only currency.
  */
+/**
+ * The pillar's cost, split into the two things it was doing at once.
+ *
+ * `grindAgainst` opens a new contact at `bite` kills and then accrues
+ * `max(floor, squad x rate)` per second. Those are different jobs and they were
+ * the same number, which is why the first attempt at softening the early pillar
+ * did nothing measurable:
+ *
+ *   BITE  is the LESSON. Touching a pillar costs a survivor, immediately and
+ *         visibly, at every stage. That is what makes a bank a commitment, and
+ *         it is what fires the "never touch the pillar" hint. It never softens.
+ *   FLOOR is the SPIRAL. It is what a crowd pays per second for SITTING on the
+ *         pillar, and at 1 it guarantees a body a second no matter how low the
+ *         proportional rate goes — which is the whole of what kills a player
+ *         who has not yet learned to steer.
+ *
+ * The distinction matters because of the geometry: a two-leaf bank puts its
+ * doors at +/-`GATE_LEAF_X` and its pillar at x = 0, which is exactly where the
+ * crowd sits when nobody steers it. THE DEFAULT STATE OF THE GAME IS AIMED AT
+ * THE ONE OBJECT THAT KILLS FASTEST. Measured across the opening stages, a run
+ * that never steers lost three survivors at EVERY bank and was dead 44 seconds
+ * in; a run that steers loses none, because it never touches the thing. The
+ * mechanic was all-or-nothing and it landed on the one skill a brand-new player
+ * has not acquired.
+ *
+ * So the bite stays and the spiral ramps. A learner is charged for the mistake
+ * once per bank instead of once per second, and by stage 5 the pillar is the
+ * full grind again. None of this changes anything for a player who steers.
+ */
+export interface CrushRamp { rate: number; floor: number; bite: number }
+
+export const DIVIDER_GRIND_FULL = 0.35
+
+export const dividerCrushFor = (stage: number): CrushRamp => ({
+  rate: Math.min(DIVIDER_GRIND_FULL, 0.1 + Math.max(0, stage - 2) * 0.09),
+  floor: Math.min(1, 0.2 + Math.max(0, stage - 2) * 0.27),
+  // Never softened: one body, every time, at every stage.
+  bite: 1
+})
+
 export const BOSS_GUARD_GATES = [0.66, 0.33] as const
+
+/** Stage 1 gets ONE, at half health. See `bossGuardGates`. */
+export const TUTORIAL_GUARD_GATES = [0.5] as const
+
+/**
+ * Which guard phases a stage's boss owes the player.
+ *
+ * A guard gate is a FLOOR on how long the climax lasts: the boss plants, goes
+ * immune to gunfire, and swings. Stage 1 gets one, and the number was measured
+ * rather than chosen.
+ *
+ * With the usual TWO, a first-time squad of seventeen finished the fight at
+ * seven — the phases are where the slams come from, and losing 60 % of the crowd
+ * is not the note to end a tutorial on. With NONE, the floor went with them: a
+ * player who had collected the road's crates deleted the boss in 0.6 s, which is
+ * not a climax, it is a speed bump. The level still ended on nothing much.
+ *
+ * One gate keeps the shape — wind-up, swing, finish — for every squad size,
+ * whether they arrive with 30 DPS or 180. Paired with `TUTORIAL_SLAM_FRACTION`
+ * the swing costs a body or two instead of most of the run, so the phase reads
+ * as the thing to learn rather than the thing that took the level off you.
+ */
+export const bossGuardGates = (stage: number): readonly number[] =>
+  stage <= 1 ? TUTORIAL_GUARD_GATES : BOSS_GUARD_GATES
+
+/**
+ * The share of the crowd one slam takes on stage 1.
+ *
+ * A token, against `SLAM_MAX_FRACTION`'s 31 %. The tutorial boss still winds up
+ * and still swings, because that is the shape the player has to recognise on
+ * stage 2 — but the first time they meet it, it costs them a couple of bodies
+ * and a fright rather than most of their run.
+ */
+export const TUTORIAL_SLAM_FRACTION = 0.08
+/** …and it may never be the swing that ends a tutorial run. */
+export const TUTORIAL_SLAM_MIN_KILL = 1
 /**
  * Slam footprint at the first swing. MUST stay well under the crowd's own
  * radius — at 2.9 the ring covered the entire squad and every connected slam
@@ -1075,12 +1230,53 @@ export const contactReliefFor = (failures: number): number => {
 export const startBonusFor = (failures: number, stage: number): number =>
   stage <= 1 ? 0 : Math.max(0, Math.min(4, failures))
 
+/** Extra crowd per death, as a fraction. */
+export const RETRY_SQUAD_STEP = 0.2
+
+/**
+ * …and the same concession as a MULTIPLIER: +20 % of the starting squad per
+ * death on this stage, cleared the moment the stage is.
+ *
+ * `startBonusFor` above adds a flat body per failure, capped at four. That is
+ * the right shape for a run dying at the very end — a foothold — and the wrong
+ * shape for the early stages, where the whole squad is four people and four
+ * extra is a different game. This one scales with whatever the player actually
+ * starts with, so it stays proportional at every depth: meaningful on stage 12,
+ * modest on stage 2.
+ *
+ * Not capped here on purpose. `MAX_SQUAD` already clamps the result, and a
+ * player who has died eight times to the same stage is not the player to
+ * withhold from — the failure counter resets on the clear, so the effect can
+ * never leak into a stage they have not struggled with.
+ *
+ * Stage 1 is excluded for the same reason `startBonusFor` excludes it: the only
+ * way to lose it is to never touch the screen, and paying that with a bigger
+ * crowd is how "the game plays itself" becomes true.
+ */
+export const retrySquadScaleFor = (failures: number, stage: number): number =>
+  stage <= 1 ? 1 : 1 + RETRY_SQUAD_STEP * Math.max(0, failures)
+
 // ─── Stage shape ────────────────────────────────────────────────────────────
 
-/** Length of stage `n` in world units — a run of ~35 s at base speed, growing
- *  gently so stage 12 is a real expedition without ever becoming a slog. */
+/**
+ * Length of stage `n` in world units — a run of ~35 s at base speed, growing
+ * gently so stage 12 is a real expedition without ever becoming a slog.
+ *
+ * STAGE 1 IS SHORTER, and deliberately so. A 500-player Poki fit test put 31 %
+ * of sessions under a minute and 64 % under two, against a gate that wants 25 %
+ * of them past three — the opening was asking for more than a stranger will
+ * spend before they know whether they like the game. Stage 1 is now a ~30 s
+ * round trip: the road, one weakened elite, and a boss that is the same creature
+ * again at boss size and priced to fall over (`tutorialBossHp`).
+ *
+ * The short road is what buys the climax back. The opening briefly had no boss
+ * at all, which cost less time than it was worth: a level that simply stops
+ * reads as unfinished, and it teaches the wrong shape for every stage after.
+ */
 export const stageLength = (stage: number): number =>
-  Math.round(120 + Math.min(stage, 20) * 9 + Math.max(0, stage - 20) * 4)
+  stage <= 1
+    ? 105
+    : Math.round(120 + Math.min(stage, 20) * 9 + Math.max(0, stage - 20) * 4)
 
 /** Forward speed for a stage. */
 export const stageSpeed = (stage: number): number =>
@@ -1146,7 +1342,9 @@ export interface Gate {
   halfW: number
   y: number
   op: GateOp
-  /** `+value`, `×value` or `÷value`. Climbs with fire when `op === 'add'`. */
+  /** `+value`, `−value`, `×value` or `÷value`. EVERY op climbs with fire —
+   *  the additive ones in whole survivors, the scale ones in tenths. See
+   *  `gatePumpCap` for where each one stops. */
   value: number
   /** Accumulated fire toward the next tick, ms. */
   charge: number
@@ -1193,7 +1391,77 @@ export interface Crate {
   /** Rotation, so a row of crates does not read as a stencil. */
   spin: number
   dead: boolean
+  /**
+   * What this box pays, overriding the per-kind constant.
+   *
+   * Exists for rows that are placed to TEACH rather than to reward — stage 1's
+   * opening wall is seven boxes wide because it has to be unmissable, and seven
+   * full-price payouts would hand a first-time player most of the fire-rate
+   * curve before they had met an enemy. Undefined everywhere else, which is the
+   * normal economy.
+   */
+  gain?: number
 }
+
+/**
+ * ─── TNT barrels ────────────────────────────────────────────────────────────
+ *
+ * The boss arena's second answer, and the reason a boss fight is not just a
+ * damage race with a thumb held down.
+ *
+ * A boss plants and raises a shield at fixed health gates, and during that phase
+ * the crowd's fire is designed to do nothing — the correct play is to MOVE. That
+ * is honest, but it is also a stretch of the climax where the player has no
+ * offence at all. Barrels give them one: they sit in the arena, they take real
+ * shooting to break, and when they go they hurt the boss THROUGH the shield.
+ *
+ * They are a lever, not a solution. The blast is big but the barrels are finite,
+ * so a fight is still won with the gun; barrels are what the player spends the
+ * shield on, and what a run with too little damage reaches for when the boss is
+ * simply out-scaling their crowd.
+ */
+export interface Barrel {
+  id: number
+  x: number
+  y: number
+  hp: number
+  maxHp: number
+  /** Counts up once lit, then detonates. Gives the player a beat to read it and
+   *  the renderer something to flash. `-1` while intact. */
+  fuse: number
+  dead: boolean
+}
+
+/** Half-extent of a barrel, world units. Slightly slimmer than a crate so a row
+ *  of three still leaves lanes to steer between. */
+export const BARREL_R = 0.62
+
+/** How long a lit barrel burns before it goes, ms. Long enough to see and to
+ *  get clear of, short enough that it never feels like a timer. */
+export const BARREL_FUSE_MS = 420
+
+/** How far a blast reaches, world units. Sized to cover the boss's hold
+ *  position from either shoulder of the arena without covering the crowd. */
+export const BARREL_BLAST_R = 4.2
+
+/**
+ * Blast damage, as a fraction of the boss's MAX health.
+ *
+ * Expressed as a fraction rather than a flat number so it stays meaningful at
+ * every depth — a stage-20 boss has many times a stage-6 boss's health, and a
+ * flat number would be a wrecking ball early and a firework later.
+ *
+ * 9 % is deliberately under a guard gate's spacing: a fight with three barrels
+ * cannot be skipped by blowing all of them, which is what keeps the boss's own
+ * phases the spine of the encounter.
+ */
+export const BARREL_BLAST_BOSS_FRACTION = 0.09
+
+/** Health of one barrel, scaled with the stage the way crates are. Deliberately
+ *  chunky — "quite some hits" is the point: a barrel the crowd deletes in
+ *  passing is a pickup, not a decision. */
+export const barrelHp = (stage: number): number =>
+  Math.round(26 + Math.min(stage, 20) * 7 + Math.max(0, stage - 20) * 3)
 
 export interface Barricade {
   id: number

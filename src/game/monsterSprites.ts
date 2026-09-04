@@ -63,6 +63,19 @@ let queue: string[] = []
 let building: { id: string; def: MonsterDef; frames: HTMLCanvasElement[] } | null = null
 
 let scheduled = false
+/**
+ * Whether the idle baker may run right now.
+ *
+ * A single monster frame costs up to ~12 ms, which is a dropped frame on a phone
+ * and CANNOT be sliced smaller — so the only safe lever is WHEN. The game clears
+ * this for the duration of live gameplay (see `useGameplayLifecycle`) and sets it
+ * again on every break it already owns: the loading screen, the result screen, a
+ * modal, an ad. Those are exactly the moments nothing is animating.
+ *
+ * Measured: with the baker free-running during a stage, a throttled phone logged
+ * 114 long tasks totalling 8.7 s in a 20 s window.
+ */
+let bakeAllowed = true
 
 /**
  * Ask for designs to be baked. Cheap and idempotent — safe to call every time a
@@ -118,6 +131,9 @@ const nowMs = (): number =>
  */
 const pump = (deadline?: IdleTime): void => {
   scheduled = false
+  // Gameplay started between arming and firing: stand down. `schedule()` runs
+  // again the moment baking is allowed, so nothing is lost.
+  if (!bakeAllowed) return
   const started = nowMs()
 
   for (;;) {
@@ -142,8 +158,15 @@ const pump = (deadline?: IdleTime): void => {
   schedule()
 }
 
+/** Allow or forbid idle baking. Re-arms the queue when re-enabled. */
+export const setMonsterBakeAllowed = (allowed: boolean): void => {
+  if (bakeAllowed === allowed) return
+  bakeAllowed = allowed
+  if (allowed) schedule()
+}
+
 const schedule = (): void => {
-  if (scheduled || (queue.length === 0 && !building)) return
+  if (scheduled || !bakeAllowed || (queue.length === 0 && !building)) return
   scheduled = true
   const ric = (globalThis as { requestIdleCallback?: (cb: (d: IdleTime) => void, o?: { timeout: number }) => void })
     .requestIdleCallback

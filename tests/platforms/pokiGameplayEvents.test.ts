@@ -37,6 +37,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 type Emitted = { kind: 'start' | 'stop', at: number }
 
 const GUARD_MS = 120
+/** The window the shipped Poki core scores a start against — see `pokiPlugin`.
+ *  `GUARD_MS` sits well outside it on purpose. */
+const SDK_BAD_EVENT_MS = 50
 
 const loadPlugin = async () => {
   vi.resetModules()
@@ -233,7 +236,19 @@ describe('poki gameplay bracket', () => {
       // that the SDK doesn't score it.
       expect(emitted.map((e) => e.kind)).toEqual(['start', 'stop', 'start'])
       const [, stop, start] = emitted as [Emitted, Emitted, Emitted]
-      expect(start.at - stop.at).toBeGreaterThanOrEqual(GUARD_MS)
+
+      // Asserted against POKI'S rule, not against our own timer's nominal delay.
+      //
+      // `setTimeout(fn, 120)` is allowed to fire a fraction early, and under a
+      // loaded test run it does — this read 119.4 ms and failed a
+      // `>= GUARD_MS`, which made the suite flaky over a difference that cannot
+      // matter. What the SDK actually counts as a bad event is a start landing
+      // within `SDK_BAD_EVENT_MS` of the preceding stop; `GUARD_MS` is the
+      // margin we chose on top of that, and the margin is more than double the
+      // rule. So the claim is the rule, with the nominal delay checked loosely
+      // enough that timer jitter is not a failure.
+      expect(start.at - stop.at).toBeGreaterThan(SDK_BAD_EVENT_MS)
+      expect(start.at - stop.at).toBeGreaterThan(GUARD_MS - 2)
     })
 
     it('emits normally when the game paces itself outside the window', async () => {

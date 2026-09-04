@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>perf harness — isolated draw path</title>
+  <style>
+    html, body { margin: 0; background: #101018; color: #cfd6e4;
+                 font: 12px ui-monospace, monospace; }
+    #stage { display: block; }
+    #hud { position: fixed; top: 0; left: 0; padding: 6px 8px;
+           background: rgba(0,0,0,.6); white-space: pre; }
+  </style>
+</head>
+<body>
+  <!--
+    ─── Isolation harness ───────────────────────────────────────────────────
+
+    Prices ONE draw path with a fixed workload, when driving real gameplay
+    would add more variance than the change under test. `scripts/perf-ab.mjs`
+    drives it exactly like the real game — it publishes the same
+    `window.__perf` / `window.__perfDone` contract:
+
+      pnpm perf:ab --base "http://127.0.0.1:5173/perf/harness.html?n=150" \
+                   --a "perf=<thing>-legacy" --b ""
+
+    PREFER THE REAL GAME (`--base http://127.0.0.1:5173/`) when you can. This
+    measures a draw path in isolation, which is not the same as measuring the
+    frame it lives in: a 40% saving on a pass that is 4% of the frame is a 1.6%
+    saving, and only the real game will tell you that.
+
+    Two properties make it trustworthy, and both are easy to lose:
+
+      • The canvas is ATTACHED AND VISIBLE. An offscreen canvas that is never
+        composited lets the browser skip raster work, which is how an earlier
+        headless benchmark on this project reported 25.4 ms and 3.98 ms for the
+        same untouched code on consecutive runs.
+      • The workload is FIXED AND SEEDED, and the pool is never stepped, so
+        every frame paints exactly the same thing and simulation variance is
+        zero. Both arms must paint an identical set — a variant that draws
+        fewer entities is measuring a different game, not a faster one.
+
+    Edit `buildWorkload` / `paint` for whatever path you are pricing.
+  -->
+  <canvas id="stage"></canvas>
+  <div id="hud">booting…</div>
+
+  <script type="module">
+    import { emit, drawParticles, clearParticles, quality } from '/src/use/useVfx.ts'
+    import { activeVariants } from '/src/use/perfVariants.ts'
+
+    const qs = new URLSearchParams(location.search)
+    const N      = Number(qs.get('n') ?? 150)
+    const FRAMES = Number(qs.get('perfframes') ?? 600)
+    const WARMUP = Number(qs.get('warmup') ?? 120)
+    const DPR    = Number(qs.get('dpr') ?? 2)
+    const CSS_W  = Number(qs.get('w') ?? 412)
+    const CSS_H  = Number(qs.get('h') ?? 915)
+
+    const canvas = document.getElementById('stage')
+    canvas.width = Math.round(CSS_W * DPR)
+    canvas.height = Math.round(CSS_H * DPR)
+    canvas.style.width = `${CSS_W}px`
+    canvas.style.height = `${CSS_H}px`
+    const ctx = canvas.getContext('2d')
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0)
+
+    const rnd = (i, s) => ((Math.sin((i + 1) * 12.9898 + s * 78.233) * 43758.5453) % 1 + 1) % 1
+    const COLORS = [[168, 156, 134], [78, 78, 86], [148, 152, 164], [90, 92, 100]]
+
+    // ── The workload under test ──
+    const buildWorkload = () => {
+      quality.value = 'high'
+      clearParticles()
+      for (let i = 0; i < N; i++) {
+        emit({
+          x: rnd(i, 1) * CSS_W, y: rnd(i, 2) * CSS_H,
+          life: 500, size: 0.30 + rnd(i, 3) * 0.20,
+          color: COLORS[i & 3], shape: 3, alpha: 0.16 + rnd(i, 4) * 0.26
+        })
+      }
+    }
+
+    // The camera scale the real game runs at on this viewport, so entity sizes
+    // match what ships: max(16, min(w / 11.2, usableH / 19)).
+    const scale = Math.max(16, Math.min(CSS_W / 11.2, CSS_H / 19))
+    const paint = () => {
+      ctx.clearRect(0, 0, CSS_W, CSS_H)
+      drawParticles(ctx, wx => wx, wy => wy, scale)
+    }
+
+    buildWorkload()
+
+    const work = new Float64Array(FRAMES)
+    const interval = new Float64Array(FRAMES)
+    let n = 0, warm = 0, last = 0
+
+    const pct = (buf, p) => {
+      const a = Array.from(buf.subarray(0, n)).sort((x, y) => x - y)
+      return a[Math.min(a.length - 1, Math.floor(a.length * p))] ?? 0
+    }
+
+    const frame = t => {
+      if (warm < WARMUP) { warm++; paint(); last = t; requestAnimationFrame(frame); return }
+
+      const t0 = performance.now()
+      paint()
+      work[n] = performance.now() - t0
+      interval[n] = last ? t - last : 0
+      last = t
+      n++
+
+      if (n < FRAMES) { requestAnimationFrame(frame); return }
+
+      // Same shape `usePerfProbe` publishes, so one runner drives both.
+      window.__perf = {
+        frames: n,
+        workP50: +pct(work, 0.50).toFixed(4),
+        workP95: +pct(work, 0.95).toFixed(4),
+        workP99: +pct(work, 0.99).toFixed(4),
+        intervalP50: +pct(interval, 0.50).toFixed(3),
+        intervalP95: +pct(interval, 0.95).toFixed(3),
+        heapSlope: 0,
+        longTasks: 0,
+        phases: {},
+        variants: activeVariants(),
+        n: N
+      }
+      document.getElementById('hud').textContent = JSON.stringify(window.__perf, null, 1)
+      window.__perfDone = true
+    }
+
+    document.getElementById('hud').textContent =
+      `variants=[${activeVariants()}] n=${N} running…`
+    requestAnimationFrame(frame)
+  </script>
+</body>
+</html>

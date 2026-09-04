@@ -6,24 +6,30 @@ import {
   stage, phase, squadCount, damage, runFireRate, progress01, bossHp01, bestStage,
   eliteAlive, eliteHp01, challenge, declines,
   startStage, advanceStage, retryStage, step, steerTo, steerBy, steerOnly, runSummary,
-  isChargingGate, getCrates, getGates, getDividers, getBoss, anchor, crowdRadius
+  isChargingGate, getCrates, getGates, getDividers, getBoss, anchor, crowdRadius,
+  throwGrenade, raiseShield, shieldActive as isShieldUp
 } from '@/use/useSurvivalGame'
 import {
-  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt
+  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX
 } from '@/use/useSurvivalArt'
-import { resetVfx } from '@/use/useVfx'
+import { renderScaleTier, resetVfx } from '@/use/useVfx'
 import { warmAudio, playFx } from '@/use/useGameAudio'
 import { DECLINE_MAX, LANE_HALF } from '@/game/survival'
 
 import { getState, setState } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
-  GUARD_HINT_KEY, ONBOARDED_KEY, REWARD_DECLINE_KEY, SHOP_SPOTLIGHT_KEY, TUTORIAL_KEY
+  GUARD_HINT_KEY, ONBOARDED_KEY, RESULTS_SEEN_KEY, REWARD_DECLINE_KEY, SHOP_SPOTLIGHT_KEY,
+  TUTORIAL_KEY
 } from '@/keys'
 import useTowerEconomy from '@/use/useTowerEconomy'
-import { affordableCount } from '@/use/useUpgrades'
+import { affordableCount, grantUpgrade } from '@/use/useUpgrades'
 import useSounds, { useMusic } from '@/use/useSound'
 import { useScreenshake } from '@/use/useScreenshake'
+import { newTutorialClock, tickTutorial } from '@/use/useTutorialGate'
+import { frameStart, frameEnd, phaseStart, phaseEnd } from '@/use/usePerfProbe'
+import StageBanner from '@/components/game/StageBanner.vue'
+import type { GameIconName } from '@/components/icons/iconNames'
 import { isGamePaused, isAdShowing } from '@/use/useGamePause'
 import { spawnCoinExplosion } from '@/use/useCoinExplosion'
 import { isInterstitialReady, showMidgameAd } from '@/use/useAds'
@@ -34,6 +40,7 @@ import { signalGameplayLoaded, triggerHappytime } from '@/use/useCrazyGames'
 import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
 import { isAnyModalOpen } from '@/use/useModalState'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
+import { mobileCheck } from '@/utils/function'
 import { playFirstStartInterstitial } from '@/use/useFirstStartInterstitial'
 import {
   OUTSIDE_BOARD, boardSize, leaderboardEnabled, leaderboardFailed, playerTotal, rankFor, reportRun
@@ -42,6 +49,12 @@ import {
 import RunHud from '@/components/game/RunHud.vue'
 import ControlHint, { type HintId } from '@/components/game/ControlHint.vue'
 import TutorialOverlay from '@/components/game/TutorialOverlay.vue'
+import SteerHint from '@/components/game/SteerHint.vue'
+import SkillBar from '@/components/game/SkillBar.vue'
+import {
+  skillReady, startCooldown, tickSkills, grenadeMultiplier, shieldDuration,
+  type SkillId
+} from '@/use/useSkills'
 import RewardAdIcon from '@/components/atoms/RewardAdIcon.vue'
 import FHudButton from '@/components/atoms/FHudButton.vue'
 import FHudBadge from '@/components/atoms/FHudBadge.vue'
@@ -101,10 +114,20 @@ const measureInsets = (): { top: number; bottom: number } => ({
 const resize = (): void => {
   const canvas = canvasRef.value
   if (!canvas) return
-  // Clamp DPR to 2: past that the pixel cost doubles again for no perceptible
-  // gain on a phone, and it is the difference between 60 fps and 40 on mid-tier
-  // Android.
-  dpr = Math.min(window.devicePixelRatio || 1, 2)
+  // Clamp DPR by QUALITY TIER, not to a constant.
+  //
+  // Fill cost scales with the square of this number, and it is the single
+  // biggest lever the renderer has on a slow phone: a 2.6x device rendering at
+  // 2x is pushing 2.7x the pixels of one rendering at 1.25x, every frame,
+  // forever. The tier is already driven by a rolling FPS average, so a device
+  // that cannot hold 40 fps says so within a second and gets the cheaper canvas.
+  //
+  // 2 stays the ceiling for healthy devices — past that the cost doubles again
+  // for no perceptible gain on a phone.
+  const dprCap = renderScaleTier.value === 'low'
+    ? 1.25
+    : renderScaleTier.value === 'medium' ? 1.5 : 2
+  dpr = Math.min(window.devicePixelRatio || 1, dprCap)
   cssW = window.innerWidth
   cssH = window.innerHeight
   canvas.width = Math.round(cssW * dpr)
@@ -115,12 +138,18 @@ const resize = (): void => {
   ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
   const insets = measureInsets()
   setViewport(cssW, cssH, insets.top, insets.bottom)
+  // Half the road, in CSS pixels — measured through the renderer's own
+  // projection rather than guessed at as a percentage of the viewport, so the
+  // steer hint sits between the same rails the crowd does on every aspect ratio.
+  laneHalfPx.value = Math.max(40, worldToScreenX(LANE_HALF) - worldToScreenX(0))
   // The lane tile is baked at the current scale, so a resize invalidates it.
   invalidateArt()
 }
 
 const loop = (t: number): void => {
   rafId = requestAnimationFrame(loop)
+  // Performance probe. No-ops unless `?perfprobe=1` — see `usePerfProbe`.
+  frameStart(t)
   const dt = lastT ? Math.min(t - lastT, 120) : 16
   lastT = t
 
@@ -128,6 +157,7 @@ const loop = (t: number): void => {
   // modals. The RENDER loop keeps running (so the frame under an ad isn't a
   // frozen artefact) but the simulation clock does not advance.
   if (!isGamePaused.value && !showResult.value) {
+    phaseStart('step')
     step(dt)
     driveKeyboardSteering(dt)
     // After `step`, because it reads the anchor the step just moved.
@@ -137,10 +167,45 @@ const loop = (t: number): void => {
     if (hintPollAccum >= 200) {
       hintPollAccum = 0
       hintTick.value++
+      // The skill cooldowns are wall-clock, so nothing would otherwise tell Vue
+      // a button had come back. Ridden on the existing 5 Hz poll rather than a
+      // timer of their own — a second-resolution countdown does not need 60 Hz.
+      tickSkills()
+      shieldLive.value = isShieldUp()
     }
+    phaseEnd('step')
   }
 
+  phaseStart('draw')
   if (ctx) drawScene(ctx, cssW, cssH, dt, dpr)
+  phaseEnd('draw')
+  frameEnd()
+}
+
+// ─── Active skills ──────────────────────────────────────────────────────────
+//
+// The scene owns the WIRING; `useSkills` owns the clock and `useSurvivalGame`
+// owns what the skills actually do. The cooldown is only ever started when the
+// skill did something — a grenade thrown at an empty road returns false and
+// keeps its charge, because a button that eats thirty seconds for nothing is a
+// button players stop trusting.
+const shieldLive = ref(false)
+
+const onUseSkill = (id: SkillId): void => {
+  if (!skillReady(id)) return
+  if (isGamePaused.value || showResult.value) return
+
+  if (id === 'grenade') {
+    if (!throwGrenade(grenadeMultiplier.value)) return
+    startCooldown('grenade')
+    return
+  }
+
+  const seconds = shieldDuration.value
+  if (seconds <= 0) return
+  raiseShield(seconds)
+  shieldLive.value = true
+  startCooldown('shield')
 }
 
 // ─── Input ──────────────────────────────────────────────────────────────────
@@ -163,12 +228,37 @@ let downX = 0
 let lastX = 0
 let dragging = false
 
+/**
+ * Has the player actually done anything to this game yet?
+ *
+ * Set by the first input that could plausibly move the squad — a press, a mouse
+ * moving over the road, an arrow key — and never cleared. It is the difference
+ * between "the game has been on screen for twelve seconds" and "the player has
+ * been playing for twelve seconds", and until this is true those are not the
+ * same claim.
+ *
+ * Deliberately platform-neutral. The case that forced it is Poki's playtest
+ * recording consent, which puts a yes/no dialog over the game at load: the
+ * dialog lives outside the iframe, so the game sees no input at all while the
+ * player reads it, and the tutorial's bail-out timer would spend itself against
+ * a screen nobody was looking at. But nothing about that is specific to Poki —
+ * an interstitial, a permissions prompt, a portal's own chrome or a tab opened
+ * in the background all produce exactly the same thing, on every platform.
+ */
+const sawFirstInput = ref(false)
+
+/** Every path that could have moved the squad funnels through here. */
+const noteFirstInput = (): void => {
+  if (!sawFirstInput.value) sawFirstInput.value = true
+}
+
 const onPointerDown = (e: PointerEvent): void => {
   // In a portal iframe the frame does not hold keyboard focus on load, and the
   // `preventDefault` below cancels the implicit focus transfer a click would
   // otherwise cause — so claim focus explicitly, or the arrow keys never arrive.
   try { window.focus() } catch { /* a cross-origin parent may refuse */ }
   e.preventDefault()
+  noteFirstInput()
   if (showResult.value) return
 
   pointerDown = true
@@ -185,7 +275,26 @@ const onPointerMove = (e: PointerEvent): void => {
     // Desktop: hovering with no button held also steers. It reads as "the crowd
     // follows the mouse", which is what every player of this genre expects, and
     // it costs one branch.
-    if (e.pointerType === 'mouse' && !showResult.value) steerTo(screenToWorldX(e.clientX))
+    if (e.pointerType === 'mouse' && !showResult.value) {
+      // Only while the cursor is over the ROAD.
+      //
+      // Hover-steering used to follow the mouse anywhere on the page, which
+      // made the skill buttons unusable with a mouse: they live off to the
+      // right, so reaching for one dragged the whole squad into the right rail
+      // on the way. Steering is a statement about a position on the road, and
+      // the margins either side of the road are not positions on it — so out
+      // there the crowd simply holds its last column.
+      //
+      // Pushing PAST the rail still pins the crowd to it, because the last
+      // in-road column the cursor crossed was the rail itself.
+      const wx = screenToWorldX(e.clientX)
+      if (Math.abs(wx) <= LANE_HALF + 0.75) {
+        // Hovering over the road IS playing, on a desktop — the crowd is already
+        // following the cursor, so the player has had the lesson.
+        noteFirstInput()
+        steerTo(wx)
+      }
+    }
     return
   }
   if (!dragging && Math.abs(e.clientX - downX) > TAP_SLOP_PX) dragging = true
@@ -199,6 +308,15 @@ const onPointerMove = (e: PointerEvent): void => {
 }
 
 const onPointerUp = (e: PointerEvent): void => {
+  // A completed drag is the gesture the hint exists to teach. Retire it here
+  // rather than on `pointerdown`, so a player who taps once without dragging —
+  // the exact person this is for — still gets to see it.
+  //
+  // Only once the hint is actually up, though. On a first run the tutorial
+  // lightbox is dismissed BY dragging, and counting that drag would retire the
+  // hint before it had been shown — which would have left it visible to
+  // returning players only, i.e. everyone except the people it is for.
+  if (dragging && steerHintArmed.value) retireSteerHint()
   pointerDown = false
   dragging = false
   try { canvasRef.value?.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
@@ -220,6 +338,7 @@ const onKeyDown = (e: KeyboardEvent): void => {
   if (tgt instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tgt.tagName)) return
   if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) {
     e.preventDefault()
+    noteFirstInput()
     keys.add(e.code)
   }
   if (e.code === 'Escape') {
@@ -237,20 +356,46 @@ const onKeyUp = (e: KeyboardEvent): void => { keys.delete(e.code) }
 // (`steerOnly`) while the crowd still answers the thumb, so the lesson is
 // performed rather than read. See `TutorialOverlay.vue`.
 
-/** Moving time the player owes before the road starts. */
-const TUTORIAL_MOVE_MS = 1000
-/**
- * …and the longest we will wait for it.
- *
- * A player who cannot produce the gesture — a dead trackpad, a portal iframe
- * that never got pointer events, a child poking the screen with one finger and
- * no drag — must not be held at a black screen forever. After this the stage
- * starts anyway and the flag is spent: the tutorial is a nudge, and a nudge
- * that can soft-lock the game is a worse bug than the one it prevents.
- */
-const TUTORIAL_BAILOUT_MS = 12_000
-/** Movement below this per frame is noise — a resting hand, a spring settling. */
-const TUTORIAL_MOVE_EPS = 0.004
+// The clock, its two deadlines and the rule that the bail-out only counts time
+// the player was actually present for, all live in `useTutorialGate`.
+
+// ─── The steer hint (touch only, opening seconds) ───────────────────────────
+//
+// Mobile players were reported as struggling with a control that has exactly
+// one axis — which is the whole reason: there is no button to find, so a player
+// who does not think to DRAG watches a game that looks like it plays itself.
+// The written primer answers a question they never ask, and the first-run
+// lightbox only ever shows once.
+//
+// Five seconds of a finger sweeping between the rails, and then it retires. It
+// also retires the moment the player steers for real: nagging someone who has
+// already worked it out is its own kind of failure, and this hint's whole job
+// is to be unnecessary.
+const STEER_HINT_MS = 5000
+
+const laneHalfPx = ref(0)
+const steerHintDone = ref(false)
+const steerHintArmed = ref(false)
+let steerHintTimer: number | null = null
+
+/** Touch-ish device. A mouse player has a cursor that already steers on hover. */
+const isTouchDevice = mobileCheck()
+  || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+
+const showSteerHint = computed(() =>
+  isTouchDevice
+  && steerHintArmed.value
+  && !steerHintDone.value
+  && isLiveGameplay.value
+)
+
+const retireSteerHint = (): void => {
+  if (steerHintTimer !== null) {
+    clearTimeout(steerHintTimer)
+    steerHintTimer = null
+  }
+  steerHintDone.value = true
+}
 
 const tutorialSeen = ref(getState<boolean>(TUTORIAL_KEY, false) === true)
 /**
@@ -265,9 +410,7 @@ const tutorialActive = ref(false)
 /** A tutorial is owed and has not run yet. True from the first frame. */
 const tutorialPending = ref(!tutorialSeen.value)
 const tutorialProgress = ref(0)
-let tutorialMovedMs = 0
-let tutorialWaitedMs = 0
-let tutorialLastX = 0
+let tutorialClock = newTutorialClock(0)
 
 /**
  * @param completed did the player actually perform the gesture, or did the
@@ -296,16 +439,11 @@ const finishTutorial = (completed: boolean): void => {
 /** Drives the movement clock. Called from the render loop, after `step`. */
 const driveTutorial = (dtMs: number): void => {
   if (!tutorialActive.value) return
-  tutorialWaitedMs += dtMs
-  const x = anchor().x
-  // Credit the time only while the SQUAD is moving, not while the finger is
-  // down. The lesson is "the crowd follows you", so the crowd has to have
-  // followed — and a player who taps once and holds still has not learned it.
-  if (Math.abs(x - tutorialLastX) > TUTORIAL_MOVE_EPS) tutorialMovedMs += dtMs
-  tutorialLastX = x
-  tutorialProgress.value = Math.min(1, tutorialMovedMs / TUTORIAL_MOVE_MS)
-  if (tutorialMovedMs >= TUTORIAL_MOVE_MS) finishTutorial(true)
-  else if (tutorialWaitedMs >= TUTORIAL_BAILOUT_MS) finishTutorial(false)
+  const { progress, outcome } = tickTutorial(
+    tutorialClock, dtMs, sawFirstInput.value, anchor().x
+  )
+  tutorialProgress.value = progress
+  if (outcome !== null) finishTutorial(outcome === 'moved')
 }
 
 // ─── Control hints ──────────────────────────────────────────────────────────
@@ -387,7 +525,16 @@ const activeHint = computed<HintId | null>(() => {
 // stop the first time the player is clear of them, the crate hints when the
 // matching stat actually moves.
 watch(laneWarning, (warn, before) => {
-  if (before && !warn) markHintDone(before)
+  if (!before || warn) return
+  // …except the two crate lessons, which retire ONLY when the matching stat
+  // actually moves (below).
+  //
+  // Passing a crate is not learning what a crate is. A player who reads "boxes
+  // are obstacles" and steers around the first one would otherwise have the
+  // lesson marked as taught by the very act of avoiding it, and never be told
+  // again — which is exactly the misconception the hint exists to correct.
+  if (before === 'crate' || before === 'rate') return
+  markHintDone(before)
 })
 
 // The gate hint retires itself the moment the player actually holds fire on a
@@ -477,6 +624,81 @@ const maybeShowInterstitial = async (): Promise<void> => {
   await showMidgameAd()
 }
 
+/**
+ * ─── The opening stages hand over without stopping ──────────────────────────
+ *
+ * Clearing a stage used to mean, always: music down, overlay up, statistics, a
+ * button. That is the right shape for a player deciding what to buy. It is the
+ * wrong shape at twenty-five seconds, where it reads as an ENDING to somebody
+ * who has not decided anything yet — and measured on Poki, half the testers left
+ * at exactly that screen, having just beaten the tutorial boss.
+ *
+ * The arithmetic underneath is the real problem. Stages run 24-48 s, so Poki's
+ * three-minute gate needs five cleared stages, which is five of those screens.
+ * Even at a generous 87 % continue rate per screen that is 0.87^5 — half the
+ * players gone before the gate, purely to structure.
+ *
+ * So the first stages do not stop. Coins bank, the gift lands, the road keeps
+ * moving, and `StageBanner` rides over the next stage's opening — which is
+ * fifteen units of empty road by design, so the handover costs no gameplay. The
+ * first real result screen arrives around ninety seconds, by which point the
+ * player has met a boss, been handed a skill, and has coins worth spending.
+ *
+ * The shop is not skipped, only deferred: it is on the HUD throughout, and every
+ * stage from `CONTINUOUS_THROUGH_STAGE` on presents normally.
+ */
+const CONTINUOUS_THROUGH_STAGE = 2
+
+/** How long the handover banner sits over the new stage's opening. */
+const BANNER_MS = 1700
+
+const bannerStage = ref(0)
+const bannerUnlock = ref<{ icon: GameIconName; label: string } | null>(null)
+const bannerShown = ref(false)
+
+/**
+ * The stage-1 gift.
+ *
+ * A player who has just beaten the tutorial boss has earned something they can
+ * SEE, and "here is a button you did not have" is a far better reason to start
+ * stage 2 than a coin total. The shield is the natural pick: it is the game's
+ * other active skill, it is otherwise hidden behind a shop the player has not
+ * opened yet, and handing over level 1 leaves the remaining nine for the shop to
+ * sell. Returns what to announce, or `null` if they already had it.
+ */
+const grantStageGift = (clearedStage: number): { icon: GameIconName; label: string } | null => {
+  if (clearedStage !== 1) return null
+  if (!grantUpgrade('shield', 1)) return null
+  return { icon: 'shield', label: t('skills.shield') }
+}
+
+/** A cleared stage that hands straight over to the next one. */
+const flowToNextStage = async (): Promise<void> => {
+  summary.value = runSummary()
+  triggerHappytime()
+
+  // Everything `presentResult` banks, minus the screen. The music is
+  // deliberately NOT stopped and not restarted: it has been playing since the
+  // run began and the player never left the run.
+  void bankCoins()
+  void reportRun(bestStage.value, summary.value.peakSquad)
+  if (!onboarded.value) {
+    onboarded.value = true
+    setState(ONBOARDED_KEY, true)
+  }
+
+  const gift = grantStageGift(summary.value.stage)
+
+  resetVfx()
+  invalidateArt()
+  advanceStage()
+
+  bannerStage.value = stage.value
+  bannerUnlock.value = gift
+  bannerShown.value = true
+  window.setTimeout(() => { bannerShown.value = false }, BANNER_MS)
+}
+
 /** Stage cleared or squad wiped — the end of a run, either way. */
 const presentResult = async (): Promise<void> => {
   summary.value = runSummary()
@@ -488,6 +710,10 @@ const presentResult = async (): Promise<void> => {
 
   rewardClaimed.value = false
   rewardWasOffered.value = canOfferReward.value
+  // Counted BEFORE the screen goes up, so the hint below reads the number that
+  // includes this screen: it shows on the 1st, 2nd and 3rd, then stops.
+  resultsSeen.value += 1
+  setState(RESULTS_SEEN_KEY, resultsSeen.value)
   showResult.value = true
   void bankCoins()
 
@@ -602,7 +828,13 @@ const bankCoins = async (): Promise<void> => {
 }
 
 watch(phase, (p, prev) => {
-  if ((p === 'clear' || p === 'wipe') && prev !== p) void presentResult()
+  if (p === 'clear' && prev !== p) {
+    // A wipe always presents: the player has a decision to make there (retry,
+    // and the x3 on the coins they just lost). A clear this early has none.
+    void (runSummary().stage <= CONTINUOUS_THROUGH_STAGE ? flowToNextStage() : presentResult())
+    return
+  }
+  if (p === 'wipe' && prev !== p) void presentResult()
 })
 
 const beginStage = (next: boolean): void => {
@@ -654,6 +886,19 @@ watch(showUpgrades, (open, wasOpen) => {
 
 // ─── Shop spotlight (one-shot) ──────────────────────────────────────────────
 
+/**
+ * How many result screens this player has seen, ever — deaths and clears alike.
+ *
+ * The upgrade button is a glyph in a row of glyphs, and a player who does not
+ * work out that it leads to a shop just replays the same run until they stop
+ * playing. The Poki fit test read like that: 64 % of sessions ended inside two
+ * minutes. So the first three result screens point at it explicitly, and then
+ * never again — a permanent arrow is nagging, and it would sit on top of the
+ * one control that ends the screen.
+ */
+const resultsSeen = ref(Number(getState(RESULTS_SEEN_KEY, 0)) || 0)
+const showUpgradeHint = computed(() => showResult.value && resultsSeen.value <= 3)
+
 const shopSpotlightSeen = ref(getState<boolean>(SHOP_SPOTLIGHT_KEY, false) === true)
 const affordable = computed(() => affordableCount(coins.value))
 const showShopSpotlight = computed(() =>
@@ -688,6 +933,16 @@ const isLiveGameplay = computed(() =>
 )
 watch(isLiveGameplay, syncGameplayLifecycle, { immediate: true })
 
+// The hint's clock starts when the road does — not at mount, which on a first
+// run is behind the tutorial lightbox, and not at boot, which is behind the
+// splash. Five seconds of gameplay is what was asked for, so it is five seconds
+// of gameplay that it counts.
+watch(isLiveGameplay, (live) => {
+  if (!live || steerHintArmed.value || steerHintDone.value) return
+  steerHintArmed.value = true
+  steerHintTimer = window.setTimeout(retireSteerHint, STEER_HINT_MS)
+})
+
 // ─── Boot ───────────────────────────────────────────────────────────────────
 
 let booting = false
@@ -718,10 +973,8 @@ const boot = async (): Promise<void> => {
     if (tutorialPending.value) {
       tutorialActive.value = true
       steerOnly.value = true
-      tutorialMovedMs = 0
-      tutorialWaitedMs = 0
+      tutorialClock = newTutorialClock(anchor().x)
       tutorialProgress.value = 0
-      tutorialLastX = anchor().x
     }
     await nextTick()
     resize()
@@ -733,6 +986,16 @@ const boot = async (): Promise<void> => {
     booting = false
   }
 }
+
+// `renderScaleTier` picks the DPR cap above, so committing it has to re-size the
+// canvas — otherwise the cheaper setting only lands on the next orientation
+// change, which on a phone mid-run is never.
+//
+// It fires AT MOST ONCE a session by construction (see `renderScaleTier`). An
+// earlier version watched the live `quality` tier instead and cost 27 fps on a
+// throttled phone: a resize re-bakes every cached piece of art, ~700 ms there,
+// and the tier moves several times a session.
+watch(renderScaleTier, () => resize())
 
 const onOrientationChange = (): void => { setTimeout(resize, 250) }
 
@@ -817,6 +1080,22 @@ onUnmounted(() => {
       //- the canvas underneath it.
       TutorialOverlay(v-if="tutorialActive" :progress="tutorialProgress")
 
+      //- Touch-only, and only for the opening seconds — see `showSteerHint`.
+      StageBanner(
+        :show="bannerShown"
+        :stage="bannerStage"
+        :unlock="bannerUnlock"
+      )
+      SteerHint(:lane-half-px="laneHalfPx" :show="showSteerHint")
+
+      //- Right edge, above the bottom bar — see `SkillBar.vue` for why there.
+      SkillBar(
+        v-if="!showResult"
+        :shield-live="shieldLive"
+        :lane-half-px="laneHalfPx"
+        @use="onUseSkill"
+      )
+
       //- ── Bottom bar ────────────────────────────────────────────────────
       div.scene__bottom(ref="bottomBarRef")
         div.scene__meta
@@ -863,7 +1142,15 @@ onUnmounted(() => {
 
       div.result
         div.result__headline
-          span.result__stage {{ t('result.reachedStage', { n: summary.stage }) }}
+          //- ON A WIN THIS LOOKS FORWARD, and on a loss it looks back.
+          //-
+          //- The screen used to headline the stage just finished either way,
+          //- which is a summary — the shape of an ending. Half of Poki's testers
+          //- left at this screen having just WON, so the win path now names the
+          //- thing that has not happened yet. The stage they cleared is already
+          //- on the ribbon above; repeating it bought nothing.
+          span.result__stage(v-if="summary.cleared") {{ t('result.upNext', { n: summary.stage + 1 }) }}
+          span.result__stage(v-else) {{ t('result.reachedStage', { n: summary.stage }) }}
           span.result__record(v-if="summary.isRecord") {{ t('result.newRecord') }}
           //- Only ever shown AFTER the run. Telling a player mid-stage that the
           //- game went easy on them takes the win away from them.
@@ -947,16 +1234,22 @@ onUnmounted(() => {
         //- the row is visually uniform and the one button that ends the screen
         //- needs another way to be found. `emphasis` grows the real layout box,
         //- so the row still gutters correctly around it.
-        div.result__actions
-          FButton(
-            icon-only
-            icon="shop"
-            :size="resultCompact ? 'sm' : 'md'"
-            type="secondary"
-            :is-disabled="adInFlight"
-            :aria-label="t('result.upgrade')"
-            @click="onUpgradeFromResult"
-          )
+        div.result__actions(:class="{ 'result__actions--hinted': showUpgradeHint }")
+          //- The upgrade button wears a pointer on the first three result
+          //- screens only. It is a glyph in a row of glyphs, and it is the one
+          //- that makes the next run different from the last.
+          div.result__shop(:class="{ 'result__shop--hinted': showUpgradeHint }")
+            Transition(name="shop-tip")
+              div.result__shop-tip(v-if="showUpgradeHint") {{ t('result.upgradeHint') }}
+            FButton(
+              icon-only
+              icon="shop"
+              :size="resultCompact ? 'sm' : 'md'"
+              type="secondary"
+              :is-disabled="adInFlight"
+              :aria-label="t('result.upgrade')"
+              @click="onUpgradeFromResult"
+            )
           FButton(
             icon-only
             :icon="summary.cleared ? 'skip-forward' : 'replay'"
@@ -1268,6 +1561,88 @@ onUnmounted(() => {
   font-size: clamp(1.1rem, 5vmin, 2rem)
   line-height: 1.1
   text-shadow: 3px 3px 0 #000
+
+// ─── The upgrade pointer (first three result screens) ───────────────────────
+//
+// A label above the shop glyph plus a ring around it. Both are `pointer-events:
+// none` so the hint can never eat the tap it is asking for, and the label is
+// absolutely positioned so adding it does not move the action row — the row is
+// laid out for a 320 px phone and has no slack.
+.result__shop
+  position: relative
+  display: flex
+  align-items: center
+  justify-content: center
+
+.result__shop-tip
+  // ABOVE the button. Below it looked tempting — there is dead space under the
+  // row — but the result panel clips its own overflow, so the bubble was cut in
+  // half. Above it would collide with the rewarded ×3 button, which carries a
+  // number and must stay legible, so the ROW reserves space for it instead
+  // (`.result__actions--hinted`). The reservation is only paid while the hint
+  // is up, so the normal screen keeps its layout exactly as it was.
+  position: absolute
+  bottom: calc(100% + 0.45rem)
+  left: 50%
+  transform: translateX(-50%)
+  z-index: 2
+  pointer-events: none
+  white-space: nowrap
+  padding: 0.22rem 0.6rem
+  border-radius: 999px
+  border: 2px solid rgba(255, 255, 255, 0.22)
+  background-color: rgba(8, 14, 28, 0.9)
+  color: #ffd93c
+  font-weight: 900
+  font-size: clamp(0.58rem, 2.6vw, 0.8rem)
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.85)
+  animation: shop-tip-bob 1.5s ease-in-out infinite
+
+  // The tail, pointing down at the button.
+  &::after
+    content: ''
+    position: absolute
+    top: 100%
+    left: 50%
+    transform: translateX(-50%)
+    border: 0.32rem solid transparent
+    border-top-color: rgba(255, 255, 255, 0.22)
+
+.result__shop--hinted
+  // A ring on the button itself: the label says what, this says which.
+  &::before
+    content: ''
+    position: absolute
+    inset: -0.3rem
+    border-radius: 1rem
+    border: 2px solid rgba(255, 217, 60, 0.8)
+    pointer-events: none
+    animation: shop-ring-pulse 1.5s ease-in-out infinite
+
+@keyframes shop-tip-bob
+  0%, 100%
+    transform: translateX(-50%) translateY(0)
+  50%
+    transform: translateX(-50%) translateY(-0.22rem)
+
+@keyframes shop-ring-pulse
+  0%, 100%
+    opacity: 0.45
+    transform: scale(1)
+  50%
+    opacity: 1
+    transform: scale(1.06)
+
+.shop-tip-enter-active, .shop-tip-leave-active
+  transition: opacity 0.25s ease
+
+.shop-tip-enter-from, .shop-tip-leave-to
+  opacity: 0
+
+// Only while the pointer is up: enough headroom for the bubble to sit between
+// the rewarded button and the action row without touching either.
+.result__actions--hinted
+  margin-top: clamp(1.3rem, 5vmin, 1.9rem)
 
 .result__actions
   display: flex

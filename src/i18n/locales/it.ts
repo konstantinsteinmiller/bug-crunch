@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!', 'desktop': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Sbloccato!'
+
+  },
+
   'result': {
     'stageClear': 'Livello superato!',
     'wipedOut': 'Squadra annientata',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Livello successivo',
     'tryAgain': 'Riprova',
     'upgrade': 'Potenzia',
-    'rankOf': 'su {n}'
+    'upgradeHint': 'Potenzia la squadra!',
+    'rankOf': 'su {n}',
+    'upNext': 'Prossimo: Livello {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'su {n} giocatori'
   },
 
+  'skills': {
+
+    'grenade': 'Granata',
+
+    'shield': 'Scudo'
+
+  },
+
   'upgrades': {
     'title': 'Potenziamenti',
     'spotlight': 'Spendi!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Potenza',
       'rate': 'Cadenza',
       'range': 'Gittata',
-      'scavenge': 'Recupero'
+      'scavenge': 'Recupero',
+      'grenade': 'Granata',
+      'shield': 'Scudo'
     },
     'descriptions': {
       'squad': 'Inizia ogni livello con più sopravvissuti.',
       'power': 'Ogni sopravvissuto infligge più danni per colpo.',
       'rate': 'Ogni sopravvissuto spara più velocemente.',
       'range': 'La squadra apre il fuoco più avanti sulla strada.',
-      'scavenge': 'Guadagna più monete a ogni partita.'
+      'scavenge': 'Guadagna più monete a ogni partita.',
+      'grenade': 'Lancia una granata per un colpo di danno pesante.',
+      'shield': 'Dimezza i danni alla squadra per qualche secondo.'
     }
   },
 

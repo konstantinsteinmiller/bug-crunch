@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Bouclier levé — tes tirs ne font rien. BOUGE !', 'desktop': 'Bouclier levé — tes tirs ne font rien. BOUGE !' }
   },
 
+  'flow': {
+
+    'unlocked': 'Débloqué !'
+
+  },
+
   'result': {
     'stageClear': 'Niveau terminé !',
     'wipedOut': 'Escouade anéantie',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Niveau suivant',
     'tryAgain': 'Réessayer',
     'upgrade': 'Améliorer',
-    'rankOf': 'sur {n}'
+    'upgradeHint': 'Améliore ton escouade !',
+    'rankOf': 'sur {n}',
+    'upNext': 'Ensuite : Niveau {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'sur {n} joueurs'
   },
 
+  'skills': {
+
+    'grenade': 'Grenade',
+
+    'shield': 'Bouclier'
+
+  },
+
   'upgrades': {
     'title': 'Améliorations',
     'spotlight': 'Dépense !',
@@ -87,14 +103,18 @@ export default {
       'power': 'Puissance',
       'rate': 'Cadence',
       'range': 'Portée',
-      'scavenge': 'Récupération'
+      'scavenge': 'Récupération',
+      'grenade': 'Grenade',
+      'shield': 'Bouclier'
     },
     'descriptions': {
       'squad': 'Commence chaque niveau avec plus de survivants.',
       'power': 'Chaque survivant inflige plus de dégâts par tir.',
       'rate': 'Chaque survivant tire plus vite.',
       'range': 'Ton escouade ouvre le feu plus loin sur la route.',
-      'scavenge': 'Gagne plus de pièces à chaque partie.'
+      'scavenge': 'Gagne plus de pièces à chaque partie.',
+      'grenade': 'Lance une grenade pour infliger de gros dégâts.',
+      'shield': 'Réduit de moitié les dégâts subis pendant quelques secondes.'
     }
   },
 

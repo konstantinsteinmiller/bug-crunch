@@ -6,7 +6,9 @@ import {
 import {
   primeMonsterSprites, monstersReady, monsterBakeProgress01, bakeMonsterSlice
 } from '@/game/monsterSprites'
-import { allFoeDesigns } from '@/game/foes'
+import { stageDesigns } from '@/game/foes'
+import { getState } from '@/use/useTowerState'
+import { STAGE_KEY } from '@/keys'
 
 // Survivalist draws all gameplay art programmatically (Canvas 2D) and uses
 // inline SVG for HUD icons, so the preloader only has to decode two pieces of
@@ -340,10 +342,27 @@ export default () => {
   }
 }
 
-/** The foe + boss designs the renderer will ask for. Cached: the list is static
- *  and `allFoeDesigns()` allocates a Set and an array on every call. */
+/**
+ * The foe + boss designs THIS BOOT will actually put on screen — the roster of
+ * the stage the save resumes to, not the whole cast.
+ *
+ * Gating the splash on all thirteen designs (208 canvases) took 11 s on a
+ * throttled phone and still only reached 19 %, so the rest baked mid-run: that
+ * is where both the red fallback ellipses and the stutter came from. A fresh
+ * player needs four designs; a returning one needs what they are about to meet.
+ *
+ * Read straight from the persisted blob rather than from `useSurvivalGame` —
+ * the loader runs before the game module graph is imported, and reaching for it
+ * here would invert that order.
+ */
 let foeDesignCache: string[] | null = null
-const foeDesigns = (): string[] => (foeDesignCache ??= allFoeDesigns())
+const foeDesigns = (): string[] => {
+  if (foeDesignCache) return foeDesignCache
+  const raw = Number(getState(STAGE_KEY, 1))
+  const stage = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1
+  foeDesignCache = stageDesigns(stage)
+  return foeDesignCache
+}
 
 /**
  * Wait for the sprite strips to bake, feeding the loading bar as they go.

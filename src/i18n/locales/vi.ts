@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Khiên bật — bắn vô ích. TRÁNH RA!', 'desktop': 'Khiên bật — bắn vô ích. TRÁNH RA!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Đã mở khóa!'
+
+  },
+
   'result': {
     'stageClear': 'Qua màn!',
     'wipedOut': 'Đội bị xóa sổ',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Màn tiếp theo',
     'tryAgain': 'Thử lại',
     'upgrade': 'Nâng cấp',
-    'rankOf': 'trên {n}'
+    'upgradeHint': 'Nâng cấp đội của bạn!',
+    'rankOf': 'trên {n}',
+    'upNext': 'Tiếp theo: Màn {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'trên {n} người chơi'
   },
 
+  'skills': {
+
+    'grenade': 'Lựu đạn',
+
+    'shield': 'Khiên'
+
+  },
+
   'upgrades': {
     'title': 'Nâng cấp',
     'spotlight': 'Tiêu đi!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Sát thương',
       'rate': 'Tốc độ bắn',
       'range': 'Tầm bắn',
-      'scavenge': 'Nhặt nhạnh'
+      'scavenge': 'Nhặt nhạnh',
+      'grenade': 'Lựu đạn',
+      'shield': 'Khiên'
     },
     'descriptions': {
       'squad': 'Bắt đầu mỗi màn với nhiều người sống sót hơn.',
       'power': 'Mỗi người gây nhiều sát thương hơn mỗi phát.',
       'rate': 'Mỗi người bắn nhanh hơn.',
       'range': 'Đội của bạn khai hỏa xa hơn trên đường.',
-      'scavenge': 'Kiếm nhiều xu hơn sau mỗi lượt.'
+      'scavenge': 'Kiếm nhiều xu hơn sau mỗi lượt.',
+      'grenade': 'Ném lựu đạn để gây sát thương lớn.',
+      'shield': 'Giảm một nửa sát thương lên đội trong vài giây.'
     }
   },
 

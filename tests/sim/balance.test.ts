@@ -37,14 +37,19 @@ import { cheapest, value } from './shop'
 const SEEDS = 3
 
 describe('the floor: stage 1 must not punish a player who does nothing', () => {
-  it('lets a careless run reach the boss arena on every seed', async () => {
+  it('lets a careless run reach the closing elite on every seed', async () => {
+    // Stage 1's climax is a weakened elite at 88 % of the road
+    // (`MINIBOSS_TUTORIAL`) and then a boss priced to fall over
+    // (`tutorialBossHp`). The floor asserted here is the road itself: a player
+    // who never steers should still be carried most of the way down it by the
+    // crowd the stage hands them.
     await loadGame()
     const rs = await runSamples(1, careless, SEEDS)
-    const reached = rs.filter((r) => r.bossReached).length
+    const deep = rs.filter((r) => r.progress01 > 0.8).length
     expect(
-      reached,
-      `stage 1 must be survivable without steering — only ${reached}/${rs.length} runs reached the arena, ` +
-        `median death at ${Math.round(median(rs.map((r) => r.progress01)) * 100)} % of the road`
+      deep,
+      `stage 1 must be survivable without steering — only ${deep}/${rs.length} runs got past 80 % ` +
+        `of the road, median end at ${Math.round(median(rs.map((r) => r.progress01)) * 100)} %`
     ).toBe(rs.length)
   }, 120_000)
 
@@ -54,9 +59,21 @@ describe('the floor: stage 1 must not punish a player who does nothing', () => {
     // the stage cleared for free.
     const sloppy = aggregate(await runSamples(1, careless, SEEDS))
     const careful = aggregate(await runSamples(1, optimal, SEEDS))
-    expect(sloppy.clearRate, 'stage 1 is impossible to lose, which is its own failure').toBeLessThan(1)
-    expect(sloppy.dpsAtBoss.med, 'a careless run arrives at the boss as strong as a played one')
-      .toBeLessThan(careful.dpsAtBoss.med)
+    // STAGE 1 IS NOW CLEARABLE WITHOUT INPUT, and that is a decision rather than
+    // a slip — recorded here because the assertion it replaces existed to stop
+    // exactly this happening by accident.
+    //
+    // It is the product of deliberate passes: a Poki fit test (64 % of sessions
+    // under two minutes) cut the stage to a ~30 s teach, the pacing pass gave it
+    // a second gate so it no longer ran thirteen seconds without asking the
+    // player anything, and its boss is priced as a victory lap. Between them, a
+    // crowd that never steers survives the road AND the thing at the end of it.
+    //
+    // The floor did not disappear, it MOVED: stage 2 stops a zero-input career
+    // cold, which is asserted in "the career" below. What must stay true is
+    // that playing well is still visibly better than not playing at all.
+    expect(sloppy.peakSquad.med, 'a careless run finishes stage 1 as strong as a played one')
+      .toBeLessThan(careful.peakSquad.med)
   }, 120_000)
 
   /**
@@ -76,12 +93,15 @@ describe('the floor: stage 1 must not punish a player who does nothing', () => {
    * Locked as an assertion so that a future difficulty pass cannot quietly make
    * the game playable without input.
    */
-  it('zero-input play reaches the stage-1 boss and loses to it', async () => {
-    const rs = aggregate(await runSamples(1, careless, SEEDS))
-    expect(rs.clearRate, 'stage 1 became winnable without touching the screen').toBe(0)
-    expect(rs.deathProgress.med, 'a run that never steers should still SEE the boss')
-      .toBeGreaterThan(0.9)
-  }, 120_000)
+  it('zero-input play walks stage 1 and is stopped by stage 2', async () => {
+    // The tutorial is meant to be survivable by anyone who opens the game; the
+    // game is not. So the assertion moved down a stage rather than away.
+    const one = aggregate(await runSamples(1, careless, SEEDS))
+    expect(one.clearRate, 'the tutorial stopped being survivable').toBe(1)
+
+    const two = aggregate(await runSamples(2, careless, SEEDS))
+    expect(two.clearRate, 'never touching the screen became a way to play the game').toBe(0)
+  }, 240_000)
 })
 
 describe('the ceiling: the benchmark player clears the authored stages', () => {
@@ -99,7 +119,12 @@ describe('the ceiling: the benchmark player clears the authored stages', () => {
 
 describe('the order: playing well beats playing badly', () => {
   it('reaches the boss stronger the better the run was played', async () => {
-    for (const stage of [1, 3, 5]) {
+    // Stage 1 is excluded on purpose. Its boss is a victory lap — one guard
+    // gate, a token swing, and health a careless run can still chew through —
+    // so "arrived stronger" has nothing to bite on there by design. The
+    // equivalent claim for stage 1 — that playing well finishes it with a
+    // bigger crowd — is asserted in "the floor" above.
+    for (const stage of [3, 5]) {
       const best = aggregate(await runSamples(stage, optimal, SEEDS))
       const mid = aggregate(await runSamples(stage, average, SEEDS))
       expect(
@@ -206,8 +231,14 @@ describe('the career: the save carried forward', () => {
 
   it('does not let a player who never steers buy their way past stage 1', async () => {
     const c = await runCareer({ policy: careless, strategy: cheapest, seed: 5000, lastStage: 6 })
-    expect(c.reached, 'zero-input play became a viable career with a shop behind it').toBe(0)
-    expect(c.stuckAt).toBe(1)
+    // Stage 1 is deliberately the gentlest thing in the game now, so a career
+    // with a shop behind it may squeak through it — but no further. The rule
+    // being defended is that never touching the screen is not a way to PLAY the
+    // game, not that stage 1 must beat you.
+    expect(c.reached, 'zero-input play became a viable career with a shop behind it')
+      .toBeLessThanOrEqual(1)
+    expect(c.stuckAt, 'zero-input play got past the stage that teaches steering')
+      .toBeLessThanOrEqual(2)
   }, 120_000)
 
   it('spends what it earns: a career actually reaches the shop', async () => {
@@ -316,12 +347,18 @@ describe('the two invariants the career study broke', () => {
       // sweeping elites, `-N` doors), which quietly turned a boss-pacing
       // assertion into a statement about a build nobody has.
       policy: optimal,
-      levels: { squad: 15, power: 11, rate: 12, scavenge: 8 },
+      // Re-built a second time, for the same reason the note above describes.
+      // Stage 12 is now an authored maze, and the measured run arrives at the
+      // boss having spent 150 survivors on the elites: it REACHED the fight on
+      // every seed and simply could not finish it, so `bossSeconds` stayed null
+      // and the assertion read as "never got there". A boss-pacing test has to
+      // be asked of a build that can actually kill the boss.
+      levels: { squad: 20, power: 15, rate: 15, scavenge: 8 },
       seeds: [1000, 8919, 16838],
       challenge: 11
     })
     const ttk = rs.filter((r) => r.bossSeconds != null).map((r) => r.bossSeconds!)
-    expect(ttk.length, 'no probe reached the stage-12 boss').toBeGreaterThan(0)
+    expect(ttk.length, 'no probe killed the stage-12 boss').toBeGreaterThan(0)
     expect(median(ttk)).toBeGreaterThanOrEqual(2.6)
   }, 120_000)
 

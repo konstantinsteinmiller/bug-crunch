@@ -1,13 +1,17 @@
 import {
-  BARRICADE_H, BASE_FIRE_RATE, ROCK_H, CRATE_R, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H,
+  BARREL_R, BARRICADE_H, BASE_FIRE_RATE, ROCK_H, CRATE_R, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H,
   DIVIDER_HALF_W, ELITE_SWEEP_REACH, ELITE_TELEGRAPH,
+  GATE_TICK_MS, gatePumpCap, gateValueLabel,
   LANE_HALF, MAX_FIRE_RATE, SLAM_RADIUS, SLAM_RADIUS_GROWTH, slamRadiusFor,
   SLAM_RADIUS_MAX, VIEW_HEIGHT, UNIT_R,
   type Divider, type GateOp
 } from '@/game/survival'
 import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBoss,
-  getBullets, getCrates, getDividers, getFoes, getGates, getPickups, getRocks, getUnits,
+  shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
+  getBarrels, getBullets, getCrates, getDividers, getFoes, getGates, getGrenades, getPickups,
+  getRocks,
+  getUnits,
   nowMs, phase, runFireRate, squadCount, stage
 } from '@/use/useSurvivalGame'
 import {
@@ -15,9 +19,10 @@ import {
   primeSurvivors, survivorFrame
 } from '@/game/heroSprites'
 import {
-  SPRITE_FOOT, SPRITE_HEIGHT, monsterFaces, monsterFrame, primeMonsterSprites
+  SPRITE_FOOT, SPRITE_HEIGHT, bakeMonsterSlice, monsterFaces, monsterFrame,
+  monstersReady, primeMonsterSprites
 } from '@/game/monsterSprites'
-import { allFoeDesigns } from '@/game/foes'
+import { stageDesigns } from '@/game/foes'
 import {
   drainFx, drawParticles, emit, emitDecal, emitText, getDecals, getTexts,
   quality, sampleFrame, stepDecals, stepParticles, stepTexts, type FxEvent
@@ -25,6 +30,7 @@ import {
 import { useScreenshake } from '@/use/useScreenshake'
 import { playFx } from '@/use/useGameAudio'
 import { getCachedImage } from '@/use/useAssets'
+import { clearRamps, getRamp, putRamp } from '@/use/useGradientRamps'
 
 /**
  * ─── Renderer ───────────────────────────────────────────────────────────────
@@ -704,9 +710,10 @@ const spawnDismissal = (
   d.y = y
   d.halfW = halfW
   d.op = op
-  d.label = op === 'div' ? `÷${value}`
-    : op === 'sub' ? `−${value}`
-    : op === 'mul' ? `×${value}` : `+${value}`
+  const shown = gateValueLabel(value)
+  d.label = op === 'div' ? `÷${shown}`
+    : op === 'sub' ? `−${shown}`
+    : op === 'mul' ? `×${shown}` : `+${shown}`
   // Capped: a bank can never be wider than the lane, and an uncapped delay on a
   // freak layout would leave a leaf still standing after the crowd has run past
   // where it used to be.
@@ -954,7 +961,9 @@ const burstDismissal = (d: Dismissal): void => {
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 
-let primed = false
+let primedStage = -1
+/** Designs the CURRENT stage can spawn — the set the top-up below guarantees. */
+let currentStageDesigns: string[] = []
 
 export const drawScene = (
   ctx: CanvasRenderingContext2D,
@@ -974,11 +983,30 @@ export const drawScene = (
   camY = a.y
   measureCrowd(dtMs)
 
-  if (!primed) {
-    primed = true
+  // Prime per STAGE, not the whole cast, and re-prime when the stage changes.
+  // The lookahead queues the next stage's designs while the player is still on
+  // this one; they bake during the result screen (the baker is gated off during
+  // live gameplay), so the next stage opens with its strips already warm.
+  if (primedStage !== stage.value) {
+    primedStage = stage.value
+    currentStageDesigns = stageDesigns(stage.value)
     primeSurvivors()
-    primeMonsterSprites(allFoeDesigns())
+    primeMonsterSprites(currentStageDesigns)
+    primeMonsterSprites(stageDesigns(stage.value + 1))
   }
+
+  // The guarantee that closes the last hole. The idle baker is switched OFF
+  // while gameplay is live, and the lookahead normally finishes during the
+  // result screen — but if the player blows through a stage, or a break was too
+  // short, the next stage can open with a design still missing and its foes draw
+  // as the red fallback ellipse. So while anything THIS stage can spawn is still
+  // unbaked, spend a small slice per frame on it, no matter what the gate says.
+  //
+  // Deliberately narrow: only the current stage's designs (four on stage 1, not
+  // the thirteen of the full cast), and 6 ms rather than the idle baker's 10, so
+  // it costs a fraction of a frame and self-terminates within a few hundred ms.
+  // A brief dip is worth never showing a placeholder where a monster should be.
+  if (!monstersReady(currentStageDesigns)) bakeMonsterSlice(6)
 
   // Events → particles, sound and shake. Drained BEFORE stepping the pools so a
   // burst spawned this frame is already integrated once when it is first drawn
@@ -1005,6 +1033,7 @@ export const drawScene = (
   drawDecals(ctx)
   drawPickups(ctx)
   drawCrates(ctx)
+  drawBarrels(ctx)
   drawBarricades(ctx)
   drawRocks(ctx)
   // Shock ring → live leaves → the leaves being torn down → the pillars. The
@@ -1016,6 +1045,8 @@ export const drawScene = (
   drawFoes(ctx)
   drawBossBody(ctx)
   drawUnits(ctx)
+  // The player's own effects sit above the crowd they belong to.
+  drawSkills(ctx)
   // The elite's wind-up again, over the bodies — the ground pass under them is
   // buried by a full-size crowd, and the crowd is exactly what it aims at. See
   // `drawEliteTelegraphs`.
@@ -1140,44 +1171,103 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
 const drawDecals = (ctx: CanvasRenderingContext2D): void => {
   const decals = getDecals()
   if (decals.length === 0) return
+
+  // Scorch marks vary in BOTH radius and opacity, which is what made this the
+  // worst of the per-entity ramps: neither could be carried in a cache key, so
+  // every decal on the road rebuilt a two-stop ramp every frame.
+  //
+  // The opacity moves to `globalAlpha`, which is exact rather than an
+  // approximation: canvas interpolates stops premultiplied, so ramping
+  // `rgba(12,10,14,a) → 0` is the same pixel as ramping `rgba(12,10,14,1) → 0`
+  // and scaling the result by `a`.
+  //
+  // The radius goes in the KEY, at full precision, rather than being pushed
+  // into a `scale()`. Sizing a unit ramp by the transform is the tempting move
+  // and it measured worse than the gradient it replaces — see the note in
+  // `useGradientRamps`.
+  //
+  // Full precision rather than a quantised bucket because it costs nothing
+  // here: the emitters ask for a handful of fixed radii (1.4, 1.1, 0.9, 1.3,
+  // 1.5, 2.1, 2.4) times a frame-constant `scale`, so exact keys already hit for
+  // almost every decal, and rounding would trade real output fidelity for a
+  // saving no measurement asked for. There are at most 24 of these.
   for (const d of decals) {
     const a = Math.min(1, d.life / d.maxLife) * d.dark
     if (a <= 0.01) continue
-    const sx = worldToScreenX(d.x)
-    const sy = worldToScreenY(d.y)
     const r = d.r * scale
-    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r)
-    g.addColorStop(0, `rgba(12,10,14,${a})`)
-    g.addColorStop(1, 'rgba(12,10,14,0)')
-    ctx.fillStyle = g
+    if (r <= 0) continue
+
+    const key = `decal|${r}`
+    let ramp = getRamp(key)
+    if (!ramp) {
+      ramp = putRamp(key, ctx.createRadialGradient(0, 0, 0, 0, 0, r))
+      ramp.addColorStop(0, 'rgba(12,10,14,1)')
+      ramp.addColorStop(1, 'rgba(12,10,14,0)')
+    }
+
+    ctx.save()
+    ctx.translate(worldToScreenX(d.x), worldToScreenY(d.y))
+    ctx.globalAlpha = a
+    ctx.fillStyle = ramp
     ctx.beginPath()
-    ctx.ellipse(sx, sy, r, r * 0.55, 0, 0, Math.PI * 2)
+    ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
   }
 }
 
 // ─── Layer 6: pickups, crates, barricades, gates ────────────────────────────
 
 const drawPickups = (ctx: CanvasRenderingContext2D): void => {
-  for (const p of getPickups()) {
+  const pickups = getPickups()
+  if (pickups.length === 0) return
+
+  // Every coin on the road is the same coin. The radius comes from `scale`, so
+  // both ramps are fixed for the whole frame and only their POSITION differs —
+  // which is precisely the case that a cached ramp plus a `translate` covers,
+  // and precisely the case that building at absolute screen coordinates
+  // (`createRadialGradient(sx, ...)`) cannot, because `sx` moves every frame.
+  const r = scale * 0.22
+  const glowR = r * 2.6
+
+  let glow = getRamp(`coinGlow|${glowR}`)
+  if (!glow) {
+    glow = putRamp(`coinGlow|${glowR}`, ctx.createRadialGradient(0, 0, 0, 0, 0, glowR))
+    glow.addColorStop(0, 'rgba(255,210,90,0.5)')
+    glow.addColorStop(1, 'rgba(255,180,40,0)')
+  }
+  let body = getRamp(`coinBody|${r}`)
+  if (!body) {
+    body = putRamp(`coinBody|${r}`, ctx.createLinearGradient(0, -r, 0, r))
+    body.addColorStop(0, '#ffe066')
+    body.addColorStop(0.55, '#e0a81c')
+    body.addColorStop(1, '#8a6410')
+  }
+
+  for (const p of pickups) {
     if (p.taken) continue
-    const sx = worldToScreenX(p.x)
     const sy = worldToScreenY(p.y)
     if (sy < -40 || sy > viewH + 40) continue
+    const sx = worldToScreenX(p.x)
     // Spin by squashing the ellipse — cheaper than a rotation and it reads as
     // a coin turning rather than a disc rolling.
     const spin = Math.abs(Math.cos(p.phase))
-    const r = scale * 0.22
     const bob = Math.sin(p.phase * 0.6) * scale * 0.06
 
     ctx.save()
+    ctx.translate(sx, sy)
+
+    // The glow follows the bob; the body ramp deliberately does NOT — it spans
+    // `sy - r … sy + r` while the coin itself is drawn at `sy + bob`, so the
+    // highlight slides across the face as the coin rises. That was true of the
+    // absolute-coordinate version and is preserved here by translating the two
+    // to different origins rather than by hoisting the bob into the outer one.
+    ctx.save()
     ctx.globalCompositeOperation = 'lighter'
-    const glow = ctx.createRadialGradient(sx, sy + bob, 0, sx, sy + bob, r * 2.6)
-    glow.addColorStop(0, 'rgba(255,210,90,0.5)')
-    glow.addColorStop(1, 'rgba(255,180,40,0)')
+    ctx.translate(0, bob)
     ctx.fillStyle = glow
     ctx.beginPath()
-    ctx.arc(sx, sy + bob, r * 2.6, 0, Math.PI * 2)
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
 
@@ -1186,20 +1276,387 @@ const drawPickups = (ctx: CanvasRenderingContext2D): void => {
       // The bitmap spins by being squashed on X, exactly like the drawn one, so
       // dropping real art in never changes the animation.
       const w = Math.max(1, r * 2 * spin)
-      ctx.drawImage(art, sx - w / 2, sy + bob - r, w, r * 2)
+      ctx.drawImage(art, -w / 2, bob - r, w, r * 2)
     } else {
-      const g = ctx.createLinearGradient(sx, sy - r, sx, sy + r)
-      g.addColorStop(0, '#ffe066')
-      g.addColorStop(0.55, '#e0a81c')
-      g.addColorStop(1, '#8a6410')
-      ctx.fillStyle = g
+      ctx.fillStyle = body
       ctx.beginPath()
-      ctx.ellipse(sx, sy + bob, Math.max(1, r * spin), r, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, bob, Math.max(1, r * spin), r, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.strokeStyle = 'rgba(60,40,4,0.7)'
       ctx.lineWidth = Math.max(1, r * 0.18)
       ctx.stroke()
     }
+    ctx.restore()
+  }
+}
+
+/**
+ * TNT barrels — the boss arena's damage lever.
+ *
+ * Read at a glance in three states, because the player has to make a decision
+ * about one mid-fight: INTACT is a dark drum with red bands and a stencil,
+ * DAMAGED shows the same drum with its bands cracking through, and LIT throws
+ * the whole thing to white on a fast strobe so a blast about to happen can never
+ * be mistaken for one that already did.
+ */
+/**
+ * The grenade in flight, and the dome over the crowd.
+ *
+ * Both are drawn LAST, over everything, because both are the player's own doing
+ * and the one thing they must never lose track of is what their own button did.
+ */
+/**
+ * The crowd's drawn bounding box in screen pixels, measured by `drawUnits` on
+ * the frame that just ran.
+ *
+ * The shield bubble has to enclose the SQUAD, and the squad's on-screen extent
+ * is not derivable from the camera: survivor sprites are foot-anchored, so a
+ * body sits a fixed sprite-height ABOVE its world position, while the formation
+ * spreads sideways with the head count. Deriving the dome from `camY` plus a
+ * multiple of the crowd's width got both wrong at once — it fitted a squad of
+ * seventy and sat entirely below a squad of eight hundred.
+ *
+ * So the crowd measures itself while it draws. It already walks every unit, so
+ * this is four comparisons per body and no extra pass.
+ */
+let crowdBoxL = 0
+let crowdBoxR = 0
+let crowdBoxT = 0
+let crowdBoxB = 0
+let crowdBoxN = 0
+
+/** Longest remaining time seen this activation — the countdown ring's 100%. */
+let shieldTotalMs = 0
+/** When the shield last ate a hit, so the bubble can flash on absorb. */
+let shieldHitAt = -1e9
+
+const drawSkills = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+
+  // ── The shield bubble ──
+  //
+  // The first version was a cyan ellipse, and an ellipse means nothing. A player
+  // three seconds into a fight has to know, without being told, that (a) this is
+  // the shield they bought, (b) it is protecting THEM, and (c) it is about to run
+  // out. So it is built from the four signals casual games use for exactly this,
+  // and each one carries a different part of that sentence:
+  //
+  //   BUBBLE    a domed hemisphere with a lit rim and a ground ring, not a flat
+  //             outline — the crowd is visibly INSIDE something.
+  //   HONEYCOMB faint hex cells across the surface. This is the universal
+  //             "energy shield" texture, and it is what separates a force field
+  //             from a coloured circle at a glance.
+  //   CREST     the same heater-shield emblem the BOSS guard uses, in the
+  //             player's blue instead of the boss's orange. The player has
+  //             already been taught that this shape means "shielded", so
+  //             reusing it is free comprehension, and the colour swap is what
+  //             says whose shield it is.
+  //   RING      a countdown arc around the crest, because a timed buff the
+  //             player cannot time is a buff they cannot plan around.
+  //
+  // Cool blue throughout, and deliberately quieter than anything that hurts: the
+  // shield must never out-shout the threat it is protecting from.
+  if (isShieldUp()) {
+    // Fit the measured squad, with a small margin so nobody's elbow pokes out.
+    // Falls back to the camera only when nothing was painted this frame.
+    const measured = crowdBoxN > 0
+    const cx = measured ? (crowdBoxL + crowdBoxR) / 2 : worldToScreenX(camX)
+    const midY = measured ? (crowdBoxT + crowdBoxB) / 2 : worldToScreenY(camY)
+    const rx = measured
+      ? Math.max(scale * 0.95, (crowdBoxR - crowdBoxL) / 2 + scale * 0.42)
+      : Math.max(scale * 1.0, crowdHalfW * scale * 1.55)
+    const ryD = measured
+      ? Math.max(scale * 0.8, (crowdBoxB - crowdBoxT) / 2 + scale * 0.3)
+      : rx * 0.8
+    const cy = measured ? crowdBoxB : worldToScreenY(camY)
+    const domeCy = midY
+    const leftMs = shieldLeft()
+
+    // Total duration, learned from the highest remaining value seen. The skill
+    // is upgradable (3s to 6s), so the ring cannot assume a fixed length.
+    if (leftMs > shieldTotalMs) shieldTotalMs = leftMs
+    const frac = shieldTotalMs > 0 ? Math.max(0, Math.min(1, leftMs / shieldTotalMs)) : 0
+
+    // Fades over the last 900 ms so "about to end" is visible rather than a
+    // surprise, and strobes underneath it — the casual-game shorthand for
+    // "spend it or lose it".
+    const ending = Math.min(1, leftMs / 900)
+    const strobe = ending < 1 ? 0.55 + Math.abs(Math.sin(t / 90)) * 0.45 : 1
+    // A hit landing on the shield brightens the whole bubble for a moment. This
+    // is the feedback that proves the skill is working — without it the player
+    // sees survivors not dying and cannot tell why.
+    const hit = Math.max(0, 1 - (t - shieldHitAt) / 260)
+    const alpha = (0.55 * ending + 0.45 * hit) * strobe
+    const cheap = quality.value === 'low'
+
+    ctx.save()
+
+    // The ground ring the bubble stands on. Sells it as a dome resting on the
+    // road rather than a sticker floating over it.
+    ctx.globalAlpha = 0.35 * alpha
+    ctx.strokeStyle = '#7fd8ff'
+    ctx.lineWidth = Math.max(1.5, scale * 0.05)
+    ctx.beginPath()
+    ctx.ellipse(cx, cy + scale * 0.1, rx * 0.94, rx * 0.22, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // The surface wash — thin, because the crowd underneath is the thing the
+    // player is actually steering and has to stay readable through it.
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = (0.075 + 0.16 * hit) * alpha
+    ctx.fillStyle = '#3fbfff'
+    ctx.beginPath()
+    ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Honeycomb, clipped to the bubble. The grid is anchored to the dome itself,
+    // so it travels with the crowd instead of swimming across it.
+    if (!cheap) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.globalAlpha = 0.3 * alpha
+      ctx.strokeStyle = '#cdf3ff'
+      ctx.lineWidth = Math.max(1.2, scale * 0.03)
+      const s = rx * 0.24
+      const stepX = s * 1.732
+      const stepY = s * 1.5
+      const cols = Math.ceil(rx / stepX) + 1
+      const rows = Math.ceil(ryD / stepY) + 1
+      ctx.beginPath()
+      for (let row = -rows; row <= rows; row++) {
+        for (let col = -cols; col <= cols; col++) {
+          const hx = cx + col * stepX + (row & 1 ? stepX / 2 : 0)
+          const hy = domeCy + row * stepY
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 - Math.PI / 2
+            const px = hx + Math.cos(a) * s
+            const py = hy + Math.sin(a) * s
+            if (i === 0) ctx.moveTo(px, py)
+            else ctx.lineTo(px, py)
+          }
+          ctx.closePath()
+        }
+      }
+      // One stroke for the whole grid: thirty separate strokes would be thirty
+      // state changes a phone does not need to pay for.
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // The rim. Bright and thick — this is the edge that reads as a SURFACE, and
+    // it is the only part guaranteed to stay visible against muzzle flash.
+    ctx.globalAlpha = Math.min(1, 1.05 * alpha)
+    ctx.strokeStyle = hit > 0.2 ? '#ffffff' : '#b6f0ff'
+    ctx.lineWidth = Math.max(2.5, scale * 0.09)
+    ctx.beginPath()
+    ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // A specular sweep across the upper left: the standard cue that a curved
+    // surface is glass rather than a hole.
+    if (!cheap) {
+      ctx.globalAlpha = 0.5 * alpha
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = Math.max(1.5, scale * 0.045)
+      ctx.beginPath()
+      ctx.ellipse(cx, domeCy, rx * 0.82, ryD * 0.82, 0, Math.PI * 1.18, Math.PI * 1.62)
+      ctx.stroke()
+    }
+
+    ctx.globalCompositeOperation = 'source-over'
+
+    // ── The crest, at the apex ──
+    //
+    // The same heater-shield silhouette as the boss guard, with the same heavy
+    // dark rim, placed ABOVE the crowd rather than over it: the boss crest is
+    // allowed to cover the boss because hiding it is the point, but covering the
+    // player's own squad would hide the thing they are steering.
+    const bw = rx * 0.32
+    const bh = bw * 1.16
+    const by = domeCy - ryD - bh * 0.72
+    ctx.globalAlpha = Math.min(1, alpha + 0.25)
+
+    ctx.beginPath()
+    ctx.moveTo(cx - bw, by - bh)
+    ctx.lineTo(cx + bw, by - bh)
+    ctx.lineTo(cx + bw, by - bh * 0.05)
+    ctx.quadraticCurveTo(cx + bw, by + bh * 0.62, cx, by + bh)
+    ctx.quadraticCurveTo(cx - bw, by + bh * 0.62, cx - bw, by - bh * 0.05)
+    ctx.closePath()
+    ctx.fillStyle = hit > 0.2 ? '#ffffff' : '#6fd6ff'
+    ctx.fill()
+    ctx.lineWidth = Math.max(2.5, scale * 0.085)
+    ctx.strokeStyle = '#06263a'
+    ctx.stroke()
+
+    // Chief band and centre rib: the two strokes that turn a blob into heraldry,
+    // and they survive being 20 px tall on a phone.
+    ctx.strokeStyle = 'rgba(6,38,58,0.9)'
+    ctx.lineWidth = Math.max(1.2, scale * 0.04)
+    ctx.beginPath()
+    ctx.moveTo(cx - bw * 0.78, by - bh * 0.46)
+    ctx.lineTo(cx + bw * 0.78, by - bh * 0.46)
+    ctx.moveTo(cx, by - bh * 0.46)
+    ctx.lineTo(cx, by + bh * 0.66)
+    ctx.stroke()
+
+    // The countdown arc around the crest. Full at cast, unwinding clockwise from
+    // twelve o'clock — the same direction and the same language as the cooldown
+    // ring on the button that cast it. It turns amber for the final second,
+    // matching the strobe.
+    const ringR = bh * 1.42
+    ctx.globalAlpha = 0.5 * alpha
+    ctx.strokeStyle = '#06263a'
+    ctx.lineWidth = Math.max(3, scale * 0.085)
+    ctx.beginPath()
+    ctx.arc(cx, by, ringR, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.globalAlpha = Math.min(1, alpha + 0.45)
+    ctx.strokeStyle = ending < 1 ? '#ffd93c' : '#7fe4ff'
+    ctx.lineWidth = Math.max(2.5, scale * 0.07)
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.arc(cx, by, ringR, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+    ctx.stroke()
+    ctx.lineCap = 'butt'
+
+    ctx.restore()
+  } else {
+    // Forget the learned duration, so the next cast measures its own.
+    shieldTotalMs = 0
+  }
+
+  // ── The grenade, mid-air ──
+  //
+  // Sized to be TRACKED, not to be accurate. This thing crosses the screen in
+  // 420 ms over a road full of muzzle flashes and bodies, and the player has to
+  // follow it from their own thumb to the place it goes off — so it is drawn
+  // large, given a smoke trail to say where it came from, and lit at the fuse
+  // so the eye has something bright to lock onto.
+  for (const g of getGrenades()) {
+    // The arc lives in SCREEN space: the sim throws in a straight line and the
+    // lob is added here, which keeps the simulation two-dimensional.
+    const at = (u: number): { x: number; y: number; lift: number } => ({
+      x: worldToScreenX(g.fromX + (g.tx - g.fromX) * u),
+      y: worldToScreenY(g.fromY + (g.ty - g.fromY) * u),
+      lift: Math.sin(u * Math.PI) * scale * 2.4
+    })
+    const r = Math.max(5, scale * 0.26)
+    const head = at(g.t)
+
+    ctx.save()
+
+    // The trail it came in on — four fading ghosts along the arc already flown.
+    ctx.globalCompositeOperation = 'lighter'
+    for (let i = 1; i <= 4; i++) {
+      const u = g.t - i * 0.07
+      if (u <= 0) break
+      const p = at(u)
+      ctx.globalAlpha = 0.2 * (1 - i / 5)
+      ctx.fillStyle = '#c8d4e4'
+      ctx.beginPath()
+      ctx.arc(p.x, p.y - p.lift, r * (0.8 - i * 0.13), 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 1
+
+    // A shadow that tracks along the ground, so the height reads as height.
+    ctx.globalAlpha = 0.32
+    ctx.fillStyle = '#000'
+    ctx.beginPath()
+    ctx.ellipse(head.x, head.y, r * 1.15, r * 0.42, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
+
+    ctx.translate(head.x, head.y - head.lift)
+    ctx.rotate(g.t * 9)
+    ctx.fillStyle = '#46536a'
+    ctx.beginPath()
+    ctx.arc(0, 0, r, 0, Math.PI * 2)
+    ctx.fill()
+    // A band across the body, so the tumble is visible rather than implied.
+    ctx.fillStyle = '#2b3446'
+    ctx.fillRect(-r, -r * 0.16, r * 2, r * 0.32)
+    ctx.strokeStyle = '#141a26'
+    ctx.lineWidth = Math.max(1.2, scale * 0.035)
+    ctx.stroke()
+
+    // The lit fuse — the bright point the eye actually follows.
+    ctx.globalCompositeOperation = 'lighter'
+    const spark = r * (0.5 + Math.random() * 0.28)
+    ctx.fillStyle = 'rgba(255, 190, 110, 0.55)'
+    ctx.beginPath()
+    ctx.arc(0, -r * 1.2, spark * 1.9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff2cf'
+    ctx.beginPath()
+    ctx.arc(0, -r * 1.2, spark, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+}
+
+const drawBarrels = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+  for (const bl of getBarrels()) {
+    if (bl.dead) continue
+    const sx = worldToScreenX(bl.x)
+    const sy = worldToScreenY(bl.y)
+    if (sy < -60 || sy > viewH + 60) continue
+
+    const r = BARREL_R * scale
+    const hurt = 1 - Math.max(0, bl.hp) / bl.maxHp
+    const lit = bl.fuse >= 0
+    // Strobe accelerates as the fuse burns: the tell is the RATE, not the colour,
+    // so it still reads with the screen full of muzzle flash.
+    const burn = lit ? Math.min(1, bl.fuse / 420) : 0
+    const flash = lit ? (Math.sin(t / (34 - burn * 22)) * 0.5 + 0.5) : 0
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    // Contact shadow, so the drum sits on the road rather than floating.
+    ctx.fillStyle = 'rgba(0,0,0,0.38)'
+    ctx.beginPath()
+    ctx.ellipse(0, r * 0.72, r * 0.86, r * 0.3, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // The drum.
+    const body = lit
+      ? `rgb(${180 + flash * 75}, ${70 + flash * 150}, ${60 + flash * 140})`
+      : '#5a3428'
+    ctx.fillStyle = body
+    roundRect(ctx, -r * 0.8, -r, r * 1.6, r * 2, r * 0.28)
+    ctx.fill()
+    ctx.lineWidth = Math.max(1.5, scale * 0.05)
+    ctx.strokeStyle = '#20140f'
+    ctx.stroke()
+
+    // Two hazard bands. They CRACK as the barrel takes rounds — the damage read
+    // is on the prop itself, not on a bar floating over it.
+    ctx.fillStyle = lit ? '#fff3d0' : '#c8341f'
+    for (const by of [-r * 0.42, r * 0.28]) {
+      ctx.globalAlpha = 1 - hurt * 0.55
+      ctx.fillRect(-r * 0.8, by, r * 1.6, r * 0.3)
+    }
+    ctx.globalAlpha = 1
+
+    // The stencil: a fuse-and-spark mark, so the prop says "explosive" without a
+    // word of copy in any of the twenty-one languages this ships in.
+    ctx.strokeStyle = lit ? '#3a1a0c' : '#f0d59a'
+    ctx.lineWidth = Math.max(1.2, scale * 0.032)
+    ctx.beginPath()
+    ctx.moveTo(0, -r * 0.1)
+    ctx.lineTo(0, -r * 0.62)
+    ctx.moveTo(-r * 0.22, -r * 0.5)
+    ctx.lineTo(r * 0.22, -r * 0.5)
+    ctx.stroke()
+
+    ctx.restore()
   }
 }
 
@@ -1220,14 +1677,29 @@ const drawCrates = (ctx: CanvasRenderingContext2D): void => {
     const pulse = 0.5 + 0.5 * Math.sin(t / tone.pulseMs)
 
     // Halo, so a crate never hides against the road.
+    //
+    // The throb used to be baked into the ramp's first stop, which meant a new
+    // ramp every frame for every crate — a continuously varying number is the
+    // one thing a cache key cannot hold. It moves to `globalAlpha` instead,
+    // which is exact here rather than an approximation, and leaves a ramp that
+    // varies only by crate KIND. The halo stop is fully transparent and so
+    // premultiplies to zero; its RGB never reached a pixel, which is why the
+    // cached ramp can end on the glow colour instead without changing anything.
+    const glowR = r * 2.3
+    const glowKey = `crateGlow|${tone.glow}|${glowR}`
+    let glow = getRamp(glowKey)
+    if (!glow) {
+      glow = putRamp(glowKey, ctx.createRadialGradient(0, 0, 0, 0, 0, glowR))
+      glow.addColorStop(0, `rgba(${tone.glow},1)`)
+      glow.addColorStop(1, `rgba(${tone.glow},0)`)
+    }
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
-    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 2.3)
-    glow.addColorStop(0, `rgba(${tone.glow},${0.16 + pulse * (rate ? 0.22 : 0.16)})`)
-    glow.addColorStop(1, tone.halo)
+    ctx.globalAlpha = 0.16 + pulse * (rate ? 0.22 : 0.16)
+    ctx.translate(sx, sy)
     ctx.fillStyle = glow
     ctx.beginPath()
-    ctx.arc(sx, sy, r * 2.3, 0, Math.PI * 2)
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
 
@@ -1241,10 +1713,16 @@ const drawCrates = (ctx: CanvasRenderingContext2D): void => {
     if (art) {
       ctx.drawImage(art, -r, -r, r * 2, r * 2)
     } else {
-      const body = ctx.createLinearGradient(-r, -r, r * 0.4, r)
-      body.addColorStop(0, '#c08b48')
-      body.addColorStop(0.5, '#8d5f2c')
-      body.addColorStop(1, '#5c3c18')
+      // `r` is `CRATE_R * scale` — one value for the whole frame — and the ramp
+      // was already local to the crate's own transform, so this caches with no
+      // geometry change at all.
+      let body = getRamp(`crateBody|${r}`)
+      if (!body) {
+        body = putRamp(`crateBody|${r}`, ctx.createLinearGradient(-r, -r, r * 0.4, r))
+        body.addColorStop(0, '#c08b48')
+        body.addColorStop(0.5, '#8d5f2c')
+        body.addColorStop(1, '#5c3c18')
+      }
       ctx.fillStyle = body
       roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.18)
       ctx.fill()
@@ -1390,10 +1868,15 @@ const drawRocks = (ctx: CanvasRenderingContext2D): void => {
     }
     ctx.closePath()
 
-    const body = ctx.createLinearGradient(0, -h * 0.5, 0, h * 0.5)
-    body.addColorStop(0, '#8f97a6')
-    body.addColorStop(0.45, '#5c6472')
-    body.addColorStop(1, '#333a46')
+    // Only the polygon is per-rock; the shading ramp spans `ROCK_H * scale`,
+    // which is the same for every boulder on screen.
+    let body = getRamp(`rockBody|${h}`)
+    if (!body) {
+      body = putRamp(`rockBody|${h}`, ctx.createLinearGradient(0, -h * 0.5, 0, h * 0.5))
+      body.addColorStop(0, '#8f97a6')
+      body.addColorStop(0.45, '#5c6472')
+      body.addColorStop(1, '#333a46')
+    }
     ctx.fillStyle = body
     ctx.fill()
     ctx.strokeStyle = 'rgba(16,20,28,0.9)'
@@ -1455,10 +1938,19 @@ const drawBarricades = (ctx: CanvasRenderingContext2D): void => {
       }
       ctx.restore()
     } else {
-      const body = ctx.createLinearGradient(-w / 2, -h / 2, w * 0.2, h / 2)
-      body.addColorStop(0, '#767e88')
-      body.addColorStop(0.5, '#4a5058')
-      body.addColorStop(1, '#2a2f36')
+      // Height is frame-constant; width comes from the block, which is drawn
+      // from a small set of lane spans — so this keys exactly and still hits.
+      // If a future generator makes widths continuous the key simply stops
+      // matching and the site degrades to what it did before, capped by
+      // `MAX_RAMPS` rather than growing.
+      const key = `barricadeBody|${w}|${h}`
+      let body = getRamp(key)
+      if (!body) {
+        body = putRamp(key, ctx.createLinearGradient(-w / 2, -h / 2, w * 0.2, h / 2))
+        body.addColorStop(0, '#767e88')
+        body.addColorStop(0.5, '#4a5058')
+        body.addColorStop(1, '#2a2f36')
+      }
       ctx.fillStyle = body
       roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.14)
       ctx.fill()
@@ -1691,7 +2183,8 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
     // that". The trap's plate is tilted off true: nothing else on screen is
     // crooked, so the tilt alone flags it before the glyph is readable.
     const s = 1 + pop * 0.28
-    const label = bad ? `÷${g.value}` : g.op === 'sub' ? `−${g.value}` : mul ? `×${g.value}` : `+${g.value}`
+    const shown = gateValueLabel(g.value)
+    const label = bad ? `÷${shown}` : g.op === 'sub' ? `−${shown}` : mul ? `×${shown}` : `+${shown}`
     const plateH = height * 0.52
     // Measured OUTSIDE the pop scale, so the punch magnifies a plate that was
     // already the right size rather than changing how the number is laid out
@@ -1728,12 +2221,17 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
     ctx.restore()
 
     // Charge meter under the plate: how far through the current half-second the
-    // crowd's fire has got. Without it, pumping feels like a slot machine. `add`
-    // only — see the header. Pinned to the PLATE's width, not to the frame's, so
-    // it stays welded to the number it is filling on a narrow leaf.
-    if (g.op === 'add' && (hot || g.charge > 0)) {
+    // crowd's fire has got. Without it, pumping feels like a slot machine.
+    //
+    // EVERY door that can still grow, not just `+N`. This said `add` only, from
+    // back when the additive doors were the only ones that moved — so a
+    // multiplier being pumped showed no sign of it, and the one mechanic that
+    // makes a bank a decision was invisible while it happened. A trap's meter
+    // fills in its own hostile tint, which is the point: the bar is a warning
+    // there, not a promise.
+    if (g.value < gatePumpCap(g.op) && (hot || g.charge > 0)) {
       const barW = plateW * 1.02
-      const frac = Math.max(0, Math.min(1, g.charge / 500))
+      const frac = Math.max(0, Math.min(1, g.charge / GATE_TICK_MS))
       ctx.fillStyle = 'rgba(0,0,0,0.5)'
       ctx.fillRect(-barW / 2, plateH * 0.72, barW, scale * 0.1)
       ctx.fillStyle = tint.a
@@ -2911,6 +3409,33 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
     }
   }
 
+  crowdBoxN = 0
+
+  // Per-PASS constants, in the same spirit as the tracer colours in
+  // `drawBullets`. None of these depend on the unit being drawn — `scale` and
+  // `rateHeat` are both latched for the frame — so computing them inside the
+  // loop was doing the same arithmetic up to a hundred and ninety times.
+  //
+  // The muzzle ramp is the one that actually cost something: three colour stops
+  // parsed and a ramp rasterised per FIRING survivor per frame, for a gradient
+  // that is byte-for-byte the same for all of them. It is already expressed in
+  // the unit's local space (the loop paints it under `translate(sx, sy)`), so
+  // hoisting it needs no geometry change at all — a gradient resolves its
+  // coordinates against the transform in effect when it is painted, not when it
+  // was built. Keyed on the two numbers that shape it, so it also survives
+  // across frames for as long as the camera scale and the fire rate hold.
+  const size = scale * 1.15
+  const flashY = -size * 0.95
+  const flashR = size * (0.34 + rateHeat * 0.13)
+  const flashKey = `muzzle|${flashY}|${flashR}`
+  let flashRamp = getRamp(flashKey)
+  if (!flashRamp) {
+    flashRamp = putRamp(flashKey, ctx.createRadialGradient(0, flashY, 0, 0, flashY, flashR))
+    flashRamp.addColorStop(0, 'rgba(255,244,200,0.95)')
+    flashRamp.addColorStop(0.4, 'rgba(255,180,60,0.5)')
+    flashRamp.addColorStop(1, 'rgba(255,120,20,0)')
+  }
+
   for (let k = 0; k < n && painted < drawn; k++) {
     const u = units[order[k]!]!
     const sy = worldToScreenY(u.y)
@@ -2918,8 +3443,30 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
     const sx = worldToScreenX(u.x)
     painted++
 
+
     const dieK = u.dying > 0 ? u.dying / 420 : 1
-    const size = scale * 1.15
+
+    // Feed the bubble's bounding box. Dying bodies are excluded: they fall
+    // outward, and a shield that swelled to cover the casualties would grow
+    // every time it failed to prevent one.
+    if (u.dying <= 0) {
+      // Derived from the same numbers the blit uses, so the box cannot drift
+      // away from the art if the sprite metrics are ever retuned. The width is
+      // the visible torso rather than the padded frame, which is mostly air.
+      const kBox = (size * 1.05) / HERO_HEIGHT
+      const halfW = HERO_PX * kBox * 0.26
+      const top = sy - HERO_FOOT * kBox * pitch
+      if (crowdBoxN === 0) {
+        crowdBoxL = sx - halfW; crowdBoxR = sx + halfW
+        crowdBoxT = top; crowdBoxB = sy
+      } else {
+        if (sx - halfW < crowdBoxL) crowdBoxL = sx - halfW
+        if (sx + halfW > crowdBoxR) crowdBoxR = sx + halfW
+        if (top < crowdBoxT) crowdBoxT = top
+        if (sy > crowdBoxB) crowdBoxB = sy
+      }
+      crowdBoxN++
+    }
 
     ctx.save()
     ctx.translate(sx, sy)
@@ -2983,15 +3530,9 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
       ctx.save()
       ctx.globalCompositeOperation = 'lighter'
       ctx.globalAlpha = a
-      const fy = -size * 0.95
-      const fr = size * (0.34 + rateHeat * 0.13)
-      const g = ctx.createRadialGradient(0, fy, 0, 0, fy, fr)
-      g.addColorStop(0, 'rgba(255,244,200,0.95)')
-      g.addColorStop(0.4, 'rgba(255,180,60,0.5)')
-      g.addColorStop(1, 'rgba(255,120,20,0)')
-      ctx.fillStyle = g
+      ctx.fillStyle = flashRamp
       ctx.beginPath()
-      ctx.arc(0, fy, fr, 0, Math.PI * 2)
+      ctx.arc(0, flashY, flashR, 0, Math.PI * 2)
       ctx.fill()
       ctx.restore()
     }
@@ -3468,6 +4009,126 @@ const applyFx = (e: FxEvent): void => {
       }
       break
 
+    case 'grenadeThrow':
+      // The throw itself. Almost nothing — a scuff of dust at the crowd's feet
+      // and an arm sound — because the grenade is now a real object in the air
+      // and IT is the thing the player should be watching. A loud throw would
+      // pull the eye back down to the crowd at the exact moment it needs to
+      // travel up the road.
+      // A swing, borrowed from the elite's sweep — a throw is a swing.
+      playFx('eliteSweep', 0.4)
+      for (let i = 0; i < (quality.value === 'low' ? 3 : 7); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.4
+        emit({
+          x: e.x, y: e.y + 0.2, vx: Math.cos(a) * 1.6, vy: Math.sin(a) * 1.2 + 0.6,
+          life: 220 + Math.random() * 160, size: 0.07 + Math.random() * 0.06,
+          color: [210, 205, 190], additive: false, shape: 0, drag: 2.8, gravity: 2
+        })
+      }
+      break
+
+    case 'grenade':
+      // The player's own explosion. Reads like a barrel blast on purpose — the
+      // two are the same verb — but tinted cooler so a thrown grenade is never
+      // mistaken for a barrel someone happened to shoot.
+      playFx('eliteDie', 0.9)
+      triggerShake('strong')
+      screenFlash = 0.42
+      flashColour = '200,225,255'
+      emitDecal(e.x, e.y, 2.1, 0.55)
+      for (let i = 0; i < (quality.value === 'low' ? 18 : 40); i++) {
+        const a = Math.random() * Math.PI * 2
+        const ring = i % 3 === 0
+        const sp = ring ? 10 + Math.random() * 5 : 2 + Math.random() * 6
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.55 + 1.4,
+          life: ring ? 240 + Math.random() * 150 : 560 + Math.random() * 460,
+          size: ring ? 0.08 + Math.random() * 0.06 : 0.14 + Math.random() * 0.14,
+          color: ring ? [235, 245, 255] : (Math.random() < 0.5 ? [255, 200, 120] : [150, 190, 240]),
+          additive: true, shape: ring ? 2 : 0, drag: ring ? 2.6 : 1.2, gravity: ring ? 0 : 3
+        })
+      }
+      break
+
+    case 'shieldUp':
+      // A dome snapping on over the crowd. Cool blue, and quiet: the shield is a
+      // defensive beat and must not read as loudly as the thing it protects from.
+      playFx('gateMul', 0.7)
+      screenFlash = 0.16
+      flashColour = '140,220,255'
+      for (let i = 0; i < (quality.value === 'low' ? 12 : 26); i++) {
+        const a = Math.random() * Math.PI * 2
+        const r = 1.4 + Math.random() * 0.6
+        emit({
+          x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r * 0.6,
+          vx: Math.cos(a) * 1.2, vy: Math.sin(a) * 0.8 + 1.2,
+          life: 420 + Math.random() * 260, size: 0.09 + Math.random() * 0.07,
+          color: [130, 220, 255], additive: true, shape: 2, drag: 2.4, gravity: -0.6
+        })
+      }
+      break
+
+    case 'shieldSave':
+      // One spark where a survivor should have died, plus a flash of the bubble
+      // itself. The bubble flash is the important half: a save is invisible by
+      // definition — nothing happens — so the shield has to VISIBLY take the hit
+      // or the player never learns what their three seconds bought them.
+      shieldHitAt = nowMs()
+      // Cheap on purpose beyond that: this fires every second loss for the whole
+      // duration, so it has to be legible at a glance and cost almost nothing
+      // when six land in one frame.
+      if (quality.value !== 'low') {
+        for (let i = 0; i < 3; i++) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6
+          emit({
+            x: e.x, y: e.y + 0.3, vx: Math.cos(a) * 2, vy: Math.sin(a) * 2.4,
+            life: 200 + Math.random() * 140, size: 0.06 + Math.random() * 0.05,
+            color: [160, 230, 255], additive: true, shape: 2, drag: 2.6, gravity: -0.4
+          })
+        }
+      }
+      break
+
+    case 'barrelLit':
+      // Quiet on purpose: a spark and a puff. The barrel's own strobe is the
+      // real tell, and a bang here would be a lie about what just happened.
+      playFx('crate', 0.5)
+      for (let i = 0; i < (quality.value === 'low' ? 4 : 9); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.1
+        emit({
+          x: e.x, y: e.y + 0.5, vx: Math.cos(a) * 2.5, vy: Math.sin(a) * 3.5,
+          life: 260 + Math.random() * 220, size: 0.07 + Math.random() * 0.06,
+          color: [255, 225, 150], additive: true, shape: 2, drag: 2.2, gravity: -1
+        })
+      }
+      break
+
+    case 'barrelBlast':
+      // The loudest thing on the road that is not a boss dying. It has to be:
+      // this is the player's answer to a shield they were told they could do
+      // nothing about, and the payoff has to match the size of that reversal.
+      playFx('eliteDie', 1)
+      triggerShake('strong')
+      screenFlash = 0.5
+      flashColour = '255,200,120'
+      emitDecal(e.x, e.y, 2.4, 0.6)
+      for (let i = 0; i < (quality.value === 'low' ? 20 : 46); i++) {
+        const a = Math.random() * Math.PI * 2
+        // A shockwave ring plus a slower fireball: the fast particles draw the
+        // radius the blast actually covers, which is information the player
+        // needs for the NEXT barrel.
+        const ring = i % 3 === 0
+        const sp = ring ? 11 + Math.random() * 5 : 2 + Math.random() * 7
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.55 + 1.5,
+          life: ring ? 260 + Math.random() * 160 : 640 + Math.random() * 520,
+          size: ring ? 0.09 + Math.random() * 0.07 : 0.16 + Math.random() * 0.16,
+          color: ring ? [255, 245, 210] : (Math.random() < 0.5 ? [255, 170, 60] : [200, 60, 40]),
+          additive: true, shape: ring ? 2 : 0, drag: ring ? 2.6 : 1.1, gravity: ring ? 0 : 3
+        })
+      }
+      break
+
     case 'divider':
       // The pillar kill. The player has one frame to understand that a solid
       // object, not an enemy, took those survivors — so this is deliberately
@@ -3663,6 +4324,11 @@ export const invalidateArt = (): void => {
   laneTileKey = ''
   hazardTile = null
   hazardKey = ''
+  // Ramps are keyed on the dimensions they were built at, so a resize would
+  // simply miss and rebuild rather than paint the wrong size — but a stage
+  // change moves the palette under keys that do NOT carry it, so they are
+  // dropped here with the rest of the cached surfaces.
+  clearRamps()
   // The dismissal pools are the renderer's own transients — `resetVfx` cannot
   // reach them — and a leaf still tearing itself down when a stage restarts
   // would draw a gate that no longer exists at a world position that has moved.

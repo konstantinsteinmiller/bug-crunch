@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'シールド展開中 — 攻撃は効かない。動け！', 'desktop': 'シールド展開中 — 攻撃は効かない。動け！' }
   },
 
+  'flow': {
+
+    'unlocked': '解放！'
+
+  },
+
   'result': {
     'stageClear': 'ステージクリア！',
     'wipedOut': '部隊全滅',
@@ -60,7 +66,9 @@ export default {
     'nextStage': '次のステージ',
     'tryAgain': 'もう一度',
     'upgrade': '強化',
-    'rankOf': '{n} 人中'
+    'upgradeHint': '部隊を強化しよう！',
+    'rankOf': '{n} 人中',
+    'upNext': '次: ステージ {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': '{n} 人中'
   },
 
+  'skills': {
+
+    'grenade': '手榴弾',
+
+    'shield': 'シールド'
+
+  },
+
   'upgrades': {
     'title': '強化',
     'spotlight': '使おう！',
@@ -87,14 +103,18 @@ export default {
       'power': '火力',
       'rate': '連射速度',
       'range': '射程',
-      'scavenge': '回収'
+      'scavenge': '回収',
+      'grenade': '手榴弾',
+      'shield': 'シールド'
     },
     'descriptions': {
       'squad': 'より多い仲間でステージを開始。',
       'power': '仲間1人あたりのダメージが上昇。',
       'rate': '仲間全員の射撃が速くなる。',
       'range': '部隊がより前方から射撃を開始します。',
-      'scavenge': '1回のランで得られるコインが増加。'
+      'scavenge': '1回のランで得られるコインが増加。',
+      'grenade': '手榴弾を投げて大ダメージを与える。',
+      'shield': '数秒間、部隊が受けるダメージを半減。'
     }
   },
 

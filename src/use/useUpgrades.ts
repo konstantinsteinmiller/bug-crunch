@@ -24,6 +24,26 @@ import { BASE_DAMAGE, BASE_FIRE_RATE, START_SQUAD } from '@/game/survival'
  * arrive. That is the whole economy.
  */
 
+/**
+ * ─── Skill numbers ──────────────────────────────────────────────────────────
+ *
+ * Kept here beside the tracks that sell them so a balance pass reads as one
+ * place, and exported so the simulation and the HUD agree on what a level buys.
+ */
+
+/** Grenade damage as a multiple of the crowd's fire, at level 0 and per level. */
+export const GRENADE_BASE_MULT = 3
+export const GRENADE_MULT_STEP = (6 - GRENADE_BASE_MULT) / 20
+
+/** Shield: level 1 unlocks it at three seconds, level 10 reaches six. */
+export const SHIELD_MAX_LEVEL = 10
+export const SHIELD_BASE_SECONDS = 3
+export const shieldSecondsAt = (level: number): number =>
+  level <= 0 ? 0 : SHIELD_BASE_SECONDS + (Math.min(level, SHIELD_MAX_LEVEL) - 1) * ((6 - SHIELD_BASE_SECONDS) / (SHIELD_MAX_LEVEL - 1))
+
+/** Both skills share one clock. */
+export const SKILL_COOLDOWN_MS = 30_000
+
 export interface UpgradeDef {
   id: UpgradeId
   maxLevel: number
@@ -33,7 +53,7 @@ export interface UpgradeDef {
   valueAt: (level: number) => number
 }
 
-export type UpgradeId = 'squad' | 'power' | 'rate' | 'range' | 'scavenge'
+export type UpgradeId = 'squad' | 'power' | 'rate' | 'range' | 'scavenge' | 'grenade' | 'shield'
 
 /**
  * ─── The endless tail ───────────────────────────────────────────────────────
@@ -195,14 +215,59 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
      */
     cost: endlessCost(120, 1.55, 10),
     valueAt: (l) => Math.round((1 + l * 0.08) * 100)
+  },
+
+  /**
+   * ─── Grenade ──────────────────────────────────────────────────────────────
+   *
+   * The first ACTIVE thing in the game: everything else the shop sells is a
+   * number the simulation reads on its own. This is a button the player presses.
+   *
+   * Owned from the start at level 0, because a skill the player has to buy
+   * before they know it exists is a skill most players never meet — and the
+   * whole point of it is to give the opening runs a verb. The track sells power,
+   * not access: 3x at 0, 6x at 20, in even steps.
+   *
+   * Priced under `power`: it is a burst on a 30-second clock rather than damage
+   * every second, so it must not out-compete the track that carries the run.
+   */
+  grenade: {
+    id: 'grenade',
+    maxLevel: 20,
+    cost: (l) => Math.round(90 * Math.pow(1.33, l)),
+    /** Multiplier on the crowd's fire. Shown as `3.0` … `6.0`. */
+    valueAt: (l) => Math.round((GRENADE_BASE_MULT + l * GRENADE_MULT_STEP) * 10) / 10
+  },
+
+  /**
+   * ─── Shield ───────────────────────────────────────────────────────────────
+   *
+   * Halves what the road takes from the crowd, for a few seconds.
+   *
+   * LOCKED at level 0, unlike the grenade, and that asymmetry is the point: one
+   * skill teaches that the game has buttons, the second is something to find in
+   * the shop later. Level 1 is the unlock and gives 3 s; level 10 gives 6 s.
+   *
+   * The expensive track of the two. A grenade answers a problem in front of you;
+   * a shield answers being wrong about one, which is worth more on exactly the
+   * stages where a run is otherwise lost.
+   */
+  shield: {
+    id: 'shield',
+    maxLevel: SHIELD_MAX_LEVEL,
+    cost: (l) => Math.round(260 * Math.pow(1.4, l)),
+    /** Seconds of protection. `0` reads as "not unlocked yet". */
+    valueAt: (l) => Math.round(shieldSecondsAt(l) * 10) / 10
   }
 }
 
-export const UPGRADE_ORDER: UpgradeId[] = ['squad', 'power', 'rate', 'range', 'scavenge']
+export const UPGRADE_ORDER: UpgradeId[] = ['squad', 'power', 'rate', 'range', 'scavenge', 'grenade', 'shield']
 
 type Levels = Record<UpgradeId, number>
 
-const emptyLevels = (): Levels => ({ squad: 0, power: 0, rate: 0, range: 0, scavenge: 0 })
+const emptyLevels = (): Levels => ({
+  squad: 0, power: 0, rate: 0, range: 0, scavenge: 0, grenade: 0, shield: 0
+})
 
 const read = (): Levels => {
   const raw = getState<Partial<Levels>>(UPGRADES_KEY, {})
@@ -270,6 +335,15 @@ export const rangeBonus = computed(() => levels.value.range * RANGE_PER_LEVEL)
  */
 export const gatePayoutBonus = computed(() => 1 + levels.value.squad * 0.04)
 
+/** Grenade damage multiplier on the crowd's fire — 3x at level 0, 6x at 20. */
+export const grenadeMult = computed(
+  () => GRENADE_BASE_MULT + levels.value.grenade * GRENADE_MULT_STEP
+)
+/** Seconds the shield holds. `0` while the track is still locked. */
+export const shieldSeconds = computed(() => shieldSecondsAt(levels.value.shield))
+/** Has the player bought the shield at all? */
+export const shieldUnlocked = computed(() => levels.value.shield > 0)
+
 export const upgradeLevel = (id: UpgradeId): number => levels.value[id]
 export const upgradeCost = (id: UpgradeId): number => UPGRADES[id].cost(levels.value[id])
 export const isMaxed = (id: UpgradeId): boolean => levels.value[id] >= UPGRADES[id].maxLevel
@@ -284,6 +358,31 @@ export const applyUpgrade = (id: UpgradeId): boolean => {
   // A purchase is a hard checkpoint: the player spent a currency and expects it
   // to survive a reload, so the save pipeline drains now rather than on the
   // debounce. Fire-and-forget — a slow cloud write must never block the UI.
+  void flushSaveNow()
+  return true
+}
+
+/**
+ * Award a track level outright, without charging for it.
+ *
+ * The progression-gift path, as opposed to `applyUpgrade`'s purchase path. It
+ * exists because the game hands the shield over for beating stage 1: a player
+ * who has just won their first fight has earned something they can SEE, and "a
+ * button you did not have before" is a far better reason to start stage 2 than a
+ * coin total they have not been shown how to spend.
+ *
+ * Never LOWERS a level — a gift may not undo a purchase — and returns whether it
+ * actually changed anything, so the caller knows whether there is something to
+ * announce.
+ */
+export const grantUpgrade = (id: UpgradeId, level: number): boolean => {
+  const want = Math.max(0, Math.min(UPGRADES[id].maxLevel, level))
+  if (levels.value[id] >= want) return false
+  const next = { ...levels.value, [id]: want }
+  levels.value = next
+  setState(UPGRADES_KEY, next)
+  // Flushed at once for the same reason a purchase is: it is a permanent change
+  // to the save and the player was just shown that it happened.
   void flushSaveNow()
   return true
 }

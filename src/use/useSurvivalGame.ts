@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import {
   BARRICADE_COIN_MAX, BARRICADE_COIN_MIN,
-  BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, BOSS_GUARD_GATES,
+  BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, bossGuardGates, dividerCrushFor,
+  GATE_SCALE_STEP, gatePumpCap, isScaleOp,
   BULLET_LIFE_MS, BULLET_R, BULLET_SPEED, effectiveBulletRange,
   CHALLENGE_MAX, CHALLENGE_STEP,
   COIN_MAGNET_BASE, COIN_PULL_LEAD, CRATE_DAMAGE_GAIN,
@@ -14,18 +15,20 @@ import {
   BOSS_MIN_KILL, SLAM_FRACTION_MAX, SLAM_MAX_FRACTION, SWEEP_FRACTION_MAX, endlessPressure,
   GATE_DEPTH, GATE_MAX_VALUE, GATE_SUB_MAX, GATE_TICK_MS, LANE_HALF, MAX_FIRE_RATE, MAX_SQUAD,
   SHOOTERS, SLAM_CD_BASE, SLAM_CD_DECAY, SLAM_CD_MIN, SLAM_RADIUS,
-  SLAM_RADIUS_GROWTH, SLAM_RADIUS_MAX, STEER_SPRING, UNIT_R,
+  SLAM_RADIUS_GROWTH, SLAM_RADIUS_MAX, STEER_SPRING,
+  TUTORIAL_SLAM_FRACTION, TUTORIAL_SLAM_MIN_KILL, UNIT_R,
   CHARGED_EVERY, CHARGED_LEAD, CHARGED_WINDUP_MUL, slamRadiusFor,
   DECLINE_MAX, biteShareFor, challengeBiteFactor, challengeFactor, challengePackFactor,
   rewardDeclineFactor,
   contactReliefFor,
+  BARREL_R, BARREL_FUSE_MS, BARREL_BLAST_R, BARREL_BLAST_BOSS_FRACTION, barrelHp,
   funnelRadius, reliefFor, slamReliefFor,
-  startBonusFor, stageReward, stageSpeed, wipeReward,
-  type Barricade, type Boss, type Bullet, type Crate, type Divider, type Foe,
+  retrySquadScaleFor, startBonusFor, stageReward, stageSpeed, wipeReward,
+  type Barrel, type Barricade, type Boss, type Bullet, type Crate, type Divider, type Foe,
   type Gate, type Pickup, type Rock, type Unit
 } from '@/game/survival'
-import { bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
-import { buildTrack, type Track } from '@/game/track'
+import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
+import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
 import {
@@ -137,6 +140,7 @@ let dividers: Divider[] = []
 let crates: Crate[] = []
 let barricades: Barricade[] = []
 let rocks: Rock[] = []
+let barrels: Barrel[] = []
 let foes: Foe[] = []
 let pickups: Pickup[] = []
 let boss: Boss | null = null
@@ -180,6 +184,7 @@ export const getGates = (): Gate[] => gates
 export const getDividers = (): Divider[] => dividers
 export const getCrates = (): Crate[] => crates
 export const getBarricades = (): Barricade[] => barricades
+export const getBarrels = (): Barrel[] => barrels
 export const getRocks = (): Rock[] => rocks
 export const getFoes = (): Foe[] => foes
 export const getPickups = (): Pickup[] => pickups
@@ -372,6 +377,23 @@ const recordFailure = (n: number): void => {
   setStates({ [FAILED_STAGES_KEY]: fails })
 }
 
+/**
+ * Clearing a stage wipes what it owed you.
+ *
+ * Every concession — the retry crowd multiplier, the flat body bonus, the HP,
+ * slam and contact relief — reads this one counter, so zeroing it here is what
+ * makes "winning a level clears the effect" true in one place rather than five.
+ * Without it the count persists per stage forever, and a player who comes back
+ * to a stage they once struggled with would replay it permanently buffed.
+ */
+const clearFailures = (n: number): void => {
+  const fails = readFails()
+  if (!fails[String(n)]) return
+  const next = { ...fails }
+  delete next[String(n)]
+  setStates({ [FAILED_STAGES_KEY]: next })
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 const resetWorld = (): void => {
@@ -381,6 +403,8 @@ const resetWorld = (): void => {
   dividers = []
   crates = []
   barricades = []
+  barrels = []
+  grenades = []
   rocks = []
   foes = []
   pickups = []
@@ -471,7 +495,16 @@ export const startStage = (n?: number): void => {
   funnelR = CROWD_MAX_R
   // A stuck player is handed people, not just weaker enemies: it is the only
   // concession a run dying two-thirds down the road can actually spend.
-  const start = Math.max(1, startSquad.value + startBonusFor(failures, target))
+  //
+  // Two shapes, deliberately. The flat bonus is a foothold (capped at four
+  // bodies); the multiplier scales with whatever the player starts with, so the
+  // help stays proportional at depth instead of vanishing into a squad of forty.
+  // Both read the same per-stage failure count, which the clear resets — so
+  // winning the stage clears the whole effect.
+  const start = Math.max(1, Math.round(
+    (startSquad.value + startBonusFor(failures, target))
+    * retrySquadScaleFor(failures, target)
+  ))
   for (let i = 0; i < start; i++) {
     const p = slotPos(i, start, CROWD_MAX_R)
     spawnUnit(p.x, p.y)
@@ -571,6 +604,7 @@ const finishRun = (cleared: boolean): void => {
   // tab, and paying it relief is how a difficulty curve quietly turns into an
   // idle game.
   if (!cleared && wasPlayed()) recordFailure(stage.value)
+  else if (cleared) clearFailures(stage.value)
 
   // Hard checkpoint → drain the whole save pipeline NOW rather than waiting out
   // the 200 ms state debounce plus the strategy's own flush debounce. A player
@@ -667,7 +701,10 @@ const streamTrack = (): void => {
           const hp = Math.max(1, Math.round(c.hp * diff * hpRelief))
           crates.push({
             id: entityId++, kind: c.kind, x: c.x, y: e.y, hp, maxHp: hp,
-            spin: (Math.random() - 0.5) * 0.4, dead: false
+            spin: (Math.random() - 0.5) * 0.4, dead: false,
+            // Unscaled by difficulty on purpose: relief makes a box easier to
+            // break, it does not make it pay more.
+            ...(c.gain !== undefined ? { gain: c.gain } : {})
           })
         }
         break
@@ -732,6 +769,17 @@ const streamTrack = (): void => {
           20,
           Math.round(def.hp * foeHpScale(stage.value) * e.hpScale * diff * hpRelief)
         )
+        // STAGE 1's elite is a lesson, not a wall — it stands in for the boss
+        // the opening no longer has, and the player has not met an upgrade yet.
+        //
+        // Cutting its HP alone was not enough and measurably made things WORSE:
+        // an elite plants and blocks the road, and every miniboss bites at twice
+        // its archetype's rate, so a 40 %-health one still ate a careless crowd
+        // at 88 % of the road — the sim went from "reaches the arena on every
+        // seed" to "reaches it on none". The teeth are the part that has to
+        // come off, so on stage 1 it bites like a normal foe of its type.
+        const tutorial = stage.value <= 1
+        const biteMul = tutorial ? 1 : 2
         foes.push({
           id: entityId++,
           typeId: def.id,
@@ -742,8 +790,8 @@ const streamTrack = (): void => {
           // Slower than its archetype on the walk in — but the walk in is not
           // the fight. See `ELITE_HOLD_AHEAD`: it plants when it arrives.
           speed: def.speed * 0.7,
-          bite: def.bite * 2,
-          biteShare: biteShareFor(def.id) * 2,
+          bite: def.bite * biteMul,
+          biteShare: biteShareFor(def.id) * biteMul,
           biteCd: 0,
           scale: def.scale * 1.9,
           flash: 0,
@@ -830,6 +878,8 @@ export const step = (dtMs: number): void => {
   stepBarricades(dt)
   stepRocks(dt)
   stepCrates(dt)
+  stepBarrels(dt)
+  stepGrenades(dt)
   stepPickups(dt)
   stepBoss(dt)
 
@@ -887,9 +937,18 @@ const stepAnchor = (dt: number): void => {
 
 const spawnBoss = (): void => {
   // Sized against the DPS a stage actually produces — see `BOSS_BASE_HP`.
+  //
+  // Stage 1 is priced separately and far lower (`tutorialBossHp`). The general
+  // curve starts at a full `BOSS_BASE_HP` because from stage 2 the boss is the
+  // stage's test; stage 1's is its curtain call, and a first-time player has to
+  // win it. Difficulty and relief still apply on top, so a player who has been
+  // struggling meets an even softer one.
+  const base = stage.value <= 1
+    ? tutorialBossHp()
+    : BOSS_BASE_HP * bossHpScale(stage.value)
   const hp = Math.max(
-    60,
-    Math.round(BOSS_BASE_HP * bossHpScale(stage.value) * difficultyFactor() * hpRelief)
+    stage.value <= 1 ? 1 : 60,
+    Math.round(base * difficultyFactor() * hpRelief)
   )
   boss = {
     design: bossDesign(stage.value),
@@ -914,6 +973,69 @@ const spawnBoss = (): void => {
     dying: 0
   }
   bossHp01.value = 1
+
+  // ── Furnish the arena ──
+  //
+  // Authored per stage (`arenaKit`), so a boss fight is not the same fight
+  // fifteen times. Both props are spawned HERE rather than as track events: the
+  // arena sits past `arenaY`, beyond the authored road, and they only make sense
+  // once there is a boss to use them against.
+  const kit = arenaKit(stage.value)
+
+  // Barrels stand on the shoulders, clear of the boss's hold position and of the
+  // lane the crowd runs up — the player has to choose to go and get them.
+  const bossDiff = difficultyFactor()
+  const bHp = Math.round(barrelHp(stage.value) * bossDiff)
+  for (let i = 0; i < kit.barrels; i++) {
+    // Alternating shoulders, walking outward: 1 -> right, 2 -> both, 3+ -> a
+    // spread the crowd cannot cover from one position.
+    const side = i % 2 === 0 ? 1 : -1
+    const rank = Math.floor(i / 2)
+    barrels.push({
+      id: entityId++,
+      x: side * (2.4 + rank * 1.5),
+      y: track.bossY - 3.5 - rank * 2.2,
+      hp: bHp,
+      maxHp: bHp,
+      fuse: -1,
+      dead: false
+    })
+  }
+
+  if (kit.escort) {
+    const def = foeDef(kit.escort.typeId)
+    const ehp = Math.max(
+      8,
+      Math.round(def.hp * foeHpScale(stage.value) * bossDiff * hpRelief)
+    )
+    for (let i = 0; i < kit.escort.count; i++) {
+      const spread = (i - (kit.escort.count - 1) / 2) * 1.7
+      foes.push({
+        id: entityId++,
+        typeId: def.id,
+        design: def.designs[0] ?? 'grumpling',
+        x: spread,
+        y: track.bossY - 6 - (i % 2) * 1.4,
+        hp: ehp, maxHp: ehp,
+        speed: def.speed,
+        bite: def.bite,
+        biteShare: biteShareFor(def.id),
+        biteCd: 0,
+        scale: def.scale,
+        flash: 0,
+        phase: Math.random(),
+        dead: false,
+        flying: def.flying,
+        swayPhase: Math.random() * 6.28,
+        hold: 0,
+        hitCd: 0,
+        sweepCd: 0,
+        sweepSpan: 0,
+        sweepDir: 1,
+        elite: false
+      })
+    }
+  }
 }
 
 /**
@@ -968,6 +1090,12 @@ const collectSolids = (): void => {
   for (const c of crates) {
     if (c.dead || Math.abs(c.y - anchorY) > 6) continue
     solids.push({ x: c.x, y: c.y, halfW: CRATE_R + UNIT_R, halfH: CRATE_R + UNIT_R })
+  }
+  // Barrels are solid too. Walking the crowd into one is how a player who wants
+  // the blast gets it in the wrong place — the prop has to be shot, not nudged.
+  for (const bl of barrels) {
+    if (bl.dead || Math.abs(bl.y - anchorY) > 6) continue
+    solids.push({ x: bl.x, y: bl.y, halfW: BARREL_R + UNIT_R, halfH: BARREL_R + UNIT_R })
   }
   for (const f of foes) {
     if (f.dead || Math.abs(f.y - anchorY) > 6) continue
@@ -1216,9 +1344,21 @@ const nearCrowd = (x: number, y: number, pad: number): boolean => {
 const crushDebt = new Map<number, number>()
 
 /** @returns true when at least one survivor died on this grinder this frame. */
-const grindAgainst = (id: number, c: Crush, fraction: number, dt: number): boolean => {
+const grindAgainst = (
+  id: number, c: Crush, fraction: number, dt: number, floor = 1, bite = 1
+): boolean => {
   if (!nearCrowd(c.x, c.y, Math.max(c.halfW, c.halfH) + UNIT_R + 0.2)) {
-    crushDebt.delete(id)
+    // Forget the DEBT, remember the ENCOUNTER.
+    //
+    // This used to delete the entry, which meant the next frame the crowd
+    // touched the same object it counted as a brand-new contact and paid the
+    // opening `bite` all over again. A crowd does not approach a gate pillar
+    // once — it is a wide, soft thing that brushes, separates and brushes again
+    // as the player drifts — so a single pillar was charging its entry fee three
+    // or four times, and the whole of a careless run's losses turned out to be
+    // that, not the grind. Keeping a zero says "this one has already been paid
+    // for". Cleared wholesale in `resetWorld`.
+    if (crushDebt.has(id)) crushDebt.set(id, 0)
     return false
   }
   let budget = -1
@@ -1231,13 +1371,21 @@ const grindAgainst = (id: number, c: Crush, fraction: number, dt: number): boole
     if (overlapX <= 0) continue
     if (Math.abs(u.y - c.y) > c.halfH + UNIT_R) continue
 
-    // A new contact opens at one kill — touching something solid always costs
-    // at least one survivor — and a continuing one accrues at the
-    // crowd-proportional rate, so ploughing through costs many.
+    // A new contact opens at `bite` kills — touching something solid costs a
+    // survivor outright — and a continuing one accrues at the crowd-proportional
+    // rate, so ploughing through costs many.
+    //
+    // `bite` and `floor` are separate parameters because they are separate
+    // rules: the bite is what a touch costs, the floor is what SITTING on the
+    // thing costs per second. They used to be the same literal 1, which meant an
+    // obstacle could not be made forgiving without also making it free — lower
+    // the rate and the floor still bills a body a second. The opening stages'
+    // gate pillars keep the full bite and ramp the floor (`dividerCrushFor`);
+    // every other caller takes the defaults and behaves exactly as before.
     if (budget < 0) {
       const carried = crushDebt.get(id)
-      budget = (carried === undefined ? 1 : carried)
-        + Math.max(1, squadCount.value * fraction * contactRelief) * dt
+      budget = (carried === undefined ? bite : carried)
+        + Math.max(floor, squadCount.value * fraction * contactRelief) * dt
     }
     if (budget >= 1) {
       budget -= 1
@@ -1253,8 +1401,7 @@ const grindAgainst = (id: number, c: Crush, fraction: number, dt: number): boole
     u.x = Math.max(-EDGE_X, Math.min(EDGE_X, u.x + dir * overlapX))
   }
 
-  if (budget < 0) crushDebt.delete(id)
-  else crushDebt.set(id, Math.min(budget, 1))
+  if (budget >= 0) crushDebt.set(id, Math.min(budget, 1))
   return killed
 }
 
@@ -1367,14 +1514,190 @@ const collideFoe = (f: Foe, dt: number): void => {
 }
 
 /** Kill a survivor: mark it dying, fling it, and tell the world. */
+/**
+ * How many losses the shield has eaten. Counted rather than rolled: "half the
+ * damage" as a coin flip is the same expected value and a much worse feeling —
+ * a player who loses four in a row while a shield is up concludes it does
+ * nothing. Every second death is stopped, exactly, for as long as it holds.
+ */
+let shieldEaten = 0
+/** Wall-clock ms until the shield expires. */
+let shieldUntilMs = 0
+
+/** Is the shield holding right now? Read by the HUD and the loss funnel. */
+export const shieldActive = (): boolean => shieldUntilMs > Date.now()
+/** Ms of protection left, for the ring on the button. */
+export const shieldLeftMs = (): number => Math.max(0, shieldUntilMs - Date.now())
+
+/** Raise the shield for `seconds`. */
+export const raiseShield = (seconds: number): void => {
+  if (seconds <= 0) return
+  shieldUntilMs = Date.now() + seconds * 1000
+  shieldEaten = 0
+  pushFx({ kind: 'shieldUp', x: anchorX, y: anchorY })
+}
+
 const killUnit = (u: Unit, dirX = 0, cause: DeathCause = 'foe'): void => {
   if (u.dying > 0) return
+
+  // The shield takes every second body that would have been lost, whatever took
+  // it — a bite, a slam, a pillar, a trap. Hooked HERE because this is the one
+  // funnel all of them pass through, so the skill cannot be right about some
+  // causes and wrong about others.
+  if (shieldActive()) {
+    shieldEaten++
+    if (shieldEaten % 2 === 1) {
+      u.inv = Math.max(u.inv, FOE_COLLIDE_IFRAMES_MS)
+      pushFx({ kind: 'shieldSave', x: u.x, y: u.y })
+      return
+    }
+  }
   u.dying = 420
   u.vx = dirX * 2.4 + (Math.random() - 0.5) * 1.6
   u.vy = 1.8 + Math.random() * 1.4
   squadCount.value = Math.max(0, squadCount.value - 1)
   deaths[cause]++
   pushFx({ kind: 'unitLost', x: u.x, y: u.y, outfit: u.i })
+}
+
+/** Test seam: bill a survivor through the real loss funnel, so a spec can
+ *  measure what the shield actually stops. */
+export const __killUnitForTest = (u: Unit): void => killUnit(u, 0, 'foe')
+
+/**
+ * ─── The grenade ────────────────────────────────────────────────────────────
+ *
+ * The player's one offensive button, on a thirty-second clock.
+ *
+ * WHERE IT LANDS is chosen rather than aimed, because the game has exactly one
+ * input and adding a second (aim, then throw) would undo the thing that makes
+ * it playable one-handed. The rule reads the way a player would: the boss if
+ * there is one, otherwise the elite holding the road, otherwise the middle of
+ * the biggest knot of bodies ahead. That covers all three cases the skill is
+ * for without ever asking the player to place it.
+ *
+ * WHAT IT DOES is `mult` seconds of the whole crowd's fire, delivered at once —
+ * so it scales with the run rather than going stale, and reads as "three
+ * seconds of everything, now". Against a boss it is a real chunk; against a
+ * horde it clears the front ranks; against nothing it is wasted, which is what
+ * makes the timing a decision.
+ */
+export const GRENADE_BLAST_R = 4.6
+
+/** Where the grenade should go, or `null` when there is nothing worth hitting. */
+const grenadeTarget = (): { x: number; y: number } | null => {
+  if (boss && !boss.dead && boss.y - anchorY < 30) return { x: boss.x, y: boss.y }
+
+  const live = foes.filter((f) => !f.dead && f.y > anchorY - 2 && f.y < anchorY + 26)
+  if (live.length === 0) return null
+
+  const elite = live.find((f) => f.elite)
+  if (elite) return { x: elite.x, y: elite.y }
+
+  // The densest knot: score each body by how many others sit inside a blast of
+  // it, so the throw lands where it is worth the most rather than on whoever
+  // happens to be nearest.
+  let best = live[0]!
+  let bestScore = -1
+  for (const f of live) {
+    let score = 0
+    for (const g of live) {
+      if (Math.hypot(g.x - f.x, g.y - f.y) <= GRENADE_BLAST_R) score++
+    }
+    if (score > bestScore) { bestScore = score; best = f }
+  }
+  return { x: best.x, y: best.y }
+}
+
+/**
+ * A grenade in the air.
+ *
+ * It exists as an OBJECT with a flight time rather than as an instant effect,
+ * and that is the whole difference between a skill the player can read and a
+ * number that silently changes. The first version applied its damage on the
+ * frame the button was pressed and drew particles at the target: things died,
+ * and nothing had visibly happened. A thrown object arcs, lands, and explodes —
+ * three beats the eye can follow, in the place it is looking.
+ */
+export interface Grenade {
+  x: number
+  y: number
+  /** Where it was thrown from, so the arc can be interpolated. */
+  fromX: number
+  fromY: number
+  tx: number
+  ty: number
+  /** 0..1 along the flight. */
+  t: number
+  power: number
+}
+
+let grenades: Grenade[] = []
+export const getGrenades = (): Grenade[] => grenades
+
+/** Flight time. Long enough to read as a throw, short enough not to feel laggy. */
+const GRENADE_FLIGHT_MS = 420
+
+/**
+ * Throw it. Returns false when there was nothing worth hitting, so the caller
+ * can decline to spend the cooldown — a skill that eats its own clock on an
+ * empty road is a skill players learn not to press.
+ *
+ * The damage lands when it LANDS, in `stepGrenades`.
+ */
+export const throwGrenade = (mult: number): boolean => {
+  if (phase.value !== 'run' && phase.value !== 'boss') return false
+  const at = grenadeTarget()
+  if (!at) return false
+
+  grenades.push({
+    x: anchorX, y: anchorY,
+    fromX: anchorX, fromY: anchorY,
+    tx: at.x, ty: at.y,
+    t: 0,
+    power: Math.max(1, squadDps.value * mult)
+  })
+  pushFx({ kind: 'grenadeThrow', x: anchorX, y: anchorY })
+  return true
+}
+
+/** Everything a landed grenade does. */
+const detonateGrenade = (g: Grenade): void => {
+  pushFx({ kind: 'grenade', x: g.tx, y: g.ty })
+
+  for (const f of foes) {
+    if (f.dead) continue
+    if (Math.hypot(f.x - g.tx, f.y - g.ty) > GRENADE_BLAST_R) continue
+    damageFoe(f, g.power)
+  }
+  if (boss && !boss.dead && Math.hypot(boss.x - g.tx, boss.y - g.ty) <= GRENADE_BLAST_R + boss.scale) {
+    // Through the shield, like a barrel: the grenade is the other answer to a
+    // phase the player was told they could do nothing about.
+    damageBoss(boss, g.power, true)
+  }
+  for (const bl of barrels) {
+    if (bl.dead || bl.fuse >= 0) continue
+    if (Math.hypot(bl.x - g.tx, bl.y - g.ty) > GRENADE_BLAST_R) continue
+    bl.fuse = 0
+    pushFx({ kind: 'barrelLit', x: bl.x, y: bl.y })
+  }
+}
+
+const stepGrenades = (dt: number): void => {
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i]!
+    g.t += (dt * 1000) / GRENADE_FLIGHT_MS
+    if (g.t >= 1) {
+      g.t = 1
+      detonateGrenade(g)
+      grenades.splice(i, 1)
+      continue
+    }
+    // Straight line in world space; the renderer adds the arc as screen height,
+    // so the throw reads as a lob without the sim needing a third axis.
+    g.x = g.fromX + (g.tx - g.fromX) * g.t
+    g.y = g.fromY + (g.ty - g.fromY) * g.t
+  }
 }
 
 /**
@@ -1483,6 +1806,25 @@ const resolveBullet = (b: Bullet): boolean => {
     return true
   }
 
+  // Barrels eat rounds like a crate and are worth spending them on: see
+  // `detonate`. Checked before barricades so a barrel standing against a wall is
+  // still the thing the crowd is shooting at.
+  for (const bl of barrels) {
+    if (bl.dead || bl.fuse >= 0) continue
+    const dy = bl.y - b.y
+    if (dy < -BARREL_R || dy > BARREL_R + 0.4) continue
+    if (Math.abs(bl.x - b.x) > BARREL_R + BULLET_R) continue
+    bl.hp -= b.damage
+    pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'crate' })
+    if (bl.hp <= 0) {
+      // Lit, not gone: the fuse is what lets the player read the blast coming
+      // and gives the moment a beat of its own.
+      bl.fuse = 0
+      pushFx({ kind: 'barrelLit', x: bl.x, y: bl.y })
+    }
+    return true
+  }
+
   for (const bar of barricades) {
     if (bar.dead) continue
     const dy = bar.y - b.y
@@ -1556,14 +1898,16 @@ const resolveBullet = (b: Bullet): boolean => {
     const dy = g.y - b.y
     if (dy < -GATE_DEPTH || dy > GATE_DEPTH + 0.5) continue
     if (Math.abs(g.x - b.x) > g.halfW) continue
-    if (
-      (g.op === 'add' && g.value < GATE_MAX_VALUE) ||
-      (g.op === 'sub' && g.value < GATE_SUB_MAX)
-    ) {
+    // EVERY op, not just the additive ones. This test used to name `add` and
+    // `sub` explicitly, which is why multipliers and traps shipped unpumpable:
+    // `stepGates` was willing to grow them and nothing ever told it they were
+    // being shot at. `gatePumpCap` is now the single answer to "can this door
+    // still grow", so the two halves cannot drift apart again.
+    if (g.value < gatePumpCap(g.op)) {
       // One tick per half second of sustained fire, exactly as promised on the
       // tin. That keeps a gate worth the same to a squad of five and a squad of
-      // fifty — it is a decision about time, not a DPS check. A `-N` leaf is
-      // the same clock running the other way.
+      // fifty — it is a decision about time, not a DPS check. A `-N` or `/N`
+      // leaf is the same clock running the other way.
       g.hotFor = 0
     }
     // The curtain sparks once per round rather than once per frame: a doorway
@@ -1620,13 +1964,13 @@ const breakCrate = (c: Crate): void => {
   if (c.kind === 'rate') {
     // The only way fire rate rises during a run. Capped so a crate-rich stage
     // cannot outrun the bullet budget.
-    setFireRate(runFireRate.value + CRATE_RATE_GAIN)
+    setFireRate(runFireRate.value + (c.gain ?? CRATE_RATE_GAIN))
     pushFx({
       kind: 'crateBreak', x: c.x, y: c.y, crate: 'rate',
       value: Math.round(runFireRate.value * 10) / 10
     })
   } else {
-    damage.value += CRATE_DAMAGE_GAIN
+    damage.value += c.gain ?? CRATE_DAMAGE_GAIN
     pushFx({ kind: 'crateBreak', x: c.x, y: c.y, crate: 'damage', value: damage.value })
   }
   for (const u of units) u.flash = 220
@@ -1705,17 +2049,33 @@ const stepGates = (dt: number): void => {
     // somewhere else. `firingAtGate` is NOT set for it — that flag drives the
     // "you are pumping something" feedback, and a player making a mistake
     // should not be told they are earning.
-    const pumpCap = g.op === 'sub' ? GATE_SUB_MAX : GATE_MAX_VALUE
-    if (g.hotFor < 0.4 && (g.op === 'add' || g.op === 'sub')) {
-      if (g.op === 'add') firingAtGate = true
+    // Every op pumps now, and the two families pump differently: `+/-` in whole
+    // survivors, `x//` in tenths (see `GATE_SCALE_STEP`). What they share is the
+    // rule that makes a bank a decision — the crowd has ONE stream of fire, so
+    // whatever it is pointed at is the door being invested in, and the doors it
+    // is not pointed at stay where they are.
+    const scale = isScaleOp(g.op)
+    const pumpCap = gatePumpCap(g.op)
+    if (g.hotFor < 0.4) {
+      // `firingAtGate` drives the "you are pumping something" feedback, so it is
+      // set only for the doors that pay: a player making the mistake of hosing a
+      // trap should not be told they are earning.
+      if (g.op === 'add' || g.op === 'mul') firingAtGate = true
       g.charge += dt * 1000
       while (g.charge >= GATE_TICK_MS && g.value < pumpCap) {
         g.charge -= GATE_TICK_MS
-        g.value++
+        // Rounded to a tenth every step: floating point would otherwise print
+        // `x2.4000000000000004` on the door.
+        g.value = scale
+          ? Math.min(pumpCap, Math.round((g.value + GATE_SCALE_STEP) * 10) / 10)
+          : g.value + 1
         g.pop = 1
-        pushFx({ kind: 'gateTick', x: g.x, y: g.y, value: g.value, hostile: g.op === 'sub' })
+        pushFx({
+          kind: 'gateTick', x: g.x, y: g.y, value: g.value,
+          hostile: g.op === 'sub' || g.op === 'div'
+        })
       }
-    } else if (g.hotFor >= 0.4) {
+    } else {
       g.charge = 0
     }
 
@@ -1903,16 +2263,17 @@ const stepDividers = (dt: number): void => {
     // teardown. They are on screen; they are not lethal.
     if (d.dismissed) continue
 
-    // The steepest crush rate in the game: a pillar is a narrow thing that the
-    // player was told to avoid, and hitting one dead-centre should hurt more
-    // than a wall you could not have gone around.
-    // The steepest grind in the game: a pillar is a narrow thing the player was
-    // told to avoid, and hitting one dead-centre should hurt more than a wall
-    // they could not have gone around.
+    // The steepest grind in the game once the player knows what a pillar is — a
+    // narrow thing they were told to avoid, so hitting one dead-centre should
+    // cost more than a wall they could not have gone around.
+    //
+    // Ramped over the opening stages, because the crowd's resting position is
+    // x = 0 and so is the pillar: see `dividerGrindFor`.
+    const crush = dividerCrushFor(stage.value)
     const hit = grindAgainst(d.id, {
       x: d.x, halfW: d.halfW, y: d.y, halfH: DIVIDER_H / 2,
       cause: 'divider'
-    }, 0.35, dt)
+    }, crush.rate, dt, crush.floor, crush.bite)
     if (hit) pushFx({ kind: 'divider', x: d.x, y: d.y })
   }
 }
@@ -2306,6 +2667,53 @@ const holdCorridor = (
 }
 
 /**
+ * Burn the fuses and blow what is ready.
+ *
+ * The blast is the point of the whole prop: a flat fraction of the boss's MAX
+ * health, so it stays meaningful at every depth, and it lands THROUGH the
+ * shield. It also clears the arena's escort — a barrel that killed the boss's
+ * bodyguards but not the boss reads exactly right, and it gives a player who
+ * cannot out-damage the boss a way to at least clear the room.
+ */
+const stepBarrels = (dt: number): void => {
+  for (let i = barrels.length - 1; i >= 0; i--) {
+    const bl = barrels[i]!
+    if (bl.dead) { barrels.splice(i, 1); continue }
+    if (bl.fuse < 0) continue
+
+    bl.fuse += dt * 1000
+    if (bl.fuse < BARREL_FUSE_MS) continue
+
+    bl.dead = true
+    pushFx({ kind: 'barrelBlast', x: bl.x, y: bl.y })
+
+    if (boss && !boss.dead) {
+      const dx = boss.x - bl.x
+      const dy = boss.y - bl.y
+      if (Math.hypot(dx, dy) <= BARREL_BLAST_R + boss.scale) {
+        damageBoss(boss, boss.maxHp * BARREL_BLAST_BOSS_FRACTION, true)
+      }
+    }
+    for (const f of foes) {
+      if (f.dead) continue
+      if (Math.hypot(f.x - bl.x, f.y - bl.y) > BARREL_BLAST_R) continue
+      // Whatever is standing in the blast dies outright. An escort that survived
+      // a stick of TNT would make the prop feel like a firework.
+      damageFoe(f, f.maxHp)
+    }
+    // Chain reaction: a barrel inside the blast lights rather than detonating,
+    // so a row goes off as a rolling sequence the player can watch instead of
+    // one frame of everything.
+    for (const other of barrels) {
+      if (other === bl || other.dead || other.fuse >= 0) continue
+      if (Math.hypot(other.x - bl.x, other.y - bl.y) > BARREL_BLAST_R) continue
+      other.fuse = 0
+      pushFx({ kind: 'barrelLit', x: other.x, y: other.y })
+    }
+  }
+}
+
+/**
  * Crates are obstacles too.
  *
  * An unbroken crate kills whoever runs into it, which turns "should I detour
@@ -2518,14 +2926,21 @@ const stepBoss = (dt: number): void => {
   // nothing measurable — 14 of 15 simulated retries moved the clear rate by
   // exactly zero — because 68–80 % of a failing run's losses are slams, which
   // no amount of enemy HP relief ever touches.
-  const slamShare = Math.min(
-    SLAM_FRACTION_MAX,
-    SLAM_MAX_FRACTION * endlessPressure(stage.value)
-  ) * slamRelief
+  // Stage 1 pays a token (see `TUTORIAL_SLAM_FRACTION`): its boss swings so the
+  // player learns the shape, not so it takes the run off them.
+  const slamShare = stage.value <= 1
+    ? TUTORIAL_SLAM_FRACTION
+    : Math.min(
+      SLAM_FRACTION_MAX,
+      SLAM_MAX_FRACTION * endlessPressure(stage.value)
+    ) * slamRelief
   // `BOSS_MIN_KILL` is the floor: the swing the whole stage builds up to may not
   // land on a thinned-out crowd and tip over a single survivor. It is still
   // bounded by the ring — nothing outside the arc is billed for being small.
-  let budget = Math.max(BOSS_MIN_KILL, Math.ceil(squadCount.value * slamShare))
+  let budget = Math.max(
+    stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL,
+    Math.ceil(squadCount.value * slamShare)
+  )
   for (const u of units) {
     if (budget <= 0) break
     if (u.dying > 0) continue
@@ -2549,9 +2964,16 @@ const stepBoss = (dt: number): void => {
  * paid. Overkill is forfeited, which is the point — the gate is a floor on how
  * long the climax lasts, not a tax on damage.
  */
-const damageBoss = (b: Boss, amount: number): void => {
-  if (b.dead || b.guard > 0) return
-  const gate = BOSS_GUARD_GATES[b.guarded]
+const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
+  if (b.dead) return
+  // A guarded boss is immune to GUNFIRE — that is the phase, and the primer the
+  // player is shown says so. A barrel blast is the exception the phase exists to
+  // create: it is the one offence available while the shield is up, which turns
+  // "MOVE and wait" into "MOVE and go get that". The gate floor below still
+  // applies, so a blast can carry the boss TO its next phase but never past it —
+  // the boss still plants and swings at every gate it owes the player.
+  if (b.guard > 0 && !throughGuard) return
+  const gate = bossGuardGates(stage.value)[b.guarded]
   const floor = gate === undefined ? 0 : gate * b.maxHp
   b.hp -= amount
   b.flash = 1

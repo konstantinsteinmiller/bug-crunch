@@ -46,6 +46,12 @@ export default {
     'guard': { 'touch': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!', 'desktop': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!' }
   },
 
+  'flow': {
+
+    'unlocked': 'Freigeschaltet!'
+
+  },
+
   'result': {
     'stageClear': 'Level geschafft!',
     'wipedOut': 'Trupp ausgelöscht',
@@ -60,7 +66,9 @@ export default {
     'nextStage': 'Nächstes Level',
     'tryAgain': 'Nochmal',
     'upgrade': 'Upgrade',
-    'rankOf': 'von {n}'
+    'upgradeHint': 'Rüste deine Truppe auf!',
+    'rankOf': 'von {n}',
+    'upNext': 'Als Nächstes: Level {n}'
   },
 
   'leaderboard': {
@@ -77,6 +85,14 @@ export default {
     'of': 'von {n} Spielern'
   },
 
+  'skills': {
+
+    'grenade': 'Granate',
+
+    'shield': 'Schild'
+
+  },
+
   'upgrades': {
     'title': 'Upgrades',
     'spotlight': 'Ausgeben!',
@@ -87,14 +103,18 @@ export default {
       'power': 'Feuerkraft',
       'rate': 'Feuerrate',
       'range': 'Reichweite',
-      'scavenge': 'Plündern'
+      'scavenge': 'Plündern',
+      'grenade': 'Granate',
+      'shield': 'Schild'
     },
     'descriptions': {
       'squad': 'Starte jedes Level mit mehr Überlebenden.',
       'power': 'Jeder Überlebende macht mehr Schaden pro Schuss.',
       'rate': 'Jeder Überlebende schießt schneller.',
       'range': 'Dein Trupp eröffnet das Feuer weiter vorn.',
-      'scavenge': 'Verdiene mehr Münzen pro Lauf.'
+      'scavenge': 'Verdiene mehr Münzen pro Lauf.',
+      'grenade': 'Wirf eine Granate für einen schweren Schadensstoß.',
+      'shield': 'Halbiere für einige Sekunden den Schaden an deiner Truppe.'
     }
   },
 
