@@ -595,16 +595,36 @@ describe('a passage squeezes the crowd and gives it back', () => {
 // drift instead of trailing it.
 describe('every third boss swing is charged', () => {
   /**
+   * The stage these tests fight on.
+   *
+   * It used to be 10, and 10 now fields a `summoner` — a boss that never swings
+   * (see `BOSS_POOL`). Every assertion in this block is about the SLAM, so on a
+   * summoner they were measuring an empty room. 9 is the nearest stage the
+   * rotation still gives a meteor and its arena is bare (`ARENA_KITS`), so the
+   * fight is the boss and nothing else; the crowd is 260 rather than 400 to keep
+   * the fight the same LENGTH against a shallower stage's health bar.
+   *
+   * The kind is asserted out loud below so a future rotation change fails here
+   * with a sentence rather than silently emptying these.
+   */
+  const SLAM_STAGE = 9
+
+  it('is fighting the kind these tests were written about', async () => {
+    const { bossKindFor } = await import('@/game/threats')
+    expect(bossKindFor(SLAM_STAGE), 'the charged-swing tests are no longer on a slam boss')
+      .toBe('meteor')
+  })
+
+  /**
    * A boss fight long enough to see the pattern.
    *
-   * Stage 10 against 400 survivors, measured: fifteen swings, five of them
-   * charged. A stage-6 fight with a big crowd is over in two — the boss dies
-   * before the third swing exists, which says nothing about the third swing.
+   * A shallow-stage fight with a big crowd is over in two swings — the boss dies
+   * before the third exists, which says nothing about the third.
    */
   const fight = async (): Promise<Array<Extract<FxEvent, { kind: 'bossSlam' }>>> => {
     const game = await importGame()
-    game.startStage(10)
-    game.debugAddUnits(400)
+    game.startStage(SLAM_STAGE)
+    game.debugAddUnits(260)
     game.debugSkipToArena()
     drainFx()
     const slams: Array<Extract<FxEvent, { kind: 'bossSlam' }>> = []
@@ -658,8 +678,8 @@ describe('every third boss swing is charged', () => {
     const { CHARGED_WINDUP_MUL } = await import('@/game/survival')
     const restore = withSeed(20260815)
     try {
-      game.startStage(10)
-      game.debugAddUnits(400)
+      game.startStage(SLAM_STAGE)
+      game.debugAddUnits(260)
       game.debugSkipToArena()
 
       // The wind-up is the fairness of the move: twice the ground covered has
@@ -688,8 +708,8 @@ describe('every third boss swing is charged', () => {
       // share is capped either way — so "more threatening" has to show up as a
       // HIT RATE, and that is what this counts, against a crowd that is
       // constantly moving rather than a stationary target.
-      game.startStage(10)
-      game.debugAddUnits(400)
+      game.startStage(SLAM_STAGE)
+      game.debugAddUnits(260)
       game.debugSkipToArena()
       drainFx()
 

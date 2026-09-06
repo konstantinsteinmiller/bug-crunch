@@ -31,11 +31,58 @@ import {
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
 import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
 import {
-  BOLT_LIFE, BOLT_R, BOLT_SPEED, BOLT_TRAIL,
-  BOMBER_BLAST_R, BOMBER_FRACTION, BOMBER_FUSE, BOMBER_PLANT_GAP, BOMBER_SPEED, BOMBER_TRACK,
-  GUNNER_FRACTION, GUNNER_RELOAD, GUNNER_STANDOFF, GUNNER_TELEGRAPH,
-  ROLLER_FRACTION, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD,
-  bossKindFor, minibossKindFor, rollerLaneFor, rollerLaneX
+  BOLT_BLAST_R,
+  BOLT_FLIGHT_S,
+  BOLT_HIT_R,
+  BOLT_LEAD,
+  BOLT_LIFE,
+  BOLT_R,
+  BOLT_SHARE_MUL,
+  BOLT_SPEED,
+  BOLT_TRAIL,
+  BOMBER_BLAST_R,
+  BOMBER_FRACTION,
+  BOMBER_FUSE,
+  BOMBER_PLANT_GAP,
+  BOMBER_SPEED,
+  BOMBER_TRACK,
+  BOSS_BOLT_LIFE,
+  CLAW_HALF_DEPTH,
+  CLAW_LEAD,
+  GUNNER_FRACTION,
+  GUNNER_RELOAD,
+  GUNNER_STANDOFF,
+  GUNNER_TELEGRAPH,
+  HEALER_CAST_CD,
+  HEALER_TELEGRAPH,
+  HEAL_EVERY,
+  HEAL_FRACTION,
+  HEAL_MAX_CASTS,
+  ROLLER_FRACTION,
+  ROLLER_R,
+  ROLLER_SPEED,
+  ROLLER_WARN_AHEAD,
+  SUMMON_AHEAD,
+  SUMMON_BITE_MUL,
+  SUMMON_CD,
+  SUMMON_DESIGN,
+  SUMMON_HP_SHARE,
+  SUMMON_PER_WAVE,
+  SUMMON_SPREAD,
+  SUMMON_TELEGRAPH,
+  SUMMON_TYPE,
+  SUMMON_WAVES_MAX,
+  bossGuardPayoff,
+  bossHpMulFor,
+  bossKindFor,
+  clawFurrowHalfW,
+  clawLaneXs,
+  inClawFurrow,
+  minibossKindFor,
+  rollerLaneFor,
+  rollerLaneX,
+  type BossBolt,
+  type BossKind
 } from '@/game/threats'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
@@ -152,6 +199,9 @@ let barrels: Barrel[] = []
 let foes: Foe[] = []
 let pickups: Pickup[] = []
 let boss: Boss | null = null
+/** The healer's projectiles. Empty for every other boss kind and for the whole
+ *  road — nothing but a `healer` ever puts one in here. */
+let bossBolts: BossBolt[] = []
 
 /**
  * ─── A gunner's round in flight ─────────────────────────────────────────────
@@ -238,6 +288,9 @@ export const getFoes = (): Foe[] => foes
 export const getBolts = (): ReadonlyArray<Bolt> => bolts
 export const getPickups = (): Pickup[] => pickups
 export const getBoss = (): Boss | null => boss
+/** The healer's bossBolts in flight, for the renderer. Always empty unless the
+ *  stage's boss is a `healer`. */
+export const getBossBolts = (): BossBolt[] => bossBolts
 export const getTrack = (): Track => track
 export const anchor = (): { x: number; y: number } => ({ x: anchorX, y: anchorY })
 export const nowMs = (): number => clock
@@ -459,6 +512,7 @@ const resetWorld = (): void => {
   bolts = []
   pickups = []
   boss = null
+  bossBolts = []
   nextEvent = 0
   fireAccum = 0
   timeScale = 1
@@ -1029,17 +1083,28 @@ const spawnBoss = (): void => {
   // The opening stages' cut is applied to BOTH prices, the tutorial's own and
   // the general curve, so stage 1's victory lap gets easier along with the rest
   // rather than being the one boss that ignored the onboarding pass.
+  // …and by the KIND, which is the other half of the same sentence. A healer
+  // gives 60 % of its bar back and a summoner spends a quarter of it on bodies,
+  // so charging all four kinds the same printed number would make the same stage
+  // four different lengths. See `bossHpMulFor`.
+  const kind = bossKindFor(stage.value)
   const base = (stage.value <= 1
     ? tutorialBossHp()
-    : BOSS_BASE_HP * bossHpScale(stage.value)) * earlyBossHpMul(stage.value)
+    : BOSS_BASE_HP * bossHpScale(stage.value)) * earlyBossHpMul(stage.value) * bossHpMulFor(kind)
   const hp = Math.max(
     stage.value <= 1 ? 1 : 60,
     Math.round(base * difficultyFactor() * hpRelief)
   )
+  // The healer runs its own clock (`HEALER_CAST_CD`), and its first cycle has to
+  // be the one it will actually throw: `charging` marks the every-third heal for
+  // a healer exactly as it marks the charged swing for a meteor — decided when
+  // the cycle BEGINS, so the telegraph and the effect can never disagree about
+  // which cast is being wound up.
+  const openCd = kind === 'healer' ? HEALER_CAST_CD : 2.6
   boss = {
-    kind: bossKindFor(stage.value),
+    kind,
     attacks: 0,
-    summonCd: 0,
+    summonCd: SUMMON_CD,
     design: bossDesign(stage.value),
     x: 0,
     y: track.bossY,
@@ -1049,15 +1114,15 @@ const spawnBoss = (): void => {
     flash: 0,
     phase: 0,
     scale: 2.5,
-    slamCd: 2.6,
-    slamSpan: 2.6,
+    slamCd: openCd,
+    slamSpan: openCd,
     slams: 0,
     aimed: false,
     guarded: 0,
     guard: 0,
     slamX: 0,
     slamY: 0,
-    charging: false,
+    charging: kind === 'healer' ? healCastDue(1) : false,
     dead: false,
     dying: 0
   }
@@ -1695,19 +1760,82 @@ let shieldUntilMs = 0
  * fixed place to look.
  */
 export const attackIncoming = (): boolean => {
-  if (boss && !boss.dead && boss.aimed && boss.slamCd > 0) return true
+  const t = incomingThreat()
+  // A HEAL is the one wind-up the badge stays down for, and the reason is the
+  // word printed under it. The badge says DODGE; a heal cannot be dodged, it can
+  // only be out-damaged. A warning that instructs the player to do something
+  // impossible is worse than no warning, because it is the same badge they are
+  // supposed to trust on the swing that follows.
+  //
+  // A SUMMON WAVE never reaches this at all: `incomingThreat` returns nothing
+  // for a summoner, because three skeletons walking down the road are already
+  // the most legible warning in the game and a corner badge would only compete
+  // with them.
+  return t !== null && t.kind !== 'heal'
+}
+
+/**
+ * ─── …and what it is, for a badge that wants to say more than DODGE ─────────
+ *
+ * `attackIncoming` answers the yes/no the current badge is wired to. This is the
+ * whole answer, and it exists because the badge's single word is a half-truth
+ * the moment the pools open: a healer's third cast raises a wind-up nobody can
+ * step out of, and an elite's sweep spans the whole road.
+ *
+ * ── What a component needs to vary the label ──
+ *
+ * `IncomingWarning.vue` today takes `show: boolean` and prints `t('hud.dodge')`.
+ * To carry the healer it needs one more prop — the `kind`, or just `dodgeable` —
+ * and one more i18n key beside `hud.dodge` chosen from it. Nothing else changes:
+ * the badge's position, animation and `hud.incoming` aria-label are correct for
+ * every kind. The wiring is deliberately not done here; the state is exported so
+ * it can be.
+ *
+ * `ttl` is seconds until the thing lands, so a badge that wanted a countdown
+ * could have one — though the ring on the ground already says how long, and two
+ * clocks disagreeing is worse than one.
+ */
+export type IncomingKind =
+  | 'slam' | 'rake' | 'bolt' | 'heal'
+  | 'sweep' | 'bomb' | 'shot' | 'roll'
+
+export interface Incoming {
+  kind: IncomingKind
+  /**
+   * Can the player actually step out of this one?
+   *
+   * The elite's sweep is `false` and has always been: it spans the whole road,
+   * and the answer to it is damage, not position. That is a pre-existing
+   * half-truth in the badge's wording rather than one the pools introduced —
+   * recorded here so a component that varies its label fixes both at once.
+   */
+  dodgeable: boolean
+  /** Seconds until it lands. */
+  ttl: number
+}
+
+export const incomingThreat = (): Incoming | null => {
+  const b = boss
+  if (b && !b.dead && b.aimed && b.slamCd > 0) {
+    if (b.kind === 'healer') {
+      return { kind: b.charging ? 'heal' : 'bolt', dodgeable: !b.charging, ttl: b.slamCd }
+    }
+    return { kind: b.kind === 'claw' ? 'rake' : 'slam', dodgeable: true, ttl: b.slamCd }
+  }
+
+  // The elite pool. Ordered by how close the thing is to landing rather than by
+  // kind, so a road carrying two elites reports the one about to hurt.
   for (const f of foes) {
     if (!f.elite || f.dead) continue
     switch (f.kind) {
       case 'bomber':
-        // Armed. The fuse is the wind-up, and there is nothing else it can be
-        // doing while `fuse` is running.
-        if (f.fuse > 0) return true
+        // Armed. The fuse IS the wind-up — there is nothing else it can be doing
+        // while `fuse` runs.
+        if (f.fuse > 0) return { kind: 'bomb', dodgeable: true, ttl: f.fuse }
         break
       case 'gunner':
-        // `kindTicks` is the aim latch: set when the gun is levelled, cleared
-        // when the round leaves. See `stepGunner`.
-        if (f.kindTicks > 0) return true
+        // `kindTicks` is the aim latch, `reload` the countdown to the shot.
+        if (f.kindTicks > 0) return { kind: 'shot', dodgeable: true, ttl: Math.max(0, f.reload) }
         break
       case 'roller': {
         // The ball has no wind-up because it does not need one — the roll IS the
@@ -1716,16 +1844,26 @@ export const attackIncoming = (): boolean => {
         // moment, because the badge's whole job is to move the player's eye to
         // the road BEFORE there is something to see there.
         const gap = f.y - anchorY
-        if (gap > -ROLLER_R && gap <= ROLLER_WARN_AHEAD) return true
+        if (gap > -ROLLER_R && gap <= ROLLER_WARN_AHEAD) {
+          return {
+            kind: 'roll',
+            dodgeable: true,
+            ttl: Math.max(0, gap) / (ROLLER_SPEED + stageSpeed(stage.value))
+          }
+        }
         break
       }
       default:
-        if (f.sweepCd > 0 && f.sweepCd <= ELITE_TELEGRAPH) return true
+        if (f.sweepCd > 0 && f.sweepCd <= ELITE_TELEGRAPH) {
+          return { kind: 'sweep', dodgeable: false, ttl: f.sweepCd }
+        }
     }
   }
+
   // A round already in the air is the most incoming thing on the road, and it
   // outlives the gunner that fired it.
-  return bolts.some((b) => !b.dead && b.y > anchorY - CROWD_MAX_R)
+  const inAir = bolts.find((x) => !x.dead && x.y > anchorY - CROWD_MAX_R)
+  return inAir ? { kind: 'shot', dodgeable: true, ttl: 0 } : null
 }
 
 export const shieldActive = (): boolean => shieldUntilMs > Date.now()
@@ -3462,14 +3600,20 @@ const stepPickups = (dt: number): void => {
  * The boss.
  *
  * One body, one telegraph, one punish. It walks in, holds just ahead of the
- * crowd, and every couple of seconds it SLAMS — but it slams where the CROWD
- * IS, not where it is standing. The target is locked when the telegraph starts
- * (`SLAM_TELEGRAPH` seconds before impact) and drawn as a closing ring, so the
- * fight is a dodge with a fair warning rather than a coin toss.
+ * crowd, and every couple of seconds it commits to something — but it commits
+ * where the CROWD IS, not where it is standing. The target is locked when the
+ * telegraph starts (`SLAM_TELEGRAPH` seconds before impact, or the kind's own
+ * window) and painted on the ground, so the fight is a dodge with a fair warning
+ * rather than a coin toss.
  *
- * The previous version slammed under its own feet, four units ahead of a crowd
+ * The first version slammed under its own feet, four units ahead of a crowd
  * whose radius is under two — so the attack literally could not reach anybody
  * and the boss fight was a damage race with no failure state.
+ *
+ * What it commits TO is the kind (`BossKind`): a meteor drops a ring, a claw
+ * rakes three furrows, a healer throws a bolt or puts its own bar back up, and a
+ * summoner does not attack at all. Below, `meteor` is the path that must not
+ * change — every other kind branches away from it and back.
  */
 /**
  * How long the slam is telegraphed before it lands.
@@ -3503,11 +3647,33 @@ export const SLAM_TELEGRAPH = 1.0
  *  slam reaches, far enough that its body never covers the crowd. */
 const BOSS_HOLD_AHEAD = 3.8
 
+/**
+ * ─── One boss, four fights ──────────────────────────────────────────────────
+ *
+ * Every kind shares the same skeleton — walk in, hold ahead of the crowd, wind
+ * up, resolve — and owns exactly one branch of the wind-up and one of the
+ * resolve. Nothing below reaches into another kind's scratch: `slams` and
+ * `charging` belong to the meteor and the claw, `attacks` to the healer and the
+ * summoner, `summonCd` to the summoner alone.
+ *
+ * The split is by KIND rather than by a parameterised "attack", because the four
+ * differ in shape and not in degree: a ring, three strips, a projectile and a
+ * spawn have no common footprint to parameterise. Branching on the kind also
+ * keeps the meteor's path a straight read of what it always was, which is what
+ * a 24-run before/after fingerprint over stages 1-3 and 5 confirms it still is.
+ */
 const stepBoss = (dt: number): void => {
   const b = boss
   if (!b) return
   if (b.flash > 0) b.flash = Math.max(0, b.flash - dt * 4)
   b.phase += dt
+
+  // Stepped BEFORE the death check, so a bolt already in the air when the healer
+  // falls over still lands or leaves: a hit that vanished mid-flight would be
+  // the game taking back a threat it had already shown, which teaches the player
+  // to stop reading them. It stops at the end of the RUN rather than at the end
+  // of the boss — see the guard in `stepBossBolts`.
+  if (bossBolts.length > 0) stepBossBolts(dt)
 
   if (b.dead) {
     b.dying += dt * 1000
@@ -3528,6 +3694,13 @@ const stepBoss = (dt: number): void => {
     b.x = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, b.x))
   }
 
+  // The summoner has no attack, so it never touches the wind-up clock at all —
+  // not even to leave it running. Its whole behaviour is a budget and a timer.
+  if (b.kind === 'summoner') {
+    stepSummoner(b, dt)
+    return
+  }
+
   b.slamCd -= dt
 
   // Lock the target at the START of the telegraph, on the crowd's own position
@@ -3538,29 +3711,135 @@ const stepBoss = (dt: number): void => {
   // cross the telegraph" — see `Boss.aimed`. The crossing stops happening once
   // rage pulls the cadence below the window, and the boss then spends the rest
   // of the fight slamming the last place it aimed at.
-  if (!b.aimed && b.slamCd <= SLAM_TELEGRAPH) {
+  if (!b.aimed && b.slamCd <= bossTelegraph(b.kind)) {
     b.aimed = true
-    // A charged swing aims where the crowd is GOING, not where it was — see
-    // `CHARGED_LEAD`. That, and the doubled arc, is what makes it the swing a
-    // player has to answer rather than drift out of.
-    const lead = b.charging ? CHARGED_LEAD : 0.35
-    b.slamX = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead))
-    b.slamY = anchorY
-    // Something falls out of the sky onto the marked ground, and it takes
-    // exactly as long to get there as the swing does. The ring alone was not
-    // being seen — the player is watching the boss or their own thumb, never the
-    // patch of road they are about to be standing on.
-    pushFx({
-      kind: 'meteorCast',
-      x: b.slamX,
-      y: b.slamY,
-      radius: slamRadiusFor(b.slams, b.charging),
-      ttl: Math.max(0.15, b.slamCd),
-      charged: b.charging
-    })
+    aimBoss(b)
   }
 
   if (b.slamCd > 0) return
+
+  throwBossAttack(b)
+}
+
+/**
+ * How long this kind's wind-up is.
+ *
+ * The healer's is shorter because its cadence is. A full second of wind-up on a
+ * loop only a little longer than that leaves no frame with nothing incoming,
+ * which reads as no tell at all.
+ */
+const bossTelegraph = (kind: BossKind): number =>
+  kind === 'healer' ? HEALER_TELEGRAPH : SLAM_TELEGRAPH
+
+/**
+ * Pick the ground this cycle is aimed at, and announce it.
+ *
+ * The cast is pushed HERE and nowhere else on this path, so there is exactly one
+ * place that can be wrong about where an attack is going: the mark, the sound
+ * and the kill all read `slamX` / `slamY`, which were written on the line above.
+ */
+const aimBoss = (b: Boss, leadMul = 1): void => {
+  if (b.kind === 'healer') {
+    // A heal is aimed at the healer itself; there is nothing on the road to
+    // point at. A bolt is aimed at the crowd and then flies — the lead is small
+    // because the projectile's own travel time is the real difficulty.
+    b.slamX = b.charging
+      ? b.x
+      : Math.max(
+        -LANE_HALF + 1,
+        Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * BOLT_LEAD * leadMul)
+      )
+    b.slamY = b.charging ? b.y : anchorY
+    pushFx(
+      b.charging
+        ? { kind: 'healCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
+        : { kind: 'bossBoltCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
+    )
+    return
+  }
+
+  // A charged swing aims where the crowd is GOING, not where it was — see
+  // `CHARGED_LEAD`. That, and the doubled arc, is what makes it the swing a
+  // player has to answer rather than drift out of. A rake never charges (see
+  // `throwBossAttack`), so it always uses the ordinary lead.
+  const lead = (b.kind === 'claw' ? CLAW_LEAD : b.charging ? CHARGED_LEAD : 0.35) * leadMul
+  b.slamX = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead))
+  b.slamY = anchorY
+
+  if (b.kind === 'claw') {
+    // Sized from the rake that is actually coming — `b.slams` is the count
+    // ALREADY thrown, so the one being wound up is the next one. Getting this
+    // off by one would paint a narrower furrow than the one that kills.
+    pushFx({
+      kind: 'rakeCast',
+      x: b.slamX,
+      y: b.slamY,
+      lanes: clawLaneXs(b.slamX),
+      halfW: clawFurrowHalfW(b.slams + 1),
+      depth: CLAW_HALF_DEPTH,
+      ttl: Math.max(0.15, b.slamCd)
+    })
+    return
+  }
+
+  // Something falls out of the sky onto the marked ground, and it takes exactly
+  // as long to get there as the swing does. The ring alone was not being seen —
+  // the player is watching the boss or their own thumb, never the patch of road
+  // they are about to be standing on.
+  pushFx({
+    kind: 'meteorCast',
+    x: b.slamX,
+    y: b.slamY,
+    radius: slamRadiusFor(b.slams, b.charging),
+    ttl: Math.max(0.15, b.slamCd),
+    charged: b.charging
+  })
+}
+
+/**
+ * The share of the crowd one big boss attack takes.
+ *
+ * ONE definition for every kind, because they are all the same promise — "a hit
+ * you did not dodge costs about a third of your crowd" — and a second copy of it
+ * is how one archetype quietly ends up three times the others. The per-kind
+ * difference is `mul`, and a `mul` is only allowed to exist where a kind's
+ * CADENCE differs from the meteor's — the arithmetic and the deliberate discount
+ * on top of it are both written down at `BOLT_SHARE_MUL`.
+ */
+const bossHitShare = (mul = 1): number =>
+  (stage.value <= 1
+    ? TUTORIAL_SLAM_FRACTION
+    : Math.min(
+      SLAM_FRACTION_MAX,
+      SLAM_MAX_FRACTION * endlessPressure(stage.value)
+    ) * slamRelief) * earlyBigHitMul(stage.value) * mul
+
+/**
+ * …and the floor under it. `BOSS_MIN_KILL` intends a real hit on a thinned-out
+ * crowd; it is still bounded by the shape, so nothing outside the attack is ever
+ * billed for the crowd being small.
+ */
+const bossHitBudget = (share: number): number => Math.max(
+  Math.max(1, Math.round(
+    (stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL) * earlyBigHitMul(stage.value)
+  )),
+  Math.ceil(squadCount.value * share)
+)
+
+/** Resolve the cycle that just ran out. */
+const throwBossAttack = (b: Boss): void => {
+  b.attacks++
+  b.guard = 0
+  // This cycle is spent; the next one has to pick its own target. When rage has
+  // pulled the cadence under the telegraph window this re-aims on the very next
+  // frame, which is correct — a boss swinging faster than it can wind up is
+  // simply always winding up.
+  b.aimed = false
+
+  if (b.kind === 'healer') {
+    throwHealerCast(b)
+    return
+  }
 
   // Rage: every swing thrown brings the next one closer and widens it, down to
   // `SLAM_CD_MIN`. A squad that arrived big enough kills the boss in three or
@@ -3574,47 +3853,38 @@ const stepBoss = (dt: number): void => {
   const charged = b.charging
   b.slams++
   b.slamSpan = Math.max(SLAM_CD_MIN, SLAM_CD_BASE - b.slams * SLAM_CD_DECAY)
+
+  if (b.kind === 'claw') {
+    // ── Why a rake never charges ──
+    //
+    // `CHARGED_RADIUS_MUL` doubles a ring, and the ring is the whole attack, so
+    // doubling it is fair. The equivalent for a rake is doubling the furrows,
+    // which does not widen the attack — it CLOSES THE POCKETS, from 3.6 units to
+    // 2.7 against a crowd 3.3 across. That converts the one attack in the game
+    // whose answer is a position into one with no answer at all, every third
+    // swing, for the players least able to afford it.
+    //
+    // The claw's escalation is `CLAW_FURROW_GROWTH` instead: the furrows fatten
+    // as the fight drags, which tightens the window to reach a pocket without
+    // ever removing the pocket. `CLAW_SPACING` is derived from the fattest
+    // furrow precisely so that stays true.
+    b.charging = false
+    b.slamCd = b.slamSpan
+    throwRake(b)
+    return
+  }
+
   // Every third swing, and the wind-up stretches to pay for the size of it.
   b.charging = (b.slams + 1) % CHARGED_EVERY === 0
   b.slamCd = b.slamSpan * (b.charging ? CHARGED_WINDUP_MUL : 1)
-  // This swing is spent; the next one has to pick its own target. When rage has
-  // pulled the cadence under the telegraph window this re-aims on the very next
-  // frame, which is correct — a boss swinging faster than it can wind up is
-  // simply always winding up.
-  b.aimed = false
   const radius = slamRadiusFor(b.slams, charged)
-  b.guard = 0
 
   pushFx({ kind: 'bossSlam', x: b.slamX, y: b.slamY, radius, charged })
   // The retry relief scales the SLAM as well as enemy health. Health alone did
   // nothing measurable — 14 of 15 simulated retries moved the clear rate by
   // exactly zero — because 68–80 % of a failing run's losses are slams, which
   // no amount of enemy HP relief ever touches.
-  // Stage 1 pays a token (see `TUTORIAL_SLAM_FRACTION`): its boss swings so the
-  // player learns the shape, not so it takes the run off them.
-  // `earlyBigHitMul` on top of everything else: the health cuts shorten the
-  // fight, this makes LOSING it survivable. A first-timer who cannot dodge yet
-  // has to come out of a boss fight with a squad, because the fight is where
-  // they learn what the telegraph meant.
-  const slamShare = (stage.value <= 1
-    ? TUTORIAL_SLAM_FRACTION
-    : Math.min(
-      SLAM_FRACTION_MAX,
-      SLAM_MAX_FRACTION * endlessPressure(stage.value)
-    ) * slamRelief) * earlyBigHitMul(stage.value)
-  // `BOSS_MIN_KILL` is the floor: the swing the whole stage builds up to may not
-  // land on a thinned-out crowd and tip over a single survivor. It is still
-  // bounded by the ring — nothing outside the arc is billed for being small.
-  // The FLOOR is cut too, and it has to be: at a small crowd the floor is the
-  // whole swing, so trimming only the share would have left the opening bosses
-  // hitting a thinned-out squad exactly as hard as before.
-  let budget = Math.max(
-    Math.max(1, Math.round(
-      (stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL)
-      * earlyBigHitMul(stage.value)
-    )),
-    Math.ceil(squadCount.value * slamShare)
-  )
+  let budget = bossHitBudget(bossHitShare())
   for (const u of units) {
     if (budget <= 0) break
     if (u.dying > 0) continue
@@ -3624,6 +3894,206 @@ const stepBoss = (dt: number): void => {
     killUnit(u, Math.sign(dx), 'slam')
     budget--
   }
+}
+
+/**
+ * The claw's rake: three lethal gouges with two pockets between them.
+ *
+ * Billed under `slam`, deliberately. `DeathCause` is a vocabulary the result
+ * screen and the balance harness both read, and "the boss's big attack" is one
+ * idea whichever shape it arrives in — splitting it would make `slamsConnected`
+ * mean "connected, on the stages that field a meteor", which is a metric that
+ * silently measures less the more kinds there are.
+ */
+const throwRake = (b: Boss): void => {
+  const halfW = clawFurrowHalfW(b.slams)
+  const lanes = clawLaneXs(b.slamX)
+  pushFx({ kind: 'bossRake', x: b.slamX, y: b.slamY, lanes, halfW, depth: CLAW_HALF_DEPTH })
+
+  // Priced at exactly a slam's share, and the arithmetic works out because the
+  // SHAPES are the same size: a slam's ring (1.75, growing) swallows a crowd of
+  // radius 1.65 whole, so it can spend its whole budget; a rake's middle furrow
+  // covers about 30 % of that same disc, so it spends about 30 % of the crowd.
+  // Both come to "roughly a third of everyone" on a crowd that did not move,
+  // and to nothing at all on one that did.
+  let budget = bossHitBudget(bossHitShare())
+  for (const u of units) {
+    if (budget <= 0) break
+    if (u.dying > 0) continue
+    if (Math.abs(u.y - b.slamY) > CLAW_HALF_DEPTH) continue
+    if (!inClawFurrow(u.x, lanes, halfW)) continue
+    killUnit(u, Math.sign(u.x - b.slamX) || 1, 'slam')
+    budget--
+  }
+}
+
+/**
+ * Is the `n`-th cast of a healer's fight the heal?
+ *
+ * Two conditions, and the second one is the whole safety of the archetype: past
+ * `HEAL_MAX_CASTS` the cycle falls through to a bolt, so a fight that goes long
+ * stops regenerating instead of never ending. See `HEAL_MAX_CASTS`.
+ */
+const healCastDue = (n: number): boolean =>
+  n % HEAL_EVERY === 0 && Math.floor(n / HEAL_EVERY) <= HEAL_MAX_CASTS
+
+const throwHealerCast = (b: Boss): void => {
+  const healing = b.charging
+  b.slamSpan = HEALER_CAST_CD
+  b.slamCd = HEALER_CAST_CD
+  // Decide the NEXT cycle now, while it is beginning, for the same reason the
+  // meteor decides its charged swing here: the telegraph is drawn from this flag
+  // and it must never describe a different cast than the one that arrives.
+  b.charging = healCastDue(b.attacks + 1)
+
+  if (healing) {
+    const before = b.hp
+    b.hp = Math.min(b.maxHp, b.hp + b.maxHp * HEAL_FRACTION)
+    bossHp01.value = Math.max(0, b.hp / b.maxHp)
+    pushFx({ kind: 'bossHeal', x: b.x, y: b.y, amount: b.hp - before, hp01: bossHp01.value })
+    return
+  }
+
+  // A bolt is launched at the ground the wind-up marked and then flies straight.
+  // No homing: the crowd is stationary during the boss phase, so a bolt that
+  // corrected would be undodgeable, and undodgeable is not the same as slow.
+  //
+  // Its velocity is a TIME rather than a speed (`BOLT_FLIGHT_S`): the boss is
+  // anywhere between twelve and six units out depending on how far it has walked
+  // in, and a fixed speed made the dodge window vary threefold on a variable the
+  // player cannot see. See the note on `BOLT_FLIGHT_S`.
+  const dx = b.slamX - b.x
+  const dy = b.slamY - b.y
+  bossBolts.push({
+    id: entityId++,
+    x: b.x,
+    y: b.y,
+    vx: dx / BOLT_FLIGHT_S,
+    vy: dy / BOLT_FLIGHT_S,
+    life: BOSS_BOLT_LIFE,
+    radius: BOLT_BLAST_R
+  })
+}
+
+/**
+ * Move the healer's bossBolts and let them go off on whoever they reach.
+ *
+ * A bolt that reaches nothing costs nothing — it leaves the bottom of the arena
+ * and is dropped. That is what makes it a dodge rather than a delayed tax.
+ */
+const stepBossBolts = (dt: number): void => {
+  // The run is over: drop whatever is still in the air rather than letting it
+  // land. `stepBoss` keeps ticking through the boss's death animation, and a
+  // bolt that went off after the stage was won would take survivors off a result
+  // screen the player is already reading.
+  if (phase.value !== 'boss') {
+    bossBolts.length = 0
+    return
+  }
+  for (let i = bossBolts.length - 1; i >= 0; i--) {
+    const p = bossBolts[i]!
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.life -= dt
+    if (p.life <= 0 || p.y < anchorY - 2.5 || Math.abs(p.x) > LANE_HALF + 1.5) {
+      bossBolts.splice(i, 1)
+      continue
+    }
+    // One distance test against the crowd's own disc before scanning bodies —
+    // the squad cap is four thousand and a bolt spends most of its flight
+    // nowhere near any of them.
+    if (Math.abs(p.y - anchorY) > CROWD_MAX_R + BOLT_HIT_R + 1.4) continue
+
+    let struck = false
+    for (const u of units) {
+      if (u.dying > 0) continue
+      const dx = u.x - p.x
+      const dy = u.y - p.y
+      if (dx * dx + dy * dy <= BOLT_HIT_R * BOLT_HIT_R) { struck = true; break }
+    }
+    if (!struck) continue
+
+    pushFx({ kind: 'bossBoltHit', x: p.x, y: p.y, radius: p.radius })
+    let budget = bossHitBudget(bossHitShare(BOLT_SHARE_MUL))
+    for (const u of units) {
+      if (budget <= 0) break
+      if (u.dying > 0) continue
+      const dx = u.x - p.x
+      const dy = u.y - p.y
+      if (dx * dx + dy * dy > p.radius * p.radius) continue
+      killUnit(u, Math.sign(dx), 'slam')
+      budget--
+    }
+    bossBolts.splice(i, 1)
+  }
+}
+
+/**
+ * The summoner: a wave budget and a timer, and nothing else.
+ *
+ * `attacks` counts waves spent. When it reaches `SUMMON_WAVES_MAX` the boss is
+ * finished contributing and simply stands there — which is the point, and the
+ * only reason the fight has a floor under it. See the note on `SUMMON_WAVES_MAX`.
+ */
+const stepSummoner = (b: Boss, dt: number): void => {
+  b.summonCd -= dt
+  if (b.summonCd > 0) return
+  // A guard phase is paid off with a WAVE rather than a swing — see
+  // `bossGuardPayoff`. Releasing the shield here and nowhere else is what keeps
+  // "the phase is over when the boss has paid for it" true for this kind too.
+  b.guard = 0
+  if (b.attacks >= SUMMON_WAVES_MAX) {
+    // Budget spent. The timer keeps running so a later guard phase still has
+    // something to release, but nothing is spawned: the road stops filling and
+    // the fight becomes an ordinary one. See `SUMMON_WAVES_MAX`.
+    b.summonCd = SUMMON_CD
+    return
+  }
+  b.attacks++
+  b.summonCd = SUMMON_CD
+
+  const def = foeDef(SUMMON_TYPE)
+  // Priced off the BOSS's bar, not the stage's husk — see `SUMMON_HP_SHARE`.
+  // `b.maxHp` already carries the stage scaling, the difficulty factor and the
+  // retry relief, so the wall softens for a stuck player exactly as the boss
+  // does and there is no second place for those to be applied.
+  const hp = Math.max(1, Math.round(b.maxHp * SUMMON_HP_SHARE))
+  // They come up out of the road in front of the CROWD, not out of the boss —
+  // see `SUMMON_AHEAD`. Sited off `anchorX`/`anchorY` for the same reason the
+  // slam is: the boss spends a whole fight walking in, so anything placed
+  // relative to its body arrives after the fight is over.
+  const waveY = anchorY + SUMMON_AHEAD
+  for (let i = 0; i < SUMMON_PER_WAVE; i++) {
+    const spread = (i / Math.max(1, SUMMON_PER_WAVE - 1) - 0.5) * 2 * SUMMON_SPREAD
+    foes.push({
+      id: entityId++,
+      typeId: def.id,
+      design: SUMMON_DESIGN,
+      x: Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, anchorX + spread)),
+      y: waveY + (i % 2) * 0.7,
+      hp,
+      maxHp: hp,
+      speed: def.speed,
+      bite: Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL)),
+      biteShare: biteShareFor(def.id) * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL,
+      biteCd: 0,
+      scale: def.scale,
+      flash: 0,
+      phase: Math.random(),
+      dead: false,
+      flying: false,
+      swayPhase: Math.random() * 6.28,
+      hold: 0,
+      hitCd: 0,
+      sweepCd: 0,
+      sweepSpan: 0,
+      sweepDir: 1,
+      sweepTold: false,
+      kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
+      elite: false
+    })
+  }
+  pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: SUMMON_PER_WAVE, wave: b.attacks })
 }
 
 /**
@@ -3656,30 +4126,42 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
     b.hp = floor
     b.guarded++
     b.guard = 1
-    // Start the wind-up now rather than on the old clock: the phase turn IS the
-    // telegraph, so the player gets the full second from the moment they see it.
-    b.slamCd = SLAM_TELEGRAPH
-    b.slamSpan = SLAM_TELEGRAPH
-    b.slamX = anchorX
-    b.slamY = anchorY
-    // The guard picks its own target, here, at the moment the phase turns —
-    // so `stepBoss` must not re-aim it a frame later on stale input.
-    b.aimed = true
-    // …and it announces itself, exactly as the ordinary swing does.
-    //
-    // This is a SECOND path that arms a slam, and it used to arm one silently:
-    // `stepBoss` only casts when it is the thing doing the aiming, so the swing
-    // a guard phase turns into landed with nothing falling out of the sky. It is
-    // also the swing the player is least ready for, arriving on the beat their
-    // fire stopped working.
-    pushFx({
-      kind: 'meteorCast',
-      x: b.slamX,
-      y: b.slamY,
-      radius: slamRadiusFor(b.slams, b.charging),
-      ttl: SLAM_TELEGRAPH,
-      charged: b.charging
-    })
+    if (bossGuardPayoff(b.kind) === 'wave') {
+      // A summoner has no swing to owe, so the phase is paid off with a wave and
+      // its own clock is what releases the shield — see `bossGuardPayoff` and
+      // `stepSummoner`. Nothing here touches the slam machinery, because the
+      // summoner never uses it.
+      b.summonCd = SUMMON_TELEGRAPH
+    } else {
+      // Start the wind-up now rather than on the old clock: the phase turn IS
+      // the telegraph, so the player gets the full window from the moment they
+      // see it. The window is the KIND's, not the meteor's — a healer given a
+      // full second here would spend the phase turn on a longer wind-up than any
+      // of its own.
+      const tell = bossTelegraph(b.kind)
+      b.slamCd = tell
+      b.slamSpan = tell
+      // The guard picks its own target, here, at the moment the phase turns —
+      // so `stepBoss` must not re-aim it a frame later on stale input.
+      b.aimed = true
+      // …and it announces itself, exactly as the ordinary swing does.
+      //
+      // This is a SECOND path that arms an attack, and it used to arm one
+      // silently: `stepBoss` only casts when it is the thing doing the aiming,
+      // so the swing a guard phase turns into landed with nothing falling out of
+      // the sky. It is also the swing the player is least ready for, arriving on
+      // the beat their fire stopped working.
+      //
+      // Routed through `aimBoss` rather than repeating a `meteorCast` here, so a
+      // kind can never end up with a guard phase that announces somebody else's
+      // attack — which is exactly what a hard-coded meteor cast did to the claw
+      // and the healer the first time round.
+      //
+      // With NO lead, which is what the hand-written version did and is the
+      // right behaviour anyway: the phase turn is not a read on where the crowd
+      // is drifting, it is a swing owed at the ground they are standing on.
+      aimBoss(b, 0)
+    }
     slowHoldMs = 320
     pushFx({ kind: 'bossRage', x: b.x, y: b.y, stage: b.guarded })
   }

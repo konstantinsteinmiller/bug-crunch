@@ -11,10 +11,12 @@ import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
   getBarrels, getBullets, getCrates, getDividers, getFoes, getGates, getGrenades, getPickups,
+  getBossBolts,
   getRocks,
   getUnits,
   nowMs, phase, runFireRate, squadCount, stage
 } from '@/use/useSurvivalGame'
+import { HEAL_FRACTION } from '@/game/threats'
 import {
   HERO_CYCLE_MS, HERO_FOOT, HERO_HEIGHT, HERO_PX, outfitIndex, outfitTone,
   primeSurvivors, survivorFrame
@@ -888,7 +890,7 @@ const burstPillar = (t: Topple): void => {
   const chips = cheapFx ? 4 : tier === 'medium' ? 8 : 12
   const base = p.y - DIVIDER_H * 0.45
 
-  // Sheared bolts: bright, low, and thrown along the road at the base — the one
+  // Sheared bossBolts: bright, low, and thrown along the road at the base — the one
   // place the eye is looking, because that is where the thing broke.
   for (let i = 0; i < (cheapFx ? 4 : 9); i++) {
     emit({
@@ -1041,6 +1043,8 @@ export const drawScene = (
   // (otherwise every burst appears one frame late, which reads as input lag).
   consumeFx()
   stepDismissals(dtMs)
+  stepRakes(dtMs)
+  stepHealTells(dtMs)
   stepParticles(dtMs)
   // Stashed for the draw pass: the health-bar chip eases on real time, and the
   // draw functions are not handed a delta of their own.
@@ -1089,6 +1093,12 @@ export const drawScene = (
   // thing that must not be allowed to hide them. See `drawRollers`.
   drawRollers(ctx)
   drawGunnerBolts(ctx)
+  // …and the three the boss pool added, in the same band and for the same
+  // reason. The rake goes UNDER the bossBolts because a bolt has to stay findable
+  // while three furrows are burning across the road behind it.
+  drawClawFurrows(ctx)
+  drawHealTell(ctx)
+  drawBossBolts(ctx)
   // The elite's wind-up again, over the bodies — the ground pass under them is
   // buried by a full-size crowd, and the crowd is exactly what it aims at. See
   // `drawEliteTelegraphs`.
@@ -1745,6 +1755,209 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
     ctx.stroke()
     ctx.restore()
   }
+}
+
+// ─── The three tells the boss pool added ────────────────────────────────────
+//
+// Each one exists because the meteor's ring cannot describe the attack it is
+// standing in for: a ring says "not HERE", and a rake says "not here, here or
+// here — pick a gap", a heal says nothing about the road at all, and a bolt is
+// an object rather than a place. `drawBossBody` gates its ring to the meteor for
+// exactly that reason; these three replace it, one per kind.
+//
+// All three follow the same convention as `drawCasts`: the wind-up is spawned
+// with the exact time to impact and is animated against it, so the picture and
+// the hit are always describing the same beat.
+
+/**
+ * A claw's rake, winding up and then striking.
+ *
+ * Drawn as the strips that KILL and the pockets that do not, because the pockets
+ * are the answer and an attack's telegraph should show the answer. The lethal
+ * width is `halfW`, which is the same number `throwRake` measures against — the
+ * gouges are painted a hair proud of it so a dodge that looked clean is clean.
+ */
+interface Rake {
+  lanes: readonly number[]
+  y: number
+  halfW: number
+  depth: number
+  t: number
+  life: number
+  done: boolean
+}
+
+/** How long a struck rake stays on the road, seconds. Long enough to read as a
+ *  scar and short enough not to be mistaken for a live one. */
+const RAKE_AFTER_S = 0.34
+
+const rakes: Rake[] = []
+
+const stepRakes = (dtMs: number): void => {
+  const dt = dtMs / 1000
+  for (let i = rakes.length - 1; i >= 0; i--) {
+    const r = rakes[i]!
+    r.t += dt
+    if (r.t >= r.life) r.done = true
+    if (r.t >= r.life + RAKE_AFTER_S) rakes.splice(i, 1)
+  }
+}
+
+const drawClawFurrows = (ctx: CanvasRenderingContext2D): void => {
+  if (rakes.length === 0) return
+  for (const r of rakes) {
+    const p = Math.max(0, Math.min(1, r.t / Math.max(0.001, r.life)))
+    const after = r.done ? Math.min(1, (r.t - r.life) / RAKE_AFTER_S) : 0
+    const top = worldToScreenY(r.y + r.depth)
+    const bottom = worldToScreenY(r.y - r.depth)
+    const w = r.halfW * scale
+
+    ctx.save()
+    for (const lx of r.lanes) {
+      const cx = worldToScreenX(lx)
+      if (cx < -w * 3 || cx > viewW + w * 3) continue
+
+      if (!r.done) {
+        // The wind-up. The strip fills from the far end toward the crowd, so the
+        // animation reads as something being dragged down the road at them
+        // rather than as a rectangle fading in — and the fraction filled is the
+        // fraction of the wind-up gone, which is the only clock it needs.
+        const cut = bottom + (top - bottom) * (1 - p)
+        ctx.globalAlpha = 0.16 + p * 0.2
+        ctx.fillStyle = '#ff5a3c'
+        ctx.fillRect(cx - w, top, w * 2, cut - top)
+        ctx.globalAlpha = 0.4 + p * 0.45
+        ctx.strokeStyle = '#ffb07a'
+        ctx.lineWidth = Math.max(1.5, scale * 0.05)
+        ctx.beginPath()
+        ctx.moveTo(cx - w, top)
+        ctx.lineTo(cx - w, bottom)
+        ctx.moveTo(cx + w, top)
+        ctx.lineTo(cx + w, bottom)
+        ctx.stroke()
+        continue
+      }
+
+      // The strike, then the scar. White-hot for a beat, then a dark gouge.
+      const fade = 1 - after
+      ctx.globalAlpha = fade
+      ctx.fillStyle = after < 0.35 ? '#fff2d8' : '#2a1109'
+      ctx.fillRect(cx - w, top, w * 2, bottom - top)
+    }
+    ctx.restore()
+  }
+}
+
+/**
+ * The healer's every-third, winding up.
+ *
+ * Under the boss and not on the road, because that is the truth of it: nothing
+ * is about to land anywhere, the bar is about to go back up. Green, which is a
+ * colour this game uses nowhere else, so the one event that undoes the player's
+ * work is never confused with one that threatens them.
+ */
+interface HealTell { x: number; y: number; t: number; life: number }
+const healTells: HealTell[] = []
+
+const stepHealTells = (dtMs: number): void => {
+  const dt = dtMs / 1000
+  for (let i = healTells.length - 1; i >= 0; i--) {
+    const h = healTells[i]!
+    h.t += dt
+    if (h.t >= h.life) healTells.splice(i, 1)
+  }
+}
+
+const drawHealTell = (ctx: CanvasRenderingContext2D): void => {
+  if (healTells.length === 0) return
+  for (const h of healTells) {
+    const p = Math.max(0, Math.min(1, h.t / Math.max(0.001, h.life)))
+    const sx = worldToScreenX(h.x)
+    const sy = worldToScreenY(h.y)
+    // Rings that close INWARD on the boss — the opposite direction to every
+    // other ring in the game, which all radiate outward from a hit. Something
+    // gathering rather than something arriving.
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    const rings = cheapFx ? 2 : 3
+    for (let i = 0; i < rings; i++) {
+      const phase01 = (p + i / rings) % 1
+      const r = scale * (3.2 - phase01 * 2.6)
+      ctx.globalAlpha = 0.42 * (1 - phase01) * (0.4 + p * 0.6)
+      ctx.strokeStyle = '#5cf08a'
+      ctx.lineWidth = Math.max(2, scale * 0.09)
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, r, r * 0.5, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 0.18 + p * 0.3
+    ctx.fillStyle = '#2fbd63'
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, scale * 1.1 * (0.5 + p * 0.6), scale * 0.55 * (0.5 + p * 0.6), 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+}
+
+/**
+ * The healer's bossBolts, in the air.
+ *
+ * Read straight off the simulation's own array rather than from an effect, so
+ * the thing on screen IS the thing that will hit — a bolt drawn from a copy
+ * could be a frame behind at exactly the moment the player is deciding whether
+ * they have cleared it.
+ */
+const drawBossBolts = (ctx: CanvasRenderingContext2D): void => {
+  const list = getBossBolts()
+  if (list.length === 0) return
+  const t = nowMs() / 1000
+  ctx.save()
+  for (const p of list) {
+    const sx = worldToScreenX(p.x)
+    const sy = worldToScreenY(p.y)
+    const r = scale * 0.34
+
+    // The ground shadow first: a projectile with no contact patch reads as a
+    // sticker on the camera rather than as something in the world.
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 0.32
+    ctx.fillStyle = '#000'
+    ctx.beginPath()
+    ctx.ellipse(sx, sy + r * 1.5, r * 0.9, r * 0.34, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.globalCompositeOperation = 'lighter'
+    if (!cheapFx) {
+      // A short trail behind the direction of travel, so the bolt's LINE is
+      // legible — which is the thing the player has to step off.
+      const len = Math.hypot(p.vx, p.vy) || 1
+      for (let i = 1; i <= 4; i++) {
+        const back = i / 4
+        ctx.globalAlpha = 0.3 * (1 - back)
+        ctx.fillStyle = '#7cf0a8'
+        ctx.beginPath()
+        ctx.arc(
+          sx - (p.vx / len) * back * r * 4,
+          sy + (p.vy / len) * back * r * 4,
+          r * (1 - back * 0.6), 0, Math.PI * 2
+        )
+        ctx.fill()
+      }
+    }
+    // Halo and core, pulsing, so it is unmistakably a live thing.
+    const pulse = 0.85 + Math.sin(t * 14 + p.id) * 0.15
+    ctx.globalAlpha = 0.5
+    ctx.fillStyle = '#3ad97a'
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * 2.1 * pulse, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 0.95
+    ctx.fillStyle = '#eafff0'
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * pulse, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
 }
 
 /**
@@ -3949,8 +4162,16 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   // A charged swing gets a longer look at it, because it covers twice the
   // ground: the ring has to be readable for long enough that leaving it was a
   // decision the player got to make, not a reflex they failed.
+  //
+  // METEOR ONLY, and that gate is load-bearing rather than tidy. The ring is a
+  // shrinking circle centred on `slamX`, and `slamX` is the middle of a CLAW's
+  // rake — so on a claw stage it drew a "get out of here" mark on the one strip
+  // of road the player must not stand in, and pointed away from the two pockets
+  // that are the whole answer to the attack. A telegraph that is wrong is worse
+  // than none. The claw, the healer and the summoner each paint their own tell
+  // (`drawClawFurrows`, `drawHealTell`, `drawBossBolts`).
   const windowS = b.charging ? 1.1 : 0.6
-  if (!b.dead && b.slamCd < windowS) {
+  if (b.kind === 'meteor' && !b.dead && b.slamCd < windowS) {
     const k = 1 - b.slamCd / windowS
     const rx = worldToScreenX(b.slamX)
     const ry = worldToScreenY(b.slamY)
@@ -4982,6 +5203,114 @@ const applyFx = (e: FxEvent): void => {
         })
       }
       break
+    case 'rakeCast':
+      // The claw's wind-up. No sound of its own: it borrows the elite's swing,
+      // because it IS a swing, and a fifth combat cue in the same second of the
+      // mix is mud rather than information.
+      playFx('eliteSweep', 0.35)
+      rakes.push({
+        lanes: e.lanes, y: e.y, halfW: e.halfW, depth: e.depth,
+        t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'bossRake': {
+      playFx('bossSlam')
+      triggerShake('strong')
+      // Mark the rake struck if its wind-up is still on screen; otherwise paint
+      // the scar on its own, so a rake that arrived without a tell (it cannot,
+      // but a future path might) still leaves the evidence that it landed.
+      const live = rakes.find((r) => !r.done)
+      if (live) { live.t = live.life; live.done = true }
+      else {
+        rakes.push({
+          lanes: e.lanes, y: e.y, halfW: e.halfW, depth: e.depth,
+          t: 0, life: 0.001, done: true
+        })
+      }
+      for (const lx of e.lanes) {
+        if (Math.abs(lx) > LANE_HALF + 1) continue
+        emitDecal(lx, e.y, e.halfW * 1.6, 0.45)
+        const n = minFx ? 3 : cheapFx ? 6 : 12
+        for (let i = 0; i < n; i++) {
+          emit({
+            x: lx + (Math.random() - 0.5) * e.halfW * 2,
+            y: e.y + (Math.random() - 0.5) * e.depth * 2,
+            vx: (Math.random() - 0.5) * 3, vy: 1.5 + Math.random() * 4,
+            life: 420, size: 0.13, color: [150, 120, 100], shape: 1,
+            gravity: 12, drag: 1.6, vrot: (Math.random() - 0.5) * 9
+          })
+        }
+      }
+      break
+    }
+
+    case 'healCast':
+      healTells.push({ x: e.x, y: e.y, t: 0, life: e.ttl })
+      break
+
+    case 'bossHeal': {
+      playFx('bossHeal')
+      screenFlash = 0.18
+      flashColour = '90,240,140'
+      // The rising plus. The one number in the game that goes the wrong way, so
+      // it is spelled out rather than left to the bar: a player who does not
+      // read WHY the bar moved concludes their damage stopped counting.
+      emitText({
+        x: e.x, y: e.y + 0.8, vy: 2.6, life: 1000,
+        text: `+${Math.round(HEAL_FRACTION * 100)}%`,
+        color: '#6cf59a', size: 0.95, crit: true
+      })
+      const n = minFx ? 8 : cheapFx ? 16 : 30
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2
+        emit({
+          x: e.x + Math.cos(a) * 1.2, y: e.y + Math.sin(a) * 0.6,
+          vx: -Math.cos(a) * 2.4, vy: -Math.sin(a) * 1.3 + 2.4,
+          life: 620, size: 0.13, color: [110, 245, 150],
+          additive: true, shape: 0, drag: 1.4
+        })
+      }
+      break
+    }
+
+    case 'bossBoltCast':
+      healTells.push({ x: e.x, y: e.y, t: 0, life: e.ttl })
+      playFx('bossGuard', 0.4)
+      break
+
+    case 'bossBoltHit': {
+      playFx('bossSlam', 0.5)
+      triggerShake('small')
+      emitDecal(e.x, e.y, e.radius, 0.35)
+      const n = minFx ? 6 : cheapFx ? 12 : 24
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * 5 * e.radius, vy: Math.sin(a) * 3 * e.radius + 1.5,
+          life: 460, size: 0.12, color: [110, 240, 150],
+          additive: true, shape: 2, drag: 2
+        })
+      }
+      break
+    }
+
+    case 'summonWave': {
+      // Borrowed from the miniboss arrival, because that is what it is: bodies
+      // walking onto the road with a health bar's worth of intent behind them.
+      playFx('eliteSpawn', 0.6)
+      triggerShake('small')
+      const n = minFx ? 6 : cheapFx ? 12 : 26
+      for (let i = 0; i < n; i++) {
+        emit({
+          x: e.x + (Math.random() - 0.5) * 6.4,
+          y: e.y + (Math.random() - 0.5) * 1.6,
+          vx: (Math.random() - 0.5) * 2.4, vy: 2 + Math.random() * 3.5,
+          life: 560, size: 0.15, color: [120, 130, 145], shape: 3, drag: 1.5, gravity: 5
+        })
+      }
+      break
+    }
 
     case 'grenadeThrow':
       // The throw itself. Almost nothing — a scuff of dust at the crowd's feet
@@ -5316,6 +5645,8 @@ export const invalidateArt = (): void => {
   // that belonged to the last run would land on nobody, in the wrong place, and
   // announce an attack that is not coming.
   casts.length = 0
+  rakes.length = 0
+  healTells.length = 0
   hpChip.clear()
   crowdSqueeze = 0
   batchBleak = false
