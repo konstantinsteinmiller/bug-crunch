@@ -107,6 +107,38 @@ export type FxEvent =
       dir: number
       ttl: number
     }
+  /**
+   * ─── …and the three pool minibosses' own tells ────────────────────────────
+   *
+   * Same contract as the two casts above and for the same reason: emitted ONCE,
+   * at the start of the wind-up, carrying the exact seconds until the damage
+   * lands. An effect that arrives late teaches the player the wrong moment to
+   * move, which is worse than no effect at all.
+   *
+   * The roller has no cast, and that is deliberate rather than an omission: its
+   * telegraph is the ball itself rolling down the road for a second and a half,
+   * and a wind-up event on top of a two-and-a-quarter-unit object already
+   * filling half the screen would be a second warning for the same thing.
+   * `drawRollers` paints the lane it owns instead, straight from the world.
+   */
+  /** A bomber armed. `radius` is the blast it will throw, `ttl` its fuse. */
+  | { kind: 'bombCast'; x: number; y: number; radius: number; ttl: number }
+  /** …and it went off. */
+  | { kind: 'bombBlast'; x: number; y: number; radius: number }
+  /**
+   * A gunner locked a shot. `tx` / `ty` are where it is aiming, so the line the
+   * player is shown is the line the bolt actually takes — the aim is locked at
+   * the start of the window exactly as the boss's slam is.
+   */
+  | { kind: 'boltCast'; x: number; y: number; tx: number; ty: number; ttl: number }
+  /** …and fired it. */
+  | { kind: 'boltFire'; x: number; y: number; dirX: number; dirY: number }
+  /** A bolt buried itself in the crowd, or ran out of road. `spent` is true when
+   *  it stopped because it had taken everyone it was allowed to. */
+  | { kind: 'boltEnd'; x: number; y: number; spent: boolean }
+  /** The ball rolled over part of the squad. `dir` is the side it came down, so
+   *  the debris leaves along the roll rather than away from a point. */
+  | { kind: 'rollerHit'; x: number; y: number; dir: number }
   | { kind: 'grenadeThrow'; x: number; y: number }
   /** The player's grenade went off. */
   | { kind: 'grenade'; x: number; y: number }

@@ -6,8 +6,9 @@ import {
   SLAM_RADIUS_MAX, VIEW_HEIGHT, UNIT_R,
   type Divider, type GateOp
 } from '@/game/survival'
+import { BOLT_R, ROLLER_R, ROLLER_WARN_AHEAD } from '@/game/threats'
 import {
-  anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBoss,
+  anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
   getBarrels, getBullets, getCrates, getDividers, getFoes, getGates, getGrenades, getPickups,
   getRocks,
@@ -1082,6 +1083,12 @@ export const drawScene = (
   drawSkills(ctx)
   // Above the crowd: a telegraph nobody can see is not a telegraph.
   drawCasts(ctx)
+  // The two pool minibosses whose threat is a live OBJECT rather than a wind-up
+  // event — a ball with a lane, and a round in the air. Same layer and the same
+  // reason: the crowd is exactly what they are aimed at, so the crowd is the one
+  // thing that must not be allowed to hide them. See `drawRollers`.
+  drawRollers(ctx)
+  drawGunnerBolts(ctx)
   // The elite's wind-up again, over the bodies — the ground pass under them is
   // buried by a full-size crowd, and the crowd is exactly what it aims at. See
   // `drawEliteTelegraphs`.
@@ -1457,13 +1464,24 @@ const chipFor = (id: number, hp01: number, dtMs: number): number => {
  * wrong moment to dodge, which is worse than no effect at all.
  */
 interface Cast {
-  kind: 'meteor' | 'slice'
+  /**
+   * `bomb` and `bolt` are the two pool minibosses that HAVE a wind-up. The
+   * roller does not appear here on purpose: its telegraph is the ball itself
+   * rolling down the road for a second and a half, and it is painted straight
+   * from the world by `drawRollers` rather than from an event.
+   */
+  kind: 'meteor' | 'slice' | 'bomb' | 'bolt'
   x: number
   y: number
-  /** Ground footprint for a meteor; arc reach for a slice. */
+  /** Ground footprint for a meteor or a bomb; arc reach for a slice; unused by
+   *  a bolt, which is a line rather than an area. */
   r: number
   dir: number
   charged: boolean
+  /** Where a `bolt` is aimed. The aim is locked when the cast is emitted, so
+   *  this really is the line the round will take. */
+  tx: number
+  ty: number
   /** Seconds elapsed, and the total it was given. */
   t: number
   life: number
@@ -1593,6 +1611,108 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
       continue
     }
 
+    if (c.kind === 'bomb') {
+      // ── The bomber's ring, and the fuse burning down to it ──
+      //
+      // Two signals, because the attack is two facts and the player needs both:
+      // WHERE (a ring at the blast's real radius, so what they see is what will
+      // hit them) and WHEN (a bar of the ring that fills as the fuse runs out,
+      // read like a clock hand). The ring is drawn at full size from the first
+      // frame rather than growing into place — a ring that grows tells the
+      // player the danger is growing, and it is not, it is arriving.
+      const r = c.r * scale
+      ctx.save()
+      ctx.globalAlpha = c.done ? 1 - after : 0.65
+      // Ground fill, deliberately faint: the crowd has to stay readable through
+      // it, because reading the crowd is the thing they are about to do.
+      ctx.fillStyle = 'rgba(255,90,50,0.14)'
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, r, r * 0.5, 0, 0, Math.PI * 2)
+      ctx.fill()
+      // The edge, thickening as the fuse burns.
+      ctx.strokeStyle = c.done ? '#ffffff' : '#ff6a2a'
+      ctx.lineWidth = Math.max(2.5, scale * (0.06 + p * 0.1))
+      ctx.stroke()
+      // …and the clock hand: the fraction of the ring that has filled is the
+      // fraction of the fuse that has gone.
+      ctx.strokeStyle = '#ffd27a'
+      ctx.lineWidth = Math.max(3, scale * 0.11)
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, r, r * 0.5, 0, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2)
+      ctx.stroke()
+
+      if (!c.done) {
+        // The bomb itself, pulsing faster as the fuse shortens. The pulse is
+        // the oldest "this is about to go off" signal there is, and it costs
+        // one sine.
+        const beat = 0.5 + 0.5 * Math.sin(c.t * (10 + p * 26))
+        const bodyR = scale * (0.42 + beat * 0.1 * p)
+        ctx.globalAlpha = 1
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.fillStyle = '#ff7a30'
+        ctx.beginPath()
+        ctx.arc(sx, sy - scale * 0.5, bodyR * (1.8 + beat * 0.6), 0, Math.PI * 2)
+        ctx.fill()
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.fillStyle = '#2a1a14'
+        ctx.beginPath()
+        ctx.arc(sx, sy - scale * 0.5, bodyR, 0, Math.PI * 2)
+        ctx.fill()
+        // The spark on the fuse, walking down toward the charge.
+        ctx.fillStyle = '#fff3c8'
+        ctx.beginPath()
+        ctx.arc(
+          sx + scale * 0.16,
+          sy - scale * (1.05 - 0.35 * p),
+          Math.max(2, scale * 0.09 * (0.7 + beat * 0.5)),
+          0, Math.PI * 2
+        )
+        ctx.fill()
+      }
+      ctx.restore()
+      continue
+    }
+
+    if (c.kind === 'bolt') {
+      // ── The gunner's column ──
+      //
+      // One straight line from the muzzle down the road, because that is
+      // literally the shape of the attack: the round kills what it passes
+      // through and nothing else, so the tell is the path and not a footprint.
+      // It brightens and widens as the lock runs out, so "it is about to go" is
+      // legible without reading a number.
+      const tx = worldToScreenX(c.tx)
+      const ty = worldToScreenY(c.ty)
+      const halfW = c.r * scale
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.globalAlpha = (c.done ? 1 - after : 0.22 + p * 0.5)
+      // The band the round will actually occupy — drawn at its true width, so a
+      // player who steps just outside it is right to think they are clear.
+      ctx.fillStyle = '#63d8ff'
+      ctx.fillRect(sx - halfW, Math.min(sy, ty), halfW * 2, Math.abs(ty - sy))
+      // Two hot rails on the edges, which is what makes it read as a LINE
+      // rather than as a wash of colour over the road.
+      ctx.globalAlpha = Math.min(1, 0.4 + p * 0.6)
+      ctx.strokeStyle = '#d8f6ff'
+      ctx.lineWidth = Math.max(2, scale * 0.05)
+      ctx.beginPath()
+      ctx.moveTo(sx - halfW, sy)
+      ctx.lineTo(tx - halfW, ty)
+      ctx.moveTo(sx + halfW, sy)
+      ctx.lineTo(tx + halfW, ty)
+      ctx.stroke()
+      // A charging glow at the muzzle so the eye starts at the end the round
+      // will come from.
+      ctx.globalAlpha = 0.35 + p * 0.65
+      ctx.fillStyle = '#eafaff'
+      ctx.beginPath()
+      ctx.arc(sx, sy, halfW * (0.5 + p * 0.9), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+      continue
+    }
+
     // ── The elite's blade ──
     //
     // A crescent that swings across the road the way the hit will travel, and
@@ -1622,6 +1742,212 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
     ctx.lineWidth = Math.max(3, scale * (0.08 + p * 0.12))
     ctx.beginPath()
     ctx.ellipse(0, 0, reach * 0.98, reach * 0.46, 0, Math.PI * 0.06, Math.PI * 0.94)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+/**
+ * ─── The ball, and the half of the road it owns ─────────────────────────────
+ *
+ * Drawn from the WORLD rather than from an event, and drawn over the crowd,
+ * because both of those follow from what the thing is. It has no wind-up to
+ * announce — the roll is the wind-up, and it is a second and a half long — so
+ * there is nothing for a cast to carry; and it is four and a half units across,
+ * which on this camera is over half the screen, so a ball that the crowd
+ * occluded would be a ball the player did not believe in.
+ *
+ * Two passes, saying the two things the player has to know:
+ *
+ *   THE LANE   a hazard-striped strip down the half of the road it is coming
+ *              along, running past the crowd. This is the whole instruction —
+ *              the strip has an edge, and the other side of that edge is safe.
+ *   THE BALL   a heavy sphere with a rim light and a shadow, spinning at the
+ *              rate it is actually travelling so it reads as rolling rather
+ *              than sliding.
+ *
+ * Nothing here is a hitbox of its own: the strip is drawn at the ball's real
+ * radius and the sphere at the same, so what the player is shown and what the
+ * simulation bills are the same 4.5 units.
+ */
+const drawRollers = (ctx: CanvasRenderingContext2D): void => {
+  const a = anchor()
+  for (const f of getFoes()) {
+    if (!f.elite || f.dead || f.kind !== 'roller') continue
+    const gap = f.y - a.y
+    if (gap > ROLLER_WARN_AHEAD + 6) continue
+
+    const sx = worldToScreenX(f.x)
+    const sy = worldToScreenY(f.y)
+    const r = ROLLER_R * scale
+    const left = worldToScreenX(f.x - ROLLER_R)
+    const right = worldToScreenX(f.x + ROLLER_R)
+    // Down past the crowd, so the strip and the squad are visibly in or out of
+    // the same channel.
+    const tail = worldToScreenY(a.y - CROWD_MAX_R * 2)
+
+    // ── The lane ──
+    ctx.save()
+    ctx.globalAlpha = 0.14
+    ctx.fillStyle = '#ff5a2a'
+    ctx.fillRect(left, sy, right - left, tail - sy)
+    if (!cheapFx) {
+      // Hazard stripes, scrolling with the ball. Diagonals are the universal
+      // "do not stand here" and they cost one clipped loop.
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(left, sy, right - left, tail - sy)
+      ctx.clip()
+      ctx.globalAlpha = 0.1
+      ctx.strokeStyle = '#ffd9a0'
+      ctx.lineWidth = Math.max(3, scale * 0.16)
+      const pitch = scale * 0.85
+      const drift = ((f.y * scale) % (pitch * 2)) - pitch
+      for (let x = left - (tail - sy) - pitch; x < right + pitch; x += pitch * 2) {
+        ctx.beginPath()
+        ctx.moveTo(x + drift, sy)
+        ctx.lineTo(x + drift + (tail - sy), tail)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+    // The edges: the one line that says where safe begins.
+    ctx.globalAlpha = 0.5
+    ctx.strokeStyle = '#ff8a3c'
+    ctx.lineWidth = Math.max(2, scale * 0.06)
+    ctx.beginPath()
+    ctx.moveTo(left, sy)
+    ctx.lineTo(left, tail)
+    ctx.moveTo(right, sy)
+    ctx.lineTo(right, tail)
+    ctx.stroke()
+    ctx.restore()
+
+    // ── The ball ──
+    ctx.save()
+    // Contact shadow first, squashed onto the road.
+    ctx.globalAlpha = 0.34
+    ctx.fillStyle = '#000000'
+    ctx.beginPath()
+    ctx.ellipse(sx, sy + r * 0.16, r * 0.95, r * 0.34, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.globalAlpha = 1
+    // Built per frame rather than cached in `getRamp`: a radial gradient is
+    // pinned to absolute canvas coordinates, and this one is centred on a body
+    // that is moving. A cached ramp would light the ball from wherever it was
+    // when the ramp was baked. There are never more than a couple of these on
+    // screen, so the two allocations are not the frame's problem.
+    const shade = ctx.createRadialGradient(
+      sx - r * 0.35, sy - r * 0.45, r * 0.1, sx, sy, r
+    )
+    shade.addColorStop(0, '#9aa4b2')
+    shade.addColorStop(0.45, '#5d6672')
+    shade.addColorStop(1, '#232830')
+    ctx.fillStyle = shade
+    ctx.beginPath()
+    ctx.arc(sx, sy, r, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Banding that turns with the roll. The spin is derived from how far the
+    // ball has actually travelled (`phase` accumulates with time and the speed
+    // is constant), so it can never look like it is sliding.
+    if (!cheapFx) {
+      const spin = -f.phase * 3.1
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(sx, sy, r * 0.97, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.globalAlpha = 0.28
+      ctx.strokeStyle = '#161a20'
+      ctx.lineWidth = Math.max(2, scale * 0.09)
+      for (let i = 0; i < 4; i++) {
+        const off = (((spin + i * 0.5) % 2) + 2) % 2 - 1
+        ctx.beginPath()
+        ctx.ellipse(sx, sy + off * r, r * 0.98, r * 0.24, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    // Rim light along the leading edge, and a hard outline so the silhouette
+    // survives on top of a bright road.
+    ctx.globalAlpha = 0.6
+    ctx.strokeStyle = '#c9d6e6'
+    ctx.lineWidth = Math.max(2, scale * 0.07)
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * 0.93, Math.PI * 0.15, Math.PI * 0.85)
+    ctx.stroke()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = '#10131a'
+    ctx.lineWidth = Math.max(2, scale * 0.06)
+    ctx.beginPath()
+    ctx.arc(sx, sy, r, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
+/**
+ * ─── The gunner's rounds, in the air ────────────────────────────────────────
+ *
+ * Drawn at `BOLT_R`, the radius the kill is measured against, plus a trail
+ * behind it. The trail is the part that sells "slow and fat and coming for
+ * you"; the head is the part that has to be exactly the size of the thing that
+ * will hit, because a round painted wider than it kills teaches the player to
+ * dodge further than they need and a round painted narrower gets them killed.
+ */
+const drawGunnerBolts = (ctx: CanvasRenderingContext2D): void => {
+  const bolts = getBolts()
+  if (bolts.length === 0) return
+  for (const b of bolts) {
+    if (b.dead) continue
+    const sx = worldToScreenX(b.x)
+    const sy = worldToScreenY(b.y)
+    const r = BOLT_R * scale
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+
+    // The trail, back along the line it came down.
+    const steps = cheapFx ? 4 : 9
+    for (let i = steps; i >= 1; i--) {
+      const back = i / steps
+      ctx.globalAlpha = 0.3 * (1 - back) ** 1.3
+      ctx.fillStyle = '#4fc9ff'
+      ctx.beginPath()
+      ctx.ellipse(
+        sx - b.dx * back * r * 5,
+        sy + b.dy * back * r * 5,
+        r * (1 - back * 0.6), r * (1.35 - back * 0.7),
+        0, 0, Math.PI * 2
+      )
+      ctx.fill()
+    }
+
+    // Halo then core: one flat disc reads as a sticker, two read as something
+    // burning through the air.
+    ctx.globalAlpha = 0.55
+    ctx.fillStyle = '#8fe4ff'
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * 2.1, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalAlpha = 0.95
+    ctx.fillStyle = '#eafcff'
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * 1.05, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    // …and a dark core with an outline, so it stays a solid OBJECT against the
+    // crowd rather than a patch of light that could be mistaken for a friendly
+    // effect.
+    ctx.save()
+    ctx.fillStyle = '#0d2b3a'
+    ctx.beginPath()
+    ctx.arc(sx, sy, r * 0.62, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#bff0ff'
+    ctx.lineWidth = Math.max(2, scale * 0.05)
     ctx.stroke()
     ctx.restore()
   }
@@ -4535,15 +4861,126 @@ const applyFx = (e: FxEvent): void => {
     case 'meteorCast':
       casts.push({
         kind: 'meteor', x: e.x, y: e.y, r: e.radius, dir: 1,
-        charged: e.charged, t: 0, life: e.ttl, done: false
+        charged: e.charged, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
       })
       break
 
     case 'sliceCast':
       casts.push({
         kind: 'slice', x: e.x, y: e.y, r: e.reach, dir: e.dir,
-        charged: false, t: 0, life: e.ttl, done: false
+        charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
       })
+      break
+
+    case 'bombCast':
+      // A lit fuse and the ring it will fill. Same contract as the two above —
+      // `ttl` is the exact time to the blast, so the ring closes on the beat.
+      // The boss's rage cue, quieter: the player already reads that sound as
+      // "something has committed and it is about to arrive", which is exactly
+      // what a lit bomb is.
+      playFx('bossRage', 0.6)
+      casts.push({
+        kind: 'bomb', x: e.x, y: e.y, r: e.radius, dir: 1,
+        charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'bombBlast': {
+      // The loudest thing a miniboss does, because it is the most expensive: a
+      // detonation takes half of everyone standing in it. Read as a barrel
+      // rather than as a sweep — the player has already been taught what a
+      // barrel going off looks like, and this is the same verb.
+      playFx('eliteDie')
+      triggerShake('big')
+      screenFlash = 0.5
+      flashColour = '255,200,140'
+      emitDecal(e.x, e.y, e.radius * 0.9, 0.55)
+      const n = cheapFx ? 20 : 46
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2
+        // A third of the debris is a fast outer RING at the blast's real edge,
+        // so the thing the player sees is the size of the thing that hit them.
+        const ring = i % 3 === 0
+        const sp = ring ? e.radius * 7 : 2 + Math.random() * e.radius * 2.4
+        emit({
+          x: e.x, y: e.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 + 2,
+          life: ring ? 260 + Math.random() * 140 : 520 + Math.random() * 420,
+          size: ring ? 0.09 + Math.random() * 0.05 : 0.15 + Math.random() * 0.13,
+          color: ring ? [255, 245, 215] : (Math.random() < 0.5 ? [255, 170, 70] : [120, 96, 80]),
+          additive: ring, shape: ring ? 2 : 1,
+          gravity: ring ? 0 : 9, drag: ring ? 2.4 : 1.4,
+          rot: a, vrot: (Math.random() - 0.5) * 9
+        })
+      }
+      break
+    }
+
+    case 'boltCast':
+      // The column the round will come down. Emitted once, at the lock.
+      playFx('bossGuard', 0.8)
+      casts.push({
+        kind: 'bolt', x: e.x, y: e.y, r: BOLT_R, dir: 1,
+        charged: false, tx: e.tx, ty: e.ty, t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'boltFire': {
+      // The muzzle. Small, because the ROUND is the thing to watch and a loud
+      // flash at the gun pulls the eye to the wrong end of the line.
+      playFx('bossSlam', 0.55)
+      triggerShake('small')
+      for (let i = 0; i < (cheapFx ? 4 : 10); i++) {
+        const spread = (Math.random() - 0.5) * 0.9
+        emit({
+          x: e.x, y: e.y,
+          vx: e.dirX * 9 + spread * 3, vy: e.dirY * 9 + spread,
+          life: 180 + Math.random() * 120, size: 0.1 + Math.random() * 0.07,
+          color: [180, 240, 255], additive: true, shape: 2, drag: 3.4
+        })
+      }
+      break
+    }
+
+    case 'boltEnd':
+      // Two different endings, and they must not look alike. A round that ran
+      // out of road just fades; one that SPENT itself buried in the crowd, and
+      // that is a hit the player has to be able to see they took.
+      if (!e.spent) break
+      playFx('eliteSweep', 0.7)
+      triggerShake('strong')
+      emitDecal(e.x, e.y, 0.9, 0.4)
+      for (let i = 0; i < (cheapFx ? 10 : 24); i++) {
+        const a = Math.random() * Math.PI * 2
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * 5, vy: Math.sin(a) * 3 + 2,
+          life: 300 + Math.random() * 260, size: 0.11,
+          color: Math.random() < 0.5 ? [170, 235, 255] : [140, 40, 46],
+          additive: Math.random() < 0.5, shape: 0, gravity: 8, drag: 1.7
+        })
+      }
+      break
+
+    case 'rollerHit':
+      // Everything travels ALONG the roll. A radial burst would read as an
+      // explosion and teach the player to look for a safe side of a thing that
+      // is four and a half units wide.
+      playFx('bossSlam')
+      triggerShake('big')
+      emitDecal(e.x, e.y, ROLLER_R * 0.8, 0.5)
+      for (let i = 0; i < (cheapFx ? 14 : 30); i++) {
+        const t = i / 29
+        emit({
+          x: e.x + (t - 0.5) * ROLLER_R * 1.6,
+          y: e.y + (Math.random() - 0.5) * ROLLER_R,
+          vx: e.dir * (4 + Math.random() * 7),
+          vy: -3 - Math.random() * 5,
+          life: 420 + Math.random() * 300, size: 0.13 + Math.random() * 0.08,
+          color: Math.random() < 0.5 ? [150, 150, 160] : [150, 40, 44],
+          shape: 1, gravity: 10, drag: 1.5,
+          rot: Math.random() * 6, vrot: e.dir * 11
+        })
+      }
       break
 
     case 'grenadeThrow':

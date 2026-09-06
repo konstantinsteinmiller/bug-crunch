@@ -30,7 +30,13 @@ import {
 } from '@/game/survival'
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
 import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
-import { bossKindFor, minibossKindFor } from '@/game/threats'
+import {
+  BOLT_LIFE, BOLT_R, BOLT_SPEED, BOLT_TRAIL,
+  BOMBER_BLAST_R, BOMBER_FRACTION, BOMBER_FUSE, BOMBER_PLANT_GAP, BOMBER_SPEED, BOMBER_TRACK,
+  GUNNER_FRACTION, GUNNER_RELOAD, GUNNER_STANDOFF, GUNNER_TELEGRAPH,
+  ROLLER_FRACTION, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD,
+  bossKindFor, minibossKindFor, rollerLaneFor, rollerLaneX
+} from '@/game/threats'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
 import {
@@ -147,6 +153,42 @@ let foes: Foe[] = []
 let pickups: Pickup[] = []
 let boss: Boss | null = null
 
+/**
+ * ─── A gunner's round in flight ─────────────────────────────────────────────
+ *
+ * The only enemy projectile in the game, and it is deliberately not a `Bullet`:
+ * the player's rounds are cheap, numerous and resolved against entity lists,
+ * while this one is a single fat object resolved against the CROWD, and giving
+ * it the same struct would mean every bullet loop in the file had to learn to
+ * ask whose side it was on.
+ *
+ * It lives here, next to the world it belongs to, rather than in `survival.ts`,
+ * because it is the private state of one elite's branch — see the note on
+ * `Foe`'s per-kind fields.
+ */
+export interface Bolt {
+  id: number
+  x: number
+  y: number
+  /** Unit direction, fixed at the moment it was fired. It NEVER re-aims: a
+   *  homing round would make the dodge a lie. */
+  dx: number
+  dy: number
+  /**
+   * How many survivors this round may still take.
+   *
+   * Carried on the round rather than recomputed per tick, so a bolt costs the
+   * same whether it crosses the crowd in three frames on a fast phone or in six
+   * on a slow one. See `GUNNER_FRACTION`.
+   */
+  budget: number
+  /** Seconds left before it gives up — see `BOLT_LIFE`. */
+  life: number
+  dead: boolean
+}
+
+let bolts: Bolt[] = []
+
 /** Index of the next track event that has not been streamed in yet. */
 let nextEvent = 0
 let entityId = 1
@@ -191,6 +233,9 @@ export const getBarricades = (): Barricade[] => barricades
 export const getBarrels = (): Barrel[] => barrels
 export const getRocks = (): Rock[] => rocks
 export const getFoes = (): Foe[] => foes
+/** Gunner rounds in flight. The renderer draws them; the balance harness can
+ *  count them. */
+export const getBolts = (): ReadonlyArray<Bolt> => bolts
 export const getPickups = (): Pickup[] => pickups
 export const getBoss = (): Boss | null => boss
 export const getTrack = (): Track => track
@@ -411,6 +456,7 @@ const resetWorld = (): void => {
   grenades = []
   rocks = []
   foes = []
+  bolts = []
   pickups = []
   boss = null
   nextEvent = 0
@@ -816,7 +862,12 @@ const streamTrack = (): void => {
           // Which fight this one is. Below stage 4 it is always the scythe the
           // tutorial taught; from there it comes out of the pool.
           kind: minibossKindFor(stage.value, elitesSpawned),
-          lane: Math.random() < 0.5 ? -1 : 1,
+          // DERIVED, not rolled. Which half of the road a `roller` owns is the
+          // entire content of that fight, and `Math.random()` in this game is
+          // for cosmetic jitter only — a stage has to be learnable, and a coin
+          // flip on which side is lethal is the one thing that cannot be
+          // learned. See `rollerLaneFor`.
+          lane: rollerLaneFor(stage.value, elitesSpawned),
           fuse: 0,
           reload: 0,
           kindTicks: 0,
@@ -1645,7 +1696,36 @@ let shieldUntilMs = 0
  */
 export const attackIncoming = (): boolean => {
   if (boss && !boss.dead && boss.aimed && boss.slamCd > 0) return true
-  return foes.some((f) => f.elite && !f.dead && f.sweepCd > 0 && f.sweepCd <= ELITE_TELEGRAPH)
+  for (const f of foes) {
+    if (!f.elite || f.dead) continue
+    switch (f.kind) {
+      case 'bomber':
+        // Armed. The fuse is the wind-up, and there is nothing else it can be
+        // doing while `fuse` is running.
+        if (f.fuse > 0) return true
+        break
+      case 'gunner':
+        // `kindTicks` is the aim latch: set when the gun is levelled, cleared
+        // when the round leaves. See `stepGunner`.
+        if (f.kindTicks > 0) return true
+        break
+      case 'roller': {
+        // The ball has no wind-up because it does not need one — the roll IS the
+        // wind-up, and it is a second and a half long. The badge goes up as the
+        // ball comes over the top edge of the screen rather than at some later
+        // moment, because the badge's whole job is to move the player's eye to
+        // the road BEFORE there is something to see there.
+        const gap = f.y - anchorY
+        if (gap > -ROLLER_R && gap <= ROLLER_WARN_AHEAD) return true
+        break
+      }
+      default:
+        if (f.sweepCd > 0 && f.sweepCd <= ELITE_TELEGRAPH) return true
+    }
+  }
+  // A round already in the air is the most incoming thing on the road, and it
+  // outlives the gunner that fired it.
+  return bolts.some((b) => !b.dead && b.y > anchorY - CROWD_MAX_R)
 }
 
 export const shieldActive = (): boolean => shieldUntilMs > Date.now()
@@ -2402,6 +2482,392 @@ const stepDividers = (dt: number): void => {
 }
 
 /** Foes walk down the lane, drift toward the crowd, and bite what they reach. */
+/**
+ * ─── The pool minibosses ────────────────────────────────────────────────────
+ *
+ * `MinibossKind` has four members and only one of them — `scythe` — is the
+ * plant-and-sweep fight the rest of `stepFoes` is written around. The other
+ * three own their own movement, their own attack, their own contact rules and
+ * their own tell, so they are lifted out whole rather than threaded through the
+ * scythe's code with three `if (kind === …)` guards per beat.
+ *
+ * Each is one question the others do not ask:
+ *
+ *   roller  WHICH SIDE ARE YOU ON.  Half the road, one straight line, no
+ *           tracking. The dodge is total and so is the failure to dodge.
+ *   bomber  WHERE DID YOU LEAD IT.  It comes to where you are, so where you are
+ *           is the decision. Lure, then cross.
+ *   gunner  ARE YOU STILL THERE.    One fat round down one column, slowly.
+ *
+ * @returns whether the SHARED tail still applies to this body — the solid-body
+ *          contact in `collideFoe` and the bite loop. Two of the three answer
+ *          no, and both times it matters: a rolling ball that also billed
+ *          `collideFoe` would charge twice for one roll, and an armed bomber
+ *          that stayed solid was measured taking 96 of 150 survivors against
+ *          the 75 its blast is actually priced at.
+ */
+const stepPoolElite = (f: Foe, dt: number): boolean => {
+  switch (f.kind) {
+    case 'roller':
+      stepRoller(f, dt)
+      return false
+    case 'bomber':
+      return stepBomber(f, dt)
+    case 'gunner':
+      stepGunner(f, dt)
+      return true
+    default:
+      return true
+  }
+}
+
+/**
+ * The ball.
+ *
+ * Two guarantees live in this function and both are written as ASSIGNMENTS
+ * rather than as omissions, because an omission is a line somebody deletes by
+ * accident and an assignment is a line whose removal a test can see.
+ */
+const stepRoller = (f: Foe, dt: number): void => {
+  // ── It cannot track, because its x is not its own ──
+  //
+  // Rewritten from the lane every tick rather than merely left un-homed. The
+  // difference is the difference between "we did not add tracking" and "tracking
+  // is impossible", and only the second survives the next person editing the
+  // homing line twenty lines above this one.
+  f.x = rollerLaneX(f.lane)
+
+  // ── It cannot wall the road ──
+  //
+  // `hold` is the only thing that makes `stepAnchor` drag the crowd toward a
+  // crawl. A hazard the width of half the road that ALSO stops the run is not a
+  // dodge question, it is a toll booth: the player would be held in place beside
+  // the one thing they were supposed to steer away from. So the ball never
+  // holds, and the run never slows for it.
+  f.hold = 0
+  f.y -= ROLLER_SPEED * dt
+
+  // ── One roll, one bill, taken at the crossing ──
+  //
+  // `kindTicks` is the latch: 0 until the ball has passed the crowd's own line,
+  // 1 for ever after. A ball gets exactly one chance at a squad.
+  //
+  // The moment is the CROSSING (`f.y <= anchorY`), not first contact, and the
+  // difference is the whole hit. Billing on first contact measured FOUR
+  // survivors out of a hundred and sixty: the ball touches the crowd's leading
+  // edge two and a half units before it reaches anybody's middle, so the set of
+  // bodies "inside the ball" on that frame is a handful of front-liners and the
+  // share had nothing to collect from. At the crossing the footprint is centred
+  // on the crowd's own centre, which is both the maximum overlap and the honest
+  // reading of "it rolled over you".
+  //
+  // Deliberately a single frame rather than a running total across the roll: a
+  // per-frame toll is a rate, and a rate charges a crowd for how long it spent
+  // near a thing rather than for the line it ran — the exact model
+  // `crushAgainst` was rewritten to get rid of.
+  if (f.kindTicks > 0 || phase.value !== 'run' || f.y > anchorY) return
+  f.kindTicks = 1
+
+  const hitR = ROLLER_R + UNIT_R
+  if (!nearCrowd(f.x, f.y, hitR)) return
+  const caught: Unit[] = []
+  const hit2 = hitR * hitR
+  for (const u of units) {
+    if (u.dying > 0) continue
+    const dx = u.x - f.x
+    const dy = u.y - f.y
+    if (dx * dx + dy * dy > hit2) continue
+    caught.push(u)
+  }
+  // Nobody in the lane: the player committed to the free half, and a total dodge
+  // costs a total nothing. The latch is set anyway — the ball has had its go.
+  if (caught.length === 0) return
+
+  // A SHARE of the crowd, off the bodies the ball actually rolled over — see
+  // `ROLLER_FRACTION` for why this is not "everyone it touches". The ceiling is
+  // the elite one (`SWEEP_FRACTION_MAX`) rather than the boss's, because a
+  // miniboss's percentage attacks all answer to the same bound; the floor and
+  // the onboarding cut are the ones every big hit in the game carries.
+  const cut = earlyBigHitMul(stage.value)
+  const share = Math.min(SWEEP_FRACTION_MAX, ROLLER_FRACTION * endlessPressure(stage.value))
+  let budget = Math.max(
+    Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+    Math.ceil(squadCount.value * share * slamRelief * cut)
+  )
+  // Nearest the ball's centre first. The crowd is eaten from the side the thing
+  // eating it came from, which is what makes the loss legible — a crowd hollowed
+  // out at random reads as a bug.
+  const d2 = (u: Unit): number => (u.x - f.x) ** 2 + (u.y - f.y) ** 2
+  caught.sort((a, b) => d2(a) - d2(b))
+  const dir = f.lane < 0 ? -1 : 1
+  for (const u of caught) {
+    if (budget <= 0) break
+    killUnit(u, dir, 'elite')
+    budget--
+  }
+  pushFx({ kind: 'rollerHit', x: f.x, y: f.y, dir })
+}
+
+/**
+ * The bomber: sprint, plant, burn, go off.
+ *
+ * @returns whether the shared solid-body and bite passes still apply. They do
+ *          while it is running at you (it is a body, and a body is solid) and
+ *          they do NOT once it has planted — an armed bomber is a fuse, and
+ *          charging for the fuse as well as the blast bills one mistake twice.
+ */
+const stepBomber = (f: Foe, dt: number): boolean => {
+  if (f.fuse > 0) {
+    // ── Armed ──
+    //
+    // Absolutely still: no walk, no tracking, no lunge. The whole read is that
+    // the thing has committed to a spot and the spot is the only fact left.
+    //
+    // It holds the road while it burns, and that is not decoration. The crowd
+    // covers ~5.4 units a second, which is more than the blast is wide, so a
+    // bomber that let the road run would be dodged by the squad's own forward
+    // motion — the player would learn that bombers do nothing. Holding for the
+    // one second of the fuse keeps the geometry where the player saw it and
+    // makes the answer unambiguously sideways.
+    f.hold = f.fuse
+    f.fuse -= dt
+    if (f.fuse > 0) return false
+    detonate(f)
+    return false
+  }
+
+  // ── The sprint ──
+  //
+  // It never holds while it is running: the approach is the shooting window, and
+  // a crowd dragged to a crawl in front of an unarmed bomber would be paying for
+  // an attack that has not happened yet.
+  f.hold = 0
+  f.y -= BOMBER_SPEED * dt
+  const slide = BOMBER_TRACK * dt
+  f.x += Math.max(-slide, Math.min(slide, anchorX - f.x))
+  f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+
+  // Arming is gated on the run, like every other elite attack: nothing should be
+  // detonating inside the arena, where the boss owns the fight.
+  if (phase.value !== 'run' || f.y - anchorY > BOMBER_PLANT_GAP) return true
+  f.fuse = BOMBER_FUSE
+  f.hold = BOMBER_FUSE
+  // Announced at the START of the fuse carrying the exact seconds to the blast,
+  // so the ring the player is shown closes on the beat it goes off.
+  pushFx({ kind: 'bombCast', x: f.x, y: f.y, radius: BOMBER_BLAST_R, ttl: BOMBER_FUSE })
+  return false
+}
+
+/** The blast: half of everyone still standing in it, and then the bomber is
+ *  gone. */
+const detonate = (f: Foe): void => {
+  f.fuse = 0
+  f.hold = 0
+
+  const inside: Unit[] = []
+  const r2 = BOMBER_BLAST_R * BOMBER_BLAST_R
+  for (const u of units) {
+    if (u.dying > 0) continue
+    const dx = u.x - f.x
+    const dy = u.y - f.y
+    if (dx * dx + dy * dy > r2) continue
+    inside.push(u)
+  }
+
+  // `BOMBER_FRACTION` is deliberately not scaled by `endlessPressure` — it opens
+  // at `SLAM_FRACTION_MAX`, the ceiling, and there is nowhere for that dial to
+  // push it. The onboarding cut and the stuck-player relief DO apply; the long
+  // note on the constant records the argument and the argument against.
+  const cut = earlyBigHitMul(stage.value)
+  let budget = Math.max(
+    Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+    Math.ceil(squadCount.value * BOMBER_FRACTION * slamRelief * cut)
+  )
+  // Capped by reality, exactly as `BOSS_MIN_KILL` is: the budget is what the
+  // blast INTENDS to take, and it may only collect from bodies that were
+  // actually inside the ring. A crowd that got clear pays nothing at all, which
+  // is the entire point of the lure.
+  const d2 = (u: Unit): number => (u.x - f.x) ** 2 + (u.y - f.y) ** 2
+  inside.sort((a, b) => d2(a) - d2(b))
+  for (const u of inside) {
+    if (budget <= 0) break
+    killUnit(u, Math.sign(u.x - f.x) || 1, 'elite')
+    budget--
+  }
+
+  pushFx({ kind: 'bombBlast', x: f.x, y: f.y, radius: BOMBER_BLAST_R })
+  // Gone, and it pays NO bounty: it was not killed, it finished. Marking it dead
+  // here rather than routing through `damageFoe` is what keeps that honest — a
+  // player who failed to dodge should not also be paid for the corpse. Shooting
+  // it down before it plants still pays, and that is the reward for the other
+  // answer.
+  f.dead = true
+}
+
+/**
+ * The gunner: hold at range, level the gun, fire one fat round straight down its
+ * own column.
+ *
+ * ── Why it fires down its own column and does not lead ──
+ *
+ * The aim has to be LOCKED at the start of the wind-up or the line the player is
+ * shown is not the line the round takes — the same lesson the boss's `aimed`
+ * flag records. The cheapest possible lock is no stored aim at all: the gunner
+ * stops sliding sideways the moment it levels the gun, and the round leaves
+ * straight down the lane from wherever it was standing. The telegraph is then
+ * simply "the column under the gunner", which needs no state to be true, cannot
+ * drift out of sync with the shot, and reduces the dodge to one clean question.
+ */
+const stepGunner = (f: Foe, dt: number): void => {
+  // Same engagement window the scythe uses, so the drag, the leash and the
+  // "nothing chases you into the arena" rule all behave identically.
+  const engaged = f.hold > 0 && phase.value === 'run'
+    && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
+
+  if (!engaged) {
+    // Walking in, or the leash has expired and it is walking through the crowd
+    // like any other body. It does not shoot from either state: a round thrown
+    // from off-screen has no author, and one thrown point-blank has no dodge.
+    f.kindTicks = 0
+    f.y -= f.speed * dt
+    const homing = 0.9
+    f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+    f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+    return
+  }
+
+  f.hold -= dt
+
+  // Keep the distance. It backs off as the crowd closes rather than letting the
+  // gap shut, because the gap IS the dodge window — see `GUNNER_STANDOFF`.
+  const want = anchorY + GUNNER_STANDOFF
+  if (f.y > want) f.y = Math.max(want, f.y - f.speed * dt)
+  else f.y += (want - f.y) * Math.min(1, dt * 2.5)
+
+  // It slides toward the crowd's column only while it is NOT aiming. Freezing x
+  // at the lock is what makes the telegraph honest.
+  if (f.kindTicks === 0) {
+    const homing = 0.9
+    f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+    f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+  }
+
+  // The first arrival levels the gun immediately; every shot after that waits a
+  // full reload. `reload` is spawned at 0, which is what makes that sentence one
+  // line instead of a flag.
+  if (f.reload <= 0) f.reload = GUNNER_TELEGRAPH
+  f.reload -= dt
+
+  if (f.kindTicks === 0 && f.reload <= GUNNER_TELEGRAPH) {
+    // Only start a wind-up there is time to finish. A tell whose shot never
+    // arrives because the leash ran out is a false alarm, and a badge that cries
+    // wolf is a badge players stop checking.
+    if (f.hold <= GUNNER_TELEGRAPH) return
+    f.kindTicks = 1
+    // Never a shot with less than a full tell — the same extension the scythe's
+    // wind-up gets, for the same reason.
+    f.reload = Math.max(f.reload, GUNNER_TELEGRAPH)
+    pushFx({
+      kind: 'boltCast',
+      x: f.x, y: f.y,
+      tx: f.x, ty: anchorY - CROWD_MAX_R,
+      ttl: f.reload
+    })
+    return
+  }
+
+  if (f.reload > 0) return
+
+  // ── Fire ──
+  //
+  // The budget is fixed HERE, on the round, rather than recomputed per frame as
+  // it crosses the crowd: a bolt has to cost the same whether it takes three
+  // frames to pass through on a 30 fps phone or six on a 60 fps one.
+  const cut = earlyBigHitMul(stage.value)
+  const share = Math.min(SWEEP_FRACTION_MAX, GUNNER_FRACTION * endlessPressure(stage.value))
+  bolts.push({
+    id: entityId++,
+    x: f.x,
+    y: f.y,
+    dx: 0,
+    dy: -1,
+    budget: Math.max(
+      Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+      Math.ceil(squadCount.value * share * slamRelief * cut)
+    ),
+    life: BOLT_LIFE,
+    dead: false
+  })
+  pushFx({ kind: 'boltFire', x: f.x, y: f.y, dirX: 0, dirY: -1 })
+  f.reload = GUNNER_RELOAD
+  f.kindTicks = 0
+}
+
+/**
+ * ─── The bolt, SWEPT rather than sampled ────────────────────────────────────
+ *
+ * A round moving at `BOLT_SPEED` covers 0.12 world units in a 60 fps frame and
+ * 0.23 in a 30 fps one, against a kill radius of `BOLT_R + UNIT_R` = 0.85. Ask
+ * "who is inside the circle right now" once a frame and the answer depends on
+ * where the frames happened to fall — a 30 fps phone samples the crowd half as
+ * often on the way through and bills a visibly different number of survivors for
+ * the same shot. That is the one class of bug a deterministic simulation may not
+ * have, because it makes the game a different game on a slower device.
+ *
+ * So the test is against the SEGMENT the round travelled this frame, capsule
+ * against point. Every survivor the round actually passed through is billed
+ * exactly once, at any frame rate.
+ */
+const stepBolts = (dt: number): void => {
+  if (bolts.length === 0) return
+  const hitR = BOLT_R + UNIT_R
+  const hit2 = hitR * hitR
+
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const b = bolts[i]!
+    if (b.dead) {
+      bolts.splice(i, 1)
+      continue
+    }
+    b.life -= dt
+    const x0 = b.x
+    const y0 = b.y
+    const sx = b.dx * BOLT_SPEED * dt
+    const sy = b.dy * BOLT_SPEED * dt
+    b.x = x0 + sx
+    b.y = y0 + sy
+
+    // The same bounding-disc guard every other O(units) pass uses: a round still
+    // crossing empty road never looks at a single survivor.
+    const len2 = sx * sx + sy * sy
+    if (nearCrowd(x0 + sx * 0.5, y0 + sy * 0.5, hitR + Math.sqrt(len2))) {
+      for (const u of units) {
+        if (b.budget <= 0) break
+        if (u.dying > 0) continue
+        // Closest point on this frame's segment, clamped to its ends.
+        let t = 0
+        if (len2 > 1e-9) {
+          t = ((u.x - x0) * sx + (u.y - y0) * sy) / len2
+          t = t < 0 ? 0 : t > 1 ? 1 : t
+        }
+        const dx = u.x - (x0 + sx * t)
+        const dy = u.y - (y0 + sy * t)
+        if (dx * dx + dy * dy > hit2) continue
+        killUnit(u, Math.sign(dx) || 1, 'elite')
+        b.budget--
+      }
+    }
+
+    const spent = b.budget <= 0
+    if (!spent && b.life > 0 && b.y > anchorY - BOLT_TRAIL) continue
+    // A round that has taken everyone it is allowed to STOPS there — it buried
+    // itself in the crowd. Letting it fly on through the rest of the squad
+    // untouched would paint a lie: bodies visibly inside a live round, unharmed.
+    b.dead = true
+    pushFx({ kind: 'boltEnd', x: b.x, y: b.y, spent })
+  }
+}
+
 const stepFoes = (dt: number): void => {
   let anyElite = false
   for (let i = foes.length - 1; i >= 0; i--) {
@@ -2419,6 +2885,22 @@ const stepFoes = (dt: number): void => {
     if (f.y > anchorY + LOOKAHEAD + 6) continue
 
     f.phase += dt
+
+    // ─── The pool minibosses take their own branch ────────────────────────
+    //
+    // Three of the four `MinibossKind`s are not this fight. They own their
+    // movement, their attack and their tell, so the hold, the homing and the
+    // sweep below belong to the scythe and to ordinary foes only. The BITE and
+    // the solid body are still shared where they apply, because a gunner that
+    // has broken off and is walking through the crowd is a monster like any
+    // other — see `stepPoolElite` for which kinds opt out and why.
+    const pool = f.elite && f.kind !== 'scythe'
+    let shared = true
+    if (pool) {
+      shared = stepPoolElite(f, dt)
+      if (f.dead) continue
+    }
+
     // An elite that has arrived PLANTS and tracks the crowd instead of walking
     // through it — see `ELITE_HOLD_AHEAD`. Everything else walks down the lane.
     // The hold is spent only while it is actually holding, so a long walk in
@@ -2435,23 +2917,28 @@ const stepFoes = (dt: number): void => {
     // only started there would never start, and the "it is never a soft-lock"
     // guarantee would quietly become false. Starting it where the slow starts
     // means the leash bounds exactly the window the player is being slowed for.
-    const engaged = f.elite && f.hold > 0 && phase.value === 'run'
-      && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
-    if (engaged) {
-      f.hold -= dt
-      // It gives no ground and takes none. `stepAnchor` stops the crowd at
-      // `ELITE_HOLD_AHEAD` in front of it, so this pins the fight's geometry:
-      // the elite is always exactly in the firing line, and always in reach of
-      // the crowd's leading edge and nothing deeper.
-    } else {
-      f.y -= f.speed * dt
+    //
+    // Everything from here to the sweep is the SCYTHE's fight and every ordinary
+    // foe's walk. A pool kind has already moved itself.
+    if (!pool) {
+      const engaged = f.elite && f.hold > 0 && phase.value === 'run'
+        && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
+      if (engaged) {
+        f.hold -= dt
+        // It gives no ground and takes none. `stepAnchor` stops the crowd at
+        // `ELITE_HOLD_AHEAD` in front of it, so this pins the fight's geometry:
+        // the elite is always exactly in the firing line, and always in reach of
+        // the crowd's leading edge and nothing deeper.
+      } else {
+        f.y -= f.speed * dt
+      }
+      // Home in on the crowd, but lazily — a foe that tracks perfectly is
+      // unavoidable, and unavoidable is not the same as difficult.
+      const homing = f.flying ? 1.5 : 0.9
+      f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+      if (f.flying) f.x += Math.sin(clock / 700 + f.swayPhase) * dt * 1.1
+      f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
     }
-    // Home in on the crowd, but lazily — a foe that tracks perfectly is
-    // unavoidable, and unavoidable is not the same as difficult.
-    const homing = f.flying ? 1.5 : 0.9
-    f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
-    if (f.flying) f.x += Math.sin(clock / 700 + f.swayPhase) * dt * 1.1
-    f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
 
     // ─── The sweep ────────────────────────────────────────────────────────
     //
@@ -2471,7 +2958,7 @@ const stepFoes = (dt: number): void => {
     // reaches `ELITE_SWEEP_REACH` down the road from its own feet, which is the
     // distance it is drawn at.
     const sweepGap = f.y - anchorY
-    if (f.elite && !f.dead && phase.value === 'run' && sweepGap < ELITE_SWEEP_REACH && sweepGap > -1.5) {
+    if (!pool && f.elite && !f.dead && phase.value === 'run' && sweepGap < ELITE_SWEEP_REACH && sweepGap > -1.5) {
       // The arc's direction is chosen when the WIND-UP starts, not when it
       // lands, so the telegraph can show which way it is coming from. A tell
       // that only becomes true on impact is not a tell.
@@ -2565,10 +3052,14 @@ const stepFoes = (dt: number): void => {
     // between bites, and including the walk back down the road after
     // `ELITE_HOLD_MAX` breaks an elite's hold, where a crowd that failed to
     // kill it used to pass straight through the sprite.
-    if (!f.dead) collideFoe(f, dt)
+    // `shared` is false for the two pool kinds that own their contact outright:
+    // a rolling ball bills the roll, and an armed bomber bills the blast. Either
+    // one also billing `collideFoe` charges a single mistake twice — measured at
+    // 96 of 150 survivors taken against the 75 the blast is priced at.
+    if (!f.dead && shared) collideFoe(f, dt)
 
     f.biteCd -= dt
-    if (f.biteCd > 0) continue
+    if (!shared || f.biteCd > 0) continue
     // Same guard as the obstacles: a foe that is not within biting distance of
     // the crowd's own disc never looks at a single survivor.
     if (!nearCrowd(f.x, f.y, FOE_REACH + UNIT_R + (f.elite ? 0.9 : 0))) continue
@@ -2608,6 +3099,10 @@ const stepFoes = (dt: number): void => {
   }
   eliteAlive.value = anyElite
   if (!anyElite) eliteHp01.value = 0
+  // Stepped here rather than from `step` because a bolt is one elite's fight
+  // carried on after it — a gunner that dies mid-flight leaves its round in the
+  // air, and the round is the only enemy projectile in the game.
+  stepBolts(dt)
 }
 
 /**
@@ -3239,6 +3734,7 @@ export const debugSkipToArena = (): void => {
   barricades.length = 0
   rocks.length = 0
   foes.length = 0
+  bolts.length = 0
   pickups.length = 0
   for (const u of units) u.y = anchorY
 }

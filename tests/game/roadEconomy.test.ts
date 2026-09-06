@@ -5,6 +5,7 @@ import {
   ELITE_TELEGRAPH, LANE_HALF, ROCK_H, UNIT_R
 } from '@/game/survival'
 import { buildTrack } from '@/game/track'
+import { minibossKindFor } from '@/game/threats'
 import { drainFx, type FxEvent } from '@/use/useVfx'
 
 // ─── What the road is worth, and what it costs ──────────────────────────────
@@ -103,6 +104,23 @@ describe('a gate is a doorway, not armour', () => {
 
 describe('a miniboss holds the road', () => {
   /**
+   * ─── Which stage these are asked of, and why it is not 4 any more ─────────
+   *
+   * Every test in this block is about the SCYTHE — the plant-and-sweep fight.
+   * A miniboss is one of four kinds now (`MinibossKind`) and stage 4 fields the
+   * `roller`, which deliberately does none of this: it never holds the road,
+   * never sweeps, and never tracks. Left on stage 4 these tests do not fail
+   * loudly, which would be fine — two of them went quiet instead, passing while
+   * measuring nothing at all.
+   *
+   * So the stage is named, and the kind it is chosen for is ASSERTED in every
+   * test below. If the rotation in `threats.ts` ever moves, this block stops
+   * with "the rotation moved" rather than silently re-measuring some other
+   * fight, or worse, still passing.
+   */
+  const SCYTHE_STAGE = 7
+
+  /**
    * Walk to the first elite and stop there, keeping it unkillable the whole way.
    *
    * Both tests below ask a question about the HOLD, not about time-to-kill, so
@@ -137,10 +155,12 @@ describe('a miniboss holds the road', () => {
     // So the claim is now BOUNDED MOTION, in both directions: slow enough that
     // the elite is a real obstacle defending real ground, and never zero.
     const game = await importGame()
-    game.startStage(4)
+    expect(minibossKindFor(SCYTHE_STAGE, 0), 'the miniboss rotation moved — this measures a fight that no longer holds the road')
+      .toBe('scythe')
+    game.startStage(SCYTHE_STAGE)
     game.debugAddUnits(150)
 
-    expect(reachElite(game), 'never met an elite on stage 4').toBe(true)
+    expect(reachElite(game), `never met an elite on stage ${SCYTHE_STAGE}`).toBe(true)
 
     // Freeze the fight: an unkillable elite is the clean way to ask "does it
     // hold?" without the answer depending on how fast the squad kills it.
@@ -162,7 +182,7 @@ describe('a miniboss holds the road', () => {
     const moved = game.anchor().y - startY
     // It is still an obstacle: two seconds beside it buys a fraction of the road
     // the same two seconds would buy anywhere else.
-    const freeRoad = stageSpeed(4) * (FRAMES * STEP_MS) / 1000
+    const freeRoad = stageSpeed(SCYTHE_STAGE) * (FRAMES * STEP_MS) / 1000
     expect(moved, 'the elite stopped mattering').toBeLessThan(freeRoad * 0.35)
     // …and it is never a wall: the road never actually stops.
     expect(moved, 'the crowd was pinned').toBeGreaterThan(0)
@@ -173,7 +193,9 @@ describe('a miniboss holds the road', () => {
     // The anti-frustration half of the rule. A squad that cannot win the fight
     // must not be parked in front of it for the rest of the stage.
     const game = await importGame()
-    game.startStage(4)
+    expect(minibossKindFor(SCYTHE_STAGE, 0), 'the miniboss rotation moved — a kind that never holds cannot fail to break off')
+      .toBe('scythe')
+    game.startStage(SCYTHE_STAGE)
     game.debugAddUnits(150)
 
     expect(reachElite(game), 'never met an elite').toBe(true)
@@ -206,7 +228,9 @@ describe('a miniboss holds the road', () => {
     // crosses the whole lane, so the answer is DPS rather than footwork, and it
     // costs a FIFTH of whatever the squad currently is.
     const game = await importGame()
-    game.startStage(4)
+    expect(minibossKindFor(SCYTHE_STAGE, 0), 'the miniboss rotation moved — only the scythe sweeps')
+      .toBe('scythe')
+    game.startStage(SCYTHE_STAGE)
     game.debugAddUnits(200)
     drainFx()
 
@@ -293,7 +317,9 @@ describe('a miniboss holds the road', () => {
     // damage. If a rail were ever safe, the fight would silently become a
     // stand-and-wait, which is exactly what the sweep replaced.
     const game = await importGame()
-    game.startStage(4)
+    expect(minibossKindFor(SCYTHE_STAGE, 0), 'the miniboss rotation moved — only the scythe spans the road')
+      .toBe('scythe')
+    game.startStage(SCYTHE_STAGE)
     game.debugAddUnits(200)
     drainFx()
     expect(reachElite(game), 'never met an elite').toBe(true)

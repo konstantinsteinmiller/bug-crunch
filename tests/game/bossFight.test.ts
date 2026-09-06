@@ -4,6 +4,7 @@ import {
   ELITE_SWEEP_FRACTION, SLAM_CD_BASE, SLAM_CD_MIN, SLAM_MAX_FRACTION, SLAM_RADIUS,
   SLAM_RADIUS_MAX, biteShareFor
 } from '@/game/survival'
+import { minibossKindFor } from '@/game/threats'
 import { drainFx, type FxEvent } from '@/use/useVfx'
 
 // ─── The climax has to happen ───────────────────────────────────────────────
@@ -361,7 +362,17 @@ describe('a boss swing is never a scratch', () => {
 
   it('takes at least BOSS_MIN_KILL from a small crowd, per miniboss sweep', async () => {
     const game = await importGame()
-    game.startStage(4)
+    // STAGE 7, not stage 4, and the kind is asserted rather than assumed.
+    //
+    // A miniboss is one of four kinds now (`MinibossKind`) and stage 4 fields
+    // the `roller`, which never sweeps at all — so this measured nothing there.
+    // Stage 7's first elite is still the scythe. If the rotation in
+    // `threats.ts` moves, this line fails with the reason instead of the
+    // assertion below failing with "the miniboss never swept".
+    const scytheStage = 7
+    expect(minibossKindFor(scytheStage, 0), 'the miniboss rotation moved — only the scythe sweeps')
+      .toBe('scythe')
+    game.startStage(scytheStage)
     // Sized for a WINDOW, not just for survival, and the window is narrow.
     //
     // An elite drags the road rather than stopping it now, so this fight runs
@@ -401,7 +412,7 @@ describe('a boss swing is never a scratch', () => {
       if (e && e.y - game.anchor().y <= ELITE_HOLD_AHEAD + 0.4) { met = true; break }
       if (settled(game)) break
     }
-    expect(met, 'stage 4 streamed no miniboss the crowd reached').toBe(true)
+    expect(met, `stage ${scytheStage} streamed no miniboss the crowd reached`).toBe(true)
 
     // Stand in the arc and let it eat. The crowd shrinks as it does, which is
     // exactly how the small-crowd case gets exercised: a share of 150 is thirty
