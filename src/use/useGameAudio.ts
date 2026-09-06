@@ -32,7 +32,8 @@ export type FxSound =
   | 'shoot' | 'hitSoft' | 'hitHard' | 'gateTick' | 'gateSubTick' | 'gatePass' | 'gateMul'
   | 'gateTrap' | 'gateDismiss' | 'crate' | 'damageUp' | 'rateUp' | 'barricade' | 'divider'
   | 'foeDie' | 'unitLost' | 'coin' | 'eliteSpawn' | 'eliteSweep' | 'eliteDie'
-  | 'bossHit' | 'bossGuard' | 'bossRage' | 'bossSlam' | 'bossDie' | 'stageClear' | 'wipe'
+  | 'bossHit' | 'bossGuard' | 'bossRage' | 'bossSlam' | 'bossHeal' | 'bossDie'
+  | 'stageClear' | 'wipe'
   | 'countUp'
 
 // ─── Throttling ─────────────────────────────────────────────────────────────
@@ -465,6 +466,21 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       tone(ctx, { freq: 110, toFreq: 30, duration: 0.45, gain: vol(0.22), type: 'sine' })
       noiseBurst(ctx, { duration: 0.38, gain: vol(0.16), filterFrom: 3000, filterTo: 160 })
       noiseBurst(ctx, { duration: 0.8, gain: vol(0.06), filterFrom: 800, filterTo: 90 })
+      break
+
+    case 'bossHeal':
+      // The one cue in the whole mix that RISES and stays clean. Every other
+      // combat sound here falls (a slam drops 110 -> 30, a foe dying 330 -> 85)
+      // because everything else in this game is something being spent. A health
+      // bar going back up is the opposite event and it has to sound like it, or
+      // the player reads the bar moving and assumes their fire stopped landing.
+      //
+      // Two sines a fifth apart, sweeping up together, with no noise layer at
+      // all: pitched and pure against a combat bed that is otherwise entirely
+      // filtered noise, so it cuts through forty rounds a second without being
+      // loud.
+      tone(ctx, { freq: 420, toFreq: 720, duration: 0.42, gain: vol(0.12), type: 'sine' })
+      tone(ctx, { freq: 630, toFreq: 1080, duration: 0.5, gain: vol(0.07), type: 'triangle' })
       break
 
     case 'countUp':

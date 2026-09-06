@@ -21,6 +21,25 @@ import { drainFx, type FxEvent } from '@/use/useVfx'
 
 const STEP_MS = 16
 
+/**
+ * Every wind-up, and every thing a wind-up turns into.
+ *
+ * Held as sets rather than as an `||` chain because the vocabulary GREW: the
+ * boss is a pool now (`BOSS_POOL`), and a claw announces itself with `rakeCast`
+ * and lands as `bossRake` where a meteor uses `meteorCast` / `bossSlam`. The
+ * rule under test — nothing lands that was not announced — is the same rule for
+ * all of them, and it is the only rule in the game that a NEW attack can break
+ * simply by being new. Any kind added to `BOSS_POOL` belongs in both sets.
+ *
+ * The healer's `boltCast` / `boltHit` are deliberately NOT here: a bolt's damage
+ * lands when the projectile arrives, seconds after the cast and at a place the
+ * projectile itself is pointing at, so "was there a cast before the hit" is not
+ * the question that measures it. `bossKinds.test.ts` measures the bolt on its
+ * own terms — that it exists in the world, visibly, before it hurts anybody.
+ */
+const CASTS = new Set<FxEvent['kind']>(['meteorCast', 'sliceCast', 'rakeCast'])
+const LANDS = new Set<FxEvent['kind']>(['bossSlam', 'eliteSweep', 'bossRake'])
+
 const fresh = async () => {
   localStorage.clear()
   const { __resetTowerState } = await import('@/use/useTowerState')
@@ -54,8 +73,8 @@ const watch = async (stage: number, units: number) => {
     ms += STEP_MS
     if (game.attackIncoming()) warned.push(ms)
     for (const e of drainFx() as FxEvent[]) {
-      if (e.kind === 'meteorCast' || e.kind === 'sliceCast') casts.push(ms)
-      if (e.kind === 'bossSlam' || e.kind === 'eliteSweep') lands.push(ms)
+      if (CASTS.has(e.kind)) casts.push(ms)
+      if (LANDS.has(e.kind)) lands.push(ms)
     }
     if (lands.length >= 3) break
     if (game.phase.value === 'clear' || game.phase.value === 'wipe') break

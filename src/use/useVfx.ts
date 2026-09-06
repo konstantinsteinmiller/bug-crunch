@@ -107,6 +107,56 @@ export type FxEvent =
       dir: number
       ttl: number
     }
+  /**
+   * ─── …and the three the boss pool added ───────────────────────────────────
+   *
+   * Same contract as the two above: pushed at the START of the wind-up, carrying
+   * the exact seconds until the damage lands, so the animation arrives on the
+   * beat rather than near it.
+   *
+   * The one deliberate exception is `boltCast`, and it is called out in its own
+   * comment: a projectile's damage lands when the projectile arrives, which the
+   * player reads off the projectile. Its `ttl` is the muzzle glow.
+   */
+  | {
+      kind: 'rakeCast'; x: number; y: number
+      /** Centre of each gouge, in world x. The kill reads the same array. */
+      lanes: readonly number[]
+      /** Half-width of one gouge, and half the depth of the whole rake. */
+      halfW: number
+      depth: number
+      ttl: number
+    }
+  /** The rake landed. Same geometry, so the scar sits exactly on the warning. */
+  | {
+      kind: 'bossRake'; x: number; y: number
+      lanes: readonly number[]
+      halfW: number
+      depth: number
+    }
+  /** The healer is winding up its every-third. `ttl` to the moment the bar
+   *  jumps — the one moment in the game a health bar goes UP. */
+  | { kind: 'healCast'; x: number; y: number; ttl: number }
+  /** …and it landed. `amount` is health actually restored (0 at full bar) and
+   *  `hp01` is the bar afterwards, so the burst can be sized by what it was
+   *  worth rather than by what it tried to be worth. */
+  | { kind: 'bossHeal'; x: number; y: number; amount: number; hp01: number }
+  /**
+   * The healer's muzzle, winding up a bolt.
+   *
+   * `ttl` here is seconds until the bolt is LAUNCHED, not until it lands —
+   * deliberately different from every other cast. The bolt is a real object that
+   * crosses the road slowly, and it is its own warning for the second half of
+   * the journey; a mark on the ground counting down to an impact the player can
+   * already see coming would be a second clock disagreeing with the first.
+   */
+  | { kind: 'boltCast'; x: number; y: number; ttl: number }
+  /** A bolt went off on somebody. `radius` is the burst the kill was measured
+   *  against, so the flash and the hit are the same size. */
+  | { kind: 'boltHit'; x: number; y: number; radius: number }
+  /** A summoner spent one of its waves. `wave` is which — the last one should
+   *  land differently from the first, because it is the last. */
+  | { kind: 'summonWave'; x: number; y: number; count: number; wave: number }
   | { kind: 'grenadeThrow'; x: number; y: number }
   /** The player's grenade went off. */
   | { kind: 'grenade'; x: number; y: number }

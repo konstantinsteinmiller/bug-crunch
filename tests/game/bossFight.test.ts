@@ -5,6 +5,24 @@ import {
   SLAM_RADIUS_MAX, biteShareFor
 } from '@/game/survival'
 import { drainFx, type FxEvent } from '@/use/useVfx'
+import { bossKindFor } from '@/game/threats'
+
+/**
+ * The stage these tests fight on.
+ *
+ * It used to be 6, and 6 now fields a `summoner` — a boss that never swings at
+ * all (see `BOSS_POOL`). Every assertion below is about the SLAM: the guard
+ * phases it pays with, the rage curve it follows, the floor under one hit. On a
+ * summoner they were all measuring an empty room, and quietly passing where they
+ * could.
+ *
+ * 9 is the nearest stage the rotation still gives a meteor, and its arena is
+ * bare (`ARENA_KITS`), so nothing but the boss is in the room. The kind is
+ * asserted out loud below rather than assumed, so a future rotation change fails
+ * here with a sentence instead of silently turning these back into a test of
+ * nothing.
+ */
+const SLAM_STAGE = 9
 
 // ─── The climax has to happen ───────────────────────────────────────────────
 //
@@ -36,7 +54,7 @@ beforeEach(async () => {
 
 /** Fast-forward to the boss with a squad big enough to delete it instantly. */
 const reachBoss = async (game: Game, units = 900, dmg = 400): Promise<FxEvent[]> => {
-  game.startStage(6)
+  game.startStage(SLAM_STAGE)
   game.debugAddUnits(units)
   game.debugAddDamage(dmg)
   game.debugAddFireRate(6)
@@ -55,6 +73,15 @@ const reachBoss = async (game: Game, units = 900, dmg = 400): Promise<FxEvent[]>
 }
 
 describe('the boss cannot be skipped', () => {
+  it('is fighting the kind these tests were written about', () => {
+    // Asserted out loud, and first. Everything below counts `bossSlam` events
+    // and `slam` deaths; on any other kind in the pool there are none of either,
+    // so a rotation change that moved this stage would not fail the assertions,
+    // it would empty them.
+    expect(bossKindFor(SLAM_STAGE), 'the slam tests are no longer on a slam boss')
+      .toBe('meteor')
+  })
+
   it('plants and swings at every guard gate, however hard it is hit', async () => {
     const game = await importGame()
     const fx = await reachBoss(game)
@@ -75,7 +102,7 @@ describe('the boss cannot be skipped', () => {
 
   it('forfeits the overkill instead of letting one frame cross a gate', async () => {
     const game = await importGame()
-    game.startStage(6)
+    game.startStage(SLAM_STAGE)
     game.debugAddUnits(1200)
     game.debugAddDamage(2000)
     game.debugAddFireRate(6)
@@ -101,7 +128,7 @@ describe('the boss cannot be skipped', () => {
 
   it('takes nothing from the player while it is guarding', async () => {
     const game = await importGame()
-    game.startStage(6)
+    game.startStage(SLAM_STAGE)
     game.debugAddUnits(900)
     game.debugAddDamage(400)
     game.debugAddFireRate(6)
@@ -260,7 +287,7 @@ describe('a raging boss still aims at the player', () => {
   it('re-aims on every swing, however fast the rage makes them', async () => {
     const game = await importGame()
     // Big crowd, no damage: the fight has to last long enough to rage.
-    game.startStage(6)
+    game.startStage(SLAM_STAGE)
     game.debugAddUnits(1400)
     game.debugSkipToArena()
     for (let i = 0; i < 12000 && game.phase.value !== 'boss'; i++) game.step(STEP_MS)
@@ -319,7 +346,7 @@ describe('a boss swing is never a scratch', () => {
 
   it('takes at least BOSS_MIN_KILL from a small crowd, per slam', async () => {
     const game = await importGame()
-    game.startStage(6)
+    game.startStage(SLAM_STAGE)
     // Six: small enough that `ceil(squad × slamShare)` is two — under the floor,
     // which is the only case that measures it — and big enough that the floor is
     // not simply "the whole squad" either.
