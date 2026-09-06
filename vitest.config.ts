@@ -49,6 +49,12 @@ export default defineConfig({
     // tests/e2e runs under Playwright + a real Vite dev server (Node env,
     // not jsdom). Excluded from the default suite so `pnpm test` stays
     // fast; run them with `pnpm test:e2e`.
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**']
+    // `.claude/**` holds git WORKTREES, which are full checkouts of this same
+    // repository sitting inside it. Without this, a worktree's `tests/` is
+    // discovered as if it were ours: a run on `main` picked up an agent
+    // branch's specs, failed on constants that exist only there, and reported
+    // a green tree as broken. Test discovery must never wander into a checkout
+    // that is not this one.
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**', '**/.claude/**']
   }
 })
