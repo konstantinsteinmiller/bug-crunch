@@ -10,7 +10,7 @@ import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBoss,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
   getBarrels, getBullets, getCrates, getDividers, getFoes, getGates, getGrenades, getPickups,
-  getBolts,
+  getBossBolts,
   getRocks,
   getUnits,
   nowMs, phase, runFireRate, squadCount, stage
@@ -889,7 +889,7 @@ const burstPillar = (t: Topple): void => {
   const chips = cheapFx ? 4 : tier === 'medium' ? 8 : 12
   const base = p.y - DIVIDER_H * 0.45
 
-  // Sheared bolts: bright, low, and thrown along the road at the base — the one
+  // Sheared bossBolts: bright, low, and thrown along the road at the base — the one
   // place the eye is looking, because that is where the thing broke.
   for (let i = 0; i < (cheapFx ? 4 : 9); i++) {
     emit({
@@ -1087,7 +1087,7 @@ export const drawScene = (
   // Above the crowd: a telegraph nobody can see is not a telegraph.
   drawCasts(ctx)
   // …and the three the boss pool added, in the same band and for the same
-  // reason. The rake goes UNDER the bolts because a bolt has to stay findable
+  // reason. The rake goes UNDER the bossBolts because a bolt has to stay findable
   // while three furrows are burning across the road behind it.
   drawClawFurrows(ctx)
   drawHealTell(ctx)
@@ -1780,7 +1780,7 @@ const drawHealTell = (ctx: CanvasRenderingContext2D): void => {
 }
 
 /**
- * The healer's bolts, in the air.
+ * The healer's bossBolts, in the air.
  *
  * Read straight off the simulation's own array rather than from an effect, so
  * the thing on screen IS the thing that will hit — a bolt drawn from a copy
@@ -1788,7 +1788,7 @@ const drawHealTell = (ctx: CanvasRenderingContext2D): void => {
  * they have cleared it.
  */
 const drawBossBolts = (ctx: CanvasRenderingContext2D): void => {
-  const list = getBolts()
+  const list = getBossBolts()
   if (list.length === 0) return
   const t = nowMs() / 1000
   ctx.save()
@@ -4838,12 +4838,12 @@ const applyFx = (e: FxEvent): void => {
       break
     }
 
-    case 'boltCast':
+    case 'bossBoltCast':
       healTells.push({ x: e.x, y: e.y, t: 0, life: e.ttl })
       playFx('bossGuard', 0.4)
       break
 
-    case 'boltHit': {
+    case 'bossBoltHit': {
       playFx('bossSlam', 0.5)
       triggerShake('small')
       emitDecal(e.x, e.y, e.radius, 0.35)

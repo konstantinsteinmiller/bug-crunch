@@ -264,16 +264,16 @@ describe('the healer actually heals, on its own clock', () => {
   it('spends two casts on something else between every heal', async () => {
     const r = await fight({ stage: HEALER_STAGE, squad: 90, steer: () => 0, maxTicks: 6000 })
     const heals = of(r.fx, 'bossHeal').length
-    const bolts = of(r.fx, 'boltCast').length
+    const bossBolts = of(r.fx, 'bossBoltCast').length
     expect(heals, 'no heals, so the cadence is untested').toBeGreaterThan(0)
-    expect(bolts, 'the healer only ever healed — it has no other attack')
+    expect(bossBolts, 'the healer only ever healed — it has no other attack')
       .toBeGreaterThanOrEqual(heals * (HEAL_EVERY - 1))
   })
 
   it('throws a projectile that exists in the world before it hurts anybody', async () => {
     // A bolt is the one attack whose warning IS the attack: it has to be a body
     // on the road for a real stretch of time before the burst. Measured as
-    // frames with a bolt in flight before the first `boltHit`, because "was
+    // frames with a bolt in flight before the first `bossBoltHit`, because "was
     // there a cast" cannot distinguish a slow projectile from an instant one.
     const game = await importGame()
     game.startStage(HEALER_STAGE)
@@ -288,9 +288,9 @@ describe('the healer actually heals, on its own clock', () => {
     for (let i = 0; i < 4000 && game.phase.value === 'boss'; i++) {
       game.steerTo(0)
       game.step(STEP_MS)
-      maxAloft = Math.max(maxAloft, game.getBolts().length)
-      if (game.getBolts().length > 0) airborneTicks++
-      if (drainFx().some((e) => e.kind === 'boltHit')) { sawHit = true; break }
+      maxAloft = Math.max(maxAloft, game.getBossBolts().length)
+      if (game.getBossBolts().length > 0) airborneTicks++
+      if (drainFx().some((e) => e.kind === 'bossBoltHit')) { sawHit = true; break }
     }
     expect(maxAloft, 'the healer never launched a bolt').toBeGreaterThan(0)
     expect(sawHit, 'no bolt ever went off on the crowd').toBe(true)
@@ -312,7 +312,7 @@ describe('the healer actually heals, on its own clock', () => {
     }
     const moved = await fight({ stage: HEALER_STAGE, squad: 200, steer: offTheLine, maxTicks: 6000 })
     const stood = await fight({ stage: HEALER_STAGE, squad: 200, steer: () => 0, maxTicks: 6000 })
-    expect(stood.lost, 'the bolts never landed on the stationary crowd either')
+    expect(stood.lost, 'the bossBolts never landed on the stationary crowd either')
       .toBeGreaterThan(10)
     expect(moved.lostShare, `moving lost ${(moved.lostShare * 100).toFixed(0)}% against ${(stood.lostShare * 100).toFixed(0)}%`)
       .toBeLessThan(stood.lostShare)
@@ -332,7 +332,7 @@ describe('the summoner is a wall with a budget', () => {
     // would simply be a meteor with adds.
     expect(of(r.fx, 'bossSlam').length, 'the summoner threw a slam').toBe(0)
     expect(of(r.fx, 'bossRake').length, 'the summoner threw a rake').toBe(0)
-    expect(of(r.fx, 'boltHit').length, 'the summoner threw a bolt').toBe(0)
+    expect(of(r.fx, 'bossBoltHit').length, 'the summoner threw a bolt').toBe(0)
   })
 
   it('never fields more waves than its budget, however long the fight runs', async () => {

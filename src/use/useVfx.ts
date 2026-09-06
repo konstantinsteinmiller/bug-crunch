@@ -114,7 +114,7 @@ export type FxEvent =
    * the exact seconds until the damage lands, so the animation arrives on the
    * beat rather than near it.
    *
-   * The one deliberate exception is `boltCast`, and it is called out in its own
+   * The one deliberate exception is `bossBoltCast`, and it is called out in its own
    * comment: a projectile's damage lands when the projectile arrives, which the
    * player reads off the projectile. Its `ttl` is the muzzle glow.
    */
@@ -150,10 +150,10 @@ export type FxEvent =
    * the journey; a mark on the ground counting down to an impact the player can
    * already see coming would be a second clock disagreeing with the first.
    */
-  | { kind: 'boltCast'; x: number; y: number; ttl: number }
+  | { kind: 'bossBoltCast'; x: number; y: number; ttl: number }
   /** A bolt went off on somebody. `radius` is the burst the kill was measured
    *  against, so the flash and the hit are the same size. */
-  | { kind: 'boltHit'; x: number; y: number; radius: number }
+  | { kind: 'bossBoltHit'; x: number; y: number; radius: number }
   /** A summoner spent one of its waves. `wave` is which — the last one should
    *  land differently from the first, because it is the last. */
   | { kind: 'summonWave'; x: number; y: number; count: number; wave: number }

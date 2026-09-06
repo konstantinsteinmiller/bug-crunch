@@ -342,7 +342,7 @@ export const HEAL_EXPECTED = 2
  * any fight. So a real boss spends the whole fight somewhere between 12 and 6
  * units out, and at a fixed 3.2 u/s that made the dodge window anything from 1.2
  * to 3.8 seconds, decided by how far the boss happened to have walked. Under it
- * the healer's early bolts simply never arrived: at the tuned build, three seeds
+ * the healer's early bossBolts simply never arrived: at the tuned build, three seeds
  * out of three took **zero** bolt damage on a crowd that never moved.
  *
  * A fixed flight time is the same rule `SLAM_TELEGRAPH` is built on — the player
@@ -383,14 +383,14 @@ export const BOLT_BLAST_R = 1.35
  * 60 % of a health bar for being slow; charging them the crowd at the same rate
  * as a meteor is the same mistake billed twice, and the compounding is what
  * turns a hard fight into an unwinnable one — the fight gets longer, so more
- * bolts land, so the crowd shrinks, so the fight gets longer. At 0.6 the healer
+ * bossBolts land, so the crowd shrinks, so the fight gets longer. At 0.6 the healer
  * costs about 57 % of a meteor per second across a fight roughly 1.6x as long,
  * which lands the TOTAL within about a tenth of the control.
  */
 export const BOLT_SHARE_MUL = 0.6
 
 /** Backstop only — a bolt that hits nothing leaves the arena long before this. */
-export const BOLT_LIFE = 6
+export const BOSS_BOLT_LIFE = 6
 
 /**
  * A healer's projectile, in flight.
@@ -399,7 +399,7 @@ export const BOLT_LIFE = 6
  * exactly one boss kind: an entity that only one branch of `stepBoss` can create
  * or read has no business in the file that describes the game's shared rules.
  */
-export interface Bolt {
+export interface BossBolt {
   id: number
   x: number
   y: number

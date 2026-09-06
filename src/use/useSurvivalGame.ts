@@ -31,13 +31,13 @@ import {
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
 import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
 import {
-  BOLT_BLAST_R, BOLT_FLIGHT_S, BOLT_HIT_R, BOLT_LEAD, BOLT_LIFE, BOLT_SHARE_MUL,
+  BOLT_BLAST_R, BOLT_FLIGHT_S, BOLT_HIT_R, BOLT_LEAD, BOSS_BOLT_LIFE, BOLT_SHARE_MUL,
   CLAW_HALF_DEPTH, CLAW_LEAD, clawFurrowHalfW, clawLaneXs, inClawFurrow,
   HEAL_EVERY, HEAL_FRACTION, HEAL_MAX_CASTS, HEALER_CAST_CD, HEALER_TELEGRAPH,
   SUMMON_AHEAD, SUMMON_BITE_MUL, SUMMON_CD, SUMMON_DESIGN, SUMMON_HP_SHARE,
   SUMMON_PER_WAVE, SUMMON_SPREAD, SUMMON_TELEGRAPH, SUMMON_TYPE, SUMMON_WAVES_MAX,
   bossGuardPayoff, bossHpMulFor, bossKindFor, minibossKindFor,
-  type Bolt, type BossKind
+  type BossBolt, type BossKind
 } from '@/game/threats'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
@@ -156,7 +156,7 @@ let pickups: Pickup[] = []
 let boss: Boss | null = null
 /** The healer's projectiles. Empty for every other boss kind and for the whole
  *  road — nothing but a `healer` ever puts one in here. */
-let bolts: Bolt[] = []
+let bossBolts: BossBolt[] = []
 
 /** Index of the next track event that has not been streamed in yet. */
 let nextEvent = 0
@@ -204,9 +204,9 @@ export const getRocks = (): Rock[] => rocks
 export const getFoes = (): Foe[] => foes
 export const getPickups = (): Pickup[] => pickups
 export const getBoss = (): Boss | null => boss
-/** The healer's bolts in flight, for the renderer. Always empty unless the
+/** The healer's bossBolts in flight, for the renderer. Always empty unless the
  *  stage's boss is a `healer`. */
-export const getBolts = (): Bolt[] => bolts
+export const getBossBolts = (): BossBolt[] => bossBolts
 export const getTrack = (): Track => track
 export const anchor = (): { x: number; y: number } => ({ x: anchorX, y: anchorY })
 export const nowMs = (): number => clock
@@ -427,7 +427,7 @@ const resetWorld = (): void => {
   foes = []
   pickups = []
   boss = null
-  bolts = []
+  bossBolts = []
   nextEvent = 0
   fireAccum = 0
   timeScale = 1
@@ -3128,7 +3128,7 @@ const stepBoss = (dt: number): void => {
   // the game taking back a threat it had already shown, which teaches the player
   // to stop reading them. It stops at the end of the RUN rather than at the end
   // of the boss — see the guard in `stepBolts`.
-  if (bolts.length > 0) stepBolts(dt)
+  if (bossBolts.length > 0) stepBolts(dt)
 
   if (b.dead) {
     b.dying += dt * 1000
@@ -3208,7 +3208,7 @@ const aimBoss = (b: Boss, leadMul = 1): void => {
     pushFx(
       b.charging
         ? { kind: 'healCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
-        : { kind: 'boltCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
+        : { kind: 'bossBoltCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
     )
     return
   }
@@ -3419,19 +3419,19 @@ const throwHealerCast = (b: Boss): void => {
   // player cannot see. See the note on `BOLT_FLIGHT_S`.
   const dx = b.slamX - b.x
   const dy = b.slamY - b.y
-  bolts.push({
+  bossBolts.push({
     id: entityId++,
     x: b.x,
     y: b.y,
     vx: dx / BOLT_FLIGHT_S,
     vy: dy / BOLT_FLIGHT_S,
-    life: BOLT_LIFE,
+    life: BOSS_BOLT_LIFE,
     radius: BOLT_BLAST_R
   })
 }
 
 /**
- * Move the healer's bolts and let them go off on whoever they reach.
+ * Move the healer's bossBolts and let them go off on whoever they reach.
  *
  * A bolt that reaches nothing costs nothing — it leaves the bottom of the arena
  * and is dropped. That is what makes it a dodge rather than a delayed tax.
@@ -3442,16 +3442,16 @@ const stepBolts = (dt: number): void => {
   // bolt that went off after the stage was won would take survivors off a result
   // screen the player is already reading.
   if (phase.value !== 'boss') {
-    bolts.length = 0
+    bossBolts.length = 0
     return
   }
-  for (let i = bolts.length - 1; i >= 0; i--) {
-    const p = bolts[i]!
+  for (let i = bossBolts.length - 1; i >= 0; i--) {
+    const p = bossBolts[i]!
     p.x += p.vx * dt
     p.y += p.vy * dt
     p.life -= dt
     if (p.life <= 0 || p.y < anchorY - 2.5 || Math.abs(p.x) > LANE_HALF + 1.5) {
-      bolts.splice(i, 1)
+      bossBolts.splice(i, 1)
       continue
     }
     // One distance test against the crowd's own disc before scanning bodies —
@@ -3468,7 +3468,7 @@ const stepBolts = (dt: number): void => {
     }
     if (!struck) continue
 
-    pushFx({ kind: 'boltHit', x: p.x, y: p.y, radius: p.radius })
+    pushFx({ kind: 'bossBoltHit', x: p.x, y: p.y, radius: p.radius })
     let budget = bossHitBudget(bossHitShare(BOLT_SHARE_MUL))
     for (const u of units) {
       if (budget <= 0) break
@@ -3479,7 +3479,7 @@ const stepBolts = (dt: number): void => {
       killUnit(u, Math.sign(dx), 'slam')
       budget--
     }
-    bolts.splice(i, 1)
+    bossBolts.splice(i, 1)
   }
 }
 

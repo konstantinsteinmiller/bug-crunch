@@ -31,7 +31,7 @@ const STEP_MS = 16
  * all of them, and it is the only rule in the game that a NEW attack can break
  * simply by being new. Any kind added to `BOSS_POOL` belongs in both sets.
  *
- * The healer's `boltCast` / `boltHit` are deliberately NOT here: a bolt's damage
+ * The healer's `bossBoltCast` / `bossBoltHit` are deliberately NOT here: a bolt's damage
  * lands when the projectile arrives, seconds after the cast and at a place the
  * projectile itself is pointing at, so "was there a cast before the hit" is not
  * the question that measures it. `bossKinds.test.ts` measures the bolt on its
