@@ -28,7 +28,9 @@ export default {
     'best': '最佳 {n}',
     'boss': '首领',
     'miniboss': '小首领',
-    'fireRate': '射速'
+    'fireRate': '射速',
+    'incoming': '攻击来袭！',
+    'dodge': '闪避'
   },
 
   'tutorial': {

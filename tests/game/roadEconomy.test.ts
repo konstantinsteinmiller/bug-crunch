@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  BARRICADE_COIN_MAX, BARRICADE_COIN_MIN, COIN_MAGNET_BASE, CRATE_R,
+  BARRICADE_COIN_MAX, BARRICADE_COIN_MIN, COIN_MAGNET_BASE, CRATE_R, stageSpeed,
   ELITE_HOLD_AHEAD, ELITE_HOLD_MAX, ELITE_SWEEP_FRACTION, ELITE_SWEEP_REACH,
   ELITE_TELEGRAPH, LANE_HALF, ROCK_H, UNIT_R
 } from '@/game/survival'
@@ -127,7 +127,15 @@ describe('a miniboss holds the road', () => {
     return false
   }
 
-  it('stops the crowd instead of strolling through it', async () => {
+  it('slows the crowd to a crawl instead of strolling through it', async () => {
+    // The rule USED to be "stops the crowd", and that is what players reported
+    // as not being able to get past the mini-boss. It was never a soft-lock —
+    // the leash below breaks it — but a runner whose road stops moving reads as
+    // a hung game rather than as a fight, and on the runs that struggle it was
+    // three to seven seconds of exactly that.
+    //
+    // So the claim is now BOUNDED MOTION, in both directions: slow enough that
+    // the elite is a real obstacle defending real ground, and never zero.
     const game = await importGame()
     game.startStage(4)
     game.debugAddUnits(150)
@@ -138,20 +146,27 @@ describe('a miniboss holds the road', () => {
     // hold?" without the answer depending on how fast the squad kills it.
     const live = game.getFoes().find((f) => f.elite)!
     const startY = game.anchor().y
-    for (let i = 0; i < 120; i++) {
+    let stalledFrames = 0
+    let prevY = startY
+    const FRAMES = 120
+    for (let i = 0; i < FRAMES; i++) {
       live.hp = 1e9
       live.maxHp = 1e9
       live.hold = ELITE_HOLD_MAX
       game.step(STEP_MS)
+      if (game.anchor().y - prevY <= 1e-6) stalledFrames++
+      prevY = game.anchor().y
       if (settled(game)) break
     }
 
-    // The crowd has gone nowhere…
-    expect(game.anchor().y - startY, 'the crowd walked past a holding elite')
-      .toBeLessThan(0.6)
-    // …and the elite is parked exactly where the fight wants it: in the firing
-    // line, in reach of the leading edge, and out of reach of the middle.
-    expect(live.y - game.anchor().y).toBeCloseTo(ELITE_HOLD_AHEAD, 1)
+    const moved = game.anchor().y - startY
+    // It is still an obstacle: two seconds beside it buys a fraction of the road
+    // the same two seconds would buy anywhere else.
+    const freeRoad = stageSpeed(4) * (FRAMES * STEP_MS) / 1000
+    expect(moved, 'the elite stopped mattering').toBeLessThan(freeRoad * 0.35)
+    // …and it is never a wall: the road never actually stops.
+    expect(moved, 'the crowd was pinned').toBeGreaterThan(0)
+    expect(stalledFrames, 'the road stood still').toBe(0)
   })
 
   it('breaks off rather than becoming a wall nobody can pass', async () => {
@@ -165,21 +180,22 @@ describe('a miniboss holds the road', () => {
     const live = game.getFoes().find((f) => f.elite)!
     const stalledAt = game.anchor().y
 
-    for (let i = 0; i < 3000; i++) {
+    // Asserted as the thing the PLAYER experiences rather than as the state of
+    // the leash variable. The leash can now legitimately still be running when
+    // the encounter is already over — a crawling crowd can reach the arena while
+    // the elite is technically still holding, which the old pinned version could
+    // never do — so "hold hit zero" stopped being the same claim as "I got past
+    // it". This is the claim: give an immortal elite the whole of its leash and
+    // then some, and the road has still carried the player onward.
+    const frames = Math.ceil(((ELITE_HOLD_MAX + 2) * 1000) / STEP_MS)
+    for (let i = 0; i < frames; i++) {
       live.hp = 1e9
       live.maxHp = 1e9
       game.step(STEP_MS)
-      if (live.hold <= 0) break
       if (settled(game)) break
     }
-    expect(live.hold, 'the hold never expired').toBeLessThanOrEqual(0)
 
-    for (let i = 0; i < 400; i++) {
-      live.hp = 1e9
-      game.step(STEP_MS)
-      if (settled(game)) break
-    }
-    expect(game.anchor().y, 'the crowd is still stuck behind a spent elite')
+    expect(game.anchor().y, 'the crowd is still stuck behind an elite it cannot kill')
       .toBeGreaterThan(stalledAt + 1)
   })
 
@@ -397,7 +413,11 @@ describe('the coin magnet is bought, not given', () => {
 describe('a shot-down barricade pays', () => {
   it('drops loose coins where it broke', async () => {
     const game = await importGame()
-    game.startStage(2)
+    // Stage 4, not stage 2: the opening three stages now carry no barricades and
+    // no boulders at all, so a beginner cannot lose a run to scenery they have
+    // not been taught to read (see `earlyObstacleKeep`). Stage 4 is where hard
+    // obstacles are introduced, so it is the first road with a wall to shoot.
+    game.startStage(4)
     game.debugAddUnits(120)
     game.debugAddDamage(60)
 

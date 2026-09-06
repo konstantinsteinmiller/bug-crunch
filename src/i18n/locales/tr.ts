@@ -28,7 +28,9 @@ export default {
     'best': 'Rekor {n}',
     'boss': 'Patron',
     'miniboss': 'Mini Patron',
-    'fireRate': 'Hız'
+    'fireRate': 'Hız',
+    'incoming': 'Saldırı geliyor!',
+    'dodge': 'Kaç'
   },
 
   'tutorial': {

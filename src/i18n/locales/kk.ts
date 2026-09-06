@@ -28,7 +28,9 @@ export default {
     'best': 'Рекорд {n}',
     'boss': 'Бос',
     'miniboss': 'Мини-бос',
-    'fireRate': 'Қарқын'
+    'fireRate': 'Қарқын',
+    'incoming': 'Шабуыл келеді!',
+    'dodge': 'Жалтар'
   },
 
   'tutorial': {

@@ -74,6 +74,39 @@ export type FxEvent =
   | { kind: 'eliteSweep'; x: number; y: number; reach: number; dir: number; heavy: boolean }
   | { kind: 'eliteDie'; x: number; y: number }
   /** The player pulled the pin — the throw itself. */
+  /**
+   * ─── The casts ────────────────────────────────────────────────────────────
+   *
+   * A big attack's TELEGRAPH, as a thing that travels rather than a mark on the
+   * floor.
+   *
+   * The ring that closes on the ground was legible in isolation and invisible in
+   * practice: the player is watching the boss, or watching their own thumb, and
+   * the one place they are not looking is the patch of road they are about to be
+   * standing on. So the hit landed out of nowhere and the game read as taking
+   * survivors for reasons the player could not see — which is the difference
+   * between a hard fight and an unfair one.
+   *
+   * These are emitted at the START of the wind-up and carry `ttl` — the exact
+   * time until the damage lands — so the animation arrives on the beat rather
+   * than near it. The ring stays; this is what draws the eye to it.
+   */
+  | {
+      kind: 'meteorCast'; x: number; y: number
+      /** Ground footprint, so the shadow matches the ring already being drawn. */
+      radius: number
+      /** Seconds until impact. The fall is scaled to land exactly then. */
+      ttl: number
+      /** The charged swing: a bigger, burning boulder rather than a stone. */
+      charged: boolean
+    }
+  | {
+      kind: 'sliceCast'; x: number; y: number
+      reach: number
+      /** Which way the arc travels — chosen at wind-up, same as the hit. */
+      dir: number
+      ttl: number
+    }
   | { kind: 'grenadeThrow'; x: number; y: number }
   /** The player's grenade went off. */
   | { kind: 'grenade'; x: number; y: number }
@@ -127,16 +160,44 @@ export const drainFx = (): FxEvent[] => {
 
 // ─── Quality tiers ──────────────────────────────────────────────────────────
 
-export type QualityTier = 'high' | 'medium' | 'low'
+/**
+ * `min` is the floor, and it exists because of a specific player report: runs
+ * sitting at ~10 fps that the three-tier ladder never rescued, because `low`
+ * still drew every full-screen grade, every ground pass and every per-body
+ * shadow at DPR 1.25. It is a deliberate fidelity cut, not an optimization —
+ * see `PERF-LEDGER.md` — and nothing above 25 fps ever sees it.
+ */
+export type QualityTier = 'high' | 'medium' | 'low' | 'min'
 
 /** Live quality tier, driven by a rolling FPS average. The renderer reads it to
  *  skip expensive passes; the HUD surfaces it in debug mode. */
 export const quality = ref<QualityTier>('high')
 
-const TIER_CAPACITY: Record<QualityTier, number> = { high: 900, medium: 520, low: 240 }
+const TIER_CAPACITY: Record<QualityTier, number> = {
+  high: 900, medium: 520, low: 240, min: 110
+}
+
+/**
+ * Non-reactive mirror of `quality`, for the hot paths.
+ *
+ * `emit` is called up to nine hundred times a frame and every `quality.value`
+ * there is a Vue ref getter with dependency tracking behind it. The ref stays
+ * for watchers and the debug HUD; anything inside a per-entity loop reads this.
+ */
+let currentTier: QualityTier = 'high'
+let currentCapacity = TIER_CAPACITY.high
+
+export const qualityTier = (): QualityTier => currentTier
+
+const setTier = (t: QualityTier): void => {
+  currentTier = t
+  currentCapacity = TIER_CAPACITY[t]
+  quality.value = t
+}
 
 let fpsAccum = 0
 let fpsFrames = 0
+let fpsElapsed = 0
 let tierHoldUntil = 0
 
 // ─── Device calibration ─────────────────────────────────────────────────────
@@ -166,11 +227,12 @@ const CAL_BATCH = 24
 const OUTLIER_MS = 250
 
 // Median frame-time boundaries, matching the FPS thresholds the steady-state
-// controller uses: 18 ms ≈ 55 fps, 25 ms ≈ 40 fps.
+// controller uses: 18 ms ≈ 55 fps, 25 ms ≈ 40 fps, 40 ms = 25 fps exactly.
 const HIGH_MAX_MS = 18
 const MEDIUM_MAX_MS = 25
+const LOW_MAX_MS = 40
 
-const TIER_ORDER: readonly QualityTier[] = ['low', 'medium', 'high']
+const TIER_ORDER: readonly QualityTier[] = ['min', 'low', 'medium', 'high']
 const rank = (t: QualityTier): number => TIER_ORDER.indexOf(t)
 
 let calibrating = true
@@ -189,7 +251,7 @@ let calBatch: number[] = []
 let qualityCeiling: QualityTier = 'high'
 
 /**
- * The tier the canvas RESOLUTION is sized for — written AT MOST ONCE a session.
+ * The tier the canvas RESOLUTION is sized for.
  *
  * Deliberately separate from `quality`, and this separation is load-bearing.
  * Changing the canvas resolution means re-sizing the backing store and
@@ -199,18 +261,64 @@ let qualityCeiling: QualityTier = 'high'
  * move bought a full rebake — 51 long tasks totalling 7.5 s in a 20 s window,
  * against 4 totalling 219 ms without it.
  *
- * So the resolution commits once, on the first verdict that the device cannot
- * hold `high`, and never moves again. Everything else the tier controls
- * (particle capacity, drawn-unit count, optional passes) stays free to adapt
- * continuously, because none of it invalidates a cache.
+ * So it is RATCHETED rather than free-running: it only ever goes down, it never
+ * comes back up, and each step needs the live tier to have SAT at the lower
+ * level for `RESCALE_HOLD_MS` of continuous play. That bounds the whole session
+ * at three re-sizes in the worst case and makes each one a considered response
+ * to a sustained problem rather than a reaction to a spike.
+ *
+ * The ratchet replaced a lock-once. The lock was right about the cost and wrong
+ * about the lifecycle: a device that calibrates fine and then meets a boss wave
+ * at 10 fps was stuck at the resolution its quiet opening earned, with the
+ * single biggest lever the renderer has bolted shut for the rest of the session.
  */
 export const renderScaleTier = ref<QualityTier>('high')
-let renderScaleLocked = false
+/** Sustained time at a lower tier before the canvas is re-sized to match. */
+const RESCALE_HOLD_MS = 4000
+let lowSince = 0
+let lowSinceTier: QualityTier = 'high'
+
 const lockRenderScale = (tier: QualityTier): void => {
-  if (renderScaleLocked) return
-  renderScaleLocked = true
+  if (rank(tier) >= rank(renderScaleTier.value)) return
   renderScaleTier.value = tier
 }
+
+// ─── Tier pin ───────────────────────────────────────────────────────────────
+//
+// `?tier=min` (or `low` / `medium` / `high`) freezes the ladder where it is
+// asked and stops the controller from touching it again.
+//
+// Two jobs, both real. QA can look at a tier on a machine that would never earn
+// it — there is no other way to see what a 10 fps phone is shown. And an A/B
+// run needs both arms to draw the SAME scene: without a pin, an arm that is
+// genuinely faster keeps a higher tier, draws more, and hands back a comparison
+// between two different games.
+//
+// Resolved once, at module load. It is off in every player's session, and a
+// `sampleFrame` that re-read the URL would land in the hot loop it measures.
+
+const PINNED: QualityTier | null = (() => {
+  try {
+    const want = new URLSearchParams(window.location.search).get('tier')
+    return want === 'min' || want === 'low' || want === 'medium' || want === 'high'
+      ? want
+      : null
+  } catch {
+    return null
+  }
+})()
+
+if (PINNED) {
+  currentTier = PINNED
+  currentCapacity = TIER_CAPACITY[PINNED]
+  quality.value = PINNED
+  renderScaleTier.value = PINNED
+  qualityCeiling = PINNED
+  calibrating = false
+}
+
+/** The tier the URL pinned, or `null` in a normal session. */
+export const pinnedTier = (): QualityTier | null => PINNED
 
 /** True once the calibration window has closed. Debug/telemetry only. */
 export const isQualityCalibrated = (): boolean => !calibrating
@@ -226,20 +334,24 @@ const medianOf = (xs: number[]): number => {
 }
 
 const tierForMedian = (medianMs: number): QualityTier =>
-  medianMs <= HIGH_MAX_MS ? 'high' : medianMs <= MEDIUM_MAX_MS ? 'medium' : 'low'
+  medianMs <= HIGH_MAX_MS ? 'high'
+    : medianMs <= MEDIUM_MAX_MS ? 'medium'
+      : medianMs <= LOW_MAX_MS ? 'low' : 'min'
 
 /** Test seam: forget the measurement and start over at `high`. */
 export const __resetQualityCalibration = (): void => {
-  renderScaleLocked = false
   renderScaleTier.value = 'high'
   calibrating = true
   calElapsed = 0
   calBatch = []
   qualityCeiling = 'high'
-  quality.value = 'high'
+  setTier('high')
   fpsAccum = 0
   fpsFrames = 0
+  fpsElapsed = 0
   tierHoldUntil = 0
+  lowSince = 0
+  lowSinceTier = 'high'
 }
 
 /**
@@ -249,58 +361,116 @@ export const __resetQualityCalibration = (): void => {
  * no hysteresis — a struggling device should stop paying for effects it cannot
  * afford within a second, not once a rolling average has finished being polite.
  *
- * After it: the original rolling average, every 60 frames, with a 2.5 s hold so
- * a device sitting on a threshold cannot oscillate — clamped to the ceiling the
- * measurement established.
+ * After it: a rolling average over 60 frames OR one second of rendered time,
+ * whichever comes first — clamped to the ceiling the measurement established.
+ *
+ * ── Why the window is timed as well as counted ──
+ *
+ * A pure 60-frame window is a one-second control at 60 fps and a SIX-second one
+ * at 10 fps. The device in trouble is the one that waits longest for help. The
+ * second bound makes the control's latency roughly constant in wall-clock time,
+ * which is the axis the player experiences it on.
+ *
+ * ── Why downgrades ignore the hold and upgrades do not ──
+ *
+ * The hold exists to stop a device sitting on a threshold from oscillating, and
+ * oscillation needs both directions. A downgrade that has to wait 2.5 s for
+ * permission is 2.5 s of a player at 15 fps, and it cannot start a cycle on its
+ * own, because climbing back needs both the hold AND a ceiling that a struggling
+ * device does not have.
  */
 export const sampleFrame = (dtMs: number): void => {
-  if (dtMs <= 0) return
+  if (dtMs <= 0 || PINNED) return
+  // Excluded from BOTH controllers, not just calibration.
+  //
+  // The steady-state window used to be protected from these only by its
+  // 60-frame minimum — five 4-second stalls could not fill it. Now that the
+  // window also closes on a SECOND of elapsed time, one tab switch is enough to
+  // close it on its own, and a 4 000 ms frame reads as 0.25 fps: the whole
+  // ladder collapses to `min` because the player answered a phone call.
+  if (dtMs > OUTLIER_MS) return
 
   if (calibrating) {
-    if (dtMs <= OUTLIER_MS) {
-      calElapsed += dtMs
-      calBatch.push(dtMs)
+    calElapsed += dtMs
+    calBatch.push(dtMs)
 
-      if (calBatch.length >= CAL_BATCH) {
-        const want = tierForMedian(medianOf(calBatch))
-        calBatch = []
-        if (rank(want) < rank(quality.value)) {
-          quality.value = want
-          tierHoldUntil = Date.now() + 2500
-          // First proof the device cannot hold `high`: commit the cheaper
-          // canvas now, while the player is still in their opening seconds.
-          lockRenderScale(want)
-        }
+    if (calBatch.length >= CAL_BATCH) {
+      const want = tierForMedian(medianOf(calBatch))
+      calBatch = []
+      if (rank(want) < rank(currentTier)) {
+        setTier(want)
+        tierHoldUntil = Date.now() + 2500
       }
+      // First proof the device cannot hold `high`: commit the cheaper canvas
+      // now, while the player is still in their opening seconds.
+      //
+      // OUTSIDE the tier guard, and that placement is load-bearing. The
+      // steady-state window below now closes on a second of elapsed time, so on
+      // a struggling device it reaches its own verdict BEFORE the 24-frame
+      // batch does and has already moved the tier — leaving `want` equal to the
+      // current tier, the guard false, and the resolution never committed at
+      // all. `lockRenderScale` is downgrade-only, so calling it unconditionally
+      // is safe and says the actual intent: the canvas follows the MEASUREMENT,
+      // whichever controller happened to move the tier first.
+      lockRenderScale(want)
     }
 
     if (calElapsed >= CALIBRATION_MS) {
       calibrating = false
       calBatch = []
-      qualityCeiling = quality.value
+      qualityCeiling = currentTier
       // A device that never tripped a downgrade locks in at `high` here, so the
       // resolution is settled for the session either way.
-      lockRenderScale(quality.value)
+      lockRenderScale(currentTier)
     }
   }
 
   fpsAccum += 1000 / dtMs
   fpsFrames++
-  if (fpsFrames < 60) return
+  fpsElapsed += dtMs
+  if (fpsFrames < 60 && fpsElapsed < 1000) return
 
   const avg = fpsAccum / fpsFrames
   fpsAccum = 0
   fpsFrames = 0
+  fpsElapsed = 0
 
   const now = Date.now()
-  if (now < tierHoldUntil) return
-
-  const next: QualityTier = avg >= 55 ? 'high' : avg >= 40 ? 'medium' : 'low'
+  const next: QualityTier =
+    avg >= 55 ? 'high' : avg >= 40 ? 'medium' : avg >= 25 ? 'low' : 'min'
   // Never above what the device proved it can do.
   const capped: QualityTier = rank(next) > rank(qualityCeiling) ? qualityCeiling : next
-  if (capped !== quality.value) {
-    quality.value = capped
+  const down = rank(capped) < rank(currentTier)
+
+  // Upgrades need the hold AND a closed calibration window; downgrades need
+  // neither. Calibration is a downgrade-only measurement by contract, and until
+  // now it relied on the hold's 2.5 s of wall clock to enforce that — which is
+  // true in a session and not true under fake timers or a fast test.
+  if (capped !== currentTier && (down || (!calibrating && now >= tierHoldUntil))) {
+    setTier(capped)
     tierHoldUntil = now + 2500
+  }
+
+  // ── The resolution ratchet ──
+  //
+  // Tracked on the tier the controller has SETTLED on, not on the one verdict
+  // that produced it: a single bad window is a spike, four seconds of them is a
+  // device that needs fewer pixels.
+  if (calibrating) {
+    // The measurement owns the resolution while it is running.
+    lowSinceTier = currentTier
+    lowSince = now
+  } else if (currentTier !== lowSinceTier) {
+    lowSinceTier = currentTier
+    lowSince = now
+  } else if (
+    rank(currentTier) < rank(renderScaleTier.value)
+    && now - lowSince >= RESCALE_HOLD_MS
+  ) {
+    lockRenderScale(currentTier)
+    // Re-sizing re-bakes every cached surface, which is itself a stall. Give the
+    // device the full hold again before it can be asked to pay for another.
+    lowSince = now
   }
 }
 
@@ -355,7 +525,7 @@ export interface EmitOptions {
  * tail of whatever came before it.
  */
 export const emit = (o: EmitOptions): void => {
-  const cap = TIER_CAPACITY[quality.value]
+  const cap = currentCapacity
   let i: number
   if (liveCount < cap) {
     i = liveCount++

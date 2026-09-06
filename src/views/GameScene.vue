@@ -6,6 +6,7 @@ import {
   stage, phase, squadCount, damage, runFireRate, progress01, bossHp01, bestStage,
   eliteAlive, eliteHp01, challenge, declines,
   startStage, advanceStage, retryStage, step, steerTo, steerBy, steerOnly, runSummary,
+  attackIncoming,
   isChargingGate, getCrates, getGates, getDividers, getBoss, anchor, crowdRadius,
   throwGrenade, raiseShield, shieldActive as isShieldUp
 } from '@/use/useSurvivalGame'
@@ -29,6 +30,7 @@ import { useScreenshake } from '@/use/useScreenshake'
 import { newTutorialClock, tickTutorial } from '@/use/useTutorialGate'
 import { frameStart, frameEnd, phaseStart, phaseEnd } from '@/use/usePerfProbe'
 import StageBanner from '@/components/game/StageBanner.vue'
+import IncomingWarning from '@/components/game/IncomingWarning.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import { isGamePaused, isAdShowing } from '@/use/useGamePause'
 import { spawnCoinExplosion } from '@/use/useCoinExplosion'
@@ -124,10 +126,22 @@ const resize = (): void => {
   //
   // 2 stays the ceiling for healthy devices — past that the cost doubles again
   // for no perceptible gain on a phone.
-  const dprCap = renderScaleTier.value === 'low'
-    ? 1.25
-    : renderScaleTier.value === 'medium' ? 1.5 : 2
-  dpr = Math.min(window.devicePixelRatio || 1, dprCap)
+  //
+  // `min` is the only rung that goes BELOW the device's own pixel grid: the
+  // canvas is rendered at 0.8 CSS px and the compositor scales it back up, for
+  // 36 % fewer pixels than even a DPR-1 canvas. It is visibly softer, and on a
+  // device that is otherwise showing this game at 10 fps that is the right side
+  // of the trade — a soft 30 fps reads as a game, a crisp 10 fps does not.
+  const dprCap = renderScaleTier.value === 'min'
+    ? 0.8
+    : renderScaleTier.value === 'low'
+      ? 1.25
+      : renderScaleTier.value === 'medium' ? 1.5 : 2
+  // `Math.min` against the device ratio would let a DPR-1 laptop keep a full-res
+  // canvas at `min`, which is exactly the device the tier is trying to help.
+  dpr = renderScaleTier.value === 'min'
+    ? Math.min(window.devicePixelRatio || 1, 1) * dprCap
+    : Math.min(window.devicePixelRatio || 1, dprCap)
   cssW = window.innerWidth
   cssH = window.innerHeight
   canvas.width = Math.round(cssW * dpr)
@@ -550,6 +564,25 @@ watch(phase, (p) => { if (p === 'boss') markHintDone('boss') })
 const bossGuarding = computed(() => {
   void hintTick.value
   return (getBoss()?.guard ?? 0) > 0
+})
+
+/**
+ * Is something big about to land?
+ *
+ * True from the moment an attack has picked its ground until it lands — the
+ * boss once it has aimed, and any elite inside its own wind-up. Polled on the
+ * same 5 Hz clock as the lane warnings, which is ample: the shortest telegraph
+ * in the game is the elite's 0.3 s and the boss's is a full second, so the badge
+ * is up for at least one and usually five of these ticks.
+ *
+ * Deliberately covers BOTH attackers. The in-world tells differ — a falling
+ * rock, a winding blade — but "am I about to be hit" is one question, and
+ * answering it in two different places would defeat the point of having a fixed
+ * place to look.
+ */
+const attackWarning = computed(() => {
+  void hintTick.value
+  return attackIncoming()
 })
 // Retire it the moment the shield drops: the lesson has landed by then, and the
 // swing that follows is the part the player needs to be looking at. Persisted,
@@ -991,10 +1024,12 @@ const boot = async (): Promise<void> => {
 // canvas — otherwise the cheaper setting only lands on the next orientation
 // change, which on a phone mid-run is never.
 //
-// It fires AT MOST ONCE a session by construction (see `renderScaleTier`). An
-// earlier version watched the live `quality` tier instead and cost 27 fps on a
-// throttled phone: a resize re-bakes every cached piece of art, ~700 ms there,
-// and the tier moves several times a session.
+// It fires AT MOST THREE TIMES a session by construction: `renderScaleTier` is
+// a downgrade-only ratchet across four tiers, and each step past the first needs
+// the live tier to have held for four seconds. An earlier version watched the
+// live `quality` tier instead and cost 27 fps on a throttled phone — a resize
+// re-bakes every cached piece of art, ~700 ms there, and the tier legitimately
+// moves several times a session.
 watch(renderScaleTier, () => resize())
 
 const onOrientationChange = (): void => { setTimeout(resize, 250) }
@@ -1081,6 +1116,8 @@ onUnmounted(() => {
       TutorialOverlay(v-if="tutorialActive" :progress="tutorialProgress")
 
       //- Touch-only, and only for the opening seconds — see `showSteerHint`.
+      IncomingWarning(:show="attackWarning")
+
       StageBanner(
         :show="bannerShown"
         :stage="bannerStage"

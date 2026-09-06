@@ -28,7 +28,9 @@ export default {
     'best': 'Rekord {n}',
     'boss': 'Bos',
     'miniboss': 'Mini bos',
-    'fireRate': 'Tezlik'
+    'fireRate': 'Tezlik',
+    'incoming': 'Hujum kelmoqda!',
+    'dodge': 'Chetlan'
   },
 
   'tutorial': {

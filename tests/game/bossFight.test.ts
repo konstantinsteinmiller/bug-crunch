@@ -362,12 +362,26 @@ describe('a boss swing is never a scratch', () => {
   it('takes at least BOSS_MIN_KILL from a small crowd, per miniboss sweep', async () => {
     const game = await importGame()
     game.startStage(4)
-    // Big enough to survive the walk in — the crowd is thinned to the sizes this
-    // test is about by the fight itself, which is the only lever the sim gives.
-    game.debugAddUnits(150)
+    // Sized for a WINDOW, not just for survival, and the window is narrow.
+    //
+    // An elite drags the road rather than stopping it now, so this fight runs
+    // while the crowd creeps: too large a squad (the old 150) never grinds down
+    // to the sizes where a percentage rounds below the floor, and too small a
+    // one (55) wipes after two sweeps and never lands the three this asserts.
+    game.debugAddUnits(110)
 
-    /** Walk to the first miniboss, keeping it unkillable from the moment it
-     *  streams in: the sweep is under test, not the time-to-kill. */
+    /**
+     * Walk to the first miniboss and hold the FIGHT in place: unkillable, still
+     * holding, and parked just ahead of the crowd.
+     *
+     * The position has to be pinned explicitly now. An elite drags the road to a
+     * crawl rather than stopping it (`eliteDragFor`), so a crowd left to itself
+     * creeps onward and eventually leaves the sweep's arc behind it — which is
+     * the right behaviour for the game and useless for this test. What is under
+     * test is the sweep's ARITHMETIC: when one lands, does it take at least
+     * `BOSS_MIN_KILL`? So the geometry is held constant and the numbers are
+     * allowed to vary.
+     */
     const pin = (): void => {
       const e = game.getFoes().find((f) => f.elite)
       if (!e) return
@@ -375,6 +389,7 @@ describe('a boss swing is never a scratch', () => {
       e.maxHp = 1e9
       e.dead = false
       e.hold = ELITE_HOLD_MAX
+      e.y = game.anchor().y + 1.5
     }
 
     let met = false

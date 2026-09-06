@@ -93,15 +93,41 @@ describe('the floor: stage 1 must not punish a player who does nothing', () => {
    * Locked as an assertion so that a future difficulty pass cannot quietly make
    * the game playable without input.
    */
-  it('zero-input play walks stage 1 and is stopped by stage 2', async () => {
-    // The tutorial is meant to be survivable by anyone who opens the game; the
-    // game is not. So the assertion moved down a stage rather than away.
+  it('walks the taught stages and is stopped by the game', async () => {
+    // THE FLOOR MOVED FROM STAGE 2 TO STAGE 4, deliberately, and it is worth
+    // being explicit about the trade because it is the sharpest edge of the
+    // onboarding pass.
+    //
+    // Playtesting kept losing people to a hard boss or to dying on scenery in
+    // the opening minute, so stages 1-3 lost their boulders and barricades
+    // outright, their packs were cut to one or two bodies, and their bosses and
+    // elites took health and damage cuts on top (see the curves in
+    // `survival.ts`). A road with nothing unshootable on it and one weak monster
+    // per pack is, unavoidably, a road a crowd can sometimes walk down on its
+    // own: measured, a run that never touches the screen now clears stage 2 and
+    // stage 3 about a quarter of the time.
+    //
+    // What must NOT happen is that becoming a way to play the game, and it has
+    // not: stage 4 — where hard obstacles are introduced — stops it dead on
+    // every seed. The floor is still there. It is three stages further in,
+    // which is the price of the first three being a tutorial.
     const one = aggregate(await runSamples(1, careless, SEEDS))
     expect(one.clearRate, 'the tutorial stopped being survivable').toBe(1)
 
-    const two = aggregate(await runSamples(2, careless, SEEDS))
-    expect(two.clearRate, 'never touching the screen became a way to play the game').toBe(0)
-  }, 240_000)
+    // The taught stages are allowed to be walkable, but never RELIABLY: a stage
+    // nobody can lose teaches nothing, so a no-input run still has to lose most
+    // of the time.
+    for (const stage of [2, 3]) {
+      const a = aggregate(await runSamples(stage, careless, SEEDS))
+      expect(
+        a.clearRate,
+        `stage ${stage} became reliable without playing it`
+      ).toBeLessThanOrEqual(0.5)
+    }
+
+    const four = aggregate(await runSamples(4, careless, SEEDS))
+    expect(four.clearRate, 'never touching the screen became a way to play the game').toBe(0)
+  }, 300_000)
 })
 
 describe('the ceiling: the benchmark player clears the authored stages', () => {

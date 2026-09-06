@@ -28,7 +28,9 @@ export default {
     'best': 'Rekord {n}',
     'boss': 'Boss',
     'miniboss': 'Miniboss',
-    'fireRate': 'Tempo'
+    'fireRate': 'Tempo',
+    'incoming': 'Nadchodzi atak!',
+    'dodge': 'Unik'
   },
 
   'tutorial': {

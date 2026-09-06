@@ -28,7 +28,9 @@ export default {
     'best': 'Рекорд {n}',
     'boss': 'Бос',
     'miniboss': 'Міні-бос',
-    'fireRate': 'Темп'
+    'fireRate': 'Темп',
+    'incoming': 'Атака!',
+    'dodge': 'Ухилися'
   },
 
   'tutorial': {

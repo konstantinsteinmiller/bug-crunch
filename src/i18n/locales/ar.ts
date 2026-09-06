@@ -28,7 +28,9 @@ export default {
     'best': 'الأفضل {n}',
     'boss': 'الزعيم',
     'miniboss': 'زعيم صغير',
-    'fireRate': 'معدل'
+    'fireRate': 'معدل',
+    'incoming': 'هجوم قادم!',
+    'dodge': 'تفادَ'
   },
 
   'tutorial': {

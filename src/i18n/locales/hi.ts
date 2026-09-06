@@ -28,7 +28,9 @@ export default {
     'best': 'सर्वश्रेष्ठ {n}',
     'boss': 'बॉस',
     'miniboss': 'मिनी बॉस',
-    'fireRate': 'दर'
+    'fireRate': 'दर',
+    'incoming': 'हमला आ रहा है!',
+    'dodge': 'बचें'
   },
 
   'tutorial': {

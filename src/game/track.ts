@@ -1,5 +1,6 @@
 import {
   BARRICADE_W,
+  ROCK_H,
   ROCK_W,
   BOSS_BASE_HP,
   CRATE_R,
@@ -10,6 +11,7 @@ import {
   GATE_LEAF_HALF,
   GATE_LEAF_X,
   GATE_MAX_VALUE, GATE_SUB_MAX,
+  earlyCrateHpMul, earlyMinibossHpMul, earlyObstacleKeep, earlyPackCap, earlyPackMul,
   gateMulOpen,
   LANE_HALF,
   stageLength,
@@ -99,8 +101,13 @@ export type TrackEvent =
     }
   | { kind: 'barricade'; y: number; blocks: Array<{ x: number; w: number; hp: number }> }
   /** Boulders. No `hp` — they cannot be shot, only steered around.
-   *  `passage` marks a rib walling one gate off from another; see `passage()`. */
-  | { kind: 'rocks'; y: number; blocks: Array<{ x: number; w: number }>; passage?: boolean }
+   *  `passage` marks a rib walling one gate off from another; see `passage()`.
+   *  `field` ties the ranks of one `boulderField` together: their 3.2-unit
+   *  offset is the beat, so `clearGateBands` has to move them as one body. */
+  | {
+      kind: 'rocks'; y: number; blocks: Array<{ x: number; w: number }>
+      passage?: boolean; field?: number
+    }
   | { kind: 'foes'; y: number; typeId: string; count: number; spread: number }
   /** One elite body. `hpScale` multiplies the ARCHETYPE'S BASE HP (`foeDef().hp`)
    *  — it already carries the stage scaling, see `minibossHp()`. */
@@ -351,7 +358,12 @@ export const minibossHp = (stage: number, second: boolean, rank?: MinibossRank):
     BOSS_BASE_HP *
       bossHpScale(stage) *
       MINIBOSS_BOSS_FRACTION *
-      MINIBOSS_PREMIUM[rank ?? (second ? 'second' : 'first')]
+      MINIBOSS_PREMIUM[rank ?? (second ? 'second' : 'first')] *
+      // Cut again for a beginner, on top of the tutorial rank's own discount.
+      // Applied HERE and not in `bossHpScale`, which minibosses share with the
+      // end boss — the two take different cuts, and folding them together would
+      // make one of the two numbers a lie.
+      earlyMinibossHpMul(stage)
   )
 
 /**
@@ -867,6 +879,8 @@ interface Beat {
   rng: () => number
   arenaY: number
   events: TrackEvent[]
+  /** Next id for a boulder field; see `boulderField` and `clearGateBands`. */
+  fieldId: number
   /** Write cursor: where the next beat lands. */
   y: number
   /** Did the PREVIOUS bank carry a `÷5`? Big traps never come back to back. */
@@ -1708,13 +1722,19 @@ const boulderField = (b: Beat, y: number, count: number): void => {
   // question, or the field is one wall drawn twice.
   const secondGap = Math.max(0, Math.min(3, firstGap + (b.rng() < 0.5 ? -2 : 2)))
 
+  // One id for both ranks. `clearGateBands` moves a field as a body, because
+  // the 3.2 units between the ranks are what make it two questions instead of
+  // one double-thick wall.
+  const field = b.fieldId++
+
   for (const [i, gap] of [firstGap, secondGap].entries()) {
     const kept = ensureRunnable(rank(gap, count).map((r) => ({ ...r, hp: 1 })))
     if (kept.length === 0) continue
     b.events.push({
       kind: 'rocks',
       y: r2(y + i * 3.2),
-      blocks: kept.map((r) => ({ x: r2(r.x), w: r.w }))
+      blocks: kept.map((r) => ({ x: r2(r.x), w: r.w })),
+      field
     })
   }
 }
@@ -1841,11 +1861,18 @@ const pickFoe = (b: Beat, roster: readonly string[]): string => {
 
 /** Bodies in the lane. `spread` is the half-width they are dealt across. */
 const pack = (b: Beat, y: number, typeId: string, count: number, spread: number): void => {
+  // Every mob beat in the game funnels through here — `horde` and `pincer` both
+  // call it — so the opening stages' thinning is applied once, at the only place
+  // it cannot be forgotten by a beat written later.
+  const thinned = Math.min(
+    earlyPackCap(b.stage),
+    Math.round(count * earlyPackMul(b.stage))
+  )
   b.events.push({
     kind: 'foes',
     y: r2(y),
     typeId,
-    count: Math.max(1, Math.round(count)),
+    count: Math.max(1, Math.round(thinned)),
     spread: r2(Math.min(LANE_HALF - 0.5, spread))
   })
 }
@@ -1968,6 +1995,10 @@ const crates = (
       hp: fixedHp !== undefined ? Math.max(1, Math.round(fixedHp)) : Math.max(1, Math.round(
         crateTierHp(b.stage, kind, crateTierFor(b.stage, b.rng()))
         * crateDepthFactor(y / Math.max(1, b.arenaY), b.stage)
+        // A pickup that kills you is the worst object in the game: it is the one
+        // thing the road actively invites you to drive into. See
+        // `earlyCrateHpMul`.
+        * earlyCrateHpMul(b.stage)
       ))
     }))
   })
@@ -3027,6 +3058,351 @@ const nudgeClearOfCrates = (b: Beat, y: number, x: number): number => {
   return r2(out)
 }
 
+// ─── The road a bank owns ───────────────────────────────────────────────────
+//
+// Reported from stage 12: two boulders sat just past the left leaf of a bank,
+// the second one hidden behind the leaf's own curtain and number, and the run
+// lost 90 % of its squad on a thing it never had the chance to see.
+//
+// Both halves of that are real, and they are separate faults.
+//
+// ── It cannot be SEEN ──
+//
+// The renderer draws boulders and crates before gates (see `drawScene`'s layer
+// order), so a bank paints over anything sharing its stretch of road. That is
+// the right order — a lethal pillar must never be occluded by scenery — but it
+// means the generator is the only place that can keep the two apart.
+//
+// ── It cannot be AVOIDED ──
+//
+// Worse, and true even when the boulder is perfectly visible. The crowd goes
+// through a leaf funnelled to that leaf's width and committed to its x; there
+// is no steering left in the moment a door is taken. An unbreakable rock in the
+// exit path is not a routing question, it is a toll — and this game already has
+// a hazard for "you chose wrong", which is the pillar, and it is one the player
+// can read a long way out.
+//
+// So a bank owns a band of road, and nothing that has to be steered around may
+// stand in it. The band is deliberately NOT symmetric.
+
+/**
+ * The bank's own drawn footprint, world units either side of its `y`.
+ *
+ * A leaf's curtain is `1.5` units tall centred on the bank, and a divider
+ * pillar is `DIVIDER_H` with steel caps past that. 0.9 clears both with a
+ * margin; the obstacle's own half-depth is added separately, so the two bodies
+ * are measured edge to edge rather than centre to centre.
+ */
+export const GATE_ART_HALF = 0.9
+
+/**
+ * Clear road on the APPROACH, in seconds of travel.
+ *
+ * The player is reading the bank here — three numbers, their colours, which
+ * pillar is lit — and that is the most expensive read in the game. Something
+ * they also have to steer around, in the same instant, in the same place, is
+ * two demands on one second.
+ */
+export const GATE_CLEAR_APPROACH_S = 0.45
+
+/**
+ * Clear road on the EXIT, in seconds of travel. Longer than the approach, and
+ * that asymmetry is the whole point.
+ *
+ * On the way in the crowd is wide, spread and steerable. On the way out it is
+ * funnelled to a leaf's width, pinned to that leaf's x, and has to re-spread
+ * before it can go anywhere — and the player's eyes are still on the number
+ * they just took. 0.75 s is a reaction plus a full-lane move at `STEER_SPRING`,
+ * with the crowd's own radius on top.
+ */
+export const GATE_CLEAR_EXIT_S = 0.75
+
+/**
+ * A crate's band, world units, symmetric — and MUCH smaller than a boulder's.
+ *
+ * The two hazards are not the same complaint. A boulder cannot be shot, so
+ * meeting one in a leaf's exit path is a toll with no play in it, and the band
+ * has to be wide enough to give the crowd somewhere to go. A crate can always
+ * be shot, and shooting it pays; the report about crates was that one drawn
+ * half-behind a gate "just looks like a bug", which is a READABILITY problem
+ * and stops the moment the two props do not overlap on screen.
+ *
+ * Sizing it like a boulder's was measured and reverted. It moved a third of
+ * every crate on the road, which put boxes on top of each other and — because
+ * the authored stages place their early damage crates deliberately close to the
+ * first banks — cost the benchmark player stage 4 outright: it died at 25 % of
+ * the road with foes as the top cause, having never picked up the damage it was
+ * supposed to arrive with. A fidelity rule that quietly re-balances the game is
+ * a bug of its own.
+ *
+ * 0.6 on top of the art's own half-extent leaves a visible gap of road between
+ * the box and the leaf at every zoom.
+ */
+export const CRATE_BAND_PAD = 0.6
+
+/** Half-depth of an obstacle's body, world units. */
+const obstacleHalfDepth = (e: TrackEvent): number =>
+  e.kind === 'rocks' ? ROCK_H / 2 : CRATE_R
+
+/**
+ * The band a bank at `y` owns, for one kind of obstacle.
+ *
+ * Exported so `trackShape.test.ts` asserts the invariant against the SAME
+ * numbers the sweep enforces it with. A test carrying its own copy of these
+ * would keep passing after someone retuned them, which is the one thing a
+ * regression test for this must not do.
+ */
+export const gateBandFor = (
+  stage: number, y: number, kind: 'rocks' | 'crates'
+): [number, number] => {
+  const sp = stageSpeed(stage)
+  return kind === 'rocks'
+    ? [y - (GATE_ART_HALF + sp * GATE_CLEAR_APPROACH_S),
+       y + (GATE_ART_HALF + sp * GATE_CLEAR_EXIT_S)]
+    : [y - (GATE_ART_HALF + CRATE_BAND_PAD), y + (GATE_ART_HALF + CRATE_BAND_PAD)]
+}
+
+/**
+ * Placed this far OUTSIDE the band rather than flush against it.
+ *
+ * Every `y` on a road is snapped to two decimals by `r2`, so an obstacle parked
+ * exactly on a band edge rounds back inside it half the time. Measured across
+ * stages 1-200 before this existed: 473 obstacles still technically in a band,
+ * every one of them by 0.005 units or less. Nobody could ever see 5 mm of world
+ * space against a 1.35-unit boulder — but an invariant that is true 93 % of the
+ * time is not an invariant, and `trackShape.test.ts` cannot assert it. Larger
+ * than `r2`'s half-step, small enough to be nothing.
+ */
+const BAND_MARGIN = 0.02
+
+/**
+ * Every bank's band, merged into disjoint intervals sorted by `y`.
+ *
+ * Merged because banks can land within a couple of units of each other (twelve
+ * such pairs across stages 1–60, the tightest 1.26 apart), and two overlapping
+ * bands are one stretch of forbidden road — not two, with a sliver of "legal"
+ * ground between them that is in fact inside both.
+ */
+const gateBands = (b: Beat, kind: 'rocks' | 'crates'): Array<[number, number]> => {
+  const raw: Array<[number, number]> = []
+  for (const e of b.events) {
+    if (e.kind === 'gates') raw.push(gateBandFor(b.stage, e.y, kind))
+  }
+  raw.sort((p, q) => p[0] - q[0])
+  const out: Array<[number, number]> = []
+  for (const iv of raw) {
+    const last = out[out.length - 1]
+    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1])
+    else out.push([iv[0], iv[1]])
+  }
+  return out
+}
+
+/**
+ * One hazard, as the player meets it: the events that have to move together.
+ *
+ * A boulder field is two ranks 3.2 apart with their gaps deliberately offset,
+ * and the offset IS the beat — commit to a line, then change it. Moving one
+ * rank out of a band and leaving the other would collapse those 3.2 units to
+ * whatever the band edge happened to leave, turning two questions into one
+ * double-thick wall. So a field carries an id and moves as a body.
+ */
+interface Obstacle {
+  events: TrackEvent[]
+  /** Leading and trailing edge of the whole group, body included. */
+  lo: number
+  hi: number
+}
+
+const obstacleGroups = (b: Beat, kind: 'rocks' | 'crates'): Obstacle[] => {
+  const byField = new Map<number, TrackEvent[]>()
+  const singles: TrackEvent[] = []
+  for (const e of b.events) {
+    if (e.kind !== kind) continue
+    // A passage rib is rocks laid deliberately INTO a bank — it is the wall that
+    // makes a door a corridor, it is authored to touch the gate, and the player
+    // reads it as one shape with the bank. It is the one thing the band does not
+    // apply to.
+    if (e.kind === 'rocks' && e.passage) continue
+    if (e.kind === 'rocks' && e.field !== undefined) {
+      const list = byField.get(e.field)
+      if (list) list.push(e)
+      else byField.set(e.field, [e])
+    } else {
+      singles.push(e)
+    }
+  }
+  const wrap = (events: TrackEvent[]): Obstacle => {
+    let lo = Infinity
+    let hi = -Infinity
+    for (const e of events) {
+      const half = obstacleHalfDepth(e)
+      lo = Math.min(lo, e.y - half)
+      hi = Math.max(hi, e.y + half)
+    }
+    return { events, lo, hi }
+  }
+  return [...byField.values(), ...singles.map((e) => [e])].map(wrap)
+}
+
+/**
+ * Move one obstacle clear of every band, or leave it where it is.
+ *
+ * Direction is chosen ONCE, toward the nearer edge of the band the obstacle is
+ * in, and then held. Re-choosing after each step is what turns two adjacent
+ * bands into a trap: pushed forward out of one, the nearer edge of the next is
+ * the one it just came from, and the obstacle oscillates until the guard runs
+ * out and it is left exactly where it started. If the chosen side runs off the
+ * road, the other one is tried before giving up.
+ */
+const shiftClearOfBands = (
+  ob: Obstacle, bands: Array<[number, number]>, minY: number, maxY: number
+): number | null => {
+  const bandAt = (lo: number, hi: number): [number, number] | null => {
+    for (const iv of bands) if (lo < iv[1] && hi > iv[0]) return iv
+    return null
+  }
+  const first = bandAt(ob.lo, ob.hi)
+  if (!first) return 0
+
+  let back = ob.hi - first[0] <= first[1] - ob.lo
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let lo = ob.lo
+    let hi = ob.hi
+    let ok = true
+    for (let guard = 0; guard < 40; guard++) {
+      const band = bandAt(lo, hi)
+      if (!band) break
+      const shift = back ? band[0] - hi - BAND_MARGIN : band[1] - lo + BAND_MARGIN
+      lo += shift
+      hi += shift
+      if (lo < minY || hi > maxY) { ok = false; break }
+    }
+    if (ok && !bandAt(lo, hi)) return lo - ob.lo
+    // The nearer side ran out of road. Try the other one before giving up.
+    back = !back
+  }
+  return null
+}
+
+/**
+ * Every crate on the road, as the spacing rule sees them.
+ *
+ * Two boxes on the SAME row are allowed to sit shoulder to shoulder — stage 1's
+ * teaching wall is exactly that, and every box in it is separately visible and
+ * separately shootable. Two boxes on DIFFERENT rows owe each other real road,
+ * because there they are competing offers rather than one prop. See
+ * `roadEconomy.test.ts`.
+ */
+const CRATE_ROW_CLEAR = 1.6
+
+const crateRowClashes = (b: Beat, row: TrackEvent, at: number): boolean => {
+  if (row.kind !== 'crates') return false
+  for (const e of b.events) {
+    if (e.kind !== 'crates' || e === row) continue
+    if (Math.abs(e.y - at) < 0.01) continue          // a row, not a stack
+    if (Math.abs(e.y - at) >= CRATE_ROW_CLEAR) continue
+    for (const c of row.crates) {
+      for (const o of e.crates) {
+        if (Math.hypot(o.x - c.x, e.y - at) < CRATE_ROW_CLEAR) return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Would a bank standing at `y` own something the road already has?
+ *
+ * The same test `clearGateBands` applies, asked the other way round. A FILLER
+ * bank is not authored content — it exists to break up a long quiet stretch —
+ * so when it and a hand-placed crate want the same road, the filler is the one
+ * that should move.
+ *
+ * Stage 4 is why this exists. The filler for the 50-unit gap after the opening
+ * bank landed dead centre at y=39, one unit from the rate crate the stage
+ * deliberately parks past the chicane at y=38. `clearGateBands` then did its job
+ * and moved the CRATE — correctly, by its own rule, and wrongly for the stage:
+ * that crate is the whole reason the chicane spits the crowd out on the right,
+ * and shifting it cost the benchmark run stage 4 outright. Moving the filler
+ * instead leaves the authored beat exactly where its author put it.
+ */
+const FILLER_PACK_LEAD = 6
+
+const bankWouldCrowd = (b: Beat, y: number): boolean => {
+  const [rockLo, rockHi] = gateBandFor(b.stage, y, 'rocks')
+  const [crateLo, crateHi] = gateBandFor(b.stage, y, 'crates')
+  return b.events.some((e) => {
+    if (e.kind === 'rocks') {
+      if (e.passage) return false
+      const half = ROCK_H / 2
+      return e.y + half > rockLo && e.y - half < rockHi
+    }
+    if (e.kind === 'crates') return e.y + CRATE_R > crateLo && e.y - CRATE_R < crateHi
+    // A pack waiting just past the door is the same complaint as a boulder
+    // waiting just past it — the crowd comes out funnelled and committed, and
+    // whatever is there is already on top of it. `MINIBOSS_LEAD` says the same
+    // thing about elites at four times the distance; this is the ordinary-wave
+    // version, and it only binds FILLER banks, which are pacing rather than
+    // authored intent.
+    if (e.kind === 'foes') {
+      const lead = e.y - y
+      return lead >= 0 && lead < FILLER_PACK_LEAD
+    }
+    return false
+  })
+}
+
+/**
+ * Push every boulder and crate out of every bank's band.
+ *
+ * Runs as a POST-PASS over the finished road rather than at each placement,
+ * and that is load-bearing: banks are authored, filled in by `fillGateGaps` and
+ * moved by `nudgeClear` at different points in the build, so a check made when
+ * a boulder is placed cannot see the bank that arrives after it. Sweeping the
+ * finished list is the only way to state the rule as an invariant — which is
+ * exactly how `trackShape.test.ts` asserts it, for every stage.
+ */
+const clearGateBands = (b: Beat): void => {
+  // Nothing may be shoved off either end of the road: before the first beat the
+  // player has not started, and past the arena is the boss fight.
+  const minY = 6
+  const maxY = b.arenaY - 4
+
+  for (const kind of ['rocks', 'crates'] as const) {
+    const bands = gateBands(b, kind)
+    if (bands.length === 0) continue
+    for (const ob of obstacleGroups(b, kind)) {
+      const raw = shiftClearOfBands(ob, bands, minY, maxY)
+      if (raw === null || raw === 0) continue
+      // Round the SHIFT, not each `y`. Rounding the ranks independently let a
+      // field's 3.2-unit offset drift to 3.19, and that offset is the beat. The
+      // shift is at most 0.005 off after rounding, which `BAND_MARGIN` covers.
+      const shift = r2(raw)
+      for (const e of ob.events) e.y = r2(e.y + shift)
+
+      // Landing clear of the gate is not enough if it landed on another box.
+      // Step along the same direction the band pushed it until the road is its
+      // own, re-clearing the band each time — a crate row that has to move is
+      // rare, and one that then has to move again is rarer still.
+      if (ob.events[0]?.kind !== 'crates') continue
+      const row = ob.events[0]
+      const step = shift < 0 ? -CRATE_ROW_CLEAR : CRATE_ROW_CLEAR
+      for (let guard = 0; guard < 12 && crateRowClashes(b, row, row.y); guard++) {
+        const half = obstacleHalfDepth(row)
+        const probe: Obstacle = {
+          events: [row], lo: row.y + step - half, hi: row.y + step + half
+        }
+        const extra = shiftClearOfBands(probe, bands, minY, maxY)
+        if (extra === null) break
+        const at = r2(row.y + step + extra)
+        if (at < minY || at > maxY) break
+        row.y = at
+      }
+    }
+  }
+}
+
 const nudgeClear = (b: Beat, y: number, minDist = 4.5): number => {
   let out = y
   for (let guard = 0; guard < 40; guard++) {
@@ -3219,7 +3595,18 @@ const fillGateGaps = (b: Beat): void => {
   for (const y of stops) {
     const gap = y - prev
     if (gap > maxGap) {
-      const at = nudgeClear(b, prev + gap / 2)
+      // Outward from the midpoint, nearest first, for a spot that is clear of
+      // the banks either side AND of anything already standing there. Searching
+      // both ways rather than only forward keeps the filler near the middle of
+      // the stretch it exists to break up.
+      const mid = prev + gap / 2
+      let at = nudgeClear(b, mid)
+      for (let step = 0; step <= 12; step++) {
+        const back = nudgeClear(b, mid - step)
+        if (back - prev > 6 && y - back > 6 && !bankWouldCrowd(b, back)) { at = back; break }
+        const fwd = nudgeClear(b, mid + step)
+        if (fwd - prev > 6 && y - fwd > 6 && !bankWouldCrowd(b, fwd)) { at = fwd; break }
+      }
       // Only if the nudge did not push it on top of one of the two banks it is
       // meant to sit between…
       const fits = at - prev > 6 && y - at > 6
@@ -3260,6 +3647,7 @@ export const buildTrack = (stage: number): Track => {
     rng: mulberry32(Math.imul(stage, 0x9e3779b1) ^ 0x85ebca6b),
     arenaY,
     events: [],
+    fieldId: 0,
     y: 14,
     bigDivLast: false,
     trapPlaced: false,
@@ -3334,9 +3722,41 @@ export const buildTrack = (stage: number): Track => {
   ensureSupplies(b)
   fillGateGaps(b)
 
+  // LAST, because it is the only pass that needs every bank to already exist:
+  // `fillGateGaps` adds them, and an obstacle cleared before that could be
+  // buried by a filler bank dropped on top of it.
+  clearGateBands(b)
+
   // Sorted by distance: the sim streams events in one forward pass and never
   // looks back. `Array.prototype.sort` is stable, so equal-y events keep the
   // order they were authored in and the track stays byte-identical per stage.
   b.events.sort((p, q) => p.y - q.y)
-  return { stage, arenaY, bossY, length, events: b.events }
+  // ── The opening stages carry no scenery that can kill ──
+  //
+  // Filtered from the FINISHED event list rather than gated inside each beat,
+  // and that is deliberate. `chicane`, `gauntlet`, `boulderField`, `wall`,
+  // `barricadeRow` and the passage ribs all build rocks or barricades, and a new
+  // beat written next month will too — gating each one is a rule that decays.
+  // There are exactly two event kinds that can kill a crowd it cannot shoot
+  // through, and this removes them by NAME.
+  //
+  // Safe to do after the fact: everything the generator placed around them —
+  // gates nudged clear of a wall, crates kept off a rib — stays valid when they
+  // are gone, because all those rules only ever pushed things APART.
+  const keep = earlyObstacleKeep(stage)
+  const events = keep >= 1
+    ? b.events
+    : (() => {
+      let seen = 0
+      return b.events.filter((e) => {
+        if (e.kind !== 'rocks' && e.kind !== 'barricade') return true
+        if (keep <= 0) return false
+        // Deterministic thinning: every other one, so a stage is still the same
+        // stage on every replay and a player can learn it.
+        seen++
+        return seen % 2 === 1
+      })
+    })()
+
+  return { stage, arenaY, bossY, length, events }
 }

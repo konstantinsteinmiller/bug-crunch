@@ -28,7 +28,9 @@ export default {
     'best': 'Record {n}',
     'boss': 'Baas',
     'miniboss': 'Minibaas',
-    'fireRate': 'Tempo'
+    'fireRate': 'Tempo',
+    'incoming': 'Aanval!',
+    'dodge': 'Ontwijk'
   },
 
   'tutorial': {

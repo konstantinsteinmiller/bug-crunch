@@ -101,7 +101,20 @@ const damageLabel = computed(() => {
           span.run-hud__value {{ rateLabel }}
 
     div.run-hud__rail(:class="{ 'is-boss': isBoss }")
+      //- The CHIP. A second fill on the same number with a slower, delayed
+      //- transition, so a hit leaves a pale streak behind the red that catches
+      //- up a moment later. It is the single cheapest thing that makes a health
+      //- bar read as a health bar rather than as a progress rail — and it is
+      //- the only part of the bar that says HOW HARD you just hit, which a
+      //- smoothly shrinking edge cannot.
+      div.run-hud__rail-chip(v-if="isBoss" :style="{ width: railPct + '%' }")
       div.run-hud__rail-fill(:style="{ width: railPct + '%' }")
+      //- Notches and a glass sheen, painted over the fill. Both are gradients on
+      //- an empty element rather than markup: a boss bar wants segmenting so a
+      //- quarter is readable at a glance, and neither should cost a DOM node.
+      div.run-hud__rail-ticks(v-if="isBoss")
+      div.run-hud__rail-sheen
+      GameIcon.run-hud__rail-skull(v-if="isBoss" name="skull")
       span.run-hud__rail-text(v-if="isBoss") {{ t('hud.boss') }}
       GameIcon.run-hud__rail-icon(v-else name="skull")
 
@@ -111,7 +124,11 @@ const damageLabel = computed(() => {
     //- as "the boss is here" the first time it was tried.
     Transition(name="elite")
       div.run-hud__elite(v-if="elite && !isBoss")
+        div.run-hud__elite-chip(:style="{ width: elitePct + '%' }")
         div.run-hud__elite-fill(:style="{ width: elitePct + '%' }")
+        div.run-hud__elite-ticks
+        div.run-hud__rail-sheen
+        GameIcon.run-hud__elite-skull(name="skull")
         span.run-hud__elite-text {{ t('hud.miniboss') }}
 </template>
 
@@ -207,8 +224,15 @@ const damageLabel = computed(() => {
   background-color: rgba(10, 16, 30, 0.7)
   overflow: hidden
 
+  // A BOSS BAR, not a thicker progress rail. Taller, squarer, and ringed in a
+  // warm rim so it stops reading as HUD furniture the moment the fight starts —
+  // the thin blue rail it replaces was accurate and completely unalarming.
   &.is-boss
-    height: clamp(0.7rem, 3.2vw, 1rem)
+    height: clamp(1.05rem, 4.6vw, 1.5rem)
+    border-radius: 0.28rem
+    border-color: rgba(0, 0, 0, 0.75)
+    background-color: rgba(30, 6, 8, 0.85)
+    box-shadow: inset 0 0 0 1px rgba(255, 120, 90, 0.35), 0 0 0.7rem rgba(190, 20, 20, 0.3)
 
 .run-hud__rail-fill
   position: absolute
@@ -217,9 +241,47 @@ const damageLabel = computed(() => {
   background-image: linear-gradient(to right, #4fd0ff, #a0f0ff)
   transition: width 120ms linear
 
+  // RED, top-lit. The old red-to-orange ramp ran left to right, which reads as
+  // a fuel gauge; health reads as a lit tube, so the ramp runs top to bottom
+  // with the hot band across the middle.
   .is-boss &
-    background-image: linear-gradient(to right, #ff5a4a, #ffb03a)
+    border-radius: 0.18rem
+    background-image: linear-gradient(to bottom, #ff8a72 0%, #ec1f22 42%, #a20d14 100%)
+    box-shadow: inset 0 -0.12rem 0 rgba(0, 0, 0, 0.35)
     transition: width 90ms linear
+
+// The chip: the same number, arriving late.
+.run-hud__rail-chip
+  position: absolute
+  inset: 0 auto 0 0
+  border-radius: 0.18rem
+  background-image: linear-gradient(to bottom, #fff0e2, #ffb9a4)
+  opacity: 0.9
+  transition: width 620ms cubic-bezier(0.22, 0.61, 0.36, 1) 130ms
+
+.run-hud__rail-ticks
+  position: absolute
+  inset: 0
+  pointer-events: none
+  // Quarters, so "half gone" is a thing the eye can check rather than estimate.
+  background-image: repeating-linear-gradient(to right, rgba(0, 0, 0, 0) 0 calc(25% - 2px), rgba(0, 0, 0, 0.55) calc(25% - 2px) 25%)
+
+.run-hud__rail-sheen
+  position: absolute
+  inset: 0
+  pointer-events: none
+  border-radius: inherit
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.06) 45%, rgba(0, 0, 0, 0.22) 100%)
+
+.run-hud__rail .run-hud__rail-skull
+  position: absolute
+  left: 0.2rem
+  top: 50%
+  translate: 0 -50%
+  width: clamp(0.7rem, 3vw, 1rem)
+  height: clamp(0.7rem, 3vw, 1rem)
+  color: #ffd9c8
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.8))
 
 // Nested for the same specificity reason as `.run-hud__icon` above.
 .run-hud__rail .run-hud__rail-icon
@@ -234,6 +296,7 @@ const damageLabel = computed(() => {
 .run-hud__rail-text
   position: absolute
   inset: 0
+  z-index: 2
   display: flex
   align-items: center
   justify-content: center
@@ -248,22 +311,51 @@ const damageLabel = computed(() => {
 
 .run-hud__elite
   position: relative
-  height: clamp(0.62rem, 2.8vw, 0.85rem)
-  border: 2px solid rgba(0, 0, 0, 0.6)
-  border-radius: 999px
-  background-color: rgba(24, 10, 14, 0.75)
+  height: clamp(0.85rem, 3.8vw, 1.15rem)
+  border: 2px solid rgba(0, 0, 0, 0.72)
+  border-radius: 0.24rem
+  background-color: rgba(26, 8, 10, 0.85)
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 110, 0.28), 0 0 0.5rem rgba(170, 25, 25, 0.26)
   overflow: hidden
 
 .run-hud__elite-fill
   position: absolute
   inset: 0 auto 0 0
-  border-radius: 999px
-  background-image: linear-gradient(to right, #c0392b, #ff8a5a)
+  border-radius: 0.14rem
+  // The same red as the boss, one step cooler and darker: an elite has to read
+  // as the same KIND of thing without competing with the fight at the end.
+  background-image: linear-gradient(to bottom, #ff7d63 0%, #d81f22 44%, #8e0d12 100%)
+  box-shadow: inset 0 -0.1rem 0 rgba(0, 0, 0, 0.32)
   transition: width 90ms linear
+
+.run-hud__elite-chip
+  position: absolute
+  inset: 0 auto 0 0
+  border-radius: 0.14rem
+  background-image: linear-gradient(to bottom, #ffeadf, #ffb49c)
+  opacity: 0.88
+  transition: width 560ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms
+
+.run-hud__elite-ticks
+  position: absolute
+  inset: 0
+  pointer-events: none
+  background-image: repeating-linear-gradient(to right, rgba(0, 0, 0, 0) 0 calc(33.333% - 2px), rgba(0, 0, 0, 0.5) calc(33.333% - 2px) 33.333%)
+
+.run-hud__elite .run-hud__elite-skull
+  position: absolute
+  left: 0.18rem
+  top: 50%
+  translate: 0 -50%
+  width: clamp(0.6rem, 2.6vw, 0.82rem)
+  height: clamp(0.6rem, 2.6vw, 0.82rem)
+  color: #ffd2c2
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.8))
 
 .run-hud__elite-text
   position: absolute
   inset: 0
+  z-index: 2
   display: flex
   align-items: center
   justify-content: center

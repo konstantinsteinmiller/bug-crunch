@@ -1,3 +1,4 @@
+import type { BossKind, MinibossKind } from '@/game/threats'
 /**
  * ─── Survivalist — the rules in one file ────────────────────────────────────
  *
@@ -564,6 +565,79 @@ export const dividerCrushFor = (stage: number): CrushRamp => ({
   bite: 1
 })
 
+/**
+ * ─── The first five stages are a different game ─────────────────────────────
+ *
+ * Everything below is one policy with one purpose: a first-time player must not
+ * lose a run before they have decided whether they like the game. Playtesting
+ * kept producing the same two exits — a hard boss, and dying to scenery — and
+ * both happen in the opening minute, which is the minute the whole funnel
+ * depends on.
+ *
+ * It is written as a set of curves in ONE place rather than as edits spread
+ * through the authored stages, because the stages are hand-shaped and would
+ * fight any change made stage by stage: `stageOne` says what beats the road has,
+ * and these say what those beats cost a beginner. A balance pass on the game
+ * proper moves the authored numbers; a balance pass on ONBOARDING moves these.
+ *
+ * Every one of them returns 1 from stage 6 on, so the game the player eventually
+ * arrives at is untouched.
+ */
+
+/** Below this, the road carries no boulders and no barricades at all. */
+export const HARD_OBSTACLE_FROM_STAGE = 4
+
+/**
+ * What fraction of the rocks and barricades a stage keeps.
+ *
+ * NONE for the first three: a boulder cannot be shot, so meeting one before the
+ * player can reliably steer is a death with nothing to learn from. Half on 4-5,
+ * which is where they are introduced properly. The gate pillar is deliberately
+ * NOT covered — it is part of how a bank works, not scenery, and it has its own
+ * (already gentler) early curve in `dividerCrushFor`.
+ */
+export const earlyObstacleKeep = (stage: number): number =>
+  stage < HARD_OBSTACLE_FROM_STAGE ? 0 : stage <= 5 ? 0.5 : 1
+
+/** Ordinary foes are softer while the player is learning to shoot them. */
+export const earlyFoeHpMul = (stage: number): number =>
+  stage <= 1 ? 0.6 : stage <= 3 ? 0.7 : 1
+
+/** …and there are fewer of them per pack. A hard cap, not a scale: stage 1
+ *  shows ONE monster at a time so the verb is unmistakable. */
+export const earlyPackCap = (stage: number): number =>
+  stage <= 1 ? 1 : stage <= 3 ? 2 : Number.POSITIVE_INFINITY
+
+/** Stages 4-5 keep real packs, thinned. */
+export const earlyPackMul = (stage: number): number =>
+  stage >= HARD_OBSTACLE_FROM_STAGE && stage <= 5 ? 0.6 : 1
+
+/**
+ * Crates come apart in well under half the shots.
+ *
+ * A pickup that kills you is the worst object in the game: it is the one thing
+ * the road actively invites you to drive into. Rolled HP only — a row with an
+ * authored `fixedHp` (stage 1's teaching wall, pinned at 1) is already priced
+ * for exactly this and is left alone.
+ */
+export const earlyCrateHpMul = (stage: number): number => (stage <= 5 ? 0.6 : 1)
+
+export const earlyMinibossHpMul = (stage: number): number =>
+  stage <= 3 ? 0.7 : stage <= 5 ? 0.8 : 1
+
+export const earlyBossHpMul = (stage: number): number =>
+  stage <= 3 ? 0.6 : stage <= 5 ? 0.8 : 1
+
+/**
+ * How hard a boss's slam and an elite's sweep hit in the opening stages.
+ *
+ * The health cuts shorten those fights; this one makes losing them survivable.
+ * A first-timer who cannot dodge yet should come out of a boss fight with a
+ * squad, not with a result screen — the fight is where they learn what the
+ * telegraph meant, and they have to live long enough to use it.
+ */
+export const earlyBigHitMul = (stage: number): number => (stage <= 3 ? 0.6 : 1)
+
 export const BOSS_GUARD_GATES = [0.66, 0.33] as const
 
 /** Stage 1 gets ONE, at half health. See `bossGuardGates`. */
@@ -680,6 +754,50 @@ export const FOE_REACH = 0.72
  * single extra number.
  */
 export const ELITE_HOLD_AHEAD = 2.4
+
+/**
+ * ─── An elite slows the road; it does not switch it off ─────────────────────
+ *
+ * A holding elite used to CLAMP the crowd: `anchorY` was pinned and the run
+ * stopped dead until the thing died or the leash expired. It is bounded — the
+ * hold breaks after `ELITE_HOLD_MAX` — so it was never a soft-lock, and on a
+ * competent run it is over in under a second. That is not who complains.
+ *
+ * Measured on the runs that struggle, the crowd is frozen for THREE AND A HALF
+ * to SEVEN SECONDS while being chewed for twelve to thirty-eight survivors. In
+ * a genre whose entire promise is forward motion, a runner that stops moving
+ * does not read as a fight — it reads as a broken game, and the player spends
+ * those seconds steering left and right to no effect, which is the exact input
+ * that normally does something. They are not failing a challenge; they think
+ * the game has hung.
+ *
+ * So the elite drags instead of blocking. From `ELITE_DRAG_LEAD` out the road
+ * winds down toward a crawl and stays there: progress is always visible, the
+ * approach takes long enough to be the shooting window the fight wants, and a
+ * squad too weak to kill it squeezes past paying in bodies rather than being
+ * pinned and billed anyway. The wall survives only as a floor at the elite's
+ * own body (`ELITE_BLOCK_AHEAD`), which the leash almost always outlives — so
+ * in practice the crowd never fully stops at all.
+ */
+export const ELITE_DRAG_LEAD = 6
+/** The slowest the road ever runs: a crawl, deliberately never zero. */
+export const ELITE_DRAG_MIN = 0.15
+/** …and the one place the crowd is genuinely blocked: the elite's own body. */
+export const ELITE_BLOCK_AHEAD = 1.3
+
+/**
+ * Speed multiplier for a crowd `gap` units short of a holding elite.
+ *
+ * 1 well clear of it, easing to `ELITE_DRAG_MIN` at the block line. Squared so
+ * the wind-down is gentle at first and firm at the end — a linear ramp reads as
+ * the game getting sluggish, a curve reads as arriving at something.
+ */
+export const eliteDragFor = (gap: number): number => {
+  if (gap >= ELITE_DRAG_LEAD) return 1
+  if (gap <= ELITE_BLOCK_AHEAD) return ELITE_DRAG_MIN
+  const t = (gap - ELITE_BLOCK_AHEAD) / (ELITE_DRAG_LEAD - ELITE_BLOCK_AHEAD)
+  return ELITE_DRAG_MIN + (1 - ELITE_DRAG_MIN) * t * t
+}
 
 /**
  * ─── …and it has to actually fight ──────────────────────────────────────────
@@ -907,7 +1025,7 @@ export const ELITE_LUNGE = 0.55
  * breaks off and walks past as it always did: one honest fight, and if it is
  * lost, a cost rather than a death sentence.
  *
- * ─── Why it is 4.5 and not 9 ────────────────────────────────────────────────
+ * ─── Why it is 3 and not 9 ──────────────────────────────────────────────────
  *
  * The leash is the ONLY thing bounding the sweep, and once the sweep took a
  * fifth of the squad every 1.5 s the arithmetic ran away: nine seconds is six
@@ -916,12 +1034,20 @@ export const ELITE_LUNGE = 0.55
  * quickly — `average` spent the FULL leash in front of stage 2's and stage 3's
  * elites (6.7 s and 9.1 s) and cleared neither stage on any seed.
  *
- * At 4.5 s the worst case is three sweeps — a little under half the squad — and
- * a fight the player is losing ends while they still have a run. Every number
- * the sweep itself is made of is untouched; what changed is how long the
- * question may be asked before the game accepts the answer.
+ * It went to 4.5 s, which capped the worst case at three sweeps, and it is now
+ * 3 s — TWO sweeps. The difference is what happens to a player who simply
+ * cannot win this fight yet. At three sweeps they break off having spent a
+ * little under half the squad, which is enough that the rest of the stage is
+ * lost too; at two they break off with a crowd they can still build back up
+ * from, and the road ahead has gates on it. The elite stops being the moment a
+ * run is decided and goes back to being a thing that happened during one.
+ *
+ * Every number the sweep itself is made of is untouched. What changed is how
+ * long the question may be asked before the game accepts the answer — and since
+ * an elite now drags the road rather than stopping it (`eliteDragFor`), a
+ * shorter leash also means less of the stage is spent at a crawl.
  */
-export const ELITE_HOLD_MAX = 4.5
+export const ELITE_HOLD_MAX = 3
 
 /**
  * ─── A monster is a body, and a body is solid ───────────────────────────────
@@ -1538,6 +1664,41 @@ export interface Foe {
    *  cornered crowd is thrown left, then right, then left — the read that says
    *  "this is a sweep" rather than "this is a stomp". */
   sweepDir: number
+  /**
+   * Has THIS swing been announced yet?
+   *
+   * Without it a sweep could land with no telegraph at all. The wind-up used to
+   * be detected as a transition — "the cooldown crossed `ELITE_TELEGRAPH` this
+   * frame" — and an elite only ticks that cooldown while it is in range of the
+   * crowd. So an elite that arrived with its cooldown ALREADY below the
+   * telegraph never crossed anything: no tell, no cast, and a swing out of
+   * nowhere. Asking "has this one been announced" instead of "did it just cross"
+   * cannot miss, and it is what lets the wind-up be extended to a full window
+   * when it is short.
+   */
+  sweepTold: boolean
+
+  // ─── Per-KIND state ───────────────────────────────────────────────────────
+  //
+  // An elite is one of several fights now (`MinibossKind`), and `kind` selects
+  // which branch of `stepElite` owns it. Everything below is that branch's
+  // scratch space: a rolling ball's lane and spin, a bomber's fuse, a gunner's
+  // reload. They live on the one struct rather than in per-kind maps because a
+  // foe is already a bag of fields the sim walks every frame, and a parallel map
+  // keyed by id is a second lifetime to get wrong.
+  //
+  // Each is meaningful only for the kind that owns it, and every kind must leave
+  // the others alone.
+  kind: MinibossKind
+  /** Which side of the road a `roller` came down, -1 or 1. Never 0: the middle
+   *  is the one lane a rolling ball may not use. */
+  lane: number
+  /** Seconds left on a `bomber`'s fuse once it has planted, or 0. */
+  fuse: number
+  /** Seconds until a `gunner`'s next bolt. */
+  reload: number
+  /** Free per-kind counter — shots taken, bounces, whatever the branch needs. */
+  kindTicks: number
   swayPhase: number
   /**
    * A miniboss: bigger, tankier, worth real coins, and announced in the HUD.
@@ -1551,6 +1712,17 @@ export interface Foe {
 }
 
 export interface Boss {
+  /**
+   * Which fight this is (`BossKind`). Selects the branch of `stepBoss` that owns
+   * it; every branch is responsible for its own telegraph and for leaving the
+   * others' scratch alone.
+   */
+  kind: BossKind
+  /** Attacks thrown, for the kinds that count them — the healer heals on every
+   *  third. Distinct from `slams`, which drives the meteor's rage curve. */
+  attacks: number
+  /** Seconds until the next summon wave, for `summoner`. */
+  summonCd: number
   design: string
   x: number
   y: number

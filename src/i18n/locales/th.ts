@@ -28,7 +28,9 @@ export default {
     'best': 'สถิติ {n}',
     'boss': 'บอส',
     'miniboss': 'มินิบอส',
-    'fireRate': 'อัตรา'
+    'fireRate': 'อัตรา',
+    'incoming': 'การโจมตีกำลังมา!',
+    'dodge': 'หลบ'
   },
 
   'tutorial': {

@@ -28,7 +28,9 @@ export default {
     'best': '最高 {n}',
     'boss': 'ボス',
     'miniboss': '中ボス',
-    'fireRate': '連射'
+    'fireRate': '連射',
+    'incoming': '攻撃が来る！',
+    'dodge': '回避'
   },
 
   'tutorial': {

@@ -3,13 +3,14 @@ import {
   BARRICADE_COIN_MAX, BARRICADE_COIN_MIN,
   BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, bossGuardGates, dividerCrushFor,
   GATE_SCALE_STEP, gatePumpCap, isScaleOp,
+  earlyBigHitMul, earlyBossHpMul,
   BULLET_LIFE_MS, BULLET_R, BULLET_SPEED, effectiveBulletRange,
   CHALLENGE_MAX, CHALLENGE_STEP,
   COIN_MAGNET_BASE, COIN_PULL_LEAD, CRATE_DAMAGE_GAIN,
   FOE_COIN_DROP_ELITE, FOE_COIN_DROP_PER_BOUNTY,
   CRATE_R, CRATE_RATE_GAIN, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H, DIVIDER_HALF_W,
   FOE_BODY_HALF_H, FOE_BODY_HALF_W, FOE_COLLIDE_CD, FOE_COLLIDE_CORE, FOE_COLLIDE_IFRAMES_MS, FOE_COLLIDE_KILL_EVERY,
-  ELITE_HOLD_AHEAD, ELITE_HOLD_MAX, ELITE_LUNGE, ELITE_SWEEP_CD,
+  ELITE_DRAG_LEAD, ELITE_HOLD_MAX, ELITE_LUNGE, ELITE_SWEEP_CD, eliteDragFor,
   ELITE_SWEEP_FRACTION, ELITE_SWEEP_REACH, ELITE_TELEGRAPH, FOE_REACH, FUNNEL_LEAD,
   PASSAGE_FIT_MARGIN,
   BOSS_MIN_KILL, SLAM_FRACTION_MAX, SLAM_MAX_FRACTION, SWEEP_FRACTION_MAX, endlessPressure,
@@ -29,6 +30,7 @@ import {
 } from '@/game/survival'
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
 import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
+import { bossKindFor, minibossKindFor } from '@/game/threats'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
 import {
@@ -148,6 +150,8 @@ let boss: Boss | null = null
 /** Index of the next track event that has not been streamed in yet. */
 let nextEvent = 0
 let entityId = 1
+/** How many elites this run has spawned — picks each one's kind. */
+let elitesSpawned = 0
 
 /** Where the crowd's centre is, and where the player wants it. */
 let anchorX = 0
@@ -417,6 +421,7 @@ const resetWorld = (): void => {
   firingAtGate = false
   passageSide = 0
   crushDebt.clear()
+  elitesSpawned = 0
   // The run's own clock and id space. `clock` drives the crowd's idle wobble
   // and the flyers' sway, so carrying it across stages made the same seed
   // replay a stage differently depending on how long the previous run lasted.
@@ -756,7 +761,8 @@ const streamTrack = (): void => {
             swayPhase: Math.random() * Math.PI * 2,
             hold: 0,
             hitCd: 0,
-            sweepCd: 0, sweepSpan: 0, sweepDir: 1,
+            sweepCd: 0, sweepSpan: 0, sweepDir: 1, sweepTold: false,
+            kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
             elite: false
           })
         }
@@ -804,10 +810,19 @@ const streamTrack = (): void => {
           // First sweep on a full cycle, so the walk in is not also a wind-up:
           // the player gets the whole approach before anything is thrown.
           sweepCd: ELITE_SWEEP_CD,
+          sweepTold: false,
           sweepSpan: ELITE_SWEEP_CD,
           sweepDir: Math.random() < 0.5 ? -1 : 1,
+          // Which fight this one is. Below stage 4 it is always the scythe the
+          // tutorial taught; from there it comes out of the pool.
+          kind: minibossKindFor(stage.value, elitesSpawned),
+          lane: Math.random() < 0.5 ? -1 : 1,
+          fuse: 0,
+          reload: 0,
+          kindTicks: 0,
           elite: true
         })
+        elitesSpawned++
         pushFx({ kind: 'eliteSpawn', x: 0, y: e.y })
         break
       }
@@ -902,27 +917,44 @@ export const steerOnly = ref(false)
 /** The crowd's centre: forward at the stage's pace, sideways after the thumb. */
 const stepAnchor = (dt: number): void => {
   const forward = phase.value === 'run' && !steerOnly.value ? stageSpeed(stage.value) : 0
-  anchorY += forward * dt
-
-  // A holding elite is a WALL. The crowd stops at it and has to shoot it down.
+  // A holding elite DRAGS the road down to a crawl. It does not stop it.
   //
-  // This is the difference between a landmark and a decoration, and it is the
-  // only version of the rule that survives contact with the rest of the game:
-  // an elite that merely tracked the crowd would be dragged forward through
-  // every gate bank behind it, eating the rounds meant for the doors for nine
-  // seconds. Blocking instead means it defends the ground it was placed on,
-  // which is the ground the generator cleared 12 units of road in front of.
+  // It defends the ground it was placed on — an elite that merely tracked the
+  // crowd would be pulled back through every gate bank behind it, eating the
+  // rounds meant for the doors — but it defends it by making the last few units
+  // of road take a long time, not by switching the run off. See
+  // `eliteDragFor`: the whole point is that the player can always see they are
+  // still moving, because a stopped runner reads as a hung game rather than as
+  // a fight, and the players it happened to were losing three to seven seconds
+  // of that.
   //
-  // It is never a soft-lock: `ELITE_HOLD_MAX` breaks the hold, and a broken
-  // hold walks past exactly as before. Worst case a stuck player waits nine
-  // seconds and pays in survivors — a cost, not a wall.
+  // The nearest holding elite wins; a second one further up cannot compound the
+  // slow.
+  let drag = 1
   if (phase.value === 'run') {
     for (const f of foes) {
       if (!f.elite || f.dead || f.hold <= 0) continue
-      const stopAt = f.y - ELITE_HOLD_AHEAD
-      if (anchorY > stopAt) anchorY = Math.max(anchorY - forward * dt, stopAt)
+      if (f.y < anchorY) continue
+      drag = Math.min(drag, eliteDragFor(f.y - anchorY))
     }
   }
+
+  anchorY += forward * drag * dt
+
+  // There is NO hard floor any more, and that is deliberate.
+  //
+  // A backstop at the elite's body looks harmless — the leash should expire long
+  // before a crawling crowd covers the distance — but it is not, because the
+  // elite CLOSES. It walks down the lane while the crowd creeps up it, so the
+  // gap shuts from both ends and the block line always arrives. Measured with a
+  // backstop still in place, the crowd stood still for 1.9 seconds.
+  //
+  // So the drag is the whole mechanic: at `ELITE_DRAG_MIN` the road never stops,
+  // the elite is in the firing line for as long as the leash allows, and a squad
+  // that cannot kill it inches past paying in bodies. Contact is handled where
+  // every other foe's is — the elite displaces and bites the crowd it is
+  // standing in, which is a cost the player can see and steer against, rather
+  // than a number that stops going up.
 
   // Critically-damped-ish approach. Snappy enough to feel direct, soft enough
   // that the crowd has mass.
@@ -943,14 +975,20 @@ const spawnBoss = (): void => {
   // stage's test; stage 1's is its curtain call, and a first-time player has to
   // win it. Difficulty and relief still apply on top, so a player who has been
   // struggling meets an even softer one.
-  const base = stage.value <= 1
+  // The opening stages' cut is applied to BOTH prices, the tutorial's own and
+  // the general curve, so stage 1's victory lap gets easier along with the rest
+  // rather than being the one boss that ignored the onboarding pass.
+  const base = (stage.value <= 1
     ? tutorialBossHp()
-    : BOSS_BASE_HP * bossHpScale(stage.value)
+    : BOSS_BASE_HP * bossHpScale(stage.value)) * earlyBossHpMul(stage.value)
   const hp = Math.max(
     stage.value <= 1 ? 1 : 60,
     Math.round(base * difficultyFactor() * hpRelief)
   )
   boss = {
+    kind: bossKindFor(stage.value),
+    attacks: 0,
+    summonCd: 0,
     design: bossDesign(stage.value),
     x: 0,
     y: track.bossY,
@@ -1032,6 +1070,8 @@ const spawnBoss = (): void => {
         sweepCd: 0,
         sweepSpan: 0,
         sweepDir: 1,
+        sweepTold: false,
+        kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
         elite: false
       })
     }
@@ -1341,6 +1381,26 @@ const nearCrowd = (x: number, y: number, pad: number): boolean => {
  * touching (it used to bank ~2 s of kills on approach and spend the lot on the
  * first frame of contact), and the carry is capped at one kill.
  */
+/**
+ * How far out along an obstacle counts as its EDGE rather than its face.
+ *
+ * Measured as a fraction of the half-width the contact test actually uses, so it
+ * means the same thing on every shape in the game — and that is the whole reason
+ * it is expressed this way. The first two attempts were absolute:
+ *
+ *   "the shallower overlap axis is X" — correct for a crate or a boulder, and
+ *     catastrophic for a gate pillar, which is narrow and deep, so EVERY contact
+ *     with one resolved as sideways and the pillar stopped costing anything.
+ *   "within one survivor's width of the edge" — same failure, for the same
+ *     reason: a pillar is barely wider than that, so all of it was edge.
+ *
+ * A pillar is the one obstacle the game explicitly tells the player to avoid,
+ * and a bank is only a commitment because running the middle costs. Asking how
+ * far along the obstacle the survivor is keeps that: dead centre is the face, the
+ * outer quarter is the edge, whatever the thing's absolute size.
+ */
+const GLANCE_EDGE = 0.72
+
 const crushDebt = new Map<number, number>()
 
 /** @returns true when at least one survivor died on this grinder this frame. */
@@ -1367,9 +1427,50 @@ const grindAgainst = (
   for (const u of units) {
     if (u.dying > 0) continue
     const dx = u.x - c.x
+    const dy = u.y - c.y
     const overlapX = c.halfW + UNIT_R - Math.abs(dx)
-    if (overlapX <= 0) continue
-    if (Math.abs(u.y - c.y) > c.halfH + UNIT_R) continue
+    const overlapY = c.halfH + UNIT_R - Math.abs(dy)
+    if (overlapX <= 0 || overlapY <= 0) continue
+
+    // ── A CLIP IS NOT A CRASH ──
+    //
+    // Which axis is shallower says how the survivor got here, and the two are
+    // completely different mistakes.
+    //
+    //   overlapY smaller → they are deep inside the thing's WIDTH and only just
+    //     inside its depth: they drove into its face. That is running into a
+    //     wall, and it costs.
+    //   overlapX smaller → they are level with it and only just inside its
+    //     edge: they swept sideways into it. That is clipping a corner while
+    //     steering, and it should cost NOTHING.
+    //
+    // Both used to bill identically, which made a side sweep across a crate or
+    // a barricade delete a whole squad — a run ended by a thumb travelling a
+    // few pixels too far, with no way to read that it was about to happen. The
+    // survivor slides around the edge and carries on instead, which is what the
+    // shove below already did for everyone the kill budget could not reach.
+    //
+    // It cannot be exploited into free passage: going AROUND an obstacle is the
+    // legitimate answer to one, and anybody trying to go THROUGH is resolving on
+    // the other axis and paying for it.
+    // WHERE ALONG the obstacle they are, which is the same thing as asking how
+    // they got here. Out at the edge is a survivor who swept sideways into it
+    // while steering; near the middle is one who drove at its face.
+    //
+    // Both used to bill identically, which made a side sweep across a crate or a
+    // barricade delete a whole squad — a run ended by a thumb travelling a few
+    // pixels too far, with no way to read that it was about to happen. The
+    // survivor slides around and carries on instead, which is what the shove
+    // below already did for everyone the kill budget could not reach.
+    //
+    // It cannot be exploited into free passage: going AROUND an obstacle is the
+    // legitimate answer to one, and anybody aiming THROUGH it is by definition
+    // near its middle and paying for it.
+    if (Math.abs(dx) > (c.halfW + UNIT_R) * GLANCE_EDGE) {
+      const slide = Math.sign(dx) || 1
+      u.x = Math.max(-EDGE_X, Math.min(EDGE_X, u.x + slide * overlapX))
+      continue
+    }
 
     // A new contact opens at `bite` kills — touching something solid costs a
     // survivor outright — and a continuing one accrues at the crowd-proportional
@@ -1397,6 +1498,9 @@ const grindAgainst = (
     // never the anchor keeps the player's steering authoritative, and the shove
     // is clamped to the road so a pillar near a rail squeezes the crowd along
     // the barrier rather than pushing survivors over it.
+    //
+    // This is the HEAD-ON overflow — a glancing contact never reaches here, it
+    // returned above.
     const dir = Math.sign(dx) || 1
     u.x = Math.max(-EDGE_X, Math.min(EDGE_X, u.x + dir * overlapX))
   }
@@ -1525,6 +1629,25 @@ let shieldEaten = 0
 let shieldUntilMs = 0
 
 /** Is the shield holding right now? Read by the HUD and the loss funnel. */
+/**
+ * Is something big about to land on the crowd?
+ *
+ * True from the moment an attack has picked its ground until it lands: the boss
+ * once it has aimed, and any elite inside its own wind-up. Drives the corner
+ * warning badge, and lives HERE rather than in the scene because it is a
+ * question about the world, and because a predicate the HUD owns privately is a
+ * predicate nothing can test.
+ *
+ * Deliberately covers both attackers. Their in-world tells differ — a falling
+ * rock, a winding blade — but "am I about to be hit" is one question, and
+ * answering it in two different places would defeat the point of having one
+ * fixed place to look.
+ */
+export const attackIncoming = (): boolean => {
+  if (boss && !boss.dead && boss.aimed && boss.slamCd > 0) return true
+  return foes.some((f) => f.elite && !f.dead && f.sweepCd > 0 && f.sweepCd <= ELITE_TELEGRAPH)
+}
+
 export const shieldActive = (): boolean => shieldUntilMs > Date.now()
 /** Ms of protection left, for the ring on the button. */
 export const shieldLeftMs = (): number => Math.max(0, shieldUntilMs - Date.now())
@@ -2304,8 +2427,16 @@ const stepFoes = (dt: number): void => {
     // The hold starts when the crowd arrives, not when the elite spawns: the
     // walk in is not the fight, and spending the leash on an empty road is how
     // an elite would break off before the player ever reached it.
+    // Engaged from `ELITE_DRAG_LEAD`, which is where the road starts winding
+    // down — NOT from the old block line 2.4 units out.
+    //
+    // That distinction is load-bearing now the elite drags rather than blocks: a
+    // crawling crowd may never cover the last two units at all, so a leash that
+    // only started there would never start, and the "it is never a soft-lock"
+    // guarantee would quietly become false. Starting it where the slow starts
+    // means the leash bounds exactly the window the player is being slowed for.
     const engaged = f.elite && f.hold > 0 && phase.value === 'run'
-      && f.y - anchorY <= ELITE_HOLD_AHEAD + 0.35
+      && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
     if (engaged) {
       f.hold -= dt
       // It gives no ground and takes none. `stepAnchor` stops the crowd at
@@ -2344,12 +2475,34 @@ const stepFoes = (dt: number): void => {
       // The arc's direction is chosen when the WIND-UP starts, not when it
       // lands, so the telegraph can show which way it is coming from. A tell
       // that only becomes true on impact is not a tell.
-      const winding = f.sweepCd <= ELITE_TELEGRAPH
       f.sweepCd -= dt
-      if (!winding && f.sweepCd <= ELITE_TELEGRAPH) f.sweepDir = -f.sweepDir
+      // Announce the swing once, and never let one through unannounced.
+      //
+      // Asked as "has this swing been told yet", NOT as "did the cooldown cross
+      // the telegraph this frame". The cooldown only ticks while the elite is in
+      // range, so one that arrived already inside its own telegraph crossed
+      // nothing and swung out of nowhere — which is the attack players reported
+      // not being able to see. The window is also EXTENDED to a full telegraph
+      // when it is short, because a tell the player has no time to answer buys
+      // nothing.
+      if (!f.sweepTold && f.sweepCd <= ELITE_TELEGRAPH) {
+        f.sweepTold = true
+        f.sweepDir = -f.sweepDir
+        f.sweepCd = Math.max(f.sweepCd, ELITE_TELEGRAPH)
+        // The blade is drawn winding up across the ground it is about to cut,
+        // for the same reason the boss drops a rock: an arc that only exists on
+        // the frame it lands is not a tell, it is an explanation afterwards.
+        pushFx({
+          kind: 'sliceCast', x: f.x, y: f.y,
+          reach: ELITE_SWEEP_REACH, dir: f.sweepDir,
+          ttl: f.sweepCd
+        })
+      }
       if (f.sweepCd <= 0) {
         f.sweepSpan = ELITE_SWEEP_CD
         f.sweepCd = f.sweepSpan
+        // The next swing owes its own tell.
+        f.sweepTold = false
         // A light body throws itself along the arc; a heavy one plants and
         // turns. Same event, and the sim owns it, so the lunge and the hit can
         // never disagree.
@@ -2382,9 +2535,13 @@ const stepFoes = (dt: number): void => {
         )
         // …with `BOSS_MIN_KILL` under it, so a sweep still reads as a sweep
         // against the small crowd a share of which rounds to one body.
+        // Same cut as the boss's slam, and for the same reason: an elite is the
+        // first big thing a beginner meets, and it is the one they are most
+        // likely to meet without having understood the wind-up yet.
+        const sweepCut = earlyBigHitMul(stage.value)
         let budget = Math.max(
-          BOSS_MIN_KILL,
-          Math.ceil(squadCount.value * sweepShare * slamRelief)
+          Math.max(1, Math.round(BOSS_MIN_KILL * sweepCut)),
+          Math.ceil(squadCount.value * sweepShare * slamRelief * sweepCut)
         )
         const reachable: Unit[] = []
         for (const u of units) {
@@ -2894,6 +3051,18 @@ const stepBoss = (dt: number): void => {
     const lead = b.charging ? CHARGED_LEAD : 0.35
     b.slamX = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead))
     b.slamY = anchorY
+    // Something falls out of the sky onto the marked ground, and it takes
+    // exactly as long to get there as the swing does. The ring alone was not
+    // being seen — the player is watching the boss or their own thumb, never the
+    // patch of road they are about to be standing on.
+    pushFx({
+      kind: 'meteorCast',
+      x: b.slamX,
+      y: b.slamY,
+      radius: slamRadiusFor(b.slams, b.charging),
+      ttl: Math.max(0.15, b.slamCd),
+      charged: b.charging
+    })
   }
 
   if (b.slamCd > 0) return
@@ -2928,17 +3097,27 @@ const stepBoss = (dt: number): void => {
   // no amount of enemy HP relief ever touches.
   // Stage 1 pays a token (see `TUTORIAL_SLAM_FRACTION`): its boss swings so the
   // player learns the shape, not so it takes the run off them.
-  const slamShare = stage.value <= 1
+  // `earlyBigHitMul` on top of everything else: the health cuts shorten the
+  // fight, this makes LOSING it survivable. A first-timer who cannot dodge yet
+  // has to come out of a boss fight with a squad, because the fight is where
+  // they learn what the telegraph meant.
+  const slamShare = (stage.value <= 1
     ? TUTORIAL_SLAM_FRACTION
     : Math.min(
       SLAM_FRACTION_MAX,
       SLAM_MAX_FRACTION * endlessPressure(stage.value)
-    ) * slamRelief
+    ) * slamRelief) * earlyBigHitMul(stage.value)
   // `BOSS_MIN_KILL` is the floor: the swing the whole stage builds up to may not
   // land on a thinned-out crowd and tip over a single survivor. It is still
   // bounded by the ring — nothing outside the arc is billed for being small.
+  // The FLOOR is cut too, and it has to be: at a small crowd the floor is the
+  // whole swing, so trimming only the share would have left the opening bosses
+  // hitting a thinned-out squad exactly as hard as before.
   let budget = Math.max(
-    stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL,
+    Math.max(1, Math.round(
+      (stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL)
+      * earlyBigHitMul(stage.value)
+    )),
     Math.ceil(squadCount.value * slamShare)
   )
   for (const u of units) {
@@ -2991,6 +3170,21 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
     // The guard picks its own target, here, at the moment the phase turns —
     // so `stepBoss` must not re-aim it a frame later on stale input.
     b.aimed = true
+    // …and it announces itself, exactly as the ordinary swing does.
+    //
+    // This is a SECOND path that arms a slam, and it used to arm one silently:
+    // `stepBoss` only casts when it is the thing doing the aiming, so the swing
+    // a guard phase turns into landed with nothing falling out of the sky. It is
+    // also the swing the player is least ready for, arriving on the beat their
+    // fire stopped working.
+    pushFx({
+      kind: 'meteorCast',
+      x: b.slamX,
+      y: b.slamY,
+      radius: slamRadiusFor(b.slams, b.charging),
+      ttl: SLAM_TELEGRAPH,
+      charged: b.charging
+    })
     slowHoldMs = 320
     pushFx({ kind: 'bossRage', x: b.x, y: b.y, stage: b.guarded })
   }

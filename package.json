@@ -1,6 +1,6 @@
 {
   "name": "survivalist",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,6 +24,7 @@
     "validated-build": "vue-tsc -b && vite build",
     "type-check": "vue-tsc --build",
     "perf:ab": "node scripts/perf-ab.mjs",
+    "perf:play": "node scripts/perf-play.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

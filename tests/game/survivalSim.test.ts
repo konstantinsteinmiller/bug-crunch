@@ -240,7 +240,12 @@ describe('everything you failed to destroy kills you', () => {
 
   it('kills survivors that walk into a live barricade', async () => {
     const game = await importGame()
-    game.startStage(1)
+    // Stage 4, not stage 1: the opening three stages now carry no barricades
+    // and no boulders at all, so a beginner cannot lose a run to scenery they
+    // have not been taught to read (see `earlyObstacleKeep`). Stage 4 is where
+    // hard obstacles are introduced, so it is the first road that can answer a
+    // question about them.
+    game.startStage(4)
 
     const mark = swerveIntoFirst(game, -GATE_LEAF_X, () => game.getBarricades()[0])
     expect(mark, 'no barricade streamed in').not.toBeNull()

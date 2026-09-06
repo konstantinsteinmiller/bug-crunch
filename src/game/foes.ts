@@ -1,3 +1,4 @@
+import { earlyFoeHpMul } from '@/game/survival'
 /**
  * ─── The cast that wants your crowd ─────────────────────────────────────────
  *
@@ -88,7 +89,8 @@ export const foeRoster = (stage: number): string[] => {
  * gates without shooting them stalls out around stage 5, which is precisely the
  * moment the mechanic is supposed to click.
  */
-export const foeHpScale = (stage: number): number => 1 + (stage - 1) * 0.34
+export const foeHpScale = (stage: number): number =>
+  (1 + (stage - 1) * 0.34) * earlyFoeHpMul(stage)
 
 /**
  * Boss health scaling.

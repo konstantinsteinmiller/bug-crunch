@@ -28,7 +28,9 @@ export default {
     'best': 'Kỷ lục {n}',
     'boss': 'Trùm',
     'miniboss': 'Trùm nhỏ',
-    'fireRate': 'Tốc độ'
+    'fireRate': 'Tốc độ',
+    'incoming': 'Sắp bị tấn công!',
+    'dodge': 'Né'
   },
 
   'tutorial': {

@@ -28,7 +28,9 @@ export default {
     'best': '최고 {n}',
     'boss': '보스',
     'miniboss': '중간 보스',
-    'fireRate': '연사'
+    'fireRate': '연사',
+    'incoming': '공격이 온다!',
+    'dodge': '회피'
   },
 
   'tutorial': {

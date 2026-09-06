@@ -28,7 +28,9 @@ export default {
     'best': 'Rekor {n}',
     'boss': 'Bos',
     'miniboss': 'Mini Bos',
-    'fireRate': 'Laju'
+    'fireRate': 'Laju',
+    'incoming': 'Serangan datang!',
+    'dodge': 'Hindari'
   },
 
   'tutorial': {

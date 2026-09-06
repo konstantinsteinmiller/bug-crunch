@@ -28,7 +28,9 @@ export default {
     'best': 'Recorde {n}',
     'boss': 'Chefe',
     'miniboss': 'Minichefe',
-    'fireRate': 'Ritmo'
+    'fireRate': 'Ritmo',
+    'incoming': 'Ataque a caminho!',
+    'dodge': 'Desvie'
   },
 
   'tutorial': {

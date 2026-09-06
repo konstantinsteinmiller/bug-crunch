@@ -46,7 +46,9 @@ export default {
     'miniboss': 'Miniboss',
     // Live fire-rate chip. It sits in a HUD pill next to a number, so every
     // locale keeps this to ~6 characters.
-    'fireRate': 'Rate'
+    'fireRate': 'Rate',
+    'incoming': 'Incoming attack!',
+    'dodge': 'Dodge'
   },
 
   // ─── Control hints ────────────────────────────────────────────────────────

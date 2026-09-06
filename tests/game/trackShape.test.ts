@@ -9,6 +9,7 @@ import {
   minibossHp,
   minRateCrates,
   tutorialBossHp,
+  gateBandFor,
   MIN_RUN_GAP,
   SUB_EARLIEST,
   MINIBOSS_STAGE_THIRD,
@@ -26,6 +27,7 @@ import {
   BOSS_BASE_HP, bossGuardGates, gateMulOpen, SLAM_MAX_FRACTION, TUTORIAL_SLAM_FRACTION
 } from '@/game/survival'
 import {
+  CRATE_R,
   CROWD_MAX_R,
   GATE3_DIVIDER_X,
   GATE3_LEAF_HALF,
@@ -33,7 +35,8 @@ import {
   GATE_LEAF_HALF,
   GATE_LEAF_X,
   GATE_SUB_MAX,
-  LANE_HALF
+  LANE_HALF,
+  ROCK_H
 } from '@/game/survival'
 
 // ─── The shape of a stage ───────────────────────────────────────────────────
@@ -449,6 +452,124 @@ describe('the road is always runnable', () => {
         ).toBeGreaterThanOrEqual(Math.min(MIN_RUN_GAP, 2 * CROWD_MAX_R) - 1e-6)
       }
     }
+  })
+})
+
+describe('a bank owns the road either side of it', () => {
+  // Reported from stage 12: two boulders sat just past the left leaf of a bank,
+  // the second hidden behind that leaf's own curtain and number, and the run
+  // lost 90 % of its squad to a thing it never had the chance to see.
+  //
+  // Two faults in one report, and they need different sized answers.
+  //
+  // A BOULDER cannot be shot. Meeting one in a leaf's exit path is not a
+  // routing question — the crowd comes out of a door funnelled to that leaf's
+  // width and pinned to its x, with no steering left — so it is a toll, and the
+  // game already has a hazard for "you chose wrong" that the player can read a
+  // long way out. Its band is wide, and asymmetric: the exit needs more road
+  // than the approach, because on the way in the crowd is still spread and
+  // still steerable.
+  //
+  // A CRATE can always be shot, and shooting it pays. The complaint there was
+  // that one drawn half-behind a gate "just looks like a bug" — a readability
+  // fault, which stops the moment the two props do not overlap on screen. Its
+  // band is therefore small and symmetric. Sizing it like a boulder's was
+  // measured and reverted: it moved a third of every crate on the road and cost
+  // the benchmark player stage 4 outright.
+  //
+  // Both are enforced by `clearGateBands`, a post-pass over the finished road —
+  // the only place that can see every bank, including the ones `fillGateGaps`
+  // adds after the obstacles were placed.
+  const bandOf = (stage: number, y: number, kind: 'rocks' | 'crates'): [number, number] =>
+    gateBandFor(stage, y, kind)
+
+  it('keeps every boulder out of every gate band, at every stage', () => {
+    for (const stage of STAGES) {
+      const t = track(stage)
+      const banks = t.events.filter((e) => e.kind === 'gates').map((e) => e.y)
+      for (const e of t.events) {
+        // A passage rib is rocks laid deliberately INTO a bank: it is the wall
+        // that makes a door a corridor, the player reads it as one shape with
+        // the gate, and it is the one thing the band does not apply to.
+        if (e.kind !== 'rocks' || e.passage) continue
+        const half = ROCK_H / 2
+        for (const y of banks) {
+          const [lo, hi] = bandOf(stage, y, 'rocks')
+          expect(
+            e.y + half <= lo + 1e-6 || e.y - half >= hi - 1e-6,
+            `stage ${stage}: boulders @${e.y} sit inside the band of the bank @${y} `
+            + `[${lo.toFixed(2)}, ${hi.toFixed(2)}]`
+          ).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('keeps every crate from being drawn on top of a gate', () => {
+    for (const stage of STAGES) {
+      const t = track(stage)
+      const banks = t.events.filter((e) => e.kind === 'gates').map((e) => e.y)
+      for (const e of t.events) {
+        if (e.kind !== 'crates') continue
+        for (const y of banks) {
+          const [lo, hi] = bandOf(stage, y, 'crates')
+          expect(
+            e.y + CRATE_R <= lo + 1e-6 || e.y - CRATE_R >= hi - 1e-6,
+            `stage ${stage}: crates @${e.y} overlap the bank @${y} `
+            + `[${lo.toFixed(2)}, ${hi.toFixed(2)}]`
+          ).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('moves a boulder field as one body, keeping its ranks offset', () => {
+    // The 3.2 units between a field's two ranks ARE the beat — commit to a
+    // line, then change it. Moving one rank out of a band and leaving the other
+    // would collapse that into a single double-thick wall, which is a harder
+    // hazard than the one that was authored.
+    for (const stage of STAGES) {
+      const fields = new Map<number, number[]>()
+      for (const e of track(stage).events) {
+        if (e.kind !== 'rocks' || e.field === undefined) continue
+        const ys = fields.get(e.field) ?? []
+        ys.push(e.y)
+        fields.set(e.field, ys)
+      }
+      for (const [id, ys] of fields) {
+        if (ys.length < 2) continue
+        ys.sort((p, q) => p - q)
+        expect(
+          ys[1]! - ys[0]!,
+          `stage ${stage}: field ${id} ranks drifted to ${(ys[1]! - ys[0]!).toFixed(2)} apart`
+        ).toBeCloseTo(3.2, 2)
+      }
+    }
+  })
+
+  it('never shoves an obstacle off either end of the road', () => {
+    // The sweep may only ever move something to a place a player will reach.
+    // Before the first beat the run has not started; past the arena is the boss.
+    for (const stage of STAGES) {
+      const t = track(stage)
+      for (const e of t.events) {
+        if (e.kind !== 'rocks' && e.kind !== 'crates') continue
+        expect(e.y, `stage ${stage}: ${e.kind} pushed to ${e.y}`).toBeGreaterThanOrEqual(6)
+        expect(e.y, `stage ${stage}: ${e.kind} pushed to ${e.y}`).toBeLessThanOrEqual(t.arenaY - 4)
+      }
+    }
+  })
+
+  it('moves the FILLER bank rather than the beat somebody authored', () => {
+    // `fillGateGaps` drops banks into long quiet stretches for pacing. On stage
+    // 4 its filler landed dead centre at y=39, one unit from the rate crate the
+    // stage deliberately parks past the chicane at y=38 — and the sweep then
+    // correctly, and disastrously, moved the CRATE. That crate is the whole
+    // reason the chicane spits the crowd out on the right; shifting it cost the
+    // benchmark run stage 4. A filler is pacing, not intent: it yields.
+    const t = track(4)
+    const crate = t.events.find((e) => e.kind === 'crates' && e.crates[0]?.kind === 'rate')
+    expect(crate?.y, 'stage 4 keeps its authored rate crate at y=38').toBe(38)
   })
 })
 
