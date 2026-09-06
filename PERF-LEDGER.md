@@ -79,6 +79,103 @@ heavier scene (boss + peak wave + full VFX), or a player report says otherwise.
 
 ---
 
+## 2026-09-06 — the harness was measuring STAGE 1 ❌ HARNESS BUG, FIXED
+
+The sibling of the tutorial bug below, one layer further in. A fresh profile is
+a fresh save, and a fresh save resumes on **stage 1**: three survivors, one
+gate, a handful of props, no miniboss, no boss. Perfectly good for pricing the
+opening; useless for anything whose cost scales with what is on the road —
+monster counts, bullet counts, particle budgets, the sprite cache. Two arms
+compared that way are two nearly empty roads.
+
+`perf-play.mjs` grew `--stage <n>`, which writes a plausible save (progress,
+coins, a few upgrade levels) into `localStorage` via
+`Page.addScriptToEvaluateOnNewDocument` — **before** any app script runs. Written
+post-boot it races the state layer's own debounced persist and loses, and the
+arm then measures the tutorial while the log claims stage 22. Both arms get the
+identical seed, and the child process re-spawn forwards the flag, so an arm
+cannot silently fall back to stage 1.
+
+```bash
+pnpm perf:play --stage 22 --a "perf=<thing>-legacy" --b ""
+```
+
+---
+
+## 2026-09-06 — pool monsters and rounds ✅ KEPT (allocation), ❌ null-to-negative on time
+
+**Claim.** A late road fields packs of dozens with a summoner adding waves, and
+a gatling emits on the order of 200 rounds/s. All of them live under a second.
+Recycle the structs instead of allocating a fresh one per spawn, and swap-and-pop
+instead of `splice`.
+
+### What the frame-level harness said: nothing, and it could not have
+
+```
+pnpm perf:play --stage 22 --a "perf=pool-legacy" --b "" --reps 4
+  workP95      A 15.30 -> B 16.95  (+10.8%)   paired wins for B 1/4
+  ranges       A [10.8, 55.4]   B [10.8, 24.8]     heavily overlapping
+  frames/rep   235 … 1119        draws/frame 86 … 221
+```
+
+Unusable, and the reason is structural rather than statistical: the sine steer
+sends each run through different gates, so one arm reaches a boss with 600
+survivors and the next wipes at 40 %. That difference is worth several
+milliseconds a frame; the change under test is worth microseconds. **A frame is
+100–220 draw calls and this change lives entirely inside `step()`** — the signal
+was never going to clear that floor.
+
+### Where the claim actually lives: `step()`, one arm per PROCESS
+
+In-process interleaving with `vi.resetModules()` was tried first and is
+worthless here — the arms share a heap and a JIT, and the previous arm's module
+graph stays alive behind the new one. It returned **6/6 wins** for pooling on one
+run and **2/6 losses** on each of the next two. Same lesson `perf-play` learned
+for browsers: one measurement, one process.
+
+Stage 22, 600 survivors, 8 000 steps, forced GC before the clock, 5 reps
+interleaved with the order flipped each rep:
+
+```
+                 median      paired wins for pooled
+  step time    533 -> 583 ms      1/5      (+9.3%)
+  heap growth   43.5 -> 32.5 MB   4/5      (-25.3%)
+```
+
+**Verdict: kept.** It does what it claims — a quarter less garbage per stage —
+and the time it costs is not a real cost: 8 000 steps at 583 ms is **0.073 ms a
+step against a 6–20 ms frame**, so +9 % of the simulation is +0.006 ms of the
+frame, three orders of magnitude under the draw work beside it. Allocation is
+the lever that moves a *hitch*, and a hitch is what a late stage actually
+suffers from. Both ranges overlap; the time number is a null-to-negative result
+and is recorded as one rather than argued away.
+
+### The finding worth more than the verdict
+
+The first implementation reset a recycled body with
+`Object.assign(f, FOE_BLANK)` and measured **6.3 % SLOWER than allocating
+fresh** — the pool paying for its own saving twice over. `Object.assign` walks
+the source's own enumerable keys through a generic path, and against a
+29-field template that costs more than V8 spends building a literal of known
+shape. Written out as straight-line stores (`resetFoe`), the same experiment
+became the numbers above.
+
+*Do not reach for `Object.assign` in a pooled reset.* If it is used for safety —
+so a field added to the struct cannot be forgotten — buy that safety with a
+TEST instead: `pooling.test.ts` compares `resetFoe`'s output against the typed
+`FOE_BLANK` key by key, which catches the same mistake and costs nothing at
+runtime.
+
+### Also true, and the reason this was not reverted outright
+
+Pooling is usually a null result in a modern engine — a young object is cheap to
+allocate and cheaper to scavenge — and this project should expect that answer
+next time it is proposed for something smaller. It was kept here because the
+population is genuinely unbounded in the player's own success, not because the
+technique is generally worth it.
+
+---
+
 ## 2026-09-05 — the harness was measuring the TUTORIAL ❌ HARNESS BUG, FIXED
 
 **Read this before trusting any number produced by `pnpm perf:ab` alone.**

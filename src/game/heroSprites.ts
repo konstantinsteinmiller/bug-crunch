@@ -4,6 +4,8 @@ import {
 import {
   INK, LINE, SHADE, SHADOW_DIR, footStep, bodyBob, weightShift, hipDrop, limb, gait
 } from '@/game/monsterKit'
+import { stripFrame } from '@/game/spriteStrip'
+import { spriteFor } from '@/game/art'
 
 /**
  * ─── The survivor ───────────────────────────────────────────────────────────
@@ -31,6 +33,15 @@ import {
 /** Frames per stride. Fourteen is the fewest that still reads as running. */
 const FRAMES = 14
 
+/**
+ * The run's gait: a short stance and a long swing, with both feet off the
+ * ground between one push-off and the next plant, and the swing boot folding
+ * high toward the seat. See the legs in `drawSurvivor`.
+ */
+const RUN_STANCE = 0.4
+/** How high the swing boot rises, as a fraction of the drawing's unit. */
+const RUN_LIFT = 0.42
+
 /** Baked frame size, px. A survivor is ~1.1 world units tall and the zoom tops
  *  out near 70 px/unit on a tablet, so 96 px is always downsampling. */
 const PX = 96
@@ -42,6 +53,20 @@ export const HERO_FOOT = PX * 0.52 + S
 export const HERO_HEIGHT = 2.05 * S
 /** Frame size, so the renderer can compute its blit rect. */
 export const HERO_PX = PX
+
+/**
+ * The feet line and the body height as FRACTIONS of the frame.
+ *
+ * A painted strip is this frame box at a different resolution, so the renderer
+ * measures its blit off the frame it was handed rather than off `PX` — the same
+ * contract `monsterSprites` keeps. For a baked frame these are algebraically
+ * what the pixel constants above give.
+ */
+export const HERO_FOOT_R = HERO_FOOT / PX
+export const HERO_HEIGHT_R = HERO_HEIGHT / PX
+
+/** The frame box's width:height. A painted panel is this box, scaled up. */
+export const HERO_FRAME_ASPECT = 1
 
 /** One stride, ms, at the reference speed. The renderer plays the strip faster
  *  or slower with the crowd. */
@@ -112,22 +137,50 @@ const drawSurvivor = (ctx: CanvasRenderingContext2D, s: number, t: number, o: Ou
   ctx.translate(sway, bob)
 
   // ── Legs ──
+  //
+  // A RUN seen from BEHIND, which is a different drawing from a side-view walk
+  // turned round. The stride runs INTO the screen, so nothing swings sideways:
+  // a foot that is forward is farther away and sits a touch higher, a foot
+  // that is behind is nearer and sits a touch lower, and the whole of the
+  // visible motion is the swing leg FOLDING UP — the boot rising toward the
+  // seat with its sole turned to the viewer while the other leg stands
+  // straight. The first version reused the side-view maths and put the stride
+  // on screen-x, which splayed the legs into a V and back again. At 30 px that
+  // passed for running; painted at full size it was a skater, and the painter
+  // copied it faithfully.
+  //
   // Hips are set narrow: a back view with wide hips reads as a duck.
   for (const [hipX, ph, seed] of [[-0.15, lp, 3], [0.15, rp, 9]] as const) {
-    const [fx, fy] = footStep(ph, 0.62 * s, 0.3 * s)
+    const [fx, fy] = footStep(ph, 0.62 * s, RUN_LIFT * s, RUN_STANCE)
+    /** 0 on the ground, 1 at the top of the swing. */
+    const lift01 = -fy / (RUN_LIFT * s)
     const drop = hipDrop(ph, 0.03) * s
     const hip: Pt = [hipX * s, 0.28 * s + drop]
-    const foot: Pt = [hipX * s * 0.9 + fx, 1.0 * s + fy]
+    // `fx` is travel along the road — depth — not across it. A folded leg
+    // drifts a little outward, which is what a knee does when it lifts.
+    const foot: Pt = [hipX * s * (1 + lift01 * 0.3), 1.0 * s - fx * 0.1 + fy]
     const span = Math.hypot(foot[0] - hip[0], foot[1] - hip[1])
     // Bones only fractionally longer than half the span — see `limb`'s note.
-    // Slack bones throw the knee sideways and the character walks like a mantis.
+    // Slack bones throw the knee sideways and the character walks like a
+    // mantis. A lifted leg has a short span and simply foreshortens, which is
+    // right: from behind, a folded leg IS shorter.
     const bone = Math.sqrt(0.1 * 0.1 * s * s + (span / 2) ** 2)
     limb(ctx, hip, foot, bone, bone, -Math.sign(hipX), trousers, seed, {
       width: 0.135 * s, taper: 0.72, outline: 0.035 * s, joint: 0.52
     })
-    // Boot: a wedge, so the leg ends ON the ground instead of in a point.
-    const boot = blob(foot[0], foot[1] - 0.02 * s, 0.12 * s, 0.075 * s, seed + 40, 0.12)
+    // Boot: on the ground a wedge, so the leg ends ON the ground instead of in
+    // a point. Lifted, the sole turns to the viewer and the boot grows taller
+    // and rounder — the one shape that says "this foot is in the air" at any
+    // size, and the thing that makes the eight panels of the reference eight
+    // different poses.
+    const bw = 0.12 * s * (1 + lift01 * 0.3)
+    const bh = 0.075 * s * (1 + lift01 * 1.2)
+    const boot = blob(foot[0], foot[1] - 0.02 * s, bw, bh, seed + 40, 0.12)
     cel(ctx, boot, steel, { shade: terminator(boot, SHADOW_DIR, SHADE, 0.14, seed) })
+    if (lift01 > 0.4) {
+      const sole = blob(foot[0], foot[1] - 0.01 * s, bw * 0.7, bh * 0.6, seed + 42, 0.1)
+      fillShape(ctx, sole, steel.deep)
+    }
     ink(ctx, boot, { width: LINE.fine * s, color: INK, seed: seed + 1, breakUp: 0.25 })
   }
 
@@ -238,6 +291,32 @@ const bakeFrame = (o: Outfit, i: number): HTMLCanvasElement => {
   return c
 }
 
+/**
+ * Draw one frame of an outfit into a `w x h` panel at the context's origin.
+ *
+ * The art bench's way in: the reference sheet a painter works over goes through
+ * the SAME transform `bakeFrame` uses, scaled to the panel, so a strip painted
+ * over it drops straight back in with the feet on the same line.
+ *
+ * Not used at run time.
+ */
+export const paintSurvivorFrame = (
+  ctx: CanvasRenderingContext2D,
+  outfit: number, i: number, frames: number, w: number, h: number
+): void => {
+  const o = OUTFITS[Math.abs(outfit) % OUTFITS.length]
+  if (!o) return
+  ctx.save()
+  ctx.translate(w / 2, h * 0.52)
+  // The MIDDLE of each panel's slice of the cycle, not its start. A painted
+  // strip shows panel `i` for the whole of [i/n, (i+1)/n), so its centre is
+  // the honest sample — and, with the run's swing peaking between two of the
+  // start-of-slice samples, sampling at the start put the boot's top in two
+  // consecutive panels and the painter returned the same pose twice.
+  drawSurvivor(ctx, S * (h / PX), ((i + 0.5) / frames) * HERO_CYCLE_MS, o)
+  ctx.restore()
+}
+
 /** Wall-clock budget for one bake slice, in ms. */
 const SLICE_MS = 6
 /**
@@ -305,8 +384,10 @@ const schedule = (): void => {
 }
 
 /** Ask for the outfits to be baked. Cheap, idempotent, safe every frame. */
-export const primeSurvivors = (): void => {
+export const primeSurvivors = (opts: { fetch?: boolean } = {}): void => {
   for (const o of OUTFITS) {
+    // The painted run cycle rides the same signal — see `primeMonsterSprites`.
+    if (opts.fetch !== false) spriteFor('hero', o.id)
     if (CACHE.has(o.id) || queue.includes(o) || building?.o === o) continue
     queue.push(o)
   }
@@ -363,9 +444,14 @@ export const survivorBakeProgress01 = (): number => {
 export const survivorFrame = (outfit: number, cycle01: number): HTMLCanvasElement | null => {
   const o = OUTFITS[Math.abs(outfit) % OUTFITS.length]
   if (!o) return null
+  const c01 = ((cycle01 % 1) + 1) % 1
+  // Paint wins when it is there; both strips cover exactly one stride, so one
+  // normalised position indexes either and the swap is seamless mid-step.
+  const paint = stripFrame('hero', o.id, HERO_FRAME_ASPECT, c01)
+  if (paint) return paint
   const frames = CACHE.get(o.id)
   if (!frames) return null
-  const i = Math.floor((((cycle01 % 1) + 1) % 1) * FRAMES) % FRAMES
+  const i = Math.floor(c01 * FRAMES) % FRAMES
   return frames[i] ?? null
 }
 

@@ -55,6 +55,21 @@ defineProps<{ show: boolean }>()
   flex-direction: column
   align-items: center
   gap: 0.1rem
+  // ─── How big the alarm is ──────────────────────────────────────────────────
+  //
+  // A TENTH OF THE SCREEN'S WIDTH, as a floor. This used to be `clamp(1.9rem,
+  // 8.5vw, 2.6rem)`, which is a phone rule that a desktop window silently
+  // repeals: 8.5vw only wins between roughly 360 px and 490 px of viewport, and
+  // above that the badge is pinned at 2.6rem — about **2 %** of a 1920 px
+  // screen, in the one corner a player is not looking at. The thing has to be
+  // caught in peripheral vision while the eyes are on the crowd, and peripheral
+  // vision reads SIZE before it reads shape or colour.
+  //
+  // The `vh` term is a guard, not a preference: 10vw on a landscape phone
+  // (844 x 390) is a badge a fifth of the screen tall, and this is an overlay on
+  // a fight, not the fight. It only ever binds where the viewport is much wider
+  // than it is tall, which is exactly where 10vw stops being modest.
+  --incoming-size: min(max(10vw, 1.9rem), 22vh)
   top: calc(clamp(2.6rem, 11vw, 3.6rem) + env(safe-area-inset-top, 0px))
   right: calc(clamp(0.4rem, 2.2vw, 0.8rem) + env(safe-area-inset-right, 0px))
   // Sized by its CONTENT, not by the glyph. The word under it is one short verb
@@ -70,13 +85,17 @@ defineProps<{ show: boolean }>()
   animation: incoming-pulse 0.42s ease-in-out infinite
 
 .incoming__glyph
-  width: clamp(1.9rem, 8.5vw, 2.6rem)
-  height: clamp(1.9rem, 8.5vw, 2.6rem)
+  width: var(--incoming-size)
+  height: var(--incoming-size)
   display: block
 
 .incoming__word
   font-weight: 900
-  font-size: clamp(0.55rem, 2.6vw, 0.72rem)
+  // Tied to the glyph rather than to the viewport, so the word never detaches
+  // from the triangle it belongs to. Floored at 0.55rem — the old minimum —
+  // because a caption that scales all the way down stops being legible before
+  // the glyph does.
+  font-size: max(0.55rem, calc(var(--incoming-size) * 0.28))
   letter-spacing: 0.08em
   text-transform: uppercase
   line-height: 1

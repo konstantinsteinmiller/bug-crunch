@@ -100,6 +100,16 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M8.85 19A2.15 2.15 0 1 1 13.15 19A2.15 2.15 0 1 1 8.85 19Z',
     'M15.45 19A2.15 2.15 0 1 1 19.75 19A2.15 2.15 0 1 1 15.45 19Z'
   ],
+  // The treasure chest: a domed lid over a banded box, the lid up a crack so a
+  // dark gap shows between the two, and a hasp bridging the gap in front. The
+  // lid overhangs the box by half a unit on each side, which is what makes it
+  // a chest rather than a barrel on a plinth at 16 px. Three sub-paths, all
+  // wound the same way, so the hasp merges into lid and box under nonzero.
+  'chest': [
+    'M2.5 10V8.6A5.6 5.6 0 0 1 8.1 3h7.8a5.6 5.6 0 0 1 5.6 5.6V10h-19Z',
+    'M3.5 11.6h17v7.9a1.5 1.5 0 0 1-1.5 1.5h-14a1.5 1.5 0 0 1-1.5-1.5v-7.9Z',
+    'M9.8 9.2h4.4v4.8H9.8Z'
+  ],
   'video': [
     'M2.3 8.9A2.8 2.8 0 0 1 5.1 6.1L12.1 6.1A2.8 2.8 0 0 1 14.9 8.9L14.9 15.1A2.8 2.8 0 0 1 12.1 17.9L5.1 17.9A2.8 2.8 0 0 1 2.3 15.1L2.3 8.9Z',
     'M19.29 8.67A1.4 1.4 0 0 1 21.5 9.81L21.5 14.19A1.4 1.4 0 0 1 19.29 15.33L16.76 13.53A1.1 1.1 0 0 1 16.3 12.63L16.3 11.37A1.1 1.1 0 0 1 16.76 10.47L19.29 8.67Z'
@@ -347,5 +357,28 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
   // through it rather than sitting on it as a second fill.
   'skull': [
     'M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Zm-3 8.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1Z'
+  ],
+
+  // ── The two weapons ────────────────────────────────────────────────
+  // Drawn to be told apart in the corner of the eye at 16px, which rules out
+  // detail: one is a POINTED vertical mass, the other a BLUNT bundle of three.
+  // They are the same silhouettes `weaponGlyph` paints on the road, so the box
+  // the player shoots and the badge that appears afterwards are one object.
+  //
+  // A shell with swept fins and a flame under it. The flame is a separate
+  // sub-path wound the same way, so it merges into the body rather than
+  // outlining against it.
+  'rocket': [
+    'M12 1.6c2.3 2.2 3.5 5 3.5 8.2v4.5h-7V9.8c0-3.2 1.2-6 3.5-8.2Zm0 4.2a1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z',
+    'M8.5 11.4 5.2 15a2 2 0 0 0-.5 1.3v2.1l3.8-2.2v-4.8Zm7 0 3.3 3.6a2 2 0 0 1 .5 1.3v2.1l-3.8-2.2v-4.8Z',
+    'M10.2 16.2h3.6l-1.8 6-1.8-6Z'
+  ],
+  // Three barrels over a receiver, with a crank on the side. The barrels are
+  // one contour with two counter-wound slots between them, so the bundle reads
+  // as three tubes rather than as one slab at any size.
+  'gatling': [
+    'M4.6 4.2h14.8v9.2H4.6V4.2Zm4.1 1.6H6.9v6h1.8v-6Zm6.6 0h-1.8v6h1.8v-6Z',
+    'M3 14.6h18a1.4 1.4 0 0 1 1.4 1.4v1.6A1.4 1.4 0 0 1 21 19H3a1.4 1.4 0 0 1-1.4-1.4V16A1.4 1.4 0 0 1 3 14.6Z',
+    'M9.4 19.8h5.2v2.6H9.4v-2.6Z'
   ]
 }

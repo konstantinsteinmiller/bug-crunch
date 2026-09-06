@@ -24,7 +24,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CROWD_MAX_R } from '@/game/survival'
 import {
   BOSS_POOL, CLAW_FURROWS, CLAW_SPACING, HEAL_EVERY, HEAL_FRACTION, HEAL_MAX_CASTS,
-  SUMMON_PER_WAVE, SUMMON_WAVES_MAX, THREAT_POOL_FROM_STAGE,
+  HEAL_MIN_GAP_S,
+  SUMMON_BUDGET, SUMMON_OPENING_CD, SUMMON_PER_WAVE, SUMMON_WAVES_MAX, SUMMON_WAVE_RAMP,
+  THREAT_POOL_FROM_STAGE, summonWaveSize,
   bossKindFor, clawFurrowHalfW, clawLaneXs, type BossKind
 } from '@/game/threats'
 import { drainFx, type FxEvent } from '@/use/useVfx'
@@ -261,6 +263,58 @@ describe('the healer actually heals, on its own clock', () => {
       .toBe(true)
   })
 
+  it('never lands two heals inside the minimum gap', async () => {
+    // Measured in SECONDS of fight rather than in casts, because that is what
+    // the bound is about: `HEAL_EVERY` counts casts, and anything that shortens
+    // the cadence — a guard gate re-arming the clock at `bossTelegraph` is the
+    // one that actually happens — shortens the gap with it. The cast count can
+    // be perfectly correct while the heals bunch up.
+    //
+    // Its own loop rather than `fight()` because the gap is a question about
+    // WHEN, and the shared helper flattens the fx of every tick into one list.
+    const game = await importGame()
+    game.startStage(HEALER_STAGE)
+    game.debugSkipToArena()
+    game.debugAddUnits(90)
+    for (let i = 0; i < 400 && game.phase.value !== 'boss'; i++) game.step(STEP_MS)
+    expect(game.phase.value, 'never reached the arena').toBe('boss')
+    drainFx()
+
+    const at: number[] = []
+    let ticks = 0
+    while (ticks < 6000 && game.phase.value === 'boss' && !game.getBoss()?.dead) {
+      // Held open, the file's usual way — see `SPENT`.
+      //
+      // A gap of ten seconds needs a fight of twenty to show up twice, and an
+      // ordinary one is not: left alone the crowd wipes, and kept alive it kills
+      // the boss instead. Either way the test failed on its own premise
+      // (`at.length > 1`) rather than on the property, which is the flake that
+      // teaches people to re-run a suite instead of reading it.
+      //
+      // Pinning the bar does NOT hide the thing under test: `bossHeal` is pushed
+      // on every heal whether or not the bar had room, so the CADENCE is still
+      // fully measured. What it does cost is the guard-gate path — no damage
+      // lands, so no gate turns — and that path is covered where it is actually
+      // enforced, by the invariant in `stepBoss` rather than by hoping a long
+      // fight happens to produce one.
+      const b = game.getBoss()
+      if (b) { b.hp = b.maxHp; b.guarded = SPENT; b.guard = 0 }
+      game.steerTo(game.anchor().x)
+      game.step(STEP_MS)
+      for (const e of drainFx()) if (e.kind === 'bossHeal') at.push(ticks)
+      ticks++
+    }
+
+    // Two is the premise: one heal cannot be too close to anything.
+    expect(at.length, `only ${at.length} heal(s) in the fight, so the gap is untested`)
+      .toBeGreaterThan(1)
+    for (let i = 1; i < at.length; i++) {
+      const gap = ((at[i]! - at[i - 1]!) * STEP_MS) / 1000
+      expect(gap, `heals ${i} and ${i + 1} landed ${gap.toFixed(2)} s apart`)
+        .toBeGreaterThanOrEqual(HEAL_MIN_GAP_S - STEP_MS / 1000)
+    }
+  })
+
   it('spends two casts on something else between every heal', async () => {
     const r = await fight({ stage: HEALER_STAGE, squad: 90, steer: () => 0, maxTicks: 6000 })
     const heals = of(r.fx, 'bossHeal').length
@@ -322,11 +376,63 @@ describe('the healer actually heals, on its own clock', () => {
 // ─── The summoner ───────────────────────────────────────────────────────────
 
 describe('the summoner is a wall with a budget', () => {
+  it('ramps the budget without changing what it adds up to', () => {
+    // The ramp covers the whole budget, or waves past its end fall back to the
+    // flat size and quietly re-add the bodies it was meant to remove.
+    expect(SUMMON_WAVE_RAMP.length, 'the ramp does not cover every wave')
+      .toBe(SUMMON_WAVES_MAX)
+    // The price follows the ramp rather than the other way round — see
+    // `SUMMON_BUDGET`. Asserted so a hand-written total cannot creep back in.
+    expect(SUMMON_BUDGET).toBe(SUMMON_WAVE_RAMP.reduce((a, b) => a + b, 0))
+    // The point of the ramp: the opening is smaller than the flat wave it
+    // replaced, and NOTHING ELSE IS BIGGER. Both halves matter — the first
+    // shape tried here bought a gentle opening with a heavier tail, which
+    // landed its extra bodies exactly when the crowd was least able to answer
+    // them and cost the summoner its "the wall ends" guarantee.
+    expect(summonWaveSize(1), 'the opening wave is not smaller than the flat size')
+      .toBeLessThan(SUMMON_PER_WAVE)
+    for (let n = 1; n <= SUMMON_WAVES_MAX; n++) {
+      expect(summonWaveSize(n), `wave ${n} is bigger than the flat size it replaced`)
+        .toBeLessThanOrEqual(SUMMON_PER_WAVE)
+    }
+  })
+
+  it('opens with a beat before the first wave', async () => {
+    // The measured failure: at one wave per `SUMMON_CD` from 1.4 s in, the whole
+    // budget was on the road inside nine seconds and an under-geared squad was
+    // gone in 8.5 s — against 17-29 s for every other kind at the same health.
+    // Asserted as the TIME the first wave lands, because that is the thing the
+    // player experiences; the constant it comes from is an implementation
+    // detail that a guard phase can and does override.
+    const game = await importGame()
+    game.startStage(SUMMONER_STAGE)
+    game.debugSkipToArena()
+    game.debugAddUnits(60)
+    for (let i = 0; i < 400 && game.phase.value !== 'boss'; i++) game.step(STEP_MS)
+    expect(game.phase.value, 'never reached the arena').toBe('boss')
+    drainFx()
+
+    let ticks = 0
+    let firstWaveAt = -1
+    while (ticks < 1200 && firstWaveAt < 0 && game.phase.value === 'boss') {
+      game.steerTo(0)
+      game.step(STEP_MS)
+      if (drainFx().some((e) => e.kind === 'summonWave')) firstWaveAt = ticks
+      ticks++
+    }
+    expect(firstWaveAt, 'no wave arrived at all').toBeGreaterThanOrEqual(0)
+    // +1: the wave fires DURING the step at that index, so that whole tick of
+    // simulated time has elapsed by the time it lands.
+    const seconds = ((firstWaveAt + 1) * STEP_MS) / 1000
+    expect(seconds, `the first wave landed ${seconds.toFixed(2)} s in`)
+      .toBeGreaterThanOrEqual(SUMMON_OPENING_CD - STEP_MS / 1000)
+  })
+
   it('fills the road with bodies instead of attacking', async () => {
     const r = await fight({ stage: SUMMONER_STAGE, squad: 60, steer: () => 0, maxTicks: 6000 })
     const waves = of(r.fx, 'summonWave')
     expect(waves.length, 'the summoner never summoned').toBeGreaterThan(0)
-    for (const w of waves) expect(w.count).toBe(SUMMON_PER_WAVE)
+    for (const w of waves) expect(w.count).toBe(summonWaveSize(w.wave))
     // It has no attack of its own. Nothing it does may ever arrive as one of the
     // boss's own swings — the pressure is the bodies, and if it also swung it
     // would simply be a meteor with adds.

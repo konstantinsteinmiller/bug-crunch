@@ -119,6 +119,21 @@ export const SKILL_READY_KEY = 'ts_skill_ready'
  */
 export const GUARD_HINT_KEY = 'ts_guard_hint_seen'
 
+/**
+ * The lever-puzzle primer has been shown.
+ *
+ * Its own flag for exactly the reason the guard hint has one: the weapon puzzle
+ * arrives on stage 4, by which time all but the slowest players are `onboarded`
+ * and the ordinary hint ladder has switched itself off. It is also the one beat
+ * in the game with no consequence for ignoring it — nothing kills you, nothing
+ * blocks you, the prize simply goes past — so a player who never works out what
+ * the posts at the rails are for will never be told by the road itself.
+ *
+ * Shown once, ever, and then never again: a bonus that nags is a bonus the
+ * player learns to resent.
+ */
+export const LEVER_HINT_KEY = 'ts_lever_hint_seen'
+
 // ─── Leaderboard identity + posting bookkeeping ─────────────────────────────
 //
 // All six live inside the same `ts_` blob as everything else, so they ride the

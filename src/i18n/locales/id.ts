@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Mini Bos',
     'fireRate': 'Laju',
     'incoming': 'Serangan datang!',
-    'dodge': 'Hindari'
+    'dodge': 'Hindari',
+    'weaponActive': '{name} siap',
+    'weaponLocked': '{name} terkunci — {n} dari {total} tuas ditembak'
+  },
+
+  'weapons': {
+    'rocket': 'Peluncur Roket',
+    'gatling': 'Senapan Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Peti hijau: semua memukul lebih keras', 'desktop': 'Peti hijau: semua memukul lebih keras' },
     'rate': { 'touch': 'Peti biru: semua menembak lebih cepat', 'desktop': 'Peti biru: semua menembak lebih cepat' },
     'boss': { 'touch': 'Jauhi lingkaran merah!', 'desktop': 'Jauhi lingkaran merah!' },
+    'lever': { 'touch': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata', 'desktop': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata' },
     'guard': { 'touch': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!', 'desktop': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Jangkauan',
       'scavenge': 'Pemulungan',
       'grenade': 'Granat',
-      'shield': 'Perisai'
+      'shield': 'Perisai',
+      'rocket': 'Kekuatan Roket',
+      'gatling': 'Kekuatan Gatling'
     },
     'descriptions': {
       'squad': 'Mulai tiap tahap dengan lebih banyak penyintas.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Pasukanmu melepas tembakan lebih jauh di jalan.',
       'scavenge': 'Dapatkan lebih banyak koin tiap ronde.',
       'grenade': 'Lempar granat untuk ledakan kerusakan besar.',
-      'shield': 'Kurangi setengah kerusakan pada pasukan beberapa detik.'
+      'shield': 'Kurangi setengah kerusakan pada pasukan beberapa detik.',
+      'rocket': 'Peluncur roket yang kamu buka di stage memberi lebih banyak damage.',
+      'gatling': 'Senapan Gatling yang kamu buka di stage memberi lebih banyak damage.'
     }
   },
 

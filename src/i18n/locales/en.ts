@@ -48,7 +48,23 @@ export default {
     // locale keeps this to ~6 characters.
     'fireRate': 'Rate',
     'incoming': 'Incoming attack!',
-    'dodge': 'Dodge'
+    'dodge': 'Dodge',
+    // ─── The weapon tag ─────────────────────────────────────────────────────
+    // Both are `aria-label`s on a badge that is otherwise a glyph and two dots,
+    // so they are READ ALOUD and never seen. Translate for clarity, not for
+    // brevity — nothing on screen depends on their length.
+    // `{n}` / `{total}` are the levers pulled and the levers there are.
+    'weaponActive': '{name} ready',
+    'weaponLocked': '{name} locked — {n} of {total} levers shot'
+  },
+
+  // ─── The per-stage weapons ────────────────────────────────────────────────
+  // Shown on a HUD badge roughly 8 characters wide before it ellipsises, so
+  // prefer the SHORT name a player would say out loud ("Gatling", "Rockets")
+  // over the full mechanical one. The glyph beside it already says what it is.
+  'weapons': {
+    'rocket': 'Rocket Launcher',
+    'gatling': 'Gatling Gun'
   },
 
   // ─── Control hints ────────────────────────────────────────────────────────
@@ -93,6 +109,14 @@ export default {
     'boss': {
       'touch': 'Stay out of the red ring!',
       'desktop': 'Stay out of the red ring!'
+    },
+    // The weapon puzzle, shown once ever, while an unshot lever is on screen.
+    // The two things it must carry are BOTH and WHERE: a player who shoots one
+    // post and stops has done nothing, and a player looking down the middle of
+    // the road will never find either. Keep it to one line on a 320 px phone.
+    'lever': {
+      'touch': 'Shoot BOTH levers at the road edges — they open the weapon box',
+      'desktop': 'Shoot BOTH levers at the road edges — they open the weapon box'
     },
     // Fires the first time the boss shields. Without it the phase reads as a
     // broken hitbox — the player IS still shooting, and it IS doing nothing.
@@ -173,7 +197,12 @@ export default {
       'range': 'Reach',
       'scavenge': 'Scavenging',
       'grenade': 'Grenade',
-      'shield': 'Shield'
+      'shield': 'Shield',
+      // The two weapon tracks. Named for the WEAPON rather than for the stat,
+      // because the player's question in the shop is "which of the two things I
+      // keep finding do I want to be better", not "what does this percentage do".
+      'rocket': 'Rocket Power',
+      'gatling': 'Gatling Power'
     },
     'descriptions': {
       'squad': 'Start every stage with more survivors.',
@@ -182,7 +211,9 @@ export default {
       'range': 'Your squad opens fire further up the road.',
       'scavenge': 'Earn more coins from every run.',
       'grenade': 'Throw a grenade for a burst of heavy damage.',
-      'shield': 'Halve the damage your squad takes for a few seconds.'
+      'shield': 'Halve the damage your squad takes for a few seconds.',
+      'rocket': 'Rocket launchers you unlock on a stage deal more damage.',
+      'gatling': 'Gatling guns you unlock on a stage deal more damage.'
     }
   },
 

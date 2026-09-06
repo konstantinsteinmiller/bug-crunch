@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Miniboss',
     'fireRate': 'Ritmo',
     'incoming': 'Attacco in arrivo!',
-    'dodge': 'Schiva'
+    'dodge': 'Schiva',
+    'weaponActive': '{name} pronto',
+    'weaponLocked': '{name} bloccato — {n} di {total} leve colpite'
+  },
+
+  'weapons': {
+    'rocket': 'Lanciarazzi',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Casse verdi: tutti colpiscono più forte', 'desktop': 'Casse verdi: tutti colpiscono più forte' },
     'rate': { 'touch': 'Casse blu: tutti sparano più veloce', 'desktop': 'Casse blu: tutti sparano più veloce' },
     'boss': { 'touch': 'Stai fuori dal cerchio rosso!', 'desktop': 'Stai fuori dal cerchio rosso!' },
+    'lever': { 'touch': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi', 'desktop': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi' },
     'guard': { 'touch': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!', 'desktop': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Gittata',
       'scavenge': 'Recupero',
       'grenade': 'Granata',
-      'shield': 'Scudo'
+      'shield': 'Scudo',
+      'rocket': 'Potenza razzi',
+      'gatling': 'Potenza Gatling'
     },
     'descriptions': {
       'squad': 'Inizia ogni livello con più sopravvissuti.',
@@ -116,7 +126,9 @@ export default {
       'range': 'La squadra apre il fuoco più avanti sulla strada.',
       'scavenge': 'Guadagna più monete a ogni partita.',
       'grenade': 'Lancia una granata per un colpo di danno pesante.',
-      'shield': 'Dimezza i danni alla squadra per qualche secondo.'
+      'shield': 'Dimezza i danni alla squadra per qualche secondo.',
+      'rocket': 'I lanciarazzi che sblocchi in un livello fanno più danni.',
+      'gatling': 'Le Gatling che sblocchi in un livello fanno più danni.'
     }
   },
 

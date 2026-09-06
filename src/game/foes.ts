@@ -1,4 +1,5 @@
 import { earlyFoeHpMul } from '@/game/survival'
+import { bossKindFor, SUMMON_DESIGN } from '@/game/threats'
 /**
  * ─── The cast that wants your crowd ─────────────────────────────────────────
  *
@@ -224,6 +225,11 @@ export const bossDesign = (stage: number): string => {
   // `stageDesigns` because the roster put it there.
   if (stage <= 1) return FOE_DEFS.creep!.designs[0] ?? 'grumpling'
   if (stage === 2) return FOE_DEFS.husk!.designs[0] ?? 'bonecap'
+  // THE SUMMONER IS ALWAYS THE MARROW KNIGHT. It raises marrow knights out of
+  // the road (`SUMMON_DESIGN`), and a boar that conjures skeleton knights reads
+  // as a bug rather than as a boss — the body has to be the thing it summons,
+  // at boss size. Every other kind keeps its place in the cycle below.
+  if (bossKindFor(stage) === 'summoner') return SUMMON_DESIGN
   return BOSS_DESIGNS[(stage - 1) % BOSS_DESIGNS.length] ?? 'snaggletusk'
 }
 

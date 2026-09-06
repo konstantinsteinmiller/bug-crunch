@@ -7,6 +7,7 @@ import {
   type Divider, type GateOp
 } from '@/game/survival'
 import { BOLT_R, ROLLER_R, ROLLER_WARN_AHEAD } from '@/game/threats'
+import { GUARD_H, LEVER_R, STONE_H, WEAPON_BOX_R, type WeaponId } from '@/game/weapons'
 import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
@@ -14,17 +15,19 @@ import {
   getBossBolts,
   getRocks,
   getUnits,
+  activeWeapon, getGuards, getLevers, getStones, getWeaponBoxes,
   nowMs, phase, runFireRate, squadCount, stage
 } from '@/use/useSurvivalGame'
 import { HEAL_FRACTION } from '@/game/threats'
 import {
-  HERO_CYCLE_MS, HERO_FOOT, HERO_HEIGHT, HERO_PX, outfitIndex, outfitTone,
+  HERO_CYCLE_MS, HERO_FOOT_R, HERO_FRAME_ASPECT, HERO_HEIGHT_R, outfitIndex, outfitTone,
   primeSurvivors, survivorFrame
 } from '@/game/heroSprites'
 import {
-  SPRITE_FOOT, SPRITE_HEIGHT, bakeMonsterSlice, monsterFaces, monsterFrame,
+  SPRITE_FOOT_R, SPRITE_HEIGHT_R, bakeMonsterSlice, monsterFaces, monsterFrame,
   monstersReady, primeMonsterSprites
 } from '@/game/monsterSprites'
+import { spriteFor, onArtChanged, type ArtKind } from '@/game/art'
 import { stageDesigns } from '@/game/foes'
 import {
   drainFx, drawParticles, emit, emitDecal, emitText, getDecals, getTexts,
@@ -221,14 +224,23 @@ const CRACK_BEND = [0.24, -0.3, 0.18, -0.22, 0.31, -0.16, 0.2, -0.28]
 
 // ─── Drop-in bitmap overrides ───────────────────────────────────────────────
 //
-// Three props ship as real bitmaps (they already exist under `public/images`
-// from the asset library) and everything else is drawn from code. The lookup is
-// lazy, cached and failure-tolerant: until the image decodes — or forever, if
-// the file is missing — the procedural version draws instead, so the game never
-// waits on art and a deleted file can never blank a prop.
+// Three props ship as real bitmaps today (they already exist under
+// `public/images` from the asset library) and stay on an always-on probe: they
+// are shipping art, not overrides. Everything ELSE that can be painted goes
+// through `spriteFor` from `art.ts`, which is off unless the build or the
+// `?art=on` flag says otherwise — see the flag's note for why a portal must
+// never probe files that are not there.
 //
-// Replacing any of these is a file drop, no code change. Paths are catalogued
-// in `art-todo.md`.
+// Both lookups are lazy, cached and failure-tolerant: until the image decodes —
+// or forever, if the file is missing — the procedural version draws instead, so
+// the game never waits on art and a deleted file can never blank a prop.
+//
+// EVERY drawable that can be painted goes through ONE painter that holds both
+// branches, drawn and painted. The battlefield, the art bench and the
+// playground all call the same function, which is what makes the reference
+// sheet provably the thing the game draws rather than a lookalike. The bench
+// passes `procedural: true` so it never bakes last week's painting into this
+// week's reference. Paths are catalogued by the manifest in `artSheet.ts`.
 const PROP_ART = {
   crate: 'images/props/box_256x256.webp',
   barricade: 'images/props/stone_256x256.webp',
@@ -240,96 +252,1299 @@ const propImage = (key: keyof typeof PROP_ART): HTMLImageElement | null => {
   return img.complete && img.naturalWidth > 0 ? img : null
 }
 
-// ─── Cached backdrop ────────────────────────────────────────────────────────
-//
-// The sky and the two parallax bands are the most expensive layers and the
-// least likely to change, so they are painted once into an offscreen canvas and
-// blitted with a vertical offset. They are only re-rendered when the viewport
-// or the stage changes.
-
-let backdrop: HTMLCanvasElement | null = null
-let backdropKey = ''
-
-const buildBackdrop = (): HTMLCanvasElement | null => {
-  if (typeof document === 'undefined' || viewW <= 0 || viewH <= 0) return null
-  const key = `${Math.round(viewW)}x${Math.round(viewH)}|${stage.value}`
-  if (backdrop && backdropKey === key) return backdrop
-
-  const c = document.createElement('canvas')
-  c.width = Math.max(1, Math.round(viewW))
-  // One extra viewport of height so the parallax offset never exposes an edge.
-  c.height = Math.max(1, Math.round(viewH * 1.5))
-  const ctx = c.getContext('2d')
-  if (!ctx) return null
-  const sky = skyFor(stage.value)
-  const h = c.height
-  const w = c.width
-
-  const g = ctx.createLinearGradient(0, 0, 0, h)
-  g.addColorStop(0, sky.top)
-  g.addColorStop(0.62, sky.bottom)
-  g.addColorStop(1, sky.dune)
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, w, h)
-
-  // A low sun sitting on the horizon, blown out. It is the single element that
-  // makes a flat gradient read as a place.
-  const sun = ctx.createRadialGradient(w * 0.5, h * 0.52, 0, w * 0.5, h * 0.52, w * 0.62)
-  sun.addColorStop(0, `${sky.haze}cc`)
-  sun.addColorStop(0.45, `${sky.haze}33`)
-  sun.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = sun
-  ctx.fillRect(0, 0, w, h)
-
-  // Far ridge line — a jagged silhouette, seeded so it is stable across frames.
-  const ridge = (yBase: number, amp: number, colour: string, seed: number): void => {
-    ctx.fillStyle = colour
-    ctx.beginPath()
-    ctx.moveTo(0, h)
-    ctx.lineTo(0, yBase)
-    for (let x = 0; x <= w; x += Math.max(8, w / 90)) {
-      const n = Math.sin(x * 0.0121 + seed) * 0.5 + Math.sin(x * 0.0413 + seed * 2.3) * 0.32
-        + Math.sin(x * 0.0907 + seed * 5.1) * 0.18
-      ctx.lineTo(x, yBase + n * amp)
-    }
-    ctx.lineTo(w, h)
-    ctx.closePath()
-    ctx.fill()
-  }
-  ridge(h * 0.52, h * 0.07, sky.ridge, 1.7)
-  ridge(h * 0.60, h * 0.045, sky.dune, 4.2)
-
-  backdrop = c
-  backdropKey = key
-  return c
+/** Options every painter takes. */
+export interface PaintOpts {
+  /** Draw the procedural version even when a painting is available. The art
+   *  bench sets this: a reference sheet must never contain the painting it is
+   *  about to be replaced by, or every re-roll drifts from the last. */
+  procedural?: boolean
 }
 
-// ─── Cached lane tile ───────────────────────────────────────────────────────
+/** The painting for `(kind, id)`, unless the caller wants the drawing. */
+const art = (kind: ArtKind, id: string, o?: PaintOpts): HTMLImageElement | null =>
+  o?.procedural ? null : spriteFor(kind, id)
+
+// ─── Painters ───────────────────────────────────────────────────────────────
 //
-// Gravel, cracks and tyre wear, baked into one repeatable tile and used as a
-// canvas pattern. Drawing this procedurally per frame would be a few thousand
-// ops; as a pattern it is one `fillRect`.
+// Each paints ONE drawable at the context's origin (unless it takes a
+// position), in whatever units its caller works in. The box a painting is
+// blitted into is stated in each painter and mirrored by the art bench, which
+// draws the procedural version into exactly that box to make the reference —
+// get the two out of step and every painted part is the wrong size, everywhere,
+// invisibly. See `art-sheets/README.md`.
 
-let laneTile: CanvasPattern | null = null
-let laneTilePx = 0
-let laneTileKey = ''
+/**
+ * A coin, at the origin. `spin` is the |cos| squash that turns it, `bob` the
+ * lift; the halo is the caller's, since it is additive and follows the bob.
+ */
+export const paintCoin = (
+  ctx: CanvasRenderingContext2D, r: number, spin: number, bob: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'coin', o) ?? (o?.procedural ? null : propImage('coin'))
+  if (painted) {
+    // The bitmap spins by being squashed on X, exactly like the drawn one, so
+    // dropping real art in never changes the animation.
+    const w = Math.max(1, r * 2 * spin)
+    ctx.drawImage(painted, -w / 2, bob - r, w, r * 2)
+    return
+  }
+  let body = getRamp(`coinBody|${r}`)
+  if (!body) {
+    body = putRamp(`coinBody|${r}`, ctx.createLinearGradient(0, -r, 0, r))
+    body.addColorStop(0, '#ffe066')
+    body.addColorStop(0.55, '#e0a81c')
+    body.addColorStop(1, '#8a6410')
+  }
+  ctx.fillStyle = body
+  ctx.beginPath()
+  ctx.ellipse(0, bob, Math.max(1, r * spin), r, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(60,40,4,0.7)'
+  ctx.lineWidth = Math.max(1, r * 0.18)
+  ctx.stroke()
+}
 
-/** World units covered by one tile — chosen so the seam lands on the rung
- *  rhythm and is invisible. */
-const TILE_UNITS = 4
+/**
+ * A crate's BODY, filling `(-r, -r, 2r, 2r)`.
+ *
+ * The rim in the crate's own colour, the badge and the HP number are all drawn
+ * over this by `drawCrates`, so a painting has to leave the middle readable.
+ * Two paintings, one per kind, so the identity can live in the timber and the
+ * ironwork rather than only in the rim; the shipped box bitmap stands in for
+ * both when neither has arrived.
+ */
+export const paintCrateBody = (
+  ctx: CanvasRenderingContext2D, kind: 'damage' | 'rate', r: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', kind === 'rate' ? 'crate-rate' : 'crate-damage', o)
+    ?? (o?.procedural ? null : propImage('crate'))
+  if (painted) {
+    ctx.drawImage(painted, -r, -r, r * 2, r * 2)
+    return
+  }
+  // `r` is `CRATE_R * scale` — one value for the whole frame — and the ramp
+  // was already local to the crate's own transform, so this caches with no
+  // geometry change at all.
+  let body = getRamp(`crateBody|${r}`)
+  if (!body) {
+    body = putRamp(`crateBody|${r}`, ctx.createLinearGradient(-r, -r, r * 0.4, r))
+    body.addColorStop(0, '#c08b48')
+    body.addColorStop(0.5, '#8d5f2c')
+    body.addColorStop(1, '#5c3c18')
+  }
+  ctx.fillStyle = body
+  roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.18)
+  ctx.fill()
 
-const buildLaneTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null => {
-  const px = Math.max(48, Math.round(TILE_UNITS * scale))
-  const key = String(px)
-  if (laneTile && laneTileKey === key) return laneTile
-  if (typeof document === 'undefined') return null
+  ctx.strokeStyle = 'rgba(40,24,10,0.75)'
+  ctx.lineWidth = Math.max(1.4, r * 0.11)
+  roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.18)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(-r, -r * 0.25)
+  ctx.lineTo(r, -r * 0.25)
+  ctx.moveTo(-r, r * 0.35)
+  ctx.lineTo(r, r * 0.35)
+  ctx.lineWidth = Math.max(1, r * 0.07)
+  ctx.stroke()
+}
 
-  const c = document.createElement('canvas')
-  c.width = px
-  c.height = px
-  const t = c.getContext('2d')
-  if (!t) return null
+/**
+ * The weapon box's BODY — the case and its face plate — in `(-r, -r, 2r, 2r)`.
+ *
+ * TWO paintings, not one recoloured: the locked box and the open one share only
+ * their silhouette, and that is the whole point of the beat. A player has to be
+ * able to tell from the far end of the road whether this is still a puzzle
+ * behind armour or already a pickup, so the two states are allowed to look like
+ * different objects.
+ *
+ * Everything that MOVES stays live over it — the weapon glyph, the cross-brace
+ * that says SHUT, the damage cracks, the halo and the reveal ring — so a
+ * painting has to leave its middle plain and readable, the way the supply
+ * crates do. The open plate's own colour throb is the one thing a painting
+ * gives up; the halo above it throbs on the same clock and carries the read.
+ */
+export const paintWeaponBoxBody = (
+  ctx: CanvasRenderingContext2D, r: number, scale: number, open: boolean,
+  pulse: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', open ? 'weapon-box-open' : 'weapon-box', o)
+  if (painted) {
+    ctx.drawImage(painted, -r, -r, r * 2, r * 2)
+    return
+  }
+  // The crate.
+  ctx.fillStyle = open ? '#6b4a16' : '#3f4652'
+  roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.22)
+  ctx.fill()
+  ctx.lineWidth = Math.max(1.8, scale * 0.055)
+  ctx.strokeStyle = open ? '#2a1c06' : '#1a1e26'
+  ctx.stroke()
 
+  // Face plate, so the glyph has something to sit on.
+  ctx.fillStyle = open
+    ? `rgb(255,${Math.round(196 + pulse * 40)},${Math.round(72 + pulse * 50)})`
+    : '#586374'
+  roundRect(ctx, -r * 0.78, -r * 0.78, r * 1.56, r * 1.56, r * 0.16)
+  ctx.fill()
+}
+
+/**
+ * One plate of the ARMOUR over a locked weapon box, filling `(-w/2, -h/2, w, h)`.
+ *
+ * Two of these stand edge to edge over the prize, so its left and right edges
+ * are panel edges rather than the ends of an object — a plate with a lit rim
+ * all the way round would read as two separate crates side by side instead of
+ * one bolted-on wall.
+ *
+ * The damage read is the caller's, over whatever is here: the rivets used to
+ * dim with the remaining health, which a painting cannot do, so `drawGuards`
+ * now dims and reddens the whole plate inside its own box the way `drawStones`
+ * marks the lever's cover. One read, both paths.
+ */
+export const paintGuardPlate = (
+  ctx: CanvasRenderingContext2D, w: number, h: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'guard-plate', o)
+  if (painted) {
+    ctx.drawImage(painted, -w / 2, -h / 2, w, h)
+    return
+  }
+  const key = `guardPlate|${w}|${h}`
+  let body = getRamp(key)
+  if (!body) {
+    body = putRamp(key, ctx.createLinearGradient(-w / 2, -h / 2, w * 0.2, h / 2))
+    body.addColorStop(0, '#8fa8c4')
+    body.addColorStop(0.5, '#53687f')
+    body.addColorStop(1, '#2c3947')
+  }
+  ctx.fillStyle = body
+  roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.12)
+  ctx.fill()
+
+  ctx.save()
+  roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.12)
+  ctx.clip()
+  ctx.fillStyle = '#d5e5f6'
+  ctx.globalAlpha = 0.9
+  const rr = Math.max(1.1, h * 0.06)
+  for (let ry = -h * 0.26; ry <= h * 0.3; ry += h * 0.52) {
+    for (let rx = -w / 2 + rr * 2.4; rx < w / 2 - rr; rx += rr * 3.6) {
+      ctx.beginPath()
+      ctx.arc(rx, ry, rr, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+
+  ctx.strokeStyle = 'rgba(12,18,28,0.9)'
+  ctx.lineWidth = Math.max(1.5, h * 0.07)
+  roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.12)
+  ctx.stroke()
+}
+
+/**
+ * The lever's painted boxes, in lever radii, relative to the post's origin.
+ *
+ * The post is ONE object in two pieces because half of it moves: the housing is
+ * bolted to the road and the arm swings ninety degrees through the beat, so
+ * they cannot be one bitmap. Shared with the art bench, which draws the
+ * procedural version into exactly these boxes to make the references.
+ */
+export const LEVER_ART = {
+  /** The housing: `w` x `h` (2:1), its TOP edge on the post's origin. */
+  post: { w: 2, h: 1 },
+  /** The arm, authored pointing UP: `w` x `h` (9:16 portrait), with the pivot
+   *  `pivot` above the box's bottom edge. */
+  arm: { w: 1.35, h: 2.4, pivot: 0.2 }
+} as const
+
+/** The lever's HOUSING: the part bolted to the road, which never moves. */
+export const paintLeverPost = (
+  ctx: CanvasRenderingContext2D, r: number, scale: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'lever-post', o)
+  if (painted) {
+    const { w, h } = LEVER_ART.post
+    ctx.drawImage(painted, -w / 2 * r, 0, w * r, h * r)
+    return
+  }
+  ctx.fillStyle = '#3b424e'
+  roundRect(ctx, -r * 0.9, r * 0.1, r * 1.8, r * 0.7, r * 0.18)
+  ctx.fill()
+  ctx.lineWidth = Math.max(1.4, scale * 0.045)
+  ctx.strokeStyle = '#171b22'
+  ctx.stroke()
+}
+
+/**
+ * The lever's ARM, drawn from the pivot, authored pointing UP.
+ *
+ * The caller has already rotated to the swing, so this is the arm at rest and
+ * the renderer turns it — the same deal the rounds get.
+ *
+ * The KNOB is not here. It is the colour channel of the whole beat (red while
+ * the lever is live, green once it is pulled) and it breathes on its own clock,
+ * so the painting leaves an EMPTY socket at the top of the arm and `drawLevers`
+ * lights it. The drawn arm strokes that socket too, so the reference the
+ * painting is registered against has the hole in the same place.
+ */
+export const paintLeverArm = (
+  ctx: CanvasRenderingContext2D, r: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'lever-arm', o)
+  if (painted) {
+    const { w, h, pivot } = LEVER_ART.arm
+    ctx.drawImage(painted, -w / 2 * r, -(h - pivot) * r, w * r, h * r)
+    return
+  }
+  ctx.strokeStyle = '#8e99a8'
+  ctx.lineWidth = Math.max(2, r * 0.3)
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  // Stops at the socket's lower wall rather than running up through it: the
+  // knob hides the difference in play, and the REFERENCE has to show a socket
+  // with nothing in it or a painter fills it in.
+  ctx.lineTo(0, -r * 1.2)
+  ctx.stroke()
+  // The empty socket the knob is lit inside.
+  ctx.strokeStyle = 'rgba(10,12,16,0.85)'
+  ctx.lineWidth = Math.max(1.2, r * 0.13)
+  ctx.beginPath()
+  ctx.arc(0, -r * 1.6, r * 0.46, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+/**
+ * The powder keg's BODY in `(-r, -r, 2r, 2r)`; the drum itself is 0.8 of that
+ * wide. Read in three states: intact, damaged and LIT, and the lit strobe's
+ * RATE is the tell rather than its colour — so on a painting the strobe is a
+ * white wash over the drum and the damage is the crack lines the crates wear.
+ */
+export const paintBarrelBody = (
+  ctx: CanvasRenderingContext2D, r: number, scale: number,
+  lit: boolean, flash: number, hurt: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'barrel', o)
+  if (painted) {
+    ctx.drawImage(painted, -r, -r, r * 2, r * 2)
+    if (hurt > 0.25) {
+      ctx.strokeStyle = `rgba(20,10,4,${0.4 + hurt * 0.5})`
+      ctx.lineWidth = Math.max(1, r * 0.07)
+      ctx.beginPath()
+      ctx.moveTo(-r * 0.45, -r * 0.7)
+      ctx.lineTo(-r * 0.1, -r * 0.05)
+      ctx.lineTo(-r * 0.35, r * 0.55)
+      if (hurt > 0.6) {
+        ctx.moveTo(r * 0.4, -r * 0.5)
+        ctx.lineTo(r * 0.08, r * 0.25)
+      }
+      ctx.stroke()
+    }
+    if (lit) {
+      ctx.globalAlpha = 0.25 + flash * 0.6
+      ctx.fillStyle = '#fff3d0'
+      roundRect(ctx, -r * 0.8, -r, r * 1.6, r * 2, r * 0.28)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    return
+  }
+
+  // The drum.
+  const body = lit
+    ? `rgb(${180 + flash * 75}, ${70 + flash * 150}, ${60 + flash * 140})`
+    : '#5a3428'
+  ctx.fillStyle = body
+  roundRect(ctx, -r * 0.8, -r, r * 1.6, r * 2, r * 0.28)
+  ctx.fill()
+  ctx.lineWidth = Math.max(1.5, scale * 0.05)
+  ctx.strokeStyle = '#20140f'
+  ctx.stroke()
+
+  // Two hazard bands. They CRACK as the barrel takes rounds — the damage read
+  // is on the prop itself, not on a bar floating over it.
+  ctx.fillStyle = lit ? '#fff3d0' : '#c8341f'
+  for (const by of [-r * 0.42, r * 0.28]) {
+    ctx.globalAlpha = 1 - hurt * 0.55
+    ctx.fillRect(-r * 0.8, by, r * 1.6, r * 0.3)
+  }
+  ctx.globalAlpha = 1
+
+  // The stencil: a fuse-and-spark mark, so the prop says "explosive" without a
+  // word of copy in any of the twenty-one languages this ships in.
+  ctx.strokeStyle = lit ? '#3a1a0c' : '#f0d59a'
+  ctx.lineWidth = Math.max(1.2, scale * 0.032)
+  ctx.beginPath()
+  ctx.moveTo(0, -r * 0.1)
+  ctx.lineTo(0, -r * 0.62)
+  ctx.moveTo(-r * 0.22, -r * 0.5)
+  ctx.lineTo(r * 0.22, -r * 0.5)
+  ctx.stroke()
+}
+
+/**
+ * A boulder's lump, `w` by `h`, straddling its box by up to 8% the way the
+ * jittered polygon does. Three paintings, picked by the rock's own seed, so a
+ * rank of four reads as four rocks rather than one shape repeated.
+ */
+export const paintBoulder = (
+  ctx: CanvasRenderingContext2D, w: number, h: number, seed: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', `boulder-${1 + (Math.abs(seed) % 3)}`, o)
+  if (painted) {
+    ctx.drawImage(painted, -w * 0.54, -h * 0.54, w * 1.08, h * 1.08)
+    return
+  }
+
+  // The lump. Eight points on an ellipse, pushed in and out by a hash of the
+  // body's seed — deterministic per rock, so it never shimmers frame to frame.
+  const pts = 8
+  ctx.beginPath()
+  for (let i = 0; i < pts; i++) {
+    const a = (i / pts) * Math.PI * 2
+    const n = ((Math.sin((seed + i * 37) * 12.9898) * 43758.5453) % 1 + 1) % 1
+    const rr = 0.78 + n * 0.3
+    const x = Math.cos(a) * w * 0.5 * rr
+    const y = Math.sin(a) * h * 0.5 * rr
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+
+  // Only the polygon is per-rock; the shading ramp spans `ROCK_H * scale`,
+  // which is the same for every boulder on screen.
+  let body = getRamp(`rockBody|${h}`)
+  if (!body) {
+    body = putRamp(`rockBody|${h}`, ctx.createLinearGradient(0, -h * 0.5, 0, h * 0.5))
+    body.addColorStop(0, '#8f97a6')
+    body.addColorStop(0.45, '#5c6472')
+    body.addColorStop(1, '#333a46')
+  }
+  ctx.fillStyle = body
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(16,20,28,0.9)'
+  ctx.lineWidth = Math.max(1.6, h * 0.09)
+  ctx.stroke()
+
+  // Two fracture lines. Cheap, and they are what makes it read as stone
+  // rather than as a potato.
+  ctx.strokeStyle = 'rgba(20,24,32,0.55)'
+  ctx.lineWidth = Math.max(1, h * 0.05)
+  ctx.beginPath()
+  ctx.moveTo(-w * 0.22, -h * 0.3)
+  ctx.lineTo(w * 0.04, h * 0.06)
+  ctx.lineTo(-w * 0.1, h * 0.34)
+  ctx.moveTo(w * 0.3, -h * 0.16)
+  ctx.lineTo(w * 0.12, h * 0.1)
+  ctx.stroke()
+
+  // Lit crown.
+  ctx.strokeStyle = 'rgba(210,220,236,0.5)'
+  ctx.lineWidth = Math.max(1, h * 0.06)
+  ctx.beginPath()
+  ctx.arc(0, 0, Math.min(w, h) * 0.42, Math.PI * 1.15, Math.PI * 1.85)
+  ctx.stroke()
+}
+
+/**
+ * A barricade's BODY: `w` by `h` with rounded corners, the painting tiled
+ * across it in `h`-sized squares so a 1:1 stone bitmap does not stretch into a
+ * smear on a three-unit-wide block. The chevrons, the bar and the number are
+ * drawn over it.
+ */
+export const paintBarricadeBody = (
+  ctx: CanvasRenderingContext2D, w: number, h: number, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'barricade', o) ?? (o?.procedural ? null : propImage('barricade'))
+  if (painted) {
+    const tile = h
+    ctx.save()
+    roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.14)
+    ctx.clip()
+    for (let x = -w / 2; x < w / 2; x += tile) {
+      ctx.drawImage(painted, x, -h / 2, Math.min(tile, w / 2 - x), h)
+    }
+    ctx.restore()
+    return
+  }
+  // Height is frame-constant; width comes from the block, which is drawn
+  // from a small set of lane spans — so this keys exactly and still hits.
+  // If a future generator makes widths continuous the key simply stops
+  // matching and the site degrades to what it did before, capped by
+  // `MAX_RAMPS` rather than growing.
+  const key = `barricadeBody|${w}|${h}`
+  let body = getRamp(key)
+  if (!body) {
+    body = putRamp(key, ctx.createLinearGradient(-w / 2, -h / 2, w * 0.2, h / 2))
+    body.addColorStop(0, '#767e88')
+    body.addColorStop(0.5, '#4a5058')
+    body.addColorStop(1, '#2a2f36')
+  }
+  ctx.fillStyle = body
+  roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.14)
+  ctx.fill()
+}
+
+/**
+ * The gate frame painting's own geometry, shared with the art bench.
+ *
+ * The reference is drawn at `ppu` px per world unit with a two-leaf door
+ * (`refHalfW`) centred in a `w` x `h` panel, the leaf's origin at the panel's
+ * centre. `cap` is how much of each side is blitted at true size; the span
+ * between the caps is stretched to whatever leaf it is drawn on.
+ */
+export const GATE_FRAME = { ppu: 220, w: 1344, h: 576, cap: 260, refHalfW: 2.05 } as const
+
+/**
+ * A gate leaf's FRAME: two posts and, painted, whatever spans them.
+ *
+ * The curtain, the chevrons, the plate and the charge meter are all live —
+ * they animate, they carry a number, they change colour with the op — so the
+ * painting only ever holds the standing ironwork. It is one image per op at
+ * the two-leaf width and NINE-SLICED across the leaf it is drawn on: the two
+ * post caps are blitted at their true size and the span between them is
+ * stretched, so a three-leaf bank's narrow doors get the same posts as a
+ * two-leaf bank's wide ones rather than a squashed copy.
+ *
+ * `halfW` and `height` are in px. The hot spark at the post's foot is the
+ * caller's, since it is additive and quality-gated.
+ */
+export const paintGateFrame = (
+  ctx: CanvasRenderingContext2D, op: GateOp, halfW: number, height: number,
+  scale: number, o?: PaintOpts & { postW?: number }
+): void => {
+  const painted = art('gate', `frame-${op}`, o)
+  if (painted) {
+    const u = scale / GATE_FRAME.ppu
+    const edge = (GATE_FRAME.w / 2 - GATE_FRAME.refHalfW * GATE_FRAME.ppu) * u
+    const cap = GATE_FRAME.cap * u
+    const H = GATE_FRAME.h * u
+    const y0 = -H / 2
+    const x0 = -halfW - edge
+    const x1 = halfW + edge
+    // The cut is a FRACTION of the file that arrived, never `GATE_FRAME`'s own
+    // pixels. The slicer writes this at whatever the manifest's cap allows —
+    // 256 px tall by default, not the reference's 576 — so a run at the default
+    // size put the right-hand cut (1084 px) clean past the end of a 597 px
+    // bitmap: no right post at all, the left cap eating two fifths of the
+    // painting, and the whole frame squashed into the top 44% of its box. It
+    // only ever looked right when the file happened to come back at exactly the
+    // reference size. Same rule `blitBanner` slices the result banner by.
+    const sw = painted.width
+    const sh = painted.height
+    const sc = Math.round((GATE_FRAME.cap / GATE_FRAME.w) * sw)
+    ctx.drawImage(painted, 0, 0, sc, sh, x0, y0, cap, H)
+    ctx.drawImage(painted, sw - sc, 0, sc, sh, x1 - cap, y0, cap, H)
+    const midW = (x1 - cap) - (x0 + cap)
+    if (midW > 0.5) ctx.drawImage(painted, sc, 0, sw - 2 * sc, sh, x0 + cap, y0, midW, H)
+    return
+  }
+
+  const bad = op === 'div'
+  const tint = GATE_TINT[op]
+  // Posts. One ramp for both sides, built at the origin and placed with a
+  // translate rather than rebuilt at each post's own x.
+  const postKey = `gatePost|${op}|${scale}`
+  let post = getRamp(postKey)
+  if (!post) {
+    post = putRamp(postKey, ctx.createLinearGradient(-scale * 0.1, 0, scale * 0.1, 0))
+    post.addColorStop(0, '#20242e')
+    post.addColorStop(0.45, tint.a)
+    post.addColorStop(1, tint.b)
+  }
+  // `postW` is the art bench's: the reference draws each post as wide as the
+  // game can hide under a divider pillar — the band a painting is registered
+  // onto — so a painter matches a heavy post instead of inventing one. It
+  // grows OUTWARD from the door's edge; the inner face never moves. In play
+  // the drawn post is its own 0.18 units.
+  const outer = (o?.postW ?? 0.18) - 0.09
+  for (const side of [-1, 1] as const) {
+    const px = side * halfW
+    ctx.save()
+    ctx.translate(px, 0)
+    ctx.fillStyle = post
+    ctx.fillRect(side < 0 ? -outer * scale : -scale * 0.09, -height / 2 - scale * 0.12,
+      (outer + 0.09) * scale, height + scale * 0.24)
+
+    if (bad) {
+      // A chunk blown out of the top of the post and a snapped stub above the
+      // gap. A broken frame is a thing that has already failed somebody.
+      ctx.fillStyle = 'rgba(8,6,8,0.95)'
+      ctx.beginPath()
+      ctx.moveTo(-scale * 0.1, -height / 2 + scale * 0.1)
+      ctx.lineTo(scale * 0.1, -height / 2 - scale * 0.02)
+      ctx.lineTo(scale * 0.1, -height / 2 - scale * 0.14)
+      ctx.lineTo(-scale * 0.1, -height / 2 - scale * 0.14)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = '#3a1a14'
+      ctx.fillRect(-side * scale * 0.03, -height / 2 - scale * 0.3, scale * 0.06, scale * 0.16)
+    }
+    ctx.restore()
+  }
+}
+
+/**
+ * A divider pillar's BODY: the striped post with its steel caps, in the box
+ * `(-1.25 halfPx, -0.6 h) … (1.25 halfPx, 0.6 h)`. The warning glow, the hot
+ * overlay, the beacon and the toppling are the caller's.
+ */
+export const paintPillarBody = (
+  ctx: CanvasRenderingContext2D, halfPx: number, h: number, scale: number,
+  pattern: CanvasPattern | null, o?: PaintOpts
+): void => {
+  const painted = art('prop', 'pillar', o)
+  if (painted) {
+    ctx.drawImage(painted, -halfPx * 1.25, -h / 2 - h * 0.1, halfPx * 2.5, h * 1.26)
+    return
+  }
+
+  // Body. Solid, opaque, dark metal — the base coat under the stripes so a
+  // missing pattern (no `document`, e.g. in a test) still draws a real pillar.
+  ctx.fillStyle = '#1b1c22'
+  ctx.fillRect(-halfPx, -h / 2, halfPx * 2, h)
+
+  if (pattern) {
+    // The pattern lives in the CONTEXT's space, and the context is translated
+    // to the pillar — so the stripes are pinned to the pillar and do not swim
+    // across it as the camera scrolls.
+    ctx.fillStyle = pattern
+    ctx.fillRect(-halfPx, -h / 2, halfPx * 2, h)
+  }
+
+  // Cylinder shading in two flat rects instead of a gradient: same read, one
+  // fewer allocation per pillar per frame.
+  ctx.fillStyle = 'rgba(0,0,0,0.42)'
+  ctx.fillRect(halfPx * 0.15, -h / 2, halfPx * 0.85, h)
+  ctx.fillStyle = 'rgba(255,255,255,0.14)'
+  ctx.fillRect(-halfPx, -h / 2, halfPx * 0.4, h)
+
+  // Hard rim light down the lit edge. One bright line does more for "this is
+  // a solid object" than any amount of gradient.
+  ctx.fillStyle = 'rgba(255,246,220,0.75)'
+  ctx.fillRect(-halfPx, -h / 2, Math.max(1.5, halfPx * 0.16), h)
+
+  // Steel caps top and bottom, and a hard outline. The caps stop the stripes
+  // from bleeding into the road at the ends.
+  ctx.fillStyle = '#4a4d58'
+  ctx.fillRect(-halfPx * 1.25, -h / 2 - h * 0.1, halfPx * 2.5, h * 0.13)
+  ctx.fillRect(-halfPx * 1.25, h / 2 - h * 0.03, halfPx * 2.5, h * 0.13)
+  ctx.strokeStyle = 'rgba(6,6,9,0.95)'
+  ctx.lineWidth = Math.max(1.5, scale * 0.045)
+  ctx.strokeRect(-halfPx, -h / 2, halfPx * 2, h)
+}
+
+/**
+ * How much bigger than the sphere the roller's painting is blitted.
+ *
+ * The drawn ball IS its box, and a painting of a spiked iron ball has nowhere
+ * to put the spikes: they either cross the frame edge or the painter shrinks
+ * the ball to fit them in. So the sphere sits at 1/1.3 of the file and the
+ * spikes get the margin — the file is blitted this much larger than the
+ * kill radius, and the sphere inside it lands exactly on it.
+ */
+export const ROLLER_ART_PAD = 1.3
+
+/**
+ * The rolling ball, at the origin, radius `r`. The contact shadow and the lane
+ * it owns are the caller's. A painting keeps the drawn banding over it: the
+ * bands scroll with the distance travelled, which is what stops a sphere
+ * reading as sliding, and a still cannot carry that on its own.
+ */
+export const paintRollerBall = (
+  ctx: CanvasRenderingContext2D, r: number, spin: number, scale: number,
+  cheap: boolean, o?: PaintOpts
+): void => {
+  const painted = art('round', 'roller', o)
+  if (painted) {
+    const R = r * ROLLER_ART_PAD
+    ctx.drawImage(painted, -R, -R, R * 2, R * 2)
+  } else {
+    // Built per frame rather than cached in `getRamp`: there are never more
+    // than a couple of these on screen, so the two allocations are not the
+    // frame's problem.
+    const shade = ctx.createRadialGradient(-r * 0.35, -r * 0.45, r * 0.1, 0, 0, r)
+    shade.addColorStop(0, '#9aa4b2')
+    shade.addColorStop(0.45, '#5d6672')
+    shade.addColorStop(1, '#232830')
+    ctx.fillStyle = shade
+    ctx.beginPath()
+    ctx.arc(0, 0, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // Banding that turns with the roll. The spin is derived from how far the
+  // ball has actually travelled (`phase` accumulates with time and the speed
+  // is constant), so it can never look like it is sliding.
+  if (!cheap) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(0, 0, r * 0.97, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.globalAlpha = 0.28
+    ctx.strokeStyle = '#161a20'
+    ctx.lineWidth = Math.max(2, scale * 0.09)
+    for (let i = 0; i < 4; i++) {
+      const off = (((spin + i * 0.5) % 2) + 2) % 2 - 1
+      ctx.beginPath()
+      ctx.ellipse(0, off * r, r * 0.98, r * 0.24, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+  if (painted) return
+
+  // Rim light along the leading edge, and a hard outline so the silhouette
+  // survives on top of a bright road.
+  ctx.globalAlpha = 0.6
+  ctx.strokeStyle = '#c9d6e6'
+  ctx.lineWidth = Math.max(2, scale * 0.07)
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 0.93, Math.PI * 0.15, Math.PI * 0.85)
+  ctx.stroke()
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = '#10131a'
+  ctx.lineWidth = Math.max(2, scale * 0.06)
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+/**
+ * The box a round in flight is painted in, in radii of its head: eight
+ * across, the head's centre 5.6 in from the tail end. A painted round is
+ * authored pointing RIGHT with its tail to the left and turned to its heading
+ * here — one still covers every direction.
+ */
+export const ROUND_BOX = { side: 8, head: 5.6 } as const
+
+/** Turn the context to a screen heading given a WORLD velocity (y up). */
+const faceHeading = (ctx: CanvasRenderingContext2D, vx: number, vy: number): void => {
+  ctx.rotate(Math.atan2(-vy, vx))
+}
+
+/**
+ * The gunner's round, at the origin: head radius `r`, travelling along the
+ * world direction `(dx, dy)`. The head is drawn at `BOLT_R`, the radius the
+ * kill is measured against, so what the player sees is what hits.
+ */
+export const paintGunnerBolt = (
+  ctx: CanvasRenderingContext2D, r: number, dx: number, dy: number, scale: number,
+  cheap: boolean, o?: PaintOpts
+): void => {
+  const painted = art('round', 'bolt-gunner', o)
+  if (painted) {
+    ctx.save()
+    faceHeading(ctx, dx, dy)
+    ctx.drawImage(painted, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
+      ROUND_BOX.side * r, ROUND_BOX.side * r)
+    ctx.restore()
+    return
+  }
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+
+  // The trail, back along the line it came down.
+  const steps = cheap ? 4 : 9
+  for (let i = steps; i >= 1; i--) {
+    const back = i / steps
+    ctx.globalAlpha = 0.3 * (1 - back) ** 1.3
+    ctx.fillStyle = '#4fc9ff'
+    ctx.beginPath()
+    ctx.ellipse(
+      -dx * back * r * 5,
+      dy * back * r * 5,
+      r * (1 - back * 0.6), r * (1.35 - back * 0.7),
+      0, 0, Math.PI * 2
+    )
+    ctx.fill()
+  }
+
+  // Halo then core: one flat disc reads as a sticker, two read as something
+  // burning through the air.
+  ctx.globalAlpha = 0.55
+  ctx.fillStyle = '#8fe4ff'
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 2.1, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 0.95
+  ctx.fillStyle = '#eafcff'
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // …and a dark core with an outline, so it stays a solid OBJECT against the
+  // crowd rather than a patch of light that could be mistaken for a friendly
+  // effect.
+  ctx.save()
+  ctx.fillStyle = '#0d2b3a'
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = '#bff0ff'
+  ctx.lineWidth = Math.max(2, scale * 0.05)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * The healer's bolt, at the origin, travelling along the world velocity. The
+ * ground shadow is the caller's.
+ */
+export const paintBossBolt = (
+  ctx: CanvasRenderingContext2D, r: number, vx: number, vy: number, pulse: number,
+  cheap: boolean, o?: PaintOpts
+): void => {
+  const painted = art('round', 'bolt-boss', o)
+  if (painted) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 1
+    faceHeading(ctx, vx, vy)
+    ctx.drawImage(painted, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
+      ROUND_BOX.side * r, ROUND_BOX.side * r)
+    ctx.restore()
+    return
+  }
+  ctx.globalCompositeOperation = 'lighter'
+  if (!cheap) {
+    // A short trail behind the direction of travel, so the bolt's LINE is
+    // legible — which is the thing the player has to step off.
+    const len = Math.hypot(vx, vy) || 1
+    for (let i = 1; i <= 4; i++) {
+      const back = i / 4
+      ctx.globalAlpha = 0.3 * (1 - back)
+      ctx.fillStyle = '#7cf0a8'
+      ctx.beginPath()
+      ctx.arc(
+        -(vx / len) * back * r * 4,
+        (vy / len) * back * r * 4,
+        r * (1 - back * 0.6), 0, Math.PI * 2
+      )
+      ctx.fill()
+    }
+  }
+  // Halo and core, pulsing, so it is unmistakably a live thing.
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = '#3ad97a'
+  ctx.beginPath()
+  ctx.arc(0, 0, r * 2.1 * pulse, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 0.95
+  ctx.fillStyle = '#eafff0'
+  ctx.beginPath()
+  ctx.arc(0, 0, r * pulse, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/**
+ * The box the falling rock is painted in, in radii of the stone: nine tall,
+ * the stone's centre 7.5 down from the top, the fire tail streaming UP from
+ * it — the rock falls down the screen. The drawn tail reaches about 7.6
+ * radii above the stone, so this leaves it a hair of air rather than cutting
+ * it flat at the edge.
+ */
+export const METEOR_BOX = { side: 9, centre: 7.5 } as const
+
+/** The boss's rock, mid-fall, at the origin. */
+export const paintMeteorRock = (
+  ctx: CanvasRenderingContext2D, rockR: number, big: boolean, scale: number,
+  cheap: boolean, o?: PaintOpts
+): void => {
+  const painted = art('round', 'meteor', o)
+  if (painted) {
+    const s = METEOR_BOX.side * rockR
+    ctx.drawImage(painted, -s / 2, -METEOR_BOX.centre * rockR, s, s)
+    return
+  }
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+
+  // A continuous burning streak rather than a dotted line — the tail is
+  // what says "falling" while the rock itself is barely moving on screen.
+  const tailLen = scale * (big ? 7 : 4.2)
+  const steps = cheap ? 5 : 12
+  for (let i = 1; i <= steps; i++) {
+    const back = i / steps
+    ctx.globalAlpha = 0.34 * (1 - back) ** 1.4
+    ctx.fillStyle = big ? '#ff6a1e' : '#ffa04e'
+    ctx.beginPath()
+    ctx.ellipse(
+      0, -back * tailLen,
+      rockR * (1 - back * 0.75), rockR * (1.5 - back * 0.9),
+      0, 0, Math.PI * 2
+    )
+    ctx.fill()
+  }
+
+  // Halo, then a white-hot core: two passes, because one flat glow reads
+  // as a sticker and two read as something burning.
+  ctx.globalAlpha = 0.5
+  ctx.fillStyle = big ? '#ff9a3c' : '#ffbe72'
+  ctx.beginPath()
+  ctx.arc(0, 0, rockR * 2.2, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 0.9
+  ctx.fillStyle = '#fff0c4'
+  ctx.beginPath()
+  ctx.arc(0, 0, rockR * 1.25, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalCompositeOperation = 'source-over'
+
+  // The stone, dark against its own fire so it reads as a solid object
+  // and not as a light.
+  ctx.globalAlpha = 1
+  ctx.fillStyle = big ? '#4a2415' : '#4b3a2c'
+  ctx.beginPath()
+  ctx.arc(0, 0, rockR, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = '#170a04'
+  ctx.lineWidth = Math.max(2, scale * 0.06)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * The bomber's charge at the origin: a glow of `glowR` around a body of
+ * `bodyR`. Painted in a box 4.4 body radii square. The spark walking down the
+ * fuse is the caller's.
+ */
+export const paintBombCharge = (
+  ctx: CanvasRenderingContext2D, bodyR: number, glowR: number, o?: PaintOpts
+): void => {
+  const painted = art('round', 'bomb', o)
+  if (painted) {
+    ctx.globalAlpha = 1
+    ctx.drawImage(painted, -bodyR * 2.2, -bodyR * 2.2, bodyR * 4.4, bodyR * 4.4)
+    return
+  }
+  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.fillStyle = '#ff7a30'
+  ctx.beginPath()
+  ctx.arc(0, 0, glowR, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = '#2a1a14'
+  ctx.beginPath()
+  ctx.arc(0, 0, bodyR, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/** The player's grenade body at the origin, already turned to its tumble. */
+export const paintGrenadeBody = (
+  ctx: CanvasRenderingContext2D, r: number, scale: number, o?: PaintOpts
+): void => {
+  const painted = art('round', 'grenade', o)
+  if (painted) {
+    ctx.drawImage(painted, -r * 1.3, -r * 1.3, r * 2.6, r * 2.6)
+    return
+  }
+  ctx.fillStyle = '#46536a'
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+  // A band across the body, so the tumble is visible rather than implied.
+  ctx.fillStyle = '#2b3446'
+  ctx.fillRect(-r, -r * 0.16, r * 2, r * 0.32)
+  ctx.strokeStyle = '#141a26'
+  ctx.lineWidth = Math.max(1.2, scale * 0.035)
+  ctx.stroke()
+}
+
+/**
+ * The tracer's look for a run's fire rate. The two colours brighten with the
+ * rate and are built ONCE per pass — a template literal inside the bullet loop
+ * would be an allocation per bullet per frame.
+ */
+export const tracerStyle = (heat: number, scale: number): {
+  outer: string; coreW: number; outerW: number; len: number
+} => ({
+  outer: `rgba(255,${Math.round(214 + heat * 30)},${Math.round(120 + heat * 90)},${0.35 + heat * 0.3})`,
+  coreW: Math.max(1, scale * (0.045 + heat * 0.02)),
+  outerW: Math.max(2, scale * (0.1 + heat * 0.03)),
+  len: scale * 0.55
+})
+
+/**
+ * ONE tracer, at the origin, pointing down the screen from it — the reference
+ * the painted round is made from. The battlefield batches every tracer into
+ * two path submissions instead (see `drawBullets`), which draws this exact
+ * geometry; a painted tracer is blitted into the `len`-square box this fills.
+ */
+export const paintTracerRef = (
+  ctx: CanvasRenderingContext2D, heat: number, scale: number
+): void => {
+  const st = tracerStyle(heat, scale)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = st.outer
+  ctx.lineWidth = st.outerW
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(0, st.len)
+  ctx.stroke()
+  ctx.strokeStyle = 'rgba(255,255,235,0.95)'
+  ctx.lineWidth = st.coreW
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(0, st.len * 0.6)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * The box a painted rocket is blitted into, in units of the shell's radius
+ * `rr`: `w` wide and `h` tall, its top edge `top` above the shell's centre.
+ * 9:16 — a ratio the image tools offer — with the plume given the room it
+ * has in the drawing.
+ */
+export const ROCKET_BOX = { w: 3.6, h: 6.4, top: 2 } as const
+
+/**
+ * The launcher's rocket at the origin, nose up (−y), `rr` the shell's radius;
+ * the caller has already turned the context to the round's heading.
+ *
+ * The drawing is light — a hot shell and a plume — and the battlefield draws
+ * it additively with the tracers. A painting is an OBJECT with a dark iron
+ * shell, and dark adds nothing under `lighter`, so it is blitted source-over.
+ */
+export const paintRocketBody = (ctx: CanvasRenderingContext2D, rr: number, o?: PaintOpts): void => {
+  const painted = art('round', 'rocket', o)
+  if (painted) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.drawImage(painted, -ROCKET_BOX.w / 2 * rr, -ROCKET_BOX.top * rr, ROCKET_BOX.w * rr, ROCKET_BOX.h * rr)
+    ctx.restore()
+    return
+  }
+  // The plume, trailing back behind it.
+  ctx.strokeStyle = 'rgba(255,150,50,0.5)'
+  ctx.lineWidth = rr * 1.5
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(0, rr)
+  ctx.lineTo(0, rr * 3.6)
+  ctx.stroke()
+
+  ctx.fillStyle = 'rgba(255,236,190,0.95)'
+  ctx.beginPath()
+  ctx.ellipse(0, 0, rr * 0.8, rr * 1.7, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255,120,40,0.9)'
+  ctx.beginPath()
+  ctx.ellipse(0, rr * 1.1, rr * 0.55, rr * 1.1, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/** The muzzle flash's ramp, keyed on the two numbers that shape it. */
+export const muzzleRamp = (
+  ctx: CanvasRenderingContext2D, flashY: number, flashR: number
+): CanvasGradient => {
+  const flashKey = `muzzle|${flashY}|${flashR}`
+  let ramp = getRamp(flashKey)
+  if (!ramp) {
+    ramp = putRamp(flashKey, ctx.createRadialGradient(0, flashY, 0, 0, flashY, flashR))
+    ramp.addColorStop(0, 'rgba(255,244,200,0.95)')
+    ramp.addColorStop(0.4, 'rgba(255,180,60,0.5)')
+    ramp.addColorStop(1, 'rgba(255,120,20,0)')
+  }
+  return ramp
+}
+
+/**
+ * A muzzle flash: a disc of `flashR` centred `flashY` above the survivor's
+ * feet, additive. The caller owns the blend mode and the fade.
+ */
+export const paintMuzzleFlash = (
+  ctx: CanvasRenderingContext2D, flashY: number, flashR: number, ramp: CanvasGradient,
+  o?: PaintOpts
+): void => {
+  const painted = art('fx', 'muzzle', o)
+  if (painted) {
+    ctx.drawImage(painted, -flashR, flashY - flashR, flashR * 2, flashR * 2)
+    return
+  }
+  ctx.fillStyle = ramp
+  ctx.beginPath()
+  ctx.arc(0, flashY, flashR, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/** A scorch on the road at the origin: `r` wide, squashed to 0.55 on Y. The
+ *  fade is the caller's `globalAlpha`. */
+export const paintScorch = (ctx: CanvasRenderingContext2D, r: number, o?: PaintOpts): void => {
+  const painted = art('fx', 'scorch', o)
+  if (painted) {
+    ctx.drawImage(painted, -r, -r * 0.55, r * 2, r * 1.1)
+    return
+  }
+  const key = `decal|${r}`
+  let ramp = getRamp(key)
+  if (!ramp) {
+    ramp = putRamp(key, ctx.createRadialGradient(0, 0, 0, 0, 0, r))
+    ramp.addColorStop(0, 'rgba(12,10,14,1)')
+    ramp.addColorStop(1, 'rgba(12,10,14,0)')
+  }
+  ctx.fillStyle = ramp
+  ctx.beginPath()
+  ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/** The three ring families the field draws: a gate's blast, an attack about to
+ *  land, and a heal gathering. One painting each; the drawn ring keeps its
+ *  per-site colour and width. */
+export type RingKind = 'shock' | 'heat' | 'heal'
+
+/**
+ * How much bigger than its shape a glowing effect's painting is blitted.
+ *
+ * A ring, the dome and the guard are drawn with their edge AT the box's edge;
+ * a painting of them carries a soft glow outside that edge, and a glow that
+ * runs off the frame is clipped flat. So the shape sits at 1/1.12 of the
+ * file, the glow gets the margin, and the file is blitted this much larger —
+ * the ring inside it lands exactly on the radius the kill is measured at.
+ */
+export const FX_PAD = 1.12
+
+/**
+ * A ring at the origin, `rx` by `ry`, painted or stroked in `colour`.
+ *
+ * A drawn ring carries its fade inside the colour string; a painting cannot,
+ * so a site whose colour has an alpha passes the same fade as `alpha` and the
+ * painted branch applies it through `globalAlpha` instead.
+ */
+export const paintRing = (
+  ctx: CanvasRenderingContext2D, kind: RingKind, rx: number, ry: number,
+  lineW: number, colour: string, o?: PaintOpts & { alpha?: number }
+): void => {
+  const painted = art('fx', `ring-${kind}`, o)
+  if (painted) {
+    const was = ctx.globalAlpha
+    if (o?.alpha !== undefined) ctx.globalAlpha = was * o.alpha
+    const px = rx * FX_PAD
+    const py = ry * FX_PAD
+    ctx.drawImage(painted, -px, -py, px * 2, py * 2)
+    ctx.globalAlpha = was
+    return
+  }
+  ctx.strokeStyle = colour
+  ctx.lineWidth = lineW
+  ctx.beginPath()
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+/**
+ * The shield's DOME — the surface, the honeycomb, the rim and the specular —
+ * over the ellipse `(cx, cy, rx, ry)`. Additive throughout; the ground ring
+ * under it and the crest over it are the caller's.
+ */
+export const paintShieldDome = (
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number,
+  alpha: number, hit: number, cheap: boolean, scale: number, o?: PaintOpts
+): void => {
+  const painted = art('fx', 'shield', o)
+  ctx.globalCompositeOperation = 'lighter'
+  if (painted) {
+    ctx.globalAlpha = Math.min(1, alpha * 0.9 + hit * 0.4)
+    const px = rx * FX_PAD
+    const py = ry * FX_PAD
+    ctx.drawImage(painted, cx - px, cy - py, px * 2, py * 2)
+    ctx.globalCompositeOperation = 'source-over'
+    return
+  }
+
+  // The surface wash — thin, because the crowd underneath is the thing the
+  // player is actually steering and has to stay readable through it.
+  ctx.globalAlpha = (0.075 + 0.16 * hit) * alpha
+  ctx.fillStyle = '#3fbfff'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Honeycomb, clipped to the bubble. The grid is anchored to the dome itself,
+  // so it travels with the crowd instead of swimming across it.
+  if (!cheap) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.globalAlpha = 0.3 * alpha
+    ctx.strokeStyle = '#cdf3ff'
+    ctx.lineWidth = Math.max(1.2, scale * 0.03)
+    const s = rx * 0.24
+    const stepX = s * 1.732
+    const stepY = s * 1.5
+    const cols = Math.ceil(rx / stepX) + 1
+    const rows = Math.ceil(ry / stepY) + 1
+    ctx.beginPath()
+    for (let row = -rows; row <= rows; row++) {
+      for (let col = -cols; col <= cols; col++) {
+        const hx = cx + col * stepX + (row & 1 ? stepX / 2 : 0)
+        const hy = cy + row * stepY
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 - Math.PI / 2
+          const px = hx + Math.cos(a) * s
+          const py = hy + Math.sin(a) * s
+          if (i === 0) ctx.moveTo(px, py)
+          else ctx.lineTo(px, py)
+        }
+        ctx.closePath()
+      }
+    }
+    // One stroke for the whole grid: thirty separate strokes would be thirty
+    // state changes a phone does not need to pay for.
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // The rim. Bright and thick — this is the edge that reads as a SURFACE, and
+  // it is the only part guaranteed to stay visible against muzzle flash.
+  ctx.globalAlpha = Math.min(1, 1.05 * alpha)
+  ctx.strokeStyle = hit > 0.2 ? '#ffffff' : '#b6f0ff'
+  ctx.lineWidth = Math.max(2.5, scale * 0.09)
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // A specular sweep across the upper left: the standard cue that a curved
+  // surface is glass rather than a hole.
+  if (!cheap) {
+    ctx.globalAlpha = 0.5 * alpha
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = Math.max(1.5, scale * 0.045)
+    ctx.beginPath()
+    ctx.ellipse(cx, cy, rx * 0.82, ry * 0.82, 0, Math.PI * 1.18, Math.PI * 1.62)
+    ctx.stroke()
+  }
+
+  ctx.globalCompositeOperation = 'source-over'
+}
+
+/**
+ * The boss's guard barrier: a point-up hexagon `rx` by `ry` centred `cy`
+ * below the origin, pulsing on `pulse`. Drawn UNDER the body so the boss
+ * stands inside it; the crest goes over it separately.
+ */
+export const paintGuardHex = (
+  ctx: CanvasRenderingContext2D, cy: number, rx: number, ry: number, pulse: number,
+  scale: number, o?: PaintOpts
+): void => {
+  const painted = art('fx', 'guard', o)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  if (painted) {
+    ctx.globalAlpha = 0.55 + pulse * 0.35
+    const px = rx * FX_PAD
+    const py = ry * FX_PAD
+    ctx.drawImage(painted, -px, cy - py, px * 2, py * 2)
+    ctx.restore()
+    return
+  }
+  ctx.globalAlpha = 0.16 + pulse * 0.14
+  ctx.fillStyle = '#ff6a3a'
+  guardHexPath(ctx, cy, rx, ry)
+  ctx.fill()
+  ctx.globalAlpha = 0.5 + pulse * 0.4
+  ctx.strokeStyle = '#ffd08a'
+  ctx.lineWidth = Math.max(1.5, scale * 0.05)
+  guardHexPath(ctx, cy, rx, ry)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/** The two heater-shield crests: the boss's over its guard, the player's
+ *  over their bubble. Same silhouette, different colour, so the shape is
+ *  learned once. */
+export type CrestKind = 'guard' | 'shield'
+
+/**
+ * A heater-shield crest centred on `(cx, cy)`, `cw` wide and `ch` tall on
+ * each side of the centre. The chief band and the centre rib are the two
+ * strokes that turn a blob into heraldry and survive 20 px on a phone.
+ */
+export const paintCrest = (
+  ctx: CanvasRenderingContext2D, kind: CrestKind, cx: number, cy: number,
+  cw: number, ch: number,
+  style: { fill: string; rim: string; rimW: number; rib: string; ribW: number },
+  o?: PaintOpts
+): void => {
+  const painted = art('fx', `crest-${kind}`, o)
+  if (painted) {
+    ctx.drawImage(painted, cx - cw, cy - ch, cw * 2, ch * 2)
+    return
+  }
+  // Heater shield: flat top, straight shoulders, tapering to a rounded point.
+  ctx.beginPath()
+  ctx.moveTo(cx - cw, cy - ch)
+  ctx.lineTo(cx + cw, cy - ch)
+  ctx.lineTo(cx + cw, cy - ch * 0.05)
+  ctx.quadraticCurveTo(cx + cw, cy + ch * 0.62, cx, cy + ch)
+  ctx.quadraticCurveTo(cx - cw, cy + ch * 0.62, cx - cw, cy - ch * 0.05)
+  ctx.closePath()
+  ctx.fillStyle = style.fill
+  ctx.fill()
+  ctx.lineWidth = style.rimW
+  ctx.strokeStyle = style.rim
+  ctx.stroke()
+
+  ctx.strokeStyle = style.rib
+  ctx.lineWidth = style.ribW
+  ctx.beginPath()
+  ctx.moveTo(cx - cw * 0.78, cy - ch * 0.46)
+  ctx.lineTo(cx + cw * 0.78, cy - ch * 0.46)
+  ctx.moveTo(cx, cy - ch * 0.46)
+  ctx.lineTo(cx, cy + ch * 0.66)
+  ctx.stroke()
+}
+
+/**
+ * The elite's crown: three points and a base, `cw` wide, standing `ch` tall
+ * (1.15 `ch` at the middle point) on the baseline `cy`. The universal "this
+ * one is the important one" mark, shared by the foe and the off-screen marker
+ * so the two are obviously the same object.
+ */
+export const paintCrown = (
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, cw: number, ch: number,
+  lineW: number, o?: PaintOpts
+): void => {
+  const painted = art('ui', 'crown', o)
+  if (painted) {
+    ctx.drawImage(painted, cx - cw / 2, cy - ch * 1.15, cw, ch * 1.15)
+    return
+  }
+  ctx.fillStyle = '#ffd24a'
+  ctx.strokeStyle = 'rgba(60,34,4,0.9)'
+  ctx.lineWidth = lineW
+  ctx.beginPath()
+  ctx.moveTo(cx - cw / 2, cy)
+  ctx.lineTo(cx - cw / 2, cy - ch)
+  ctx.lineTo(cx - cw / 6, cy - ch * 0.42)
+  ctx.lineTo(cx, cy - ch * 1.15)
+  ctx.lineTo(cx + cw / 6, cy - ch * 0.42)
+  ctx.lineTo(cx + cw / 2, cy - ch)
+  ctx.lineTo(cx + cw / 2, cy)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+}
+
+/**
+ * The road's texture, into a `px`-square context at its origin: gravel,
+ * cracks and tyre wear. Used as a repeating pattern.
+ *
+ * Deliberately NOT a painting. A painted cobble tile was tried through the
+ * art pipeline and was worse than this: stones big enough to read at all read
+ * as OBJECTS under the crowd, and the ground is the one layer that must never
+ * compete with what stands on it. The gravel stays drawn.
+ */
+export const paintLaneTile = (t: CanvasRenderingContext2D, px: number): void => {
   t.fillStyle = LANE_TONE.base
   t.fillRect(0, 0, px, px)
 
@@ -372,6 +1587,171 @@ const buildLaneTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null => {
     }
     t.stroke()
   }
+}
+
+/**
+ * A painted ridge band's own geometry: 4:1, with the ridge line at `line` of
+ * its height — sky above it is keyed out, silhouette below it is opaque. The
+ * renderer TINTS the silhouette per stage, so the painting is alpha only.
+ */
+export const RIDGE_BAND = { w: 1536, h: 384, line: 0.4 } as const
+
+/** A silhouette tinted to one colour, cached per (image, colour). */
+const tinted = new Map<string, HTMLCanvasElement>()
+const tintSilhouette = (img: HTMLImageElement, colour: string): HTMLCanvasElement | null => {
+  const key = `${img.src}|${colour}`
+  const hit = tinted.get(key)
+  if (hit) return hit
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth
+  c.height = img.naturalHeight
+  const t = c.getContext('2d')
+  if (!t) return null
+  t.drawImage(img, 0, 0)
+  t.globalCompositeOperation = 'source-in'
+  t.fillStyle = colour
+  t.fillRect(0, 0, c.width, c.height)
+  if (tinted.size >= 16) tinted.clear()
+  tinted.set(key, c)
+  return c
+}
+
+/**
+ * One parallax ridge across a `w`-wide, `h`-tall backdrop: a jagged
+ * silhouette wobbling `amp` about `yBase` and filled down to the bottom, in
+ * `colour`. Seeded, so it is stable across frames. The painted band is laid
+ * with its ridge line on `yBase` and tiled across, and the ground below it
+ * is filled in the same colour so the two join.
+ */
+export const paintRidge = (
+  ctx: CanvasRenderingContext2D, id: 'ridge-far' | 'ridge-near',
+  w: number, h: number, yBase: number, amp: number, colour: string, seed: number,
+  o?: PaintOpts
+): void => {
+  const painted = art('bg', id, o)
+  if (painted) {
+    const band = tintSilhouette(painted, colour)
+    if (band) {
+      const bandH = Math.max(1, Math.round(w / (RIDGE_BAND.w / RIDGE_BAND.h)))
+      const top = Math.round(yBase - RIDGE_BAND.line * bandH)
+      ctx.drawImage(band, 0, top, w, bandH)
+      ctx.fillStyle = colour
+      ctx.fillRect(0, top + bandH - 1, w, Math.max(0, h - (top + bandH - 1)))
+      return
+    }
+  }
+  ctx.fillStyle = colour
+  ctx.beginPath()
+  ctx.moveTo(0, h)
+  ctx.lineTo(0, yBase)
+  for (let x = 0; x <= w; x += Math.max(8, w / 90)) {
+    const n = Math.sin(x * 0.0121 + seed) * 0.5 + Math.sin(x * 0.0413 + seed * 2.3) * 0.32
+      + Math.sin(x * 0.0907 + seed * 5.1) * 0.18
+    ctx.lineTo(x, yBase + n * amp)
+  }
+  ctx.lineTo(w, h)
+  ctx.closePath()
+  ctx.fill()
+}
+
+/**
+ * Drop every surface that BAKED a decision about the art layer.
+ *
+ * Probing is async, so the backdrop, the lane pattern and every tinted ramp
+ * sprite may have been built from a miss; without this they keep the drawing
+ * for the life of the page while everything built later takes the paint —
+ * "the old design shows at some camera distances", the strangest bug the
+ * pipeline produces. Narrower than `invalidateArt`, which also clears the
+ * transients (a falling meteor must not vanish because a crate decoded).
+ */
+export const invalidateArtSurfaces = (): void => {
+  backdrop = null
+  backdropKey = ''
+  laneTile = null
+  laneTileKey = ''
+  tinted.clear()
+  clearRamps()
+}
+onArtChanged(invalidateArtSurfaces)
+
+// ─── Cached backdrop ────────────────────────────────────────────────────────
+//
+// The sky and the two parallax bands are the most expensive layers and the
+// least likely to change, so they are painted once into an offscreen canvas and
+// blitted with a vertical offset. They are only re-rendered when the viewport
+// or the stage changes.
+
+let backdrop: HTMLCanvasElement | null = null
+let backdropKey = ''
+
+const buildBackdrop = (): HTMLCanvasElement | null => {
+  if (typeof document === 'undefined' || viewW <= 0 || viewH <= 0) return null
+  const key = `${Math.round(viewW)}x${Math.round(viewH)}|${stage.value}`
+  if (backdrop && backdropKey === key) return backdrop
+
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(viewW))
+  // One extra viewport of height so the parallax offset never exposes an edge.
+  c.height = Math.max(1, Math.round(viewH * 1.5))
+  const ctx = c.getContext('2d')
+  if (!ctx) return null
+  const sky = skyFor(stage.value)
+  const h = c.height
+  const w = c.width
+
+  const g = ctx.createLinearGradient(0, 0, 0, h)
+  g.addColorStop(0, sky.top)
+  g.addColorStop(0.62, sky.bottom)
+  g.addColorStop(1, sky.dune)
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, w, h)
+
+  // A low sun sitting on the horizon, blown out. It is the single element that
+  // makes a flat gradient read as a place.
+  const sun = ctx.createRadialGradient(w * 0.5, h * 0.52, 0, w * 0.5, h * 0.52, w * 0.62)
+  sun.addColorStop(0, `${sky.haze}cc`)
+  sun.addColorStop(0.45, `${sky.haze}33`)
+  sun.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = sun
+  ctx.fillRect(0, 0, w, h)
+
+  // Far ridge line and the dune band — jagged silhouettes, seeded so they are
+  // stable across frames, or the painted bands tinted to this stage's sky.
+  paintRidge(ctx, 'ridge-far', w, h, h * 0.52, h * 0.07, sky.ridge, 1.7)
+  paintRidge(ctx, 'ridge-near', w, h, h * 0.60, h * 0.045, sky.dune, 4.2)
+
+  backdrop = c
+  backdropKey = key
+  return c
+}
+
+// ─── Cached lane tile ───────────────────────────────────────────────────────
+//
+// Gravel, cracks and tyre wear, baked into one repeatable tile and used as a
+// canvas pattern. Drawing this procedurally per frame would be a few thousand
+// ops; as a pattern it is one `fillRect`.
+
+let laneTile: CanvasPattern | null = null
+let laneTilePx = 0
+let laneTileKey = ''
+
+/** World units covered by one tile — chosen so the seam lands on the rung
+ *  rhythm and is invisible. */
+const TILE_UNITS = 4
+
+const buildLaneTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null => {
+  const px = Math.max(48, Math.round(TILE_UNITS * scale))
+  const key = String(px)
+  if (laneTile && laneTileKey === key) return laneTile
+  if (typeof document === 'undefined') return null
+
+  const c = document.createElement('canvas')
+  c.width = px
+  c.height = px
+  const t = c.getContext('2d')
+  if (!t) return null
+
+  paintLaneTile(t, px)
 
   laneTile = ctx.createPattern(c, 'repeat')
   laneTilePx = px
@@ -393,12 +1773,12 @@ const buildLaneTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null => {
 let hazardTile: CanvasPattern | null = null
 let hazardKey = ''
 
-const buildHazardTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null => {
+const buildHazardTile = (ctx: CanvasRenderingContext2D, s = scale): CanvasPattern | null => {
   // Sized so that ~2.5 stripe bands cross a pillar's width at ANY zoom: the
   // pillar is only `DIVIDER_HALF_W * 2` (0.5) units across, and a stripe period
   // tuned for the road would put a single band on it, which reads as a smear.
   // The 12 px floor is where a diagonal stops surviving the phone's downscale.
-  const px = Math.max(12, Math.round(scale * 0.42))
+  const px = Math.max(12, Math.round(s * 0.42))
   const key = String(px)
   if (hazardTile && hazardKey === key) return hazardTile
   if (typeof document === 'undefined') return null
@@ -427,6 +1807,11 @@ const buildHazardTile = (ctx: CanvasRenderingContext2D): CanvasPattern | null =>
   hazardKey = key
   return hazardTile
 }
+
+/** The pillar's stripes at an explicit px-per-unit — for the art bench and
+ *  the playground, which draw a pillar without a camera. */
+export const hazardPatternFor = (ctx: CanvasRenderingContext2D, s: number): CanvasPattern | null =>
+  buildHazardTile(ctx, s)
 
 // ─── Screen-wide transient grades ───────────────────────────────────────────
 
@@ -1072,7 +2457,20 @@ export const drawScene = (
   drawPickups(ctx)
   drawCrates(ctx)
   drawBarrels(ctx)
+  // The prize goes under its own armour, and the armour is a barricade — so the
+  // box is painted first and the plates land on top of it. The levers go LAST of
+  // the three: they sit out on the rails where nothing else in the game draws,
+  // and the one thing that must never happen is a lever hidden behind scenery
+  // the player is not required to look at.
+  drawWeaponBoxes(ctx)
+  drawGuards(ctx)
   drawBarricades(ctx)
+  drawLevers(ctx)
+  // The cover over each post goes ON TOP of it. It is the one thing in the game
+  // allowed to hide a lever, because hiding the lever is the entire job — and
+  // the post is drawn first so the sliver above the stone still says what is
+  // behind it.
+  drawStones(ctx)
   drawRocks(ctx)
   // Shock ring → live leaves → the leaves being torn down → the pillars. The
   // ring is flat on the road and the wreckage must never sit over a pillar.
@@ -1317,21 +2715,10 @@ const drawDecals = (ctx: CanvasRenderingContext2D): void => {
     const r = d.r * scale
     if (r <= 0) continue
 
-    const key = `decal|${r}`
-    let ramp = getRamp(key)
-    if (!ramp) {
-      ramp = putRamp(key, ctx.createRadialGradient(0, 0, 0, 0, 0, r))
-      ramp.addColorStop(0, 'rgba(12,10,14,1)')
-      ramp.addColorStop(1, 'rgba(12,10,14,0)')
-    }
-
     ctx.save()
     ctx.translate(worldToScreenX(d.x), worldToScreenY(d.y))
     ctx.globalAlpha = a
-    ctx.fillStyle = ramp
-    ctx.beginPath()
-    ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2)
-    ctx.fill()
+    paintScorch(ctx, r)
     ctx.restore()
   }
 }
@@ -1356,14 +2743,6 @@ const drawPickups = (ctx: CanvasRenderingContext2D): void => {
     glow.addColorStop(0, 'rgba(255,210,90,0.5)')
     glow.addColorStop(1, 'rgba(255,180,40,0)')
   }
-  let body = getRamp(`coinBody|${r}`)
-  if (!body) {
-    body = putRamp(`coinBody|${r}`, ctx.createLinearGradient(0, -r, 0, r))
-    body.addColorStop(0, '#ffe066')
-    body.addColorStop(0.55, '#e0a81c')
-    body.addColorStop(1, '#8a6410')
-  }
-
   for (const p of pickups) {
     if (p.taken) continue
     const sy = worldToScreenY(p.y)
@@ -1391,21 +2770,7 @@ const drawPickups = (ctx: CanvasRenderingContext2D): void => {
     ctx.fill()
     ctx.restore()
 
-    const art = propImage('coin')
-    if (art) {
-      // The bitmap spins by being squashed on X, exactly like the drawn one, so
-      // dropping real art in never changes the animation.
-      const w = Math.max(1, r * 2 * spin)
-      ctx.drawImage(art, -w / 2, bob - r, w, r * 2)
-    } else {
-      ctx.fillStyle = body
-      ctx.beginPath()
-      ctx.ellipse(0, bob, Math.max(1, r * spin), r, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(60,40,4,0.7)'
-      ctx.lineWidth = Math.max(1, r * 0.18)
-      ctx.stroke()
-    }
+    paintCoin(ctx, r, spin, bob)
     ctx.restore()
   }
 }
@@ -1554,11 +2919,9 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
       ctx.closePath()
       ctx.fill()
 
-      ctx.strokeStyle = big ? '#ff7a2a' : '#ffb066'
-      ctx.lineWidth = Math.max(2.5, scale * (big ? 0.13 : 0.09))
-      ctx.beginPath()
-      ctx.ellipse(sx, sy, groundR, groundR * 0.42, 0, 0, Math.PI * 2)
-      ctx.stroke()
+      ctx.translate(sx, sy)
+      paintRing(ctx, 'heat', groundR, groundR * 0.42,
+        Math.max(2.5, scale * (big ? 0.13 : 0.09)), big ? '#ff7a2a' : '#ffb066')
       ctx.restore()
 
       if (!c.done) {
@@ -1573,49 +2936,8 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
         const rockR = scale * (big ? 1 : 0.55)
 
         ctx.save()
-        ctx.globalCompositeOperation = 'lighter'
-
-        // A continuous burning streak rather than a dotted line — the tail is
-        // what says "falling" while the rock itself is barely moving on screen.
-        const tailLen = scale * (big ? 7 : 4.2)
-        const steps = cheap ? 5 : 12
-        for (let i = 1; i <= steps; i++) {
-          const back = i / steps
-          ctx.globalAlpha = 0.34 * (1 - back) ** 1.4
-          ctx.fillStyle = big ? '#ff6a1e' : '#ffa04e'
-          ctx.beginPath()
-          ctx.ellipse(
-            sx, my - back * tailLen,
-            rockR * (1 - back * 0.75), rockR * (1.5 - back * 0.9),
-            0, 0, Math.PI * 2
-          )
-          ctx.fill()
-        }
-
-        // Halo, then a white-hot core: two passes, because one flat glow reads
-        // as a sticker and two read as something burning.
-        ctx.globalAlpha = 0.5
-        ctx.fillStyle = big ? '#ff9a3c' : '#ffbe72'
-        ctx.beginPath()
-        ctx.arc(sx, my, rockR * 2.2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.globalAlpha = 0.9
-        ctx.fillStyle = '#fff0c4'
-        ctx.beginPath()
-        ctx.arc(sx, my, rockR * 1.25, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.globalCompositeOperation = 'source-over'
-
-        // The stone, dark against its own fire so it reads as a solid object
-        // and not as a light.
-        ctx.globalAlpha = 1
-        ctx.fillStyle = big ? '#4a2415' : '#4b3a2c'
-        ctx.beginPath()
-        ctx.arc(sx, my, rockR, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.strokeStyle = '#170a04'
-        ctx.lineWidth = Math.max(2, scale * 0.06)
-        ctx.stroke()
+        ctx.translate(sx, my)
+        paintMeteorRock(ctx, rockR, big, scale, cheap)
         ctx.restore()
       }
       continue
@@ -1640,9 +2962,11 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
       ctx.ellipse(sx, sy, r, r * 0.5, 0, 0, Math.PI * 2)
       ctx.fill()
       // The edge, thickening as the fuse burns.
-      ctx.strokeStyle = c.done ? '#ffffff' : '#ff6a2a'
-      ctx.lineWidth = Math.max(2.5, scale * (0.06 + p * 0.1))
-      ctx.stroke()
+      ctx.save()
+      ctx.translate(sx, sy)
+      paintRing(ctx, 'heat', r, r * 0.5,
+        Math.max(2.5, scale * (0.06 + p * 0.1)), c.done ? '#ffffff' : '#ff6a2a')
+      ctx.restore()
       // …and the clock hand: the fraction of the ring that has filled is the
       // fraction of the fuse that has gone.
       ctx.strokeStyle = '#ffd27a'
@@ -1657,17 +2981,11 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
         // one sine.
         const beat = 0.5 + 0.5 * Math.sin(c.t * (10 + p * 26))
         const bodyR = scale * (0.42 + beat * 0.1 * p)
+        ctx.save()
+        ctx.translate(sx, sy - scale * 0.5)
+        paintBombCharge(ctx, bodyR, bodyR * (1.8 + beat * 0.6))
+        ctx.restore()
         ctx.globalAlpha = 1
-        ctx.globalCompositeOperation = 'lighter'
-        ctx.fillStyle = '#ff7a30'
-        ctx.beginPath()
-        ctx.arc(sx, sy - scale * 0.5, bodyR * (1.8 + beat * 0.6), 0, Math.PI * 2)
-        ctx.fill()
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.fillStyle = '#2a1a14'
-        ctx.beginPath()
-        ctx.arc(sx, sy - scale * 0.5, bodyR, 0, Math.PI * 2)
-        ctx.fill()
         // The spark on the fuse, walking down toward the charge.
         ctx.fillStyle = '#fff3c8'
         ctx.beginPath()
@@ -1884,11 +3202,10 @@ const drawHealTell = (ctx: CanvasRenderingContext2D): void => {
       const phase01 = (p + i / rings) % 1
       const r = scale * (3.2 - phase01 * 2.6)
       ctx.globalAlpha = 0.42 * (1 - phase01) * (0.4 + p * 0.6)
-      ctx.strokeStyle = '#5cf08a'
-      ctx.lineWidth = Math.max(2, scale * 0.09)
-      ctx.beginPath()
-      ctx.ellipse(sx, sy, r, r * 0.5, 0, 0, Math.PI * 2)
-      ctx.stroke()
+      ctx.save()
+      ctx.translate(sx, sy)
+      paintRing(ctx, 'heal', r, r * 0.5, Math.max(2, scale * 0.09), '#5cf08a')
+      ctx.restore()
     }
     ctx.globalAlpha = 0.18 + p * 0.3
     ctx.fillStyle = '#2fbd63'
@@ -1926,36 +3243,12 @@ const drawBossBolts = (ctx: CanvasRenderingContext2D): void => {
     ctx.ellipse(sx, sy + r * 1.5, r * 0.9, r * 0.34, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.globalCompositeOperation = 'lighter'
-    if (!cheapFx) {
-      // A short trail behind the direction of travel, so the bolt's LINE is
-      // legible — which is the thing the player has to step off.
-      const len = Math.hypot(p.vx, p.vy) || 1
-      for (let i = 1; i <= 4; i++) {
-        const back = i / 4
-        ctx.globalAlpha = 0.3 * (1 - back)
-        ctx.fillStyle = '#7cf0a8'
-        ctx.beginPath()
-        ctx.arc(
-          sx - (p.vx / len) * back * r * 4,
-          sy + (p.vy / len) * back * r * 4,
-          r * (1 - back * 0.6), 0, Math.PI * 2
-        )
-        ctx.fill()
-      }
-    }
     // Halo and core, pulsing, so it is unmistakably a live thing.
     const pulse = 0.85 + Math.sin(t * 14 + p.id) * 0.15
-    ctx.globalAlpha = 0.5
-    ctx.fillStyle = '#3ad97a'
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * 2.1 * pulse, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = 0.95
-    ctx.fillStyle = '#eafff0'
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * pulse, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.save()
+    ctx.translate(sx, sy)
+    paintBossBolt(ctx, r, p.vx, p.vy, pulse, cheapFx)
+    ctx.restore()
   }
   ctx.restore()
 }
@@ -2046,57 +3339,8 @@ const drawRollers = (ctx: CanvasRenderingContext2D): void => {
     ctx.fill()
 
     ctx.globalAlpha = 1
-    // Built per frame rather than cached in `getRamp`: a radial gradient is
-    // pinned to absolute canvas coordinates, and this one is centred on a body
-    // that is moving. A cached ramp would light the ball from wherever it was
-    // when the ramp was baked. There are never more than a couple of these on
-    // screen, so the two allocations are not the frame's problem.
-    const shade = ctx.createRadialGradient(
-      sx - r * 0.35, sy - r * 0.45, r * 0.1, sx, sy, r
-    )
-    shade.addColorStop(0, '#9aa4b2')
-    shade.addColorStop(0.45, '#5d6672')
-    shade.addColorStop(1, '#232830')
-    ctx.fillStyle = shade
-    ctx.beginPath()
-    ctx.arc(sx, sy, r, 0, Math.PI * 2)
-    ctx.fill()
-
-    // Banding that turns with the roll. The spin is derived from how far the
-    // ball has actually travelled (`phase` accumulates with time and the speed
-    // is constant), so it can never look like it is sliding.
-    if (!cheapFx) {
-      const spin = -f.phase * 3.1
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(sx, sy, r * 0.97, 0, Math.PI * 2)
-      ctx.clip()
-      ctx.globalAlpha = 0.28
-      ctx.strokeStyle = '#161a20'
-      ctx.lineWidth = Math.max(2, scale * 0.09)
-      for (let i = 0; i < 4; i++) {
-        const off = (((spin + i * 0.5) % 2) + 2) % 2 - 1
-        ctx.beginPath()
-        ctx.ellipse(sx, sy + off * r, r * 0.98, r * 0.24, 0, 0, Math.PI * 2)
-        ctx.stroke()
-      }
-      ctx.restore()
-    }
-
-    // Rim light along the leading edge, and a hard outline so the silhouette
-    // survives on top of a bright road.
-    ctx.globalAlpha = 0.6
-    ctx.strokeStyle = '#c9d6e6'
-    ctx.lineWidth = Math.max(2, scale * 0.07)
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * 0.93, Math.PI * 0.15, Math.PI * 0.85)
-    ctx.stroke()
-    ctx.globalAlpha = 1
-    ctx.strokeStyle = '#10131a'
-    ctx.lineWidth = Math.max(2, scale * 0.06)
-    ctx.beginPath()
-    ctx.arc(sx, sy, r, 0, Math.PI * 2)
-    ctx.stroke()
+    ctx.translate(sx, sy)
+    paintRollerBall(ctx, r, -f.phase * 3.1, scale, cheapFx)
     ctx.restore()
   }
 }
@@ -2119,49 +3363,8 @@ const drawGunnerBolts = (ctx: CanvasRenderingContext2D): void => {
     const sy = worldToScreenY(b.y)
     const r = BOLT_R * scale
     ctx.save()
-    ctx.globalCompositeOperation = 'lighter'
-
-    // The trail, back along the line it came down.
-    const steps = cheapFx ? 4 : 9
-    for (let i = steps; i >= 1; i--) {
-      const back = i / steps
-      ctx.globalAlpha = 0.3 * (1 - back) ** 1.3
-      ctx.fillStyle = '#4fc9ff'
-      ctx.beginPath()
-      ctx.ellipse(
-        sx - b.dx * back * r * 5,
-        sy + b.dy * back * r * 5,
-        r * (1 - back * 0.6), r * (1.35 - back * 0.7),
-        0, 0, Math.PI * 2
-      )
-      ctx.fill()
-    }
-
-    // Halo then core: one flat disc reads as a sticker, two read as something
-    // burning through the air.
-    ctx.globalAlpha = 0.55
-    ctx.fillStyle = '#8fe4ff'
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * 2.1, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = 0.95
-    ctx.fillStyle = '#eafcff'
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * 1.05, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
-
-    // …and a dark core with an outline, so it stays a solid OBJECT against the
-    // crowd rather than a patch of light that could be mistaken for a friendly
-    // effect.
-    ctx.save()
-    ctx.fillStyle = '#0d2b3a'
-    ctx.beginPath()
-    ctx.arc(sx, sy, r * 0.62, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = '#bff0ff'
-    ctx.lineWidth = Math.max(2, scale * 0.05)
-    ctx.stroke()
+    ctx.translate(sx, sy)
+    paintGunnerBolt(ctx, r, b.dx, b.dy, scale, cheapFx)
     ctx.restore()
   }
 }
@@ -2267,72 +3470,9 @@ const drawSkills = (ctx: CanvasRenderingContext2D): void => {
     ctx.ellipse(cx, cy + scale * 0.1, rx * 0.94, rx * 0.22, 0, 0, Math.PI * 2)
     ctx.stroke()
 
-    // The surface wash — thin, because the crowd underneath is the thing the
-    // player is actually steering and has to stay readable through it.
-    ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = (0.075 + 0.16 * hit) * alpha
-    ctx.fillStyle = '#3fbfff'
-    ctx.beginPath()
-    ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    // Honeycomb, clipped to the bubble. The grid is anchored to the dome itself,
-    // so it travels with the crowd instead of swimming across it.
-    if (!cheap) {
-      ctx.save()
-      ctx.beginPath()
-      ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
-      ctx.clip()
-      ctx.globalAlpha = 0.3 * alpha
-      ctx.strokeStyle = '#cdf3ff'
-      ctx.lineWidth = Math.max(1.2, scale * 0.03)
-      const s = rx * 0.24
-      const stepX = s * 1.732
-      const stepY = s * 1.5
-      const cols = Math.ceil(rx / stepX) + 1
-      const rows = Math.ceil(ryD / stepY) + 1
-      ctx.beginPath()
-      for (let row = -rows; row <= rows; row++) {
-        for (let col = -cols; col <= cols; col++) {
-          const hx = cx + col * stepX + (row & 1 ? stepX / 2 : 0)
-          const hy = domeCy + row * stepY
-          for (let i = 0; i < 6; i++) {
-            const a = (i / 6) * Math.PI * 2 - Math.PI / 2
-            const px = hx + Math.cos(a) * s
-            const py = hy + Math.sin(a) * s
-            if (i === 0) ctx.moveTo(px, py)
-            else ctx.lineTo(px, py)
-          }
-          ctx.closePath()
-        }
-      }
-      // One stroke for the whole grid: thirty separate strokes would be thirty
-      // state changes a phone does not need to pay for.
-      ctx.stroke()
-      ctx.restore()
-    }
-
-    // The rim. Bright and thick — this is the edge that reads as a SURFACE, and
-    // it is the only part guaranteed to stay visible against muzzle flash.
-    ctx.globalAlpha = Math.min(1, 1.05 * alpha)
-    ctx.strokeStyle = hit > 0.2 ? '#ffffff' : '#b6f0ff'
-    ctx.lineWidth = Math.max(2.5, scale * 0.09)
-    ctx.beginPath()
-    ctx.ellipse(cx, domeCy, rx, ryD, 0, 0, Math.PI * 2)
-    ctx.stroke()
-
-    // A specular sweep across the upper left: the standard cue that a curved
-    // surface is glass rather than a hole.
-    if (!cheap) {
-      ctx.globalAlpha = 0.5 * alpha
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = Math.max(1.5, scale * 0.045)
-      ctx.beginPath()
-      ctx.ellipse(cx, domeCy, rx * 0.82, ryD * 0.82, 0, Math.PI * 1.18, Math.PI * 1.62)
-      ctx.stroke()
-    }
-
-    ctx.globalCompositeOperation = 'source-over'
+    // The dome: the wash, the honeycomb, the rim and the specular — or the
+    // painting of all four, stretched over the measured squad.
+    paintShieldDome(ctx, cx, domeCy, rx, ryD, alpha, hit, cheap, scale)
 
     // ── The crest, at the apex ──
     //
@@ -2345,29 +3485,11 @@ const drawSkills = (ctx: CanvasRenderingContext2D): void => {
     const by = domeCy - ryD - bh * 0.72
     ctx.globalAlpha = Math.min(1, alpha + 0.25)
 
-    ctx.beginPath()
-    ctx.moveTo(cx - bw, by - bh)
-    ctx.lineTo(cx + bw, by - bh)
-    ctx.lineTo(cx + bw, by - bh * 0.05)
-    ctx.quadraticCurveTo(cx + bw, by + bh * 0.62, cx, by + bh)
-    ctx.quadraticCurveTo(cx - bw, by + bh * 0.62, cx - bw, by - bh * 0.05)
-    ctx.closePath()
-    ctx.fillStyle = hit > 0.2 ? '#ffffff' : '#6fd6ff'
-    ctx.fill()
-    ctx.lineWidth = Math.max(2.5, scale * 0.085)
-    ctx.strokeStyle = '#06263a'
-    ctx.stroke()
-
-    // Chief band and centre rib: the two strokes that turn a blob into heraldry,
-    // and they survive being 20 px tall on a phone.
-    ctx.strokeStyle = 'rgba(6,38,58,0.9)'
-    ctx.lineWidth = Math.max(1.2, scale * 0.04)
-    ctx.beginPath()
-    ctx.moveTo(cx - bw * 0.78, by - bh * 0.46)
-    ctx.lineTo(cx + bw * 0.78, by - bh * 0.46)
-    ctx.moveTo(cx, by - bh * 0.46)
-    ctx.lineTo(cx, by + bh * 0.66)
-    ctx.stroke()
+    paintCrest(ctx, 'shield', cx, by, bw, bh, {
+      fill: hit > 0.2 ? '#ffffff' : '#6fd6ff',
+      rim: '#06263a', rimW: Math.max(2.5, scale * 0.085),
+      rib: 'rgba(6,38,58,0.9)', ribW: Math.max(1.2, scale * 0.04)
+    })
 
     // The countdown arc around the crest. Full at cast, unwinding clockwise from
     // twelve o'clock — the same direction and the same language as the cooldown
@@ -2441,16 +3563,7 @@ const drawSkills = (ctx: CanvasRenderingContext2D): void => {
 
     ctx.translate(head.x, head.y - head.lift)
     ctx.rotate(g.t * 9)
-    ctx.fillStyle = '#46536a'
-    ctx.beginPath()
-    ctx.arc(0, 0, r, 0, Math.PI * 2)
-    ctx.fill()
-    // A band across the body, so the tumble is visible rather than implied.
-    ctx.fillStyle = '#2b3446'
-    ctx.fillRect(-r, -r * 0.16, r * 2, r * 0.32)
-    ctx.strokeStyle = '#141a26'
-    ctx.lineWidth = Math.max(1.2, scale * 0.035)
-    ctx.stroke()
+    paintGrenadeBody(ctx, r, scale)
 
     // The lit fuse — the bright point the eye actually follows.
     ctx.globalCompositeOperation = 'lighter'
@@ -2492,36 +3605,315 @@ const drawBarrels = (ctx: CanvasRenderingContext2D): void => {
     ctx.ellipse(0, r * 0.72, r * 0.86, r * 0.3, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    // The drum.
-    const body = lit
-      ? `rgb(${180 + flash * 75}, ${70 + flash * 150}, ${60 + flash * 140})`
-      : '#5a3428'
-    ctx.fillStyle = body
-    roundRect(ctx, -r * 0.8, -r, r * 1.6, r * 2, r * 0.28)
-    ctx.fill()
-    ctx.lineWidth = Math.max(1.5, scale * 0.05)
-    ctx.strokeStyle = '#20140f'
-    ctx.stroke()
+    paintBarrelBody(ctx, r, scale, lit, flash, hurt)
 
-    // Two hazard bands. They CRACK as the barrel takes rounds — the damage read
-    // is on the prop itself, not on a bar floating over it.
-    ctx.fillStyle = lit ? '#fff3d0' : '#c8341f'
-    for (const by of [-r * 0.42, r * 0.28]) {
-      ctx.globalAlpha = 1 - hurt * 0.55
-      ctx.fillRect(-r * 0.8, by, r * 1.6, r * 0.3)
-    }
-    ctx.globalAlpha = 1
+    ctx.restore()
+  }
+}
 
-    // The stencil: a fuse-and-spark mark, so the prop says "explosive" without a
-    // word of copy in any of the twenty-one languages this ships in.
-    ctx.strokeStyle = lit ? '#3a1a0c' : '#f0d59a'
-    ctx.lineWidth = Math.max(1.2, scale * 0.032)
+/**
+ * The weapon glyph, drawn at the origin inside a box of `r` half-extent.
+ *
+ * Procedural rather than an icon lookup: this is painted on the road at four
+ * different sizes (the box, the HUD is Vue's problem, the pickup burst, the
+ * lever's little promise mark), and a bitmap that reads at one of them is mush
+ * at the others. Two silhouettes, chosen to be told apart at eight pixels — a
+ * pointed shell against three stacked barrels.
+ */
+const weaponGlyph = (
+  ctx: CanvasRenderingContext2D, id: WeaponId, r: number, colour: string
+): void => {
+  ctx.fillStyle = colour
+  if (id === 'rocket') {
     ctx.beginPath()
-    ctx.moveTo(0, -r * 0.1)
-    ctx.lineTo(0, -r * 0.62)
-    ctx.moveTo(-r * 0.22, -r * 0.5)
-    ctx.lineTo(r * 0.22, -r * 0.5)
+    ctx.moveTo(0, -r)
+    ctx.lineTo(r * 0.44, -r * 0.24)
+    ctx.lineTo(r * 0.44, r * 0.5)
+    ctx.lineTo(-r * 0.44, r * 0.5)
+    ctx.lineTo(-r * 0.44, -r * 0.24)
+    ctx.closePath()
+    ctx.fill()
+    // Fins, so the shell reads as a rocket rather than as a house.
+    ctx.beginPath()
+    ctx.moveTo(-r * 0.44, r * 0.16)
+    ctx.lineTo(-r * 0.88, r * 0.72)
+    ctx.lineTo(-r * 0.44, r * 0.72)
+    ctx.closePath()
+    ctx.moveTo(r * 0.44, r * 0.16)
+    ctx.lineTo(r * 0.88, r * 0.72)
+    ctx.lineTo(r * 0.44, r * 0.72)
+    ctx.closePath()
+    ctx.fill()
+    return
+  }
+  // Gatling: three barrels and a receiver.
+  for (const bx of [-r * 0.5, 0, r * 0.5]) {
+    roundRect(ctx, bx - r * 0.17, -r * 0.9, r * 0.34, r * 1.25, r * 0.12)
+    ctx.fill()
+  }
+  roundRect(ctx, -r * 0.78, r * 0.34, r * 1.56, r * 0.5, r * 0.14)
+  ctx.fill()
+}
+
+/**
+ * The armour over a weapon box.
+ *
+ * Cold blue steel and rivets, where every other slab on the road wears yellow
+ * hazard chevrons. The distinction is doing real work: a player who reads this
+ * as an ordinary barricade will do the ordinary thing — shoot it — and spend
+ * the whole approach discovering that twenty walls' worth of health does not
+ * come down in two seconds. "This is a lid" and "this is in your way" have to
+ * be different pictures.
+ *
+ * It also does not wear a health bar. A number that only moves under fire
+ * nobody sensible should be spending is an invitation to keep spending it.
+ */
+const drawGuards = (ctx: CanvasRenderingContext2D): void => {
+  for (const g of getGuards()) {
+    if (g.dead) continue
+    const sx = worldToScreenX(g.x)
+    const sy = worldToScreenY(g.y)
+    if (sy < -80 || sy > viewH + 80) continue
+    const w = g.w * scale
+    const h = GUARD_H * scale
+    const hp01 = Math.max(0, g.hp / g.maxHp)
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+    ctx.beginPath()
+    ctx.ellipse(0, h * 0.45, w * 0.52, h * 0.16, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    paintGuardPlate(ctx, w, h)
+
+    // Damage. The rivets used to carry it by dimming, which is a thing only a
+    // drawing can do — so the whole plate darkens and reddens instead, clipped
+    // to its own box so it works over a painting and over the drawing alike.
+    // Same read the lever's cover wears (`drawStones`).
+    if (hp01 < 1) {
+      ctx.save()
+      roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.12)
+      ctx.clip()
+      ctx.globalAlpha = (1 - hp01) * 0.5
+      ctx.fillStyle = '#5a2b22'
+      ctx.fillRect(-w / 2, -h / 2, w, h)
+      ctx.restore()
+    }
+
+    if (g.flash > 0) {
+      ctx.globalAlpha = g.flash * 0.5
+      ctx.fillStyle = '#ffffff'
+      roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.12)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    ctx.restore()
+  }
+}
+
+/**
+ * The levers.
+ *
+ * Two states and they have to be told apart from the far end of the gun's
+ * reach, because the whole beat is decided in the ~2 s a lever is in range:
+ *
+ *   UNPULLED — the arm is UP, the knob is red, and the whole post breathes. It
+ *              also carries a chevron pointing down at it, which is the only
+ *              "look here" mark the game draws outside a boss telegraph.
+ *   PULLED   — the arm swings DOWN over ~0.2 s and the knob goes green. The
+ *              swing matters more than the colour: motion is what the eye
+ *              catches when it is somewhere else, and the eye IS somewhere else.
+ */
+const drawLevers = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+  for (const lv of getLevers()) {
+    const sx = worldToScreenX(lv.x)
+    const sy = worldToScreenY(lv.y)
+    if (sy < -70 || sy > viewH + 70) continue
+    const r = LEVER_R * scale
+    // Eased over 0.22 s. A hard snap reads as a pop-in; a slow one is over
+    // before the player looks back.
+    const swing = Math.min(1, lv.pulledFor / 0.22)
+    const breathe = lv.pulled ? 0 : 0.5 + 0.5 * Math.sin(t / 260)
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    ctx.fillStyle = 'rgba(0,0,0,0.36)'
+    ctx.beginPath()
+    ctx.ellipse(0, r * 0.75, r * 0.95, r * 0.32, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // The base plate.
+    paintLeverPost(ctx, r, scale)
+
+    // The arm: straight up when idle, laid over to the right when pulled.
+    const angle = (Math.PI / 2) * swing
+    ctx.save()
+    ctx.translate(0, r * 0.2)
+    ctx.rotate(angle)
+    paintLeverArm(ctx, r)
+    // The knob, which is the colour channel of the read. Drawn into the socket
+    // the arm leaves open, painting or drawing.
+    const knob = lv.pulled ? '#66e08a' : `rgb(255,${Math.round(70 + breathe * 60)},60)`
+    ctx.fillStyle = knob
+    ctx.beginPath()
+    ctx.arc(0, -r * 1.6, r * 0.46 + (lv.pulled ? 0 : breathe * r * 0.1), 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(10,12,16,0.85)'
+    ctx.lineWidth = Math.max(1.2, r * 0.13)
     ctx.stroke()
+    ctx.restore()
+
+    if (lv.flash > 0) {
+      ctx.globalAlpha = lv.flash * 0.55
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath()
+      ctx.arc(0, -r * 1.4, r * 0.8, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+
+    // ── "Look here" ──
+    //
+    // The only marker in the game that points at something OPTIONAL, and the
+    // whole beat depends on it being caught out of the corner of an eye that is
+    // busy elsewhere. So it is drawn like a telegraph rather than like a
+    // decoration: a fat chevron with a black outline, bobbing on the same beat
+    // the post breathes on.
+    //
+    // The first pass was a thin unstroked triangle half this size and it was
+    // measured, in a real browser at 1600x900, to be invisible against the road
+    // — which on a mechanic whose entire content is "did you notice" is not a
+    // polish issue, it is the feature not working.
+    //
+    // Drawn on EVERY quality tier, `min` included, unlike almost everything else
+    // in this file. The tier cuts fidelity — grades, ground passes, per-body
+    // shadows — and this is not fidelity, it is the only thing on screen that
+    // says a lever is a thing you do something about. A player on the hardware
+    // that earns `min` needs it more than anyone, and it costs one filled
+    // triangle per post, of which there are two on a stage.
+    if (!lv.pulled) {
+      ctx.globalAlpha = 0.55 + breathe * 0.45
+      const cy = -r * 2.6 - breathe * r * 0.4
+      ctx.beginPath()
+      ctx.moveTo(0, cy + r * 0.8)
+      ctx.lineTo(-r * 0.85, cy - r * 0.35)
+      ctx.lineTo(r * 0.85, cy - r * 0.35)
+      ctx.closePath()
+      ctx.fillStyle = '#ffd24a'
+      ctx.fill()
+      ctx.lineWidth = Math.max(1.5, r * 0.16)
+      ctx.strokeStyle = 'rgba(24,16,4,0.85)'
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+
+    ctx.restore()
+  }
+}
+
+/**
+ * The prize box.
+ *
+ * Locked, it is a dull steel crate under a cross-brace — a thing that is shut.
+ * Open, it throws a halo, the glyph lights up and a ring pushes out of it once,
+ * so the moment the armour goes the box says "now" from the far end of the
+ * road. The two states share nothing except the silhouette, which is the point:
+ * the player has to be able to tell across a whole screen whether the beat is
+ * still a puzzle or already a pickup.
+ */
+const drawWeaponBoxes = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+  for (const wb of getWeaponBoxes()) {
+    if (wb.dead) continue
+    const sx = worldToScreenX(wb.x)
+    const sy = worldToScreenY(wb.y)
+    if (sy < -80 || sy > viewH + 80) continue
+    const r = WEAPON_BOX_R * scale
+    const open = !wb.locked
+    const pulse = 0.5 + 0.5 * Math.sin(t / 220)
+    const hurt = 1 - Math.max(0, wb.hp) / wb.maxHp
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    if (open && !minFx) {
+      // Halo. Keyed on nothing that varies per frame — the throb is on
+      // `globalAlpha`, exactly as the supply crates do it, so the ramp cache
+      // holds one entry for the life of the run.
+      const glowR = r * 2.6
+      const key = `weaponGlow|${glowR}`
+      let glow = getRamp(key)
+      if (!glow) {
+        glow = putRamp(key, ctx.createRadialGradient(0, 0, 0, 0, 0, glowR))
+        glow.addColorStop(0, 'rgba(255,214,96,1)')
+        glow.addColorStop(1, 'rgba(255,214,96,0)')
+      }
+      ctx.globalAlpha = 0.3 + pulse * 0.3
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(0, 0, glowR, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'
+    ctx.beginPath()
+    ctx.ellipse(0, r * 0.86, r * 0.9, r * 0.3, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.rotate(wb.spin)
+    paintWeaponBoxBody(ctx, r, scale, open, pulse)
+
+    weaponGlyph(ctx, wb.weapon, r * 0.62, open ? '#3a2405' : '#98a4b6')
+
+    if (!open) {
+      // The cross-brace. It says SHUT in one stroke, at any size, in every
+      // language the game ships in.
+      ctx.strokeStyle = '#8f9cb0'
+      ctx.lineWidth = Math.max(2.2, r * 0.24)
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(-r * 0.95, -r * 0.95)
+      ctx.lineTo(r * 0.95, r * 0.95)
+      ctx.moveTo(r * 0.95, -r * 0.95)
+      ctx.lineTo(-r * 0.95, r * 0.95)
+      ctx.stroke()
+    } else if (hurt > 0) {
+      // Cracks, once it is being shot. Same read a supply crate gives, so the
+      // player already knows what it means.
+      ctx.globalAlpha = Math.min(0.85, hurt)
+      ctx.strokeStyle = 'rgba(30,16,4,0.9)'
+      ctx.lineWidth = Math.max(1.4, r * 0.1)
+      ctx.beginPath()
+      ctx.moveTo(-r * 0.6, -r * 0.7)
+      ctx.lineTo(-r * 0.1, 0)
+      ctx.lineTo(-r * 0.45, r * 0.65)
+      ctx.moveTo(r * 0.55, -r * 0.5)
+      ctx.lineTo(r * 0.15, r * 0.2)
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+
+    // The reveal ring: one expanding circle over the first ~0.45 s of being
+    // open. It is what carries the causal link — levers went down, THIS
+    // happened — to a player whose eyes were on the levers, so like the lever's
+    // own chevron it survives every quality tier. The HALO above is gated,
+    // because that one really is decoration.
+    if (open && wb.openFor < 0.45) {
+      const k = wb.openFor / 0.45
+      ctx.globalAlpha = (1 - k) * 0.8
+      ctx.strokeStyle = '#ffe9a8'
+      ctx.lineWidth = Math.max(2, scale * 0.06 * (1 - k))
+      ctx.beginPath()
+      ctx.arc(0, 0, r * (1 + k * 3.2), 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
 
     ctx.restore()
   }
@@ -2574,38 +3966,9 @@ const drawCrates = (ctx: CanvasRenderingContext2D): void => {
     ctx.translate(sx, sy)
     ctx.rotate(Math.sin(c.spin) * 0.05)
 
-    // Body: the shipped crate bitmap when it has decoded, otherwise planks with
-    // iron corners, shaded from the shared key light.
-    const art = propImage('crate')
-    if (art) {
-      ctx.drawImage(art, -r, -r, r * 2, r * 2)
-    } else {
-      // `r` is `CRATE_R * scale` — one value for the whole frame — and the ramp
-      // was already local to the crate's own transform, so this caches with no
-      // geometry change at all.
-      let body = getRamp(`crateBody|${r}`)
-      if (!body) {
-        body = putRamp(`crateBody|${r}`, ctx.createLinearGradient(-r, -r, r * 0.4, r))
-        body.addColorStop(0, '#c08b48')
-        body.addColorStop(0.5, '#8d5f2c')
-        body.addColorStop(1, '#5c3c18')
-      }
-      ctx.fillStyle = body
-      roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.18)
-      ctx.fill()
-
-      ctx.strokeStyle = 'rgba(40,24,10,0.75)'
-      ctx.lineWidth = Math.max(1.4, r * 0.11)
-      roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.18)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(-r, -r * 0.25)
-      ctx.lineTo(r, -r * 0.25)
-      ctx.moveTo(-r, r * 0.35)
-      ctx.lineTo(r, r * 0.35)
-      ctx.lineWidth = Math.max(1, r * 0.07)
-      ctx.stroke()
-    }
+    // Body: the painting, else the shipped crate bitmap when it has decoded,
+    // else planks with iron corners, shaded from the shared key light.
+    paintCrateBody(ctx, c.kind, r)
 
     // Cracks as it takes damage — the only feedback that says "keep shooting".
     // Drawn OVER the bitmap too, so a dropped-in crate still shows its wear.
@@ -2701,6 +4064,89 @@ const drawCrates = (ctx: CanvasRenderingContext2D): void => {
  * of a dozen `lineTo`s. The lit top edge is what stops it reading as a hole in
  * the road.
  */
+/**
+ * The stones over the levers.
+ *
+ * Drawn as a BOULDER that carries a wall's damage marks, and the mixture is the
+ * whole point of the picture. The game has taught the player one hard rule
+ * about grey lumps on the road — `drawRocks` draws the thing fire cannot answer
+ * — so a stone they are required to shoot has to break that rule visibly or it
+ * reads as a wall around the prize and the puzzle simply stops being attempted.
+ *
+ * What it borrows from the barricade is exactly the "shoot me" vocabulary and
+ * nothing else: the health bar along the top edge and the number on the face,
+ * which are the two marks every destructible thing in the game wears. What it
+ * keeps from the boulder is the silhouette and the painted art, so it still
+ * belongs to the road it is standing on.
+ *
+ * It also cracks as it goes: the fill dims and the outline hardens with the
+ * remaining health, so a player who is winning the exchange can see that they
+ * are without reading the number.
+ */
+const drawStones = (ctx: CanvasRenderingContext2D): void => {
+  for (const st of getStones()) {
+    if (st.dead) continue
+    const sy = worldToScreenY(st.y)
+    if (sy < -80 || sy > viewH + 80) continue
+    const sx = worldToScreenX(st.x)
+    const w = st.w * scale
+    const h = STONE_H * scale
+    const hp01 = Math.max(0, st.hp / st.maxHp)
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    // Contact shadow, so it sits ON the road rather than floating over it.
+    ctx.fillStyle = 'rgba(0,0,0,0.42)'
+    ctx.beginPath()
+    ctx.ellipse(0, h * 0.42, w * 0.52, h * 0.2, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.save()
+    ctx.rotate(st.spin * 0.25)
+    paintBoulder(ctx, w, h, st.seed)
+    // Damage: the stone darkens and reddens as it comes apart, over the whole
+    // silhouette rather than as a decal, so it works for the painted art and
+    // the drawn fallback alike.
+    if (hp01 < 1) {
+      ctx.globalCompositeOperation = 'source-atop'
+      ctx.globalAlpha = (1 - hp01) * 0.5
+      ctx.fillStyle = '#5a2b22'
+      ctx.fillRect(-w * 0.6, -h * 0.6, w * 1.2, h * 1.2)
+      ctx.globalAlpha = 1
+      ctx.globalCompositeOperation = 'source-over'
+    }
+    ctx.restore()
+
+    // The two marks that say "this one can be shot": the bar and the number.
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w, h * 0.14)
+    ctx.fillStyle = hp01 > 0.5 ? '#7ee08a' : hp01 > 0.22 ? '#ffcf3c' : '#ff6a5a'
+    ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w * hp01, h * 0.14)
+
+    const label = formatCount(Math.ceil(st.hp))
+    ctx.font = `900 ${Math.max(10, h * 0.44)}px Angry, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = Math.max(2, h * 0.13)
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)'
+    ctx.strokeText(label, 0, h * 0.06)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(label, 0, h * 0.06)
+
+    if (st.flash > 0) {
+      ctx.globalAlpha = st.flash * 0.5
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath()
+      ctx.ellipse(0, 0, w * 0.5, h * 0.5, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    ctx.restore()
+  }
+}
+
 const drawRocks = (ctx: CanvasRenderingContext2D): void => {
   for (const r of getRocks()) {
     const sy = worldToScreenY(r.y)
@@ -2719,55 +4165,7 @@ const drawRocks = (ctx: CanvasRenderingContext2D): void => {
     ctx.fill()
 
     ctx.rotate(r.spin * 0.25)
-
-    // The lump. Eight points on an ellipse, pushed in and out by a hash of the
-    // body's seed — deterministic per rock, so it never shimmers frame to frame.
-    const pts = 8
-    ctx.beginPath()
-    for (let i = 0; i < pts; i++) {
-      const a = (i / pts) * Math.PI * 2
-      const n = ((Math.sin((r.seed + i * 37) * 12.9898) * 43758.5453) % 1 + 1) % 1
-      const rr = 0.78 + n * 0.3
-      const x = Math.cos(a) * w * 0.5 * rr
-      const y = Math.sin(a) * h * 0.5 * rr
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.closePath()
-
-    // Only the polygon is per-rock; the shading ramp spans `ROCK_H * scale`,
-    // which is the same for every boulder on screen.
-    let body = getRamp(`rockBody|${h}`)
-    if (!body) {
-      body = putRamp(`rockBody|${h}`, ctx.createLinearGradient(0, -h * 0.5, 0, h * 0.5))
-      body.addColorStop(0, '#8f97a6')
-      body.addColorStop(0.45, '#5c6472')
-      body.addColorStop(1, '#333a46')
-    }
-    ctx.fillStyle = body
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(16,20,28,0.9)'
-    ctx.lineWidth = Math.max(1.6, h * 0.09)
-    ctx.stroke()
-
-    // Two fracture lines. Cheap, and they are what makes it read as stone
-    // rather than as a potato.
-    ctx.strokeStyle = 'rgba(20,24,32,0.55)'
-    ctx.lineWidth = Math.max(1, h * 0.05)
-    ctx.beginPath()
-    ctx.moveTo(-w * 0.22, -h * 0.3)
-    ctx.lineTo(w * 0.04, h * 0.06)
-    ctx.lineTo(-w * 0.1, h * 0.34)
-    ctx.moveTo(w * 0.3, -h * 0.16)
-    ctx.lineTo(w * 0.12, h * 0.1)
-    ctx.stroke()
-
-    // Lit crown.
-    ctx.strokeStyle = 'rgba(210,220,236,0.5)'
-    ctx.lineWidth = Math.max(1, h * 0.06)
-    ctx.beginPath()
-    ctx.arc(0, 0, Math.min(w, h) * 0.42, Math.PI * 1.15, Math.PI * 1.85)
-    ctx.stroke()
+    paintBoulder(ctx, w, h, r.seed)
 
     ctx.restore()
   }
@@ -2792,36 +4190,7 @@ const drawBarricades = (ctx: CanvasRenderingContext2D): void => {
     ctx.ellipse(0, h * 0.45, w * 0.52, h * 0.16, 0, 0, Math.PI * 2)
     ctx.fill()
 
-    const art = propImage('barricade')
-    if (art) {
-      // Tiled across the block's width so a 1:1 stone bitmap does not stretch
-      // into a smear on a three-unit-wide block.
-      const tile = h
-      ctx.save()
-      roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.14)
-      ctx.clip()
-      for (let x = -w / 2; x < w / 2; x += tile) {
-        ctx.drawImage(art, x, -h / 2, Math.min(tile, w / 2 - x), h)
-      }
-      ctx.restore()
-    } else {
-      // Height is frame-constant; width comes from the block, which is drawn
-      // from a small set of lane spans — so this keys exactly and still hits.
-      // If a future generator makes widths continuous the key simply stops
-      // matching and the site degrades to what it did before, capped by
-      // `MAX_RAMPS` rather than growing.
-      const key = `barricadeBody|${w}|${h}`
-      let body = getRamp(key)
-      if (!body) {
-        body = putRamp(key, ctx.createLinearGradient(-w / 2, -h / 2, w * 0.2, h / 2))
-        body.addColorStop(0, '#767e88')
-        body.addColorStop(0.5, '#4a5058')
-        body.addColorStop(1, '#2a2f36')
-      }
-      ctx.fillStyle = body
-      roundRect(ctx, -w / 2, -h / 2, w, h, h * 0.14)
-      ctx.fill()
-    }
+    paintBarricadeBody(ctx, w, h)
 
     // Hazard chevrons on the face, dimming as the block loses HP.
     ctx.save()
@@ -3026,52 +4395,29 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
       ctx.restore()
     }
 
-    // Posts. One ramp for both sides, built at the origin and placed with a
-    // translate rather than rebuilt at each post's own x.
-    const postKey = `gatePost|${g.op}|${scale}`
-    let post = getRamp(postKey)
-    if (!post) {
-      post = putRamp(postKey, ctx.createLinearGradient(-scale * 0.1, 0, scale * 0.1, 0))
-      post.addColorStop(0, '#20242e')
-      post.addColorStop(0.45, tint.a)
-      post.addColorStop(1, tint.b)
-    }
-    for (const side of [-1, 1] as const) {
-      const px = side * halfW
-      ctx.save()
-      ctx.translate(px, 0)
-      ctx.fillStyle = post
-      ctx.fillRect(-scale * 0.09, -height / 2 - scale * 0.12, scale * 0.18, height + scale * 0.24)
-
-      if (bad) {
-        // A chunk blown out of the top of the post and a snapped stub above the
-        // gap. A broken frame is a thing that has already failed somebody.
-        ctx.fillStyle = 'rgba(8,6,8,0.95)'
-        ctx.beginPath()
-        ctx.moveTo(-scale * 0.1, -height / 2 + scale * 0.1)
-        ctx.lineTo(scale * 0.1, -height / 2 - scale * 0.02)
-        ctx.lineTo(scale * 0.1, -height / 2 - scale * 0.14)
-        ctx.lineTo(-scale * 0.1, -height / 2 - scale * 0.14)
-        ctx.closePath()
-        ctx.fill()
-        ctx.fillStyle = '#3a1a14'
-        ctx.fillRect(-side * scale * 0.03, -height / 2 - scale * 0.3, scale * 0.06, scale * 0.16)
-      } else if (hot && !minFx) {
+    // Posts — or the painted frame, nine-sliced to this leaf's own width.
+    paintGateFrame(ctx, g.op, halfW, height, scale)
+    // The foot of each post sparks while the door is being pumped. Additive,
+    // after both posts, so it reads as light on the ironwork.
+    if (!bad && hot && !minFx) {
+      const sparkR = scale * 0.7
+      const sparkKey = `gateSpark|${tint.glow}|${sparkR}`
+      let spark = getRamp(sparkKey)
+      if (!spark) {
+        spark = putRamp(sparkKey, ctx.createRadialGradient(0, 0, 0, 0, 0, sparkR))
+        spark.addColorStop(0, `rgba(${tint.glow},0.55)`)
+        spark.addColorStop(1, `rgba(${tint.glow},0)`)
+      }
+      for (const side of [-1, 1] as const) {
+        ctx.save()
+        ctx.translate(side * halfW, 0)
         ctx.globalCompositeOperation = 'lighter'
-        const sparkR = scale * 0.7
-        const sparkKey = `gateSpark|${tint.glow}|${sparkR}`
-        let spark = getRamp(sparkKey)
-        if (!spark) {
-          spark = putRamp(sparkKey, ctx.createRadialGradient(0, 0, 0, 0, 0, sparkR))
-          spark.addColorStop(0, `rgba(${tint.glow},0.55)`)
-          spark.addColorStop(1, `rgba(${tint.glow},0)`)
-        }
         ctx.fillStyle = spark
         ctx.beginPath()
         ctx.arc(0, 0, sparkR, 0, Math.PI * 2)
         ctx.fill()
+        ctx.restore()
       }
-      ctx.restore()
     }
 
     // Plate + number. The plate scales on `pop`, which is set on every tick —
@@ -3175,23 +4521,18 @@ const drawShocks = (ctx: CanvasRenderingContext2D): void => {
 
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
+    ctx.translate(sx, sy)
     // A blast that paid somebody is white-blue and hard. One that paid nobody is
     // a dull red bruise travelling the same path — same event, no light in it.
-    ctx.strokeStyle = s.bleak
-      ? `rgba(190,84,70,${a * 0.5})`
-      : `rgba(215,240,255,${a * 0.75})`
-    ctx.lineWidth = Math.max(1.5, scale * 0.16 * (1 - k))
-    ctx.beginPath()
-    ctx.ellipse(sx, sy, r, r * 0.3, 0, 0, Math.PI * 2)
-    ctx.stroke()
+    // Only the lit blast has a painting; the bruise stays drawn.
+    paintRing(ctx, 'shock', r, r * 0.3, Math.max(1.5, scale * 0.16 * (1 - k)),
+      s.bleak ? `rgba(190,84,70,${a * 0.5})` : `rgba(215,240,255,${a * 0.75})`,
+      { procedural: s.bleak, alpha: a * 0.75 })
     // A second ring lagging behind the first gives the blast a THICKNESS, which
     // is the difference between a shockwave and an outline.
     if (richFx && !s.bleak && r > scale * 0.6) {
-      ctx.strokeStyle = `rgba(255,255,255,${a * 0.3})`
-      ctx.lineWidth = Math.max(1, scale * 0.07 * (1 - k))
-      ctx.beginPath()
-      ctx.ellipse(sx, sy, r * 0.72, r * 0.72 * 0.3, 0, 0, Math.PI * 2)
-      ctx.stroke()
+      paintRing(ctx, 'shock', r * 0.72, r * 0.72 * 0.3, Math.max(1, scale * 0.07 * (1 - k)),
+        `rgba(255,255,255,${a * 0.3})`, { alpha: a * 0.3 })
     }
     ctx.restore()
   }
@@ -3657,39 +4998,8 @@ const drawDividers = (ctx: CanvasRenderingContext2D): void => {
       ctx.restore()
     }
 
-    // Body. Solid, opaque, dark metal — the base coat under the stripes so a
-    // missing pattern (no `document`, e.g. in a test) still draws a real pillar.
-    ctx.fillStyle = '#1b1c22'
-    ctx.fillRect(-halfPx, -h / 2, halfPx * 2, h)
-
-    if (pattern) {
-      // The pattern lives in the CONTEXT's space, and the context is translated
-      // to the pillar — so the stripes are pinned to the pillar and do not swim
-      // across it as the camera scrolls.
-      ctx.fillStyle = pattern
-      ctx.fillRect(-halfPx, -h / 2, halfPx * 2, h)
-    }
-
-    // Cylinder shading in two flat rects instead of a gradient: same read, one
-    // fewer allocation per pillar per frame.
-    ctx.fillStyle = 'rgba(0,0,0,0.42)'
-    ctx.fillRect(halfPx * 0.15, -h / 2, halfPx * 0.85, h)
-    ctx.fillStyle = 'rgba(255,255,255,0.14)'
-    ctx.fillRect(-halfPx, -h / 2, halfPx * 0.4, h)
-
-    // Hard rim light down the lit edge. One bright line does more for "this is
-    // a solid object" than any amount of gradient.
-    ctx.fillStyle = 'rgba(255,246,220,0.75)'
-    ctx.fillRect(-halfPx, -h / 2, Math.max(1.5, halfPx * 0.16), h)
-
-    // Steel caps top and bottom, and a hard outline. The caps stop the stripes
-    // from bleeding into the road at the ends.
-    ctx.fillStyle = '#4a4d58'
-    ctx.fillRect(-halfPx * 1.25, -h / 2 - h * 0.1, halfPx * 2.5, h * 0.13)
-    ctx.fillRect(-halfPx * 1.25, h / 2 - h * 0.03, halfPx * 2.5, h * 0.13)
-    ctx.strokeStyle = 'rgba(6,6,9,0.95)'
-    ctx.lineWidth = Math.max(1.5, scale * 0.045)
-    ctx.strokeRect(-halfPx, -h / 2, halfPx * 2, h)
+    // The striped post and its caps, drawn or painted.
+    paintPillarBody(ctx, halfPx, h, scale, pattern)
 
     // Hot overlay while the crowd is closing. Red ON the pillar, not just
     // around it, so the object itself is what is shouting.
@@ -3896,16 +5206,19 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
 
     const frame = monsterFrame(f.design, (t / 620 + f.phase) % 1)
     if (frame) {
-      const px = frame.width
-      const k = (size * 1.5) / SPRITE_HEIGHT
-      const dw = px * k
-      const dh = px * k
+      // Scaled off the frame the strip handed back rather than off the bake's
+      // pixel constants, and lined up by the FEET, so a painted strip at any
+      // resolution stands exactly where the baked one does.
+      const k = (size * 1.5) / (frame.height * SPRITE_HEIGHT_R)
+      const dw = frame.width * k
+      const dh = frame.height * k
+      const top = -frame.height * SPRITE_FOOT_R * k
       // Foes walk DOWN the screen at us; the designs are authored facing left
       // or right, so mirror the side-facing ones to keep the cast coherent.
       const mirror = monsterFaces(f.design) === 'left' ? -1 : 1
       ctx.save()
       ctx.scale(mirror, 1)
-      ctx.drawImage(frame, -dw / 2, -SPRITE_FOOT * k, dw, dh)
+      ctx.drawImage(frame, -dw / 2, top, dw, dh)
       ctx.restore()
 
       if (f.flash > 0.02) {
@@ -3916,7 +5229,7 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
         ctx.globalAlpha = Math.min(1, f.flash) * 0.85
         ctx.globalCompositeOperation = 'lighter'
         ctx.scale(mirror, 1)
-        ctx.drawImage(frame, -dw / 2, -SPRITE_FOOT * k, dw, dh)
+        ctx.drawImage(frame, -dw / 2, top, dw, dh)
         ctx.restore()
       }
     } else {
@@ -4024,23 +5337,7 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
         // Crown over the bar. Three points and a base: the universal "this one
         // is the important one" mark, drawn small enough that a pack with one
         // elite in it still reads as a pack.
-        const cw = size * 0.3
-        const ch = size * 0.17
-        const cy = by - size * 0.06
-        ctx.fillStyle = '#ffd24a'
-        ctx.strokeStyle = 'rgba(60,34,4,0.9)'
-        ctx.lineWidth = Math.max(1, size * 0.016)
-        ctx.beginPath()
-        ctx.moveTo(-cw / 2, cy)
-        ctx.lineTo(-cw / 2, cy - ch)
-        ctx.lineTo(-cw / 6, cy - ch * 0.42)
-        ctx.lineTo(0, cy - ch * 1.15)
-        ctx.lineTo(cw / 6, cy - ch * 0.42)
-        ctx.lineTo(cw / 2, cy - ch)
-        ctx.lineTo(cw / 2, cy)
-        ctx.closePath()
-        ctx.fill()
-        ctx.stroke()
+        paintCrown(ctx, 0, by - size * 0.06, size * 0.3, size * 0.17, Math.max(1, size * 0.016))
       }
     }
     ctx.restore()
@@ -4101,23 +5398,7 @@ const drawEliteMarker = (ctx: CanvasRenderingContext2D, w: number): void => {
   }
   // The same crown as sits over the elite itself, so the marker and the thing
   // it points at are obviously the same object.
-  ctx.fillStyle = '#ffd24a'
-  ctx.strokeStyle = 'rgba(60,34,4,0.9)'
-  ctx.lineWidth = Math.max(1, s * 0.1)
-  const cw = s * 0.9
-  const ch = s * 0.5
-  const cy = y + s * 1.55
-  ctx.beginPath()
-  ctx.moveTo(x - cw / 2, cy)
-  ctx.lineTo(x - cw / 2, cy - ch)
-  ctx.lineTo(x - cw / 6, cy - ch * 0.42)
-  ctx.lineTo(x, cy - ch * 1.15)
-  ctx.lineTo(x + cw / 6, cy - ch * 0.42)
-  ctx.lineTo(x + cw / 2, cy - ch)
-  ctx.lineTo(x + cw / 2, cy)
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
+  paintCrown(ctx, x, y + s * 1.55, s * 0.9, s * 0.5, Math.max(1, s * 0.1))
   ctx.restore()
 }
 
@@ -4188,11 +5469,11 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     const r = slamRadiusFor(b.slams, b.charging) * scale * 1.28
     ctx.save()
     ctx.globalAlpha = 0.25 + k * 0.4
-    ctx.strokeStyle = b.charging ? '#ffd23a' : raging ? '#ff3a2a' : '#ff5a4a'
-    ctx.lineWidth = Math.max(2, scale * (b.charging ? 0.15 : 0.09))
-    ctx.beginPath()
-    ctx.ellipse(rx, ry, r, r * 0.5, 0, 0, Math.PI * 2)
-    ctx.stroke()
+    ctx.save()
+    ctx.translate(rx, ry)
+    paintRing(ctx, 'heat', r, r * 0.5, Math.max(2, scale * (b.charging ? 0.15 : 0.09)),
+      b.charging ? '#ffd23a' : raging ? '#ff3a2a' : '#ff5a4a')
+    ctx.restore()
     ctx.globalAlpha = 0.16 + k * 0.24
     ctx.fillStyle = '#ff5a4a'
     ctx.beginPath()
@@ -4254,20 +5535,7 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   const gCy = -size * 0.55
   const gRy = gR * 1.15
 
-  if (guarding) {
-    ctx.save()
-    ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = 0.16 + gPulse * 0.14
-    ctx.fillStyle = '#ff6a3a'
-    guardHexPath(ctx, gCy, gR, gRy)
-    ctx.fill()
-    ctx.globalAlpha = 0.5 + gPulse * 0.4
-    ctx.strokeStyle = '#ffd08a'
-    ctx.lineWidth = Math.max(1.5, scale * 0.05)
-    guardHexPath(ctx, gCy, gR, gRy)
-    ctx.stroke()
-    ctx.restore()
-  }
+  if (guarding) paintGuardHex(ctx, gCy, gR, gRy, gPulse, scale)
 
   if (dying > 0) {
     ctx.rotate(dying * 0.6)
@@ -4275,16 +5543,18 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   }
   const frame = monsterFrame(b.design, (t / 900) % 1)
   if (frame) {
-    const k = (size * 1.6) / SPRITE_HEIGHT
+    const k = (size * 1.6) / (frame.height * SPRITE_HEIGHT_R)
     const dw = frame.width * k
+    const dh = frame.height * k
+    const top = -frame.height * SPRITE_FOOT_R * k
     const mirror = monsterFaces(b.design) === 'left' ? -1 : 1
     ctx.save()
     ctx.scale(mirror, 1)
-    ctx.drawImage(frame, -dw / 2, -SPRITE_FOOT * k, dw, frame.height * k)
+    ctx.drawImage(frame, -dw / 2, top, dw, dh)
     if (b.flash > 0.02) {
       ctx.globalAlpha = Math.min(1, b.flash) * 0.8
       ctx.globalCompositeOperation = 'lighter'
-      ctx.drawImage(frame, -dw / 2, -SPRITE_FOOT * k, dw, frame.height * k)
+      ctx.drawImage(frame, -dw / 2, top, dw, dh)
     }
     ctx.restore()
   } else {
@@ -4315,35 +5585,13 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
 
     ctx.save()
     ctx.globalAlpha = 0.82 + gPulse * 0.18
-
-    // Heater shield: flat top, straight shoulders, tapering to a rounded point.
-    ctx.beginPath()
-    ctx.moveTo(-cw, gCy - ch)
-    ctx.lineTo(cw, gCy - ch)
-    ctx.lineTo(cw, gCy - ch * 0.05)
-    ctx.quadraticCurveTo(cw, gCy + ch * 0.62, 0, gCy + ch)
-    ctx.quadraticCurveTo(-cw, gCy + ch * 0.62, -cw, gCy - ch * 0.05)
-    ctx.closePath()
-    ctx.fillStyle = '#ffc46a'
-    ctx.fill()
     // A HEAVY dark rim, not a hairline. Several bosses are pale tan, so a thin
     // outline let the crest melt into the body it is drawn over — the rim is
     // what holds the silhouette against both the boss and the orange barrier.
-    ctx.lineWidth = rim
-    ctx.strokeStyle = '#2a0f05'
-    ctx.stroke()
-
-    // Chief band + centre rib — two strokes that turn a plain blob into a
-    // heraldic shield at a glance, and survive being 30 px tall on a phone.
-    ctx.strokeStyle = 'rgba(42,15,5,0.9)'
-    ctx.lineWidth = Math.max(1.5, scale * 0.05)
-    ctx.beginPath()
-    ctx.moveTo(-cw * 0.78, gCy - ch * 0.46)
-    ctx.lineTo(cw * 0.78, gCy - ch * 0.46)
-    ctx.moveTo(0, gCy - ch * 0.46)
-    ctx.lineTo(0, gCy + ch * 0.66)
-    ctx.stroke()
-
+    paintCrest(ctx, 'guard', 0, gCy, cw, ch, {
+      fill: '#ffc46a', rim: '#2a0f05', rimW: rim,
+      rib: 'rgba(42,15,5,0.9)', ribW: Math.max(1.5, scale * 0.05)
+    })
     ctx.restore()
   }
 
@@ -4366,17 +5614,44 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
   const n = units.length
   if (n === 0) return
 
-  if (order.length !== n) order = new Array<number>(n)
-  for (let i = 0; i < n; i++) order[i] = i
+  // ── The draw budget, spent across the WHOLE crowd ──
+  //
+  // Only so many sprites may be painted, and which ones is not a free choice:
+  // the budget has to be spent EVENLY over the formation, because everything
+  // else in the game still uses the bodies it cannot afford to draw. They are
+  // shot from (`stepShooting` fires from any survivor in the front half), they
+  // are hit, and they are what the crowd's own radius is measured from.
+  //
+  // Picking the subset by depth — sort, then take the first `budget` — is the
+  // trap this replaced, and it got worse the bigger the crowd got: at 190 of
+  // 700 the painted bodies were the front 27% of the disc, so the squad drew as
+  // a small dome sitting at the formation's nose while its muzzle flashes and
+  // tracers kept coming out of the two thirds behind it, off bare road. Past a
+  // few hundred survivors the visible crowd shrank towards a dot while the
+  // gunfire stayed on the line the whole formation actually occupies.
+  //
+  // So the subset is a uniform sample instead: keep `seed < budget / n`. It is
+  // uncorrelated with the sunflower's slot index, so it is uniform over the
+  // disc with none of the spiral arms a stride over `i` would carve into it,
+  // and `seed` never changes, so a death does not reshuffle which bodies are
+  // visible. Density is what suffers instead of extent — the right trade, since
+  // at this size the sprites overlap many times over and the mass still reads
+  // solid.
+  //
+  // It also makes the sort cheaper: ~190 entries rather than all of `n`.
+  const budget = minFx ? 70 : tier === 'low' ? 110 : tier === 'medium' ? 150 : 190
+  let drawn = 0
+  if (n <= budget) {
+    for (let i = 0; i < n; i++) order[drawn++] = i
+  } else {
+    const keep = budget / n
+    for (let i = 0; i < n; i++) if (units[i]!.seed < keep) order[drawn++] = i
+  }
+  if (order.length !== drawn) order.length = drawn
   // Far (higher y) first.
   order.sort((a, b) => (units[b]!.y - units[a]!.y))
 
   const t = nowMs()
-  const drawn = Math.min(
-    n,
-    minFx ? 70 : tier === 'low' ? 110 : tier === 'medium' ? 150 : 190
-  )
-  let painted = 0
   const squeeze = crowdSqueeze
   // The forward lean, as foreshortening. A survivor driving forward through a
   // press of bodies is pitched away from the camera, and in a sprite that means
@@ -4449,21 +5724,13 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
   const flashR = size * (0.34 + rateHeat * 0.13)
   // Frame-constant, and it was a template literal built once per drawn body.
   const shadowTone = `rgba(0,0,0,${0.3 + squeeze * 0.16})`
-  const flashKey = `muzzle|${flashY}|${flashR}`
-  let flashRamp = getRamp(flashKey)
-  if (!flashRamp) {
-    flashRamp = putRamp(flashKey, ctx.createRadialGradient(0, flashY, 0, 0, flashY, flashR))
-    flashRamp.addColorStop(0, 'rgba(255,244,200,0.95)')
-    flashRamp.addColorStop(0.4, 'rgba(255,180,60,0.5)')
-    flashRamp.addColorStop(1, 'rgba(255,120,20,0)')
-  }
+  const flashRamp = muzzleRamp(ctx, flashY, flashR)
 
-  for (let k = 0; k < n && painted < drawn; k++) {
+  for (let k = 0; k < drawn; k++) {
     const u = units[order[k]!]!
     const sy = worldToScreenY(u.y)
     if (sy < -60 || sy > viewH + 60) continue
     const sx = worldToScreenX(u.x)
-    painted++
 
 
     const dieK = u.dying > 0 ? u.dying / 420 : 1
@@ -4475,9 +5742,11 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
       // Derived from the same numbers the blit uses, so the box cannot drift
       // away from the art if the sprite metrics are ever retuned. The width is
       // the visible torso rather than the padded frame, which is mostly air.
-      const kBox = (size * 1.05) / HERO_HEIGHT
-      const halfW = HERO_PX * kBox * 0.26
-      const top = sy - HERO_FOOT * kBox * pitch
+      // In frame heights rather than the bake's pixels, so the box holds for a
+      // painted strip at any resolution.
+      const boxH = (size * 1.05) / HERO_HEIGHT_R
+      const halfW = boxH * HERO_FRAME_ASPECT * 0.26
+      const top = sy - boxH * HERO_FOOT_R * pitch
       if (crowdBoxN === 0) {
         crowdBoxL = sx - halfW; crowdBoxR = sx + halfW
         crowdBoxT = top; crowdBoxB = sy
@@ -4525,10 +5794,10 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
 
     const frame = survivorFrame(outfitIndex(u.i), (t / HERO_CYCLE_MS + u.phase) % 1)
     if (frame) {
-      const k2 = (size * 1.05) / HERO_HEIGHT
-      const dw = HERO_PX * k2
-      const dh = HERO_PX * k2 * pitch
-      const dy = -HERO_FOOT * k2 * pitch
+      const boxH = (size * 1.05) / HERO_HEIGHT_R
+      const dw = boxH * (frame.width / frame.height)
+      const dh = boxH * pitch
+      const dy = -boxH * HERO_FOOT_R * pitch
       ctx.drawImage(frame, -dw / 2, dy, dw, dh)
       if (u.flash > 0) {
         ctx.save()
@@ -4559,10 +5828,7 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
       ctx.save()
       ctx.globalCompositeOperation = 'lighter'
       ctx.globalAlpha = a
-      ctx.fillStyle = flashRamp
-      ctx.beginPath()
-      ctx.arc(0, flashY, flashR, 0, Math.PI * 2)
-      ctx.fill()
+      paintMuzzleFlash(ctx, flashY, flashR, flashRamp)
       ctx.restore()
     }
     ctx.restore()
@@ -4579,50 +5845,102 @@ const drawBullets = (ctx: CanvasRenderingContext2D): void => {
   ctx.globalCompositeOperation = 'lighter'
   ctx.lineCap = 'round'
 
+  // A gatling reads as heat, not as a different colour. `rateHeat` is the run's
+  // own fire-rate curve and the weapon does not touch `runFireRate` — the
+  // multiplier lives in `stepShooting` — so without this the loudest gun in the
+  // game would draw exactly like the quietest one.
+  const hot = activeWeapon.value === 'gatling'
+
   // The two tracer colours brighten with the run's fire rate, and are built
-  // ONCE for the whole pass. A template literal inside the loop would be an
-  // allocation per bullet per frame, which at a late-run rate is a few hundred
-  // strings a frame for a colour that never varies between bullets.
-  const glowA = 0.35 + rateHeat * 0.3
-  const outer = `rgba(255,${Math.round(214 + rateHeat * 30)},${Math.round(120 + rateHeat * 90)},${glowA})`
-  const coreW = Math.max(1, scale * (0.045 + rateHeat * 0.02))
-  const outerW = Math.max(2, scale * (0.1 + rateHeat * 0.03))
+  // ONCE for the whole pass — see `tracerStyle`. A template literal inside the
+  // loop would be an allocation per bullet per frame.
+  const heat = Math.min(1, rateHeat + (hot ? 0.55 : 0))
+  const st = tracerStyle(heat, scale)
+  const len = st.len
 
-  const len = scale * 0.55
+  // A painted round is blitted per bullet into the `len`-square box the
+  // reference streak fills (`paintTracerRef`), pointing down the screen from
+  // the round's own position exactly as the stroked line does. Rockets are not
+  // tracers and stay drawn below either way.
+  const painted = spriteFor('round', 'tracer')
+  if (painted) {
+    for (const b of bullets) {
+      if (b.weapon === 'rocket') continue
+      const sy = worldToScreenY(b.y)
+      if (sy < -40 || sy > viewH + 40) continue
+      const sx = worldToScreenX(b.x)
+      ctx.drawImage(painted, sx - len / 2, sy, len, len)
+    }
+  } else {
+    // TWO stroke submissions for the whole pass rather than two per bullet. Both
+    // the colour and the width are already constant for the frame, so every
+    // tracer's glow segment belongs to one path and every core to another.
+    //
+    // Safe under `lighter` because the tracers do not overlap each other: they are
+    // vertical lines at the survivors' own x positions, spaced by the crowd's unit
+    // spacing (~0.3 world units) against a glow width of 0.1. Segments inside one
+    // path are rasterised once, so an overlap WOULD read a shade darker — it just
+    // cannot happen at this geometry. The core still blends over the glow, because
+    // those remain two separate passes.
+    ctx.strokeStyle = st.outer
+    ctx.lineWidth = st.outerW
+    ctx.beginPath()
+    for (const b of bullets) {
+      if (b.weapon === 'rocket') continue
+      const sy = worldToScreenY(b.y)
+      if (sy < -40 || sy > viewH + 40) continue
+      const sx = worldToScreenX(b.x)
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(sx, sy + len)
+    }
+    ctx.stroke()
 
-  // TWO stroke submissions for the whole pass rather than two per bullet. Both
-  // the colour and the width are already constant for the frame, so every
-  // tracer's glow segment belongs to one path and every core to another.
+    ctx.strokeStyle = 'rgba(255,255,235,0.95)'
+    ctx.lineWidth = st.coreW
+    ctx.beginPath()
+    for (const b of bullets) {
+      if (b.weapon === 'rocket') continue
+      const sy = worldToScreenY(b.y)
+      if (sy < -40 || sy > viewH + 40) continue
+      const sx = worldToScreenX(b.x)
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(sx, sy + len * 0.6)
+    }
+    ctx.stroke()
+  }
+
+  // ── Rockets ──
   //
-  // Safe under `lighter` because the tracers do not overlap each other: they are
-  // vertical lines at the survivors' own x positions, spaced by the crowd's unit
-  // spacing (~0.3 world units) against a glow width of 0.1. Segments inside one
-  // path are rasterised once, so an overlap WOULD read a shade darker — it just
-  // cannot happen at this geometry. The core still blends over the glow, because
-  // those remain two separate passes.
-  ctx.strokeStyle = outer
-  ctx.lineWidth = outerW
-  ctx.beginPath()
+  // Out of the batch on purpose. Everything above is a one-pixel tracer drawn a
+  // hundred at a time and batched into two strokes for it; a rocket is ONE
+  // object on screen (the launcher fires a single stream) and it has to look
+  // like an object — a body, a nose and a plume — or the player cannot tell
+  // which of the two weapons they are holding without reading the HUD.
   for (const b of bullets) {
+    if (b.weapon !== 'rocket') continue
     const sy = worldToScreenY(b.y)
-    if (sy < -40 || sy > viewH + 40) continue
+    if (sy < -60 || sy > viewH + 60) continue
     const sx = worldToScreenX(b.x)
-    ctx.moveTo(sx, sy)
-    ctx.lineTo(sx, sy + len)
-  }
-  ctx.stroke()
+    const rr = Math.max(2.5, scale * 0.17)
 
-  ctx.strokeStyle = 'rgba(255,255,235,0.95)'
-  ctx.lineWidth = coreW
-  ctx.beginPath()
-  for (const b of bullets) {
-    const sy = worldToScreenY(b.y)
-    if (sy < -40 || sy > viewH + 40) continue
-    const sx = worldToScreenX(b.x)
-    ctx.moveTo(sx, sy)
-    ctx.lineTo(sx, sy + len * 0.6)
+    // ── Pointed where it is going ──
+    //
+    // The launcher steers (`WeaponDef.homing`), so a shell drawn permanently
+    // nose-up would slide across the road sideways with its plume hanging off
+    // the wrong end — which reads as a sprite bug, not as a guided weapon.
+    //
+    // The body's local "forward" is -y, and world +y is UP the screen, so the
+    // rotation that maps forward onto the velocity is `atan2(vx, vy)`: no
+    // screen-space conversion is needed because both components scale by the
+    // same factor and the arc-tangent divides it out.
+    ctx.save()
+    ctx.translate(sx, sy)
+    ctx.rotate(Math.atan2(b.vx, b.vy))
+    // Shell and plume — or the painting of them — through the one painter the
+    // art bench draws the reference with.
+    paintRocketBody(ctx, rr)
+    ctx.restore()
   }
-  ctx.stroke()
   ctx.restore()
 }
 
@@ -4777,6 +6095,35 @@ const consumeFx = (): void => {
 const applyFx = (e: FxEvent): void => {
   switch (e.kind) {
     case 'shoot':
+      if (e.weapon === 'rocket') {
+        // ── A launch, not a shot ──
+        //
+        // Its own cue and its own backblast. The launcher used to borrow the
+        // rifle's tick and its single ejected spark, which made the biggest
+        // weapon in the game the quietest thing on screen — the only rocket the
+        // player ever heard was the blast, a quarter of a second later and
+        // somewhere else entirely.
+        playFx('rocketLaunch')
+        // Smoke thrown BACKWARD, down the screen, out of the tube. It is the
+        // half of a launch that reads at a glance: the round goes one way and
+        // the exhaust goes the other, which no muzzle flash can say.
+        const puffs = minFx ? 2 : cheapFx ? 4 : 7
+        for (let i = 0; i < puffs; i++) {
+          emit({
+            x: e.x + (Math.random() - 0.5) * 0.3, y: e.y - 0.1,
+            vx: (Math.random() - 0.5) * 2.4, vy: -2.5 - Math.random() * 2.5,
+            life: 340 + Math.random() * 280, size: 0.16 + Math.random() * 0.12,
+            color: [190, 180, 170], shape: 3, alpha: 0.45, drag: 2.4
+          })
+        }
+        if (!minFx) {
+          emit({
+            x: e.x, y: e.y, vx: 0, vy: 0, life: 130, size: 0.3,
+            color: [255, 220, 150], additive: true, shape: 0, drag: 6
+          })
+        }
+        break
+      }
       playFx('shoot')
       // A single ejected spark. Anything more and 46 shots a second becomes fog.
       if (richFx && Math.random() < 0.35) {
@@ -4955,6 +6302,113 @@ const applyFx = (e: FxEvent): void => {
           life: rate ? 380 : 500, size: rate ? 0.08 : 0.1,
           color: rate ? [140, 220, 255] : [140, 255, 190],
           additive: true, shape: rate ? 2 : 0, drag: rate ? 1.6 : 2.6
+        })
+      }
+      break
+    }
+
+    // ─── The weapon puzzle ──────────────────────────────────────────────────
+    //
+    // Three beats, escalating, and each one has to land while the player is
+    // looking somewhere else. The escalation is the whole design: a click, a
+    // tear, a fanfare — so a player who solves the puzzle by accident the first
+    // time still learns the sequence from the noise it made.
+
+    case 'leverPull': {
+      // `power` is how far through the puzzle this pull is, which the mixer
+      // turns into pitch: the second lever answers the first a fifth higher.
+      playFx('lever', e.total > 0 ? e.pulled / e.total : 1)
+      triggerShake('small')
+      // Sparks off the mechanism, thrown along the road rather than in a ball —
+      // a lever is a thing that MOVED, and the debris should say which way.
+      for (let i = 0; i < (cheapFx ? 8 : 16); i++) {
+        emit({
+          x: e.x, y: e.y + 0.4,
+          vx: (Math.random() - 0.5) * 6, vy: 2 + Math.random() * 5,
+          life: 340 + Math.random() * 260, size: 0.07 + Math.random() * 0.05,
+          color: [255, 214, 110], additive: true, shape: 2, drag: 2.2, gravity: 7
+        })
+      }
+      // The count, so one pull of two reads as PROGRESS rather than as a thing
+      // that happened. Digits only — it is the same string in every language.
+      emitText({
+        x: e.x, y: e.y + 0.9, vy: 2.6, life: 900,
+        text: `${e.pulled}/${e.total}`,
+        color: e.pulled >= e.total ? '#8fffc2' : '#ffd24a', size: 0.7,
+        crit: e.pulled >= e.total
+      })
+      break
+    }
+
+    case 'weaponOpen': {
+      // Plate steel coming off the box. The shockwave is deliberately the same
+      // vocabulary a dismissed gate leaf uses — the player already reads that
+      // ring as "a thing that was in the way is gone".
+      playFx('weaponOpen')
+      triggerShake('strong')
+      screenFlash = 0.3
+      flashColour = '190,220,255'
+      for (let i = 0; i < (cheapFx ? 14 : 30); i++) {
+        const a = Math.random() * Math.PI * 2
+        emit({
+          x: e.x, y: e.y - 0.8,
+          vx: Math.cos(a) * (4 + Math.random() * 9), vy: Math.sin(a) * 5 + 4,
+          life: 520 + Math.random() * 380, size: 0.13 + Math.random() * 0.08,
+          color: [150, 178, 210], shape: 1, gravity: 14,
+          rot: Math.random() * 6, vrot: (Math.random() - 0.5) * 16
+        })
+      }
+      break
+    }
+
+    case 'weaponTake': {
+      // The payoff. Loud, gold, and shaped like the weapon it just handed over:
+      // the burst throws the same silhouette the box was wearing, so the thing
+      // the player picked up and the thing now on their HUD are recognisably
+      // one object. No copy — the badge does the naming, in the player's own
+      // language, which a canvas string never could.
+      playFx('weaponTake')
+      triggerShake('big')
+      screenFlash = 0.45
+      flashColour = '255,225,150'
+      emitDecal(e.x, e.y, 1.3, 0.4)
+      for (let i = 0; i < (cheapFx ? 18 : 44); i++) {
+        const a = Math.random() * Math.PI * 2
+        const ring = i % 3 === 0
+        const sp = ring ? 11 : 2 + Math.random() * 7
+        emit({
+          x: e.x, y: e.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.7 + 3,
+          life: ring ? 300 + Math.random() * 160 : 640 + Math.random() * 460,
+          size: ring ? 0.08 : 0.12 + Math.random() * 0.1,
+          color: Math.random() < 0.5 ? [255, 214, 96] : [255, 150, 60],
+          additive: true, shape: Math.random() < 0.4 ? 2 : 0, drag: 1.7, gravity: 3
+        })
+      }
+      break
+    }
+
+    case 'rocketBlast': {
+      playFx('rocketBlast')
+      triggerShake(cheapFx ? 'small' : 'strong')
+      screenFlash = 0.24
+      flashColour = '255,190,120'
+      emitDecal(e.x, e.y, e.radius * 0.7, 0.35)
+      // A third of the debris is a fast OUTER ring at the blast's true radius,
+      // the same trick the bomber's detonation uses: what the player sees has to
+      // be the size of what actually landed, or they cannot learn the weapon.
+      const n = minFx ? 8 : cheapFx ? 16 : 32
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2
+        const ring = i % 3 === 0
+        const sp = ring ? e.radius * 6.5 : 2 + Math.random() * e.radius * 2.2
+        emit({
+          x: e.x, y: e.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 + 1.5,
+          life: ring ? 220 + Math.random() * 120 : 420 + Math.random() * 320,
+          size: ring ? 0.08 + Math.random() * 0.04 : 0.13 + Math.random() * 0.1,
+          color: Math.random() < 0.55 ? [255, 190, 90] : [220, 96, 52],
+          additive: true, shape: Math.random() < 0.5 ? 2 : 0, drag: 1.9, gravity: 2
         })
       }
       break

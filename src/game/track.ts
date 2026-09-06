@@ -21,6 +21,12 @@ import {
   type GateOp
 } from '@/game/survival'
 import { bossHpScale, foeDef, foeHpScale, foeRoster } from '@/game/foes'
+import {
+  LEVER_R, LEVER_STAGGER, LEVER_STONE_HP_MUL, LEVER_STONE_LEAD, LEVER_STONE_W,
+  LEVER_X, WEAPON_BOX_AHEAD, WEAPON_BOX_R, WEAPON_BOX_X, WEAPON_EVERY,
+  WEAPON_GUARD_HALF_W, WEAPON_GUARD_HP_MUL, WEAPON_GUARD_LEAD, WEAPON_STAGE,
+  leverHp, stageHasWeapon, weaponBoxHp, weaponForStage, type WeaponId
+} from '@/game/weapons'
 
 /**
  * ─── The track generator ────────────────────────────────────────────────────
@@ -113,6 +119,34 @@ export type TrackEvent =
    *  — it already carries the stage scaling, see `minibossHp()`. */
   | { kind: 'miniboss'; y: number; typeId: string; hpScale: number }
   | { kind: 'coins'; y: number; xs: number[]; ys: number[] }
+  /**
+   * The weapon puzzle, as ONE event.
+   *
+   * Levers, armour and prize are authored, streamed and reasoned about as a
+   * single beat because they are only meaningful together: a lever with no box
+   * to open is scenery, and a box with no levers is a wall. Splitting them into
+   * three events would also split the guarantee that keeps the beat fair — that
+   * the armour is exactly `WEAPON_BOX_AHEAD` past the levers, which is the
+   * reaction window the whole thing is priced against (`weaponReactionS`).
+   *
+   * `y` is the FIRST lever; everything else is an offset from it, resolved by
+   * the generator so the sim and the tests read the same absolute numbers.
+   */
+  | {
+      kind: 'weapon'; y: number; weapon: WeaponId
+      /** Two posts, opposite shoulders, staggered by `LEVER_STAGGER`. */
+      levers: Array<{ x: number; y: number; hp: number }>
+      /** One destructible boulder per lever, `LEVER_STONE_LEAD` in front of it
+       *  and in the same column — the cover that stops a lever being solved by
+       *  a stray round. Indexed to match `levers`. See `Stone`. */
+      stones: Array<{ x: number; y: number; w: number; hp: number }>
+      box: { x: number; y: number; hp: number }
+      /** Armour over the box, all of it on one line `WEAPON_GUARD_LEAD` in
+       *  front of the prize. Deleted wholesale the instant both levers are
+       *  pulled — see `unlockPuzzle` in `useSurvivalGame`. */
+      guardY: number
+      guards: Array<{ x: number; w: number; hp: number }>
+    }
 
 export interface Track {
   stage: number
@@ -3634,6 +3668,402 @@ const fillGateGaps = (b: Beat): void => {
 
 // ─── Build ──────────────────────────────────────────────────────────────────
 
+// ─── The weapon puzzle ──────────────────────────────────────────────────────
+
+/**
+ * Road a lever needs either side of a bank or an elite.
+ *
+ * The lever sweep and a gate bank are the same instruction — "steer somewhere
+ * specific, now" — pointed at two different places, and a player asked for both
+ * in the same second does neither. Slightly over one second of road at stage
+ * speed.
+ */
+const WEAPON_LEVER_CLEAR = 6
+
+/** …and the box needs more, because the detour onto the shoulder happens with
+ *  the crowd already committed to whatever the bank made it commit to. */
+const WEAPON_BOX_CLEAR = 7.5
+
+/**
+ * How much road behind the arena the beat must finish in, for the three slots
+ * that stay out of the run-in. The closing bank lands at `arenaY - 12` and owns
+ * it; a prize contending with that bank is a prize most players will not turn
+ * for.
+ *
+ * The CLOSE slot is the deliberate exception and uses `WEAPON_CLOSING_CLEAR`
+ * instead — see `WEAPON_SLOTS`. It still clears the bank; what it gives up is
+ * the comfort margin behind it, which is the whole point of that slot.
+ */
+const WEAPON_ARENA_CLEAR = 17
+
+/** The x window a round aimed at `x` travels down. Roughly half a crowd's
+ *  radius, so a block that only clips the edge of the column does not count as
+ *  cover. */
+const WEAPON_COLUMN_HALF = 0.85
+
+const inColumn = (blockX: number, blockW: number, x: number): boolean =>
+  Math.abs(blockX - x) < blockW / 2 + WEAPON_COLUMN_HALF
+
+/**
+ * Which side of the road each half of the beat uses.
+ *
+ * Mirrored on alternate stages so "the lever is on the left" never becomes the
+ * answer — the beat is about looking, and a fixed layout is a beat that can be
+ * solved without looking. The box lands on the SECOND lever's side, so the
+ * sweep ends where the prize is: left, right, and the shoulder you are already
+ * on.
+ */
+const puzzleSide = (stage: number): 1 | -1 => (Math.floor(stage / 2) % 2 === 0 ? -1 : 1)
+
+/** Everything the beat occupies, resolved from the first lever's `y`. */
+interface PuzzleAt {
+  leverY: readonly [number, number]
+  boxY: number
+  guardY: number
+}
+
+const puzzleAt = (y: number): PuzzleAt => ({
+  leverY: [y, y + LEVER_STAGGER],
+  boxY: y + WEAPON_BOX_AHEAD,
+  guardY: y + WEAPON_BOX_AHEAD - WEAPON_GUARD_LEAD
+})
+
+/** The three x positions a round has to reach: both levers, then the box. */
+const puzzleColumns = (stage: number): [number, number, number] => {
+  const side = puzzleSide(stage)
+  return [side * LEVER_X, -side * LEVER_X, -side * WEAPON_BOX_X]
+}
+
+/**
+ * How much road behind a target its firing column is cleared for.
+ *
+ * NOT `BULLET_RANGE` (10.8), which is how far a round can travel and a wildly
+ * pessimistic answer to "where does cover actually matter". The crowd is only
+ * out at |x| = 3.4 for the last second or so of a lever's approach — it has a
+ * road to run before then — so a boulder eight units back in the same column is
+ * not cover, it is scenery the player was never behind.
+ *
+ * It matters because this is the one pass in the generator that DELETES
+ * obstacles: at the full gun range it thinned three twelve-unit stretches of
+ * every stage from 4 on, which is a difficulty cut bought for nothing. Seven
+ * units is ~1.3 s of road, which is the whole window in which the column is
+ * genuinely being shot down.
+ */
+const WEAPON_LANE_CLEAR = 7
+
+/**
+ * The stretch of road each of the three columns is shot from.
+ *
+ * A column only matters BEHIND the thing it leads to: a boulder five units past
+ * a lever never blocked anything.
+ */
+const puzzleSpans = (stage: number, y: number): Array<[number, number, number]> => {
+  const at = puzzleAt(y)
+  const cols = puzzleColumns(stage)
+  return [
+    [cols[0], at.leverY[0] - WEAPON_LANE_CLEAR, at.leverY[0] + LEVER_R],
+    [cols[1], at.leverY[1] - WEAPON_LANE_CLEAR, at.leverY[1] + LEVER_R],
+    [cols[2], at.guardY - WEAPON_LANE_CLEAR, at.boxY + WEAPON_BOX_R]
+  ]
+}
+
+/**
+ * Can the beat live here?
+ *
+ * Two different questions, asked of different things:
+ *
+ *   • a BANK or an ELITE anywhere near a lever or the box is a competing
+ *     instruction, and no amount of clearing fixes it — the position is wrong;
+ *   • a wall or a boulder is only a problem where it stands IN one of the three
+ *     columns the player has to shoot down, and `clearPuzzleColumns` deletes
+ *     those. The exception is a passage rib, which is authored to be an
+ *     unbroken wall and may not have a hole opened in it — a rib in a column
+ *     rules the position out instead.
+ *
+ * `leverGap` and `boxGap` are passed in rather than read from the constants
+ * because the search relaxes them; `arenaClear` because it is the slot's, not
+ * the file's. See `placeWeaponPuzzle`.
+ */
+const puzzleFits = (
+  b: Beat, y: number, leverGap: number, boxGap: number, arenaClear: number
+): boolean => {
+  const at = puzzleAt(y)
+  if (y < 12) return false
+  if (at.boxY + WEAPON_BOX_R > b.arenaY - arenaClear) return false
+
+  const spans = puzzleSpans(b.stage, y)
+  for (const e of b.events) {
+    if (e.kind === 'gates' || e.kind === 'miniboss') {
+      for (const ly of at.leverY) if (Math.abs(e.y - ly) < leverGap) return false
+      if (Math.abs(e.y - at.boxY) < boxGap) return false
+      if (Math.abs(e.y - at.guardY) < boxGap) return false
+      continue
+    }
+    if (e.kind === 'rocks' && e.passage) {
+      for (const bl of e.blocks) {
+        for (const [x, lo, hi] of spans) {
+          if (e.y >= lo && e.y <= hi && inColumn(bl.x, bl.w, x)) return false
+        }
+      }
+    }
+  }
+  return true
+}
+
+/**
+ * Open the three firing lanes.
+ *
+ * Deletes wall and boulder BLOCKS — never whole rows — that stand in a column
+ * the player is required to shoot down. Dropping blocks can only ever widen a
+ * row's gap, so every runnability guarantee `ensureRunnable` made about these
+ * rows still holds; a row emptied completely is dropped with it.
+ *
+ * This is the one pass in the generator that makes a stage EASIER, and it is
+ * worth being explicit about why that is acceptable: a boulder cannot be shot,
+ * so a boulder parked on a lever is not a harder puzzle, it is a puzzle with no
+ * solution — and one the player would spend the whole approach failing to
+ * solve. Two or three blocks out of a stage's forty is a fair price for a beat
+ * that always works.
+ */
+const clearPuzzleColumns = (b: Beat, y: number): void => {
+  const spans = puzzleSpans(b.stage, y)
+  for (let i = b.events.length - 1; i >= 0; i--) {
+    const e = b.events[i]!
+    if (e.kind !== 'rocks' && e.kind !== 'barricade') continue
+    if (e.kind === 'rocks' && e.passage) continue
+    const kept = e.blocks.filter(
+      (bl) => !spans.some(([x, lo, hi]) => e.y >= lo && e.y <= hi && inColumn(bl.x, bl.w, x))
+    )
+    if (kept.length === e.blocks.length) continue
+    if (kept.length === 0) b.events.splice(i, 1)
+    // Mutated in place rather than rebuilt: the two event kinds differ in the
+    // fields AROUND `blocks` (a rib's `passage`, a rank's `field`) and those
+    // must survive a thinning untouched — a rank that lost its field id stops
+    // moving with its partner.
+    else (e as { blocks: typeof kept }).blocks = kept
+  }
+}
+
+/**
+ * ─── Where on the road the beat goes ────────────────────────────────────────
+ *
+ * It used to be one number — just under halfway, every stage, forever — and
+ * that is the version a player described as boring in exactly those terms: once
+ * you know the puzzle is at the midpoint you stop looking for it, you steer to
+ * the rail when the progress bar says so, and the beat whose entire content is
+ * "did you notice" has been reduced to a timer.
+ *
+ * So it rotates through four slots instead, and the rotation is a pure function
+ * of the stage number like everything else on this road: a player who wipes on
+ * stage 12 meets the same puzzle in the same place on the retry, and a player
+ * who has run stage 12 before can PLAN for it. Varied is not the same as random.
+ *
+ * The four are chosen to ask different questions rather than to spread numbers
+ * evenly:
+ *
+ *   MID   — the original. The weapon is worth carrying for most of what is left,
+ *           and the crowd solving it has been through two or three banks.
+ *   EARLY — a small crowd, a cheap sweep, and a weapon for almost the whole
+ *           road. The prize is biggest here and the squad that has to win it is
+ *           weakest, which is the trade.
+ *   LATE  — most of the stage is already spent, so it is a decision about the
+ *           run-in rather than about the run: turn for it, or bank what you have.
+ *   CLOSE — the last thing on the road. A launcher handed over here is a
+ *           launcher for the boss and nothing else, which is not a downgrade —
+ *           it is a different purchase, and it lands on the fight where five
+ *           rockets into one health bar is the best the weapon ever gets.
+ *
+ * `clear` is how much road behind the arena that slot's box must finish in. The
+ * first three keep the whole of the closing bank's run-in to themselves; CLOSE
+ * deliberately does not, and `WEAPON_CLOSING_CLEAR` is the argument for why
+ * that is safe.
+ */
+interface WeaponSlot {
+  /** Target position, as a fraction of `arenaY`. */
+  at: number
+  /** Road the box must leave between itself and the arena. */
+  clear: number
+}
+
+/**
+ * How much road the CLOSE slot leaves in front of its box.
+ *
+ * The closing bank is written at `arenaY − 12` and owns the run-in, so this has
+ * to clear it — a prize the player meets in the same breath as the last gate
+ * bank is a prize they will not turn for, and `puzzleFits` would reject the
+ * position anyway.
+ *
+ * It may not go much below this either, and the floor is a hard mechanical one
+ * rather than a taste one: the crowd STOPS at `arenaY`. A box parked two units
+ * short of the arena is passed at the exact moment the run-in ends and can then
+ * never be shot again — rounds only travel up the road — so the prize would
+ * simply be undrawable on the stages that drew that slot. Eight units is about
+ * a second and a half of road with the box already broken, which is the margin
+ * that keeps the slot a real one.
+ */
+export const WEAPON_CLOSING_CLEAR = 8
+
+const WEAPON_SLOTS = {
+  mid: { at: 0.45, clear: WEAPON_ARENA_CLEAR },
+  early: { at: 0.2, clear: WEAPON_ARENA_CLEAR },
+  late: { at: 0.68, clear: WEAPON_ARENA_CLEAR },
+  close: { at: 0.95, clear: WEAPON_CLOSING_CLEAR }
+} as const satisfies Record<string, WeaponSlot>
+
+export type WeaponSlotId = keyof typeof WEAPON_SLOTS
+
+/**
+ * The order the four slots are dealt in, one entry per PUZZLE stage.
+ *
+ * Eight long rather than four, and that length is the whole design of it.
+ *
+ * `weaponForStage` alternates gatling/rocket over the same index, so a
+ * four-long rotation locks the two together forever: the close slot would be a
+ * rocket stage every single time it came up, the mid slot a gatling stage every
+ * time, and a player who learned "the launcher lives at the end of the road"
+ * would be right for the rest of the campaign. Two dials with the same period
+ * are one dial.
+ *
+ * At eight, each slot is dealt twice — once on a gatling stage and once on a
+ * rocket stage — so position tells you nothing about which weapon is in the
+ * box, and neither one tells you about the other. No slot is dealt twice in a
+ * row either, including across the wrap, so consecutive puzzle stages never
+ * feel like a repeat.
+ */
+const WEAPON_SLOT_ORDER: readonly WeaponSlotId[] = [
+  'mid', 'early', 'late', 'close', 'early', 'mid', 'close', 'late'
+]
+
+/**
+ * Which slot this stage's puzzle aims for.
+ *
+ * The FIRST puzzle in the campaign — `WEAPON_STAGE`, and the only one below 8 —
+ * takes the head of the order, which is MID on purpose. A player meeting the
+ * beat for the first time has to be able to read it: the midpoint is where the
+ * road is calmest, where the two halves of the puzzle are most likely to be on
+ * screen together, and where a miss is cheapest to learn from. Variety is for
+ * the player who already knows what a lever is, which is why the rotation
+ * proper starts at stage 8.
+ *
+ * A pure function of the stage number, like everything else on this road: the
+ * point is that stage 20's prize is somewhere DIFFERENT from stage 18's, not
+ * that it is somewhere unknowable. A player who wipes meets the same road on
+ * the retry and can plan the sweep for it.
+ */
+export const weaponSlotIdFor = (stage: number): WeaponSlotId => {
+  const n = Math.floor((stage - WEAPON_STAGE) / WEAPON_EVERY)
+  return WEAPON_SLOT_ORDER[n <= 0 ? 0 : n % WEAPON_SLOT_ORDER.length]!
+}
+
+const weaponSlotFor = (stage: number): WeaponSlot => WEAPON_SLOTS[weaponSlotIdFor(stage)]
+
+/**
+ * Every clearance the search is willing to settle for, hardest first.
+ *
+ * A first pass that walked upward from a third of the road and took the first
+ * gap it found put the beat at 76 % of stage 4 and missed seven stages out of
+ * the first two hundred outright — because "the first legal spot" on a busy
+ * road is wherever the banks happen to thin out, which is usually the run-in.
+ *
+ * So the search scans the WHOLE legal window and scores by distance from the
+ * slot's target (`WEAPON_SLOTS`), and if the strict clearance admits nothing it
+ * lowers its standards rather than dropping the beat. The relaxed tiers are
+ * still more road than a bank's own band asks for; what they give up is the
+ * comfort margin
+ * between the lever sweep and the next decision, which is a worse puzzle than
+ * the ideal one and a far better one than no puzzle at all.
+ */
+const WEAPON_CLEARANCES: ReadonlyArray<readonly [number, number]> = [
+  [WEAPON_LEVER_CLEAR, WEAPON_BOX_CLEAR],
+  [4.5, 5.5],
+  [3, 3.5]
+]
+
+/**
+ * Lay the stage's weapon puzzle.
+ *
+ * Runs LAST, after every bank exists and every obstacle is in its final place,
+ * because it is the only beat placed around the finished road rather than into
+ * a road still being written. It adds no gates and moves nothing, so nothing
+ * that ran before it can be invalidated by it.
+ *
+ * `weaponPuzzle.test.ts` asserts that every stage `stageHasWeapon` claims gets
+ * one — and that no other stage does — and that it lands in the middle half of
+ * the road: the promises that make "a weapon every other stage" true rather
+ * than approximately true.
+ */
+const placeWeaponPuzzle = (b: Beat): void => {
+  if (!stageHasWeapon(b.stage)) return
+
+  const slot = weaponSlotFor(b.stage)
+  const want = b.arenaY * slot.at
+  // Close enough to stop looking. It was a QUARTER of the road, which was
+  // harmless while there was one target and fatal with four: a "close" slot
+  // that settles a quarter of the road early is a mid slot, and the rotation
+  // the player is supposed to notice quietly collapses back into the single
+  // position it replaced. An eighth is still a couple of banks of slack.
+  const goodEnough = b.arenaY * 0.12
+  let found = -1
+  let bestCost = Number.POSITIVE_INFINITY
+  for (const [leverGap, boxGap] of WEAPON_CLEARANCES) {
+    // Half a unit is a tenth of a second of road: finer than the player could
+    // perceive, coarse enough that the whole sweep is a few hundred tests.
+    for (let y = 12; y < b.arenaY; y += 0.5) {
+      if (!puzzleFits(b, y, leverGap, boxGap, slot.clear)) continue
+      const cost = Math.abs(y - want)
+      if (cost >= bestCost) continue
+      bestCost = cost
+      found = r2(y)
+    }
+    // Keep relaxing while the best spot found so far is still out in the
+    // run-in. The looser tier is a WORSE puzzle — less road between the sweep
+    // and the next decision — but a mid-road puzzle with a tight approach beats
+    // a comfortable one handed over at 82 % of the stage, which is where the
+    // strict tier alone put stage 50. The tiers compete rather than short-
+    // circuit, so a relaxed candidate only wins if it is genuinely closer.
+    if (found >= 0 && bestCost <= goodEnough) break
+  }
+  if (found < 0) return
+
+  clearPuzzleColumns(b, found)
+
+  const at = puzzleAt(found)
+  const side = puzzleSide(b.stage)
+  const boxX = -side * WEAPON_BOX_X
+  const hp = leverHp(b.stage)
+  const guardHp = Math.round(barricadeHp(b.stage) * WEAPON_GUARD_HP_MUL)
+  // 70 % of the stage's ordinary wall — cover priced UNDER the walls the road
+  // is already charging for. See `LEVER_STONE_HP_MUL`.
+  const stoneHp = Math.max(1, Math.round(barricadeHp(b.stage) * LEVER_STONE_HP_MUL))
+  const leverXs = [r2(side * LEVER_X), r2(-side * LEVER_X)] as const
+
+  b.events.push({
+    kind: 'weapon',
+    y: r2(found),
+    weapon: weaponForStage(b.stage),
+    levers: [
+      { x: leverXs[0], y: r2(at.leverY[0]), hp },
+      { x: leverXs[1], y: r2(at.leverY[1]), hp }
+    ],
+    // One per lever, in the same column and `LEVER_STONE_LEAD` short of it —
+    // inside the stretch `clearPuzzleColumns` has already emptied of other
+    // scenery, so the stone is the ONLY thing in front of its post.
+    stones: [
+      { x: leverXs[0], y: r2(at.leverY[0] - LEVER_STONE_LEAD), w: LEVER_STONE_W, hp: stoneHp },
+      { x: leverXs[1], y: r2(at.leverY[1] - LEVER_STONE_LEAD), w: LEVER_STONE_W, hp: stoneHp }
+    ],
+    box: { x: r2(boxX), y: r2(at.boxY), hp: weaponBoxHp(b.stage) },
+    guardY: r2(at.guardY),
+    // Two plates rather than one slab, so the armour reads as something BUILT
+    // over the box rather than as a barricade that happens to be there — and so
+    // it comes apart in two pieces when it goes.
+    guards: [
+      { x: r2(boxX - WEAPON_GUARD_HALF_W / 2), w: WEAPON_GUARD_HALF_W, hp: guardHp },
+      { x: r2(boxX + WEAPON_GUARD_HALF_W / 2), w: WEAPON_GUARD_HALF_W, hp: guardHp }
+    ]
+  })
+}
+
 export const buildTrack = (stage: number): Track => {
   const length = stageLength(stage)
   const arenaY = length - 4
@@ -3726,6 +4156,11 @@ export const buildTrack = (stage: number): Track => {
   // `fillGateGaps` adds them, and an obstacle cleared before that could be
   // buried by a filler bank dropped on top of it.
   clearGateBands(b)
+
+  // …and after THAT, because the puzzle is placed around the FINISHED road: it
+  // needs every bank and every obstacle at its final `y` to know where the three
+  // firing lanes it requires can actually be opened.
+  placeWeaponPuzzle(b)
 
   // Sorted by distance: the sim streams events in one forward pass and never
   // looks back. `Array.prototype.sort` is stable, so equal-y events keep the

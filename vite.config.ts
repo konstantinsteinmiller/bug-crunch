@@ -116,6 +116,72 @@ const mawCampaignOverridesPlugin = (): Plugin => ({
   }
 })
 
+// `/art-sheets` (dev only) bakes the whole procedural cast onto reference
+// sheets so it can be handed to an image model and sliced back in. The browser
+// can render the sheets but cannot put them where they belong — a download
+// lands in the user's Downloads folder under whatever name Chrome decides — so
+// the bench POSTs each finished sheet here and this writes it into
+// `art-sheets/` in the repo.
+//
+//   POST /__art/save-sheet  { name, dataUrl }  → writes a binary file
+//   POST /__art/save-sheet  { name, text }     → writes a text file
+//
+// Dev only, and the name is whitelisted rather than sanitised: this is a
+// file-writing endpoint, so it takes a flat basename made of safe characters
+// and nothing else. No separators, no dots leading a segment, no escaping out
+// of the directory.
+const ART_SHEET_DIR = resolve(fileURLToPath(new URL('./art-sheets', import.meta.url)))
+const SAFE_SHEET_NAME = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,79}$/
+
+const artSheetsPlugin = (): Plugin => ({
+  name: 'survivalist-art-sheets',
+  apply: 'serve',
+  // The sheets land inside the project root, so without this the dev server
+  // watches its own output: the first PNG written triggers a full page reload,
+  // which tears down the bench in the middle of writing the other fifty.
+  config: () => ({ server: { watch: { ignored: ['**/art-sheets/**'] } } }),
+  configureServer(server) {
+    server.middlewares.use('/__art/save-sheet', async (req, res, next) => {
+      if (req.method !== 'POST') { next(); return }
+      const fail = (code: number, error: string) => {
+        res.statusCode = code
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error }))
+      }
+      try {
+        const body = JSON.parse(await readBody(req)) as
+          { name?: string; dataUrl?: string; text?: string }
+        const name = body.name ?? ''
+        if (!SAFE_SHEET_NAME.test(name) || name.includes('..')) {
+          fail(400, 'name must be a flat basename of [A-Za-z0-9._@-]')
+          return
+        }
+        mkdirSync(ART_SHEET_DIR, { recursive: true })
+        const file = resolve(ART_SHEET_DIR, name)
+        // Belt and braces: even a name that passed the pattern must land
+        // inside the directory we meant.
+        if (dirname(file) !== ART_SHEET_DIR) { fail(400, 'name escaped the sheet directory'); return }
+
+        if (typeof body.text === 'string') {
+          writeFileSync(file, body.text, 'utf-8')
+        } else if (typeof body.dataUrl === 'string') {
+          const comma = body.dataUrl.indexOf(',')
+          if (comma < 0 || !body.dataUrl.startsWith('data:')) { fail(400, 'dataUrl is not a data URI'); return }
+          writeFileSync(file, Buffer.from(body.dataUrl.slice(comma + 1), 'base64'))
+        } else {
+          fail(400, 'expected { name, dataUrl } or { name, text }')
+          return
+        }
+
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ ok: true, path: `art-sheets/${name}` }))
+      } catch (e) {
+        fail(400, String((e as Error).message))
+      }
+    })
+  }
+})
+
 // Read the package version directly so APP_VERSION resolves regardless of
 // how vite is invoked. `process.env.npm_package_version` is only set when
 // vite runs via `pnpm run <script>` — running `pnpm vite` directly leaves
@@ -175,6 +241,8 @@ export default defineConfig(({ mode, command }) => {
   // Campaign-overrides plugin — virtual module + dev write endpoints so
   // editor saves persist to `data/campaign-overrides.json` in the repo.
   plugins.push(mawCampaignOverridesPlugin())
+  // Art-sheet export endpoint. `apply: 'serve'`, so it is not in any build.
+  plugins.push(artSheetsPlugin())
 
   // Only push the obfuscator if both conditions are met
   if (isProduction && shouldObfuscate) {

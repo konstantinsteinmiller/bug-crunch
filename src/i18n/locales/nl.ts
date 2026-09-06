@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Minibaas',
     'fireRate': 'Tempo',
     'incoming': 'Aanval!',
-    'dodge': 'Ontwijk'
+    'dodge': 'Ontwijk',
+    'weaponActive': '{name} gereed',
+    'weaponLocked': '{name} vergrendeld — {n} van {total} hendels geraakt'
+  },
+
+  'weapons': {
+    'rocket': 'Raketwerper',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Groene kisten: iedereen slaat harder', 'desktop': 'Groene kisten: iedereen slaat harder' },
     'rate': { 'touch': 'Blauwe kisten: iedereen schiet sneller', 'desktop': 'Blauwe kisten: iedereen schiet sneller' },
     'boss': { 'touch': 'Blijf uit de rode ring!', 'desktop': 'Blijf uit de rode ring!' },
+    'lever': { 'touch': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist', 'desktop': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist' },
     'guard': { 'touch': 'Schild op — je schoten doen niets. WEGWEZEN!', 'desktop': 'Schild op — je schoten doen niets. WEGWEZEN!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Bereik',
       'scavenge': 'Sprokkelen',
       'grenade': 'Granaat',
-      'shield': 'Schild'
+      'shield': 'Schild',
+      'rocket': 'Raketkracht',
+      'gatling': 'Gatling-kracht'
     },
     'descriptions': {
       'squad': 'Begin elk level met meer overlevenden.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Je team opent verder op de weg het vuur.',
       'scavenge': 'Verdien meer munten per run.',
       'grenade': 'Gooi een granaat voor een uitbarsting van schade.',
-      'shield': 'Halveer de schade aan je team voor enkele seconden.'
+      'shield': 'Halveer de schade aan je team voor enkele seconden.',
+      'rocket': 'Raketwerpers die je in een level vrijspeelt doen meer schade.',
+      'gatling': 'Gatlings die je in een level vrijspeelt doen meer schade.'
     }
   },
 

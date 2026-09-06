@@ -30,7 +30,14 @@ export default {
     'miniboss': '中ボス',
     'fireRate': '連射',
     'incoming': '攻撃が来る！',
-    'dodge': '回避'
+    'dodge': '回避',
+    'weaponActive': '{name} 準備完了',
+    'weaponLocked': '{name} ロック中 — レバー {total} 本中 {n} 本'
+  },
+
+  'weapons': {
+    'rocket': 'ロケットランチャー',
+    'gatling': 'ガトリングガン'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': '緑の箱：全員の攻撃力アップ', 'desktop': '緑の箱：全員の攻撃力アップ' },
     'rate': { 'touch': '青い箱：全員の連射が速くなる', 'desktop': '青い箱：全員の連射が速くなる' },
     'boss': { 'touch': '赤い輪から離れろ！', 'desktop': '赤い輪から離れろ！' },
+    'lever': { 'touch': '道の両端のレバーを両方撃て — 武器箱が開く', 'desktop': '道の両端のレバーを両方撃て — 武器箱が開く' },
     'guard': { 'touch': 'シールド展開中 — 攻撃は効かない。動け！', 'desktop': 'シールド展開中 — 攻撃は効かない。動け！' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': '射程',
       'scavenge': '回収',
       'grenade': '手榴弾',
-      'shield': 'シールド'
+      'shield': 'シールド',
+      'rocket': 'ロケット威力',
+      'gatling': 'ガトリング威力'
     },
     'descriptions': {
       'squad': 'より多い仲間でステージを開始。',
@@ -116,7 +126,9 @@ export default {
       'range': '部隊がより前方から射撃を開始します。',
       'scavenge': '1回のランで得られるコインが増加。',
       'grenade': '手榴弾を投げて大ダメージを与える。',
-      'shield': '数秒間、部隊が受けるダメージを半減。'
+      'shield': '数秒間、部隊が受けるダメージを半減。',
+      'rocket': 'ステージで手に入るロケットランチャーの威力が上がる。',
+      'gatling': 'ステージで手に入るガトリングガンの威力が上がる。'
     }
   },
 

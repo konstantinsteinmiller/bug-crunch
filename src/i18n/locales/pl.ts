@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Miniboss',
     'fireRate': 'Tempo',
     'incoming': 'Nadchodzi atak!',
-    'dodge': 'Unik'
+    'dodge': 'Unik',
+    'weaponActive': '{name} gotowy',
+    'weaponLocked': '{name} zablokowany — trafiono {n} z {total} dźwigni'
+  },
+
+  'weapons': {
+    'rocket': 'Wyrzutnia rakiet',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Zielone skrzynie: każdy bije mocniej', 'desktop': 'Zielone skrzynie: każdy bije mocniej' },
     'rate': { 'touch': 'Niebieskie skrzynie: każdy strzela szybciej', 'desktop': 'Niebieskie skrzynie: każdy strzela szybciej' },
     'boss': { 'touch': 'Trzymaj się z dala od czerwonego kręgu!', 'desktop': 'Trzymaj się z dala od czerwonego kręgu!' },
+    'lever': { 'touch': 'Zestrzel OBIE dźwignie przy krawędziach — otwierają skrzynię z bronią', 'desktop': 'Zestrzel OBIE dźwignie przy krawędziach — otwierają skrzynię z bronią' },
     'guard': { 'touch': 'Tarcza w górze — strzały nic nie robią. UCIEKAJ!', 'desktop': 'Tarcza w górze — strzały nic nie robią. UCIEKAJ!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Zasięg',
       'scavenge': 'Zbieractwo',
       'grenade': 'Granat',
-      'shield': 'Tarcza'
+      'shield': 'Tarcza',
+      'rocket': 'Moc rakiet',
+      'gatling': 'Moc Gatlinga'
     },
     'descriptions': {
       'squad': 'Zaczynaj każdy etap z większą liczbą ocalałych.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Twój oddział otwiera ogień dalej na drodze.',
       'scavenge': 'Zdobywaj więcej monet w każdej rundzie.',
       'grenade': 'Rzuć granat, by zadać potężne obrażenia.',
-      'shield': 'Zmniejsz o połowę obrażenia oddziału na kilka sekund.'
+      'shield': 'Zmniejsz o połowę obrażenia oddziału na kilka sekund.',
+      'rocket': 'Wyrzutnie rakiet zdobyte na etapie zadają więcej obrażeń.',
+      'gatling': 'Gatlingi zdobyte na etapie zadają więcej obrażeń.'
     }
   },
 

@@ -407,7 +407,7 @@ export const BOLT_TRAIL = 12
  *
  * A kind is not just a different animation: two of the four carry EFFECTIVE
  * health that never appears on the bar. The healer puts `HEAL_FRACTION` back
- * three times, so its bar is worth x1.6 of itself; the summoner spends
+ * three times, so its bar is worth x1.3 of itself; the summoner spends
  * `SUMMON_WAVES_MAX * SUMMON_PER_WAVE * SUMMON_HP_SHARE` of its own bar on
  * bodies that have to be shot at (or run from) before the bar can be. Pricing
  * that off the printed number instead of correcting for it would make the same
@@ -417,7 +417,7 @@ export const BOLT_TRAIL = 12
  * So the printed bar is cut by exactly what the kind gives back:
  *
  *   healer    1 / (1 + HEAL_FRACTION x HEAL_EXPECTED)
- *   summoner  1 / (1 + SUMMON_WAVES_MAX x SUMMON_PER_WAVE x SUMMON_HP_SHARE)
+ *   summoner  1 / (1 + SUMMON_BUDGET x SUMMON_HP_SHARE)
  *
  * The summoner's is exact — every body it fields is health it definitely spends.
  * The healer's is not, and that is what `HEAL_EXPECTED` is for: it is priced on
@@ -431,7 +431,7 @@ export const BOLT_TRAIL = 12
 export const bossHpMulFor = (kind: BossKind): number => {
   switch (kind) {
     case 'healer': return 1 / (1 + HEAL_FRACTION * HEAL_EXPECTED)
-    case 'summoner': return 1 / (1 + SUMMON_WAVES_MAX * SUMMON_PER_WAVE * SUMMON_HP_SHARE)
+    case 'summoner': return 1 / (1 + SUMMON_BUDGET * SUMMON_HP_SHARE)
     default: return 1
   }
 }
@@ -617,7 +617,24 @@ export const HEALER_TELEGRAPH = 0.7
 export const HEAL_EVERY = 3
 
 /** ...and it puts back this much of the boss's MAXIMUM health. */
-export const HEAL_FRACTION = 0.2
+export const HEAL_FRACTION = 0.1
+
+/**
+ * The floor under the gap between two heals, in seconds of fight.
+ *
+ * `HEAL_EVERY` counts CASTS, and a cast is 1.7 s (`HEALER_CAST_CD`) — so on its
+ * own the every-third rule lands a heal every ~5.1 s, and anything that shortens
+ * the cadence shortens the gap with it. A guard gate does exactly that: it
+ * re-arms the clock at `bossTelegraph`, which is shorter than a cast, so the
+ * heals bunched up precisely when the player had just been locked out of doing
+ * damage.
+ *
+ * A wall-clock floor is the honest way to say "at most this often", because the
+ * thing being bounded is a RATE and a rate is per second, not per cast. A heal
+ * that comes due early falls through to a bolt exactly as one past
+ * `HEAL_MAX_CASTS` does — the boss never stands there doing nothing.
+ */
+export const HEAL_MIN_GAP_S = 10
 
 /**
  * ...at most this many times, ever.
@@ -626,10 +643,11 @@ export const HEAL_FRACTION = 0.2
  * fight, and it is the SAME trap the summoner's wave cap fixes wearing a
  * different costume: a heal on a loop is a regeneration RATE, and any player
  * whose DPS falls under that rate never kills the boss at all — not slowly, at
- * all. At 20 % every 3.45 s the rate is 5.8 % of the bar a second, which a
- * genuinely under-built run is below.
+ * all. At 10 % every 10 s (`HEAL_MIN_GAP_S`) the rate is 1 % of the bar a
+ * second; it was 20 % every ~5.1 s, or 3.9 %, which a genuinely under-built run
+ * is below and this is not.
  *
- * Three casts turns the rate into a TOTAL: 60 % of the bar, once, and then the
+ * Three casts turns the rate into a TOTAL: 30 % of the bar, once, and then the
  * fight is a normal fight. A cast past the cap falls through to a bolt rather
  * than being skipped — the boss never stands there doing nothing.
  */
@@ -755,16 +773,79 @@ export interface BossBolt {
 /** Seconds between waves. */
 export const SUMMON_CD = 1.4
 
+/**
+ * ...and the longer beat before the FIRST one.
+ *
+ * The fight used to open with a wave 1.4 s in, on a boss that is still walking
+ * into the arena. Measured against an under-geared squad that beat the other
+ * three kinds for 17-29 s, the summoner took the whole crowd in 8.5 s — because
+ * at one wave per `SUMMON_CD` the entire budget is on the road inside nine
+ * seconds. That is not a wall building, it is a dump, and the player never gets
+ * a frame in which to read what the fight is asking of them.
+ *
+ * The extra second is spent on the one thing this boss has to teach before it
+ * starts: bones come up out of the road AHEAD of you, and you can shoot them.
+ */
+export const SUMMON_OPENING_CD = 2.4
+
 /** How long a summoner stands planted and immune before a guard phase's wave
  *  claws its way up. The phase turn's own tell — long enough to read as the
  *  fight changing, short enough that it is never a wait. */
 export const SUMMON_TELEGRAPH = 0.9
 
-/** Bodies per wave. */
+/** Bodies per wave, ON AVERAGE — the size the budget is priced at. The wave a
+ *  player actually meets comes from `SUMMON_WAVE_RAMP`. */
 export const SUMMON_PER_WAVE = 4
 
 /** ...and how many waves it may EVER field. The bound, not a pacing number. */
 export const SUMMON_WAVES_MAX = 6
+
+/**
+ * How the budget is spread across those waves.
+ *
+ * Six flat fours put every body on the road inside the first nine seconds, and
+ * measured against an under-geared squad that survived 17-29 s of every other
+ * kind at the same health, the summoner took the crowd in 8.5 s. The opening is
+ * what costs the player the fight: they meet four bodies before they have seen
+ * what this boss does, and never get a beat in which to learn it.
+ *
+ * So the OPENING wave is halved and nothing else moves. The road fills at
+ * 2 → 6 → 10 → 14 → 18 → 22 instead of 4 → 8 → 12 → 16 → 20 → 24: fewer bodies
+ * out at every moment, and no wave anywhere bigger than the four it replaced.
+ *
+ * ── Two shapes that were tried first, and what they broke ──
+ *
+ * Giving the opening's two bodies to the LATER waves (2,3,4,5,5,5) keeps the
+ * total but lands them while the crowd is at its smallest, so more are alive at
+ * once — and the squad that "cannot out-damage the spawn rate" stopped being
+ * able to outlast the wall at all, which is the one guarantee
+ * `SUMMON_WAVES_MAX` exists to make. Spreading the same total over MORE waves
+ * (8 x 3) breaks it the other way: every wave is smaller, but the wall takes
+ * five seconds longer to finish and the suppression outlasts the crowd.
+ *
+ * The budget therefore gets SMALLER rather than rearranged or stretched, and
+ * `SUMMON_BUDGET` — which prices the boss's bar — is derived from this array so
+ * the two can never drift apart.
+ */
+export const SUMMON_WAVE_RAMP: readonly number[] = [2, 4, 4, 4, 4, 4]
+
+/** Bodies in wave `n` (1-based). Past the ramp it is the flat size, but the
+ *  budget in `SUMMON_WAVES_MAX` means nothing ever asks. */
+/**
+ * Every body the summoner will ever field — the ramp's own sum.
+ *
+ * `bossHpMulFor` prices the printed health bar off this: the health the boss
+ * gives away in bodies is taken back off its own bar, so the fight is the same
+ * size as every other kind's. DERIVED from the ramp rather than written down as
+ * `SUMMON_WAVES_MAX x SUMMON_PER_WAVE`, because the two can now disagree — the
+ * opening wave is deliberately smaller than the flat size — and a price that
+ * reads a product the ramp no longer matches is a boss quietly resized by a
+ * pacing edit.
+ */
+export const SUMMON_BUDGET = SUMMON_WAVE_RAMP.reduce((a, b) => a + b, 0)
+
+export const summonWaveSize = (n: number): number =>
+  SUMMON_WAVE_RAMP[n - 1] ?? SUMMON_PER_WAVE
 
 /**
  * One summon's health, as a share of the BOSS's own bar.

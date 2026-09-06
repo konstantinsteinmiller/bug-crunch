@@ -1,4 +1,6 @@
 import { MONSTERS, type MonsterDef } from '@/game/monsters'
+import { stripFrame } from '@/game/spriteStrip'
+import { spriteFor } from '@/game/art'
 
 /**
  * ─── Baked monster frames ───────────────────────────────────────────────────
@@ -32,14 +34,32 @@ interface IdleTime { timeRemaining: () => number }
 const FRAMES = 16
 
 /**
- * Baked frame size, px.
+ * Baked frame WIDTH, px.
  *
  * Big enough that a unit at maximum zoom on a 3× screen is still downsampling,
  * small enough that the whole cast fits in a sane amount of canvas memory
- * (13 designs × 16 frames × 156² × 4 B ≈ 14 MB, and most runs never unlock all
- * thirteen).
+ * (13 designs × 16 frames × 156 × 176 × 4 B ≈ 16 MB, and most runs never
+ * unlock all thirteen).
  */
 const PX = 156
+
+/**
+ * Baked frame HEIGHT, px. Taller than it is wide.
+ *
+ * The cast is authored feet-at-+1, crown-at-−1.05, and the square frame gave
+ * the crown eight pixels of headroom — a margin thin enough that one design
+ * reaching for a tall silhouette (Thornwick, whose canopy IS the character)
+ * came out of the bake with its foliage sliced flat, and its reference sheet
+ * could not be cut because the canopy ran into the row above. A contract with
+ * no slack in it is a contract that gets broken silently, in a strip nobody
+ * looks at directly. The extra rows are all headroom: the feet line and
+ * everything below it sit exactly where the square frame had them.
+ */
+const FRAME_H = 176
+
+/** Where the character's ORIGIN sits, px from the frame's top — the same
+ *  distance above the bottom edge the square frame gave it. */
+const ORIGIN_Y = FRAME_H - PX * 0.48
 
 /**
  * Character scale inside a frame.
@@ -51,10 +71,30 @@ const PX = 156
 const SPRITE_S = PX / 2.25
 
 /** Where the character's feet sit inside a frame, in px from the top. */
-export const SPRITE_FOOT = PX * 0.52 + SPRITE_S
+export const SPRITE_FOOT = ORIGIN_Y + SPRITE_S
 
 /** Total character height inside a frame, in px. */
 export const SPRITE_HEIGHT = 2.05 * SPRITE_S
+
+/**
+ * The two numbers above, as FRACTIONS of the frame rather than pixel counts.
+ *
+ * A painted strip is the bake's frame box at a different resolution — the sheet
+ * the painter works on is the same box scaled up, and the slicer cuts it on the
+ * same grid without trimming. So the feet line and the character height are the
+ * same proportions of the frame whatever size it arrives at, and every caller
+ * measures off the frame it was handed instead of off the bake's constants.
+ * For a baked frame these are algebraically what the old code computed.
+ */
+export const SPRITE_FOOT_R = SPRITE_FOOT / FRAME_H
+export const SPRITE_HEIGHT_R = SPRITE_HEIGHT / FRAME_H
+
+/** The frame box's width:height. A painted panel is this box, scaled up. */
+export const MONSTER_FRAME_ASPECT = PX / FRAME_H
+
+/** Baked frame size, px — what the art bench scales its panels from. */
+export const MONSTER_PX = PX
+export const MONSTER_FRAME_H = FRAME_H
 
 const CACHE = new Map<string, HTMLCanvasElement[]>()
 const DEFS = new Map<string, MonsterDef>(MONSTERS.map((m) => [m.id, m]))
@@ -81,8 +121,16 @@ let bakeAllowed = true
  * Ask for designs to be baked. Cheap and idempotent — safe to call every time a
  * wave is composed.
  */
-export const primeMonsterSprites = (ids: readonly string[]): void => {
+export const primeMonsterSprites = (
+  ids: readonly string[], opts: { fetch?: boolean } = {}
+): void => {
   for (const id of ids) {
+    // Start the painted strip decoding on the same signal, unless the caller
+    // is only after the bake: the loader primes a whole stage's cast before the
+    // splash clears, and fetching every strip there is exactly what
+    // `artPreload` exists to stage instead. A design whose strip has not
+    // arrived simply plays the procedural bake rather than holding the game.
+    if (opts.fetch !== false && DEFS.has(id)) spriteFor('monster', id)
     if (CACHE.has(id) || queue.includes(id) || building?.id === id) continue
     if (DEFS.has(id)) queue.push(id)
   }
@@ -92,13 +140,35 @@ export const primeMonsterSprites = (ids: readonly string[]): void => {
 const bakeFrame = (def: MonsterDef, i: number): HTMLCanvasElement => {
   const c = document.createElement('canvas')
   c.width = PX
-  c.height = PX
+  c.height = FRAME_H
   const ctx = c.getContext('2d')
   if (ctx) {
-    ctx.translate(PX / 2, PX * 0.52)
+    ctx.translate(PX / 2, ORIGIN_Y)
     def.draw(ctx, SPRITE_S, (i / FRAMES) * def.cycleMs)
   }
   return c
+}
+
+/**
+ * Draw one frame of a design into a `w x h` panel at the context's origin.
+ *
+ * Exists so the art bench can export the reference sheet through the SAME
+ * transform `bakeFrame` uses. The panel is the bake's frame box scaled up, so a
+ * strip painted over this reference drops straight back in — get this out of
+ * step with the bake and every painted character stands at the wrong height.
+ *
+ * Not used at run time.
+ */
+export const paintMonsterFrame = (
+  ctx: CanvasRenderingContext2D,
+  id: string, i: number, frames: number, w: number, h: number
+): void => {
+  const def = DEFS.get(id)
+  if (!def) return
+  ctx.save()
+  ctx.translate(w / 2, h * (ORIGIN_Y / FRAME_H))
+  def.draw(ctx, SPRITE_S * (h / FRAME_H), (i / frames) * def.cycleMs)
+  ctx.restore()
 }
 
 /**
@@ -234,9 +304,16 @@ export const monsterBakeProgress01 = (ids: readonly string[]): number => {
  * not been baked yet.
  */
 export const monsterFrame = (id: string, cycle01: number): HTMLCanvasElement | null => {
+  const c01 = ((cycle01 % 1) + 1) % 1
+  // Paint wins when it is there. Both strips cover exactly one cycle, so the
+  // same normalised position indexes either of them and a design can swap from
+  // the bake to the painting mid-stride without a pop.
+  const paint = stripFrame('monster', id, MONSTER_FRAME_ASPECT, c01)
+  if (paint) return paint
+
   const frames = CACHE.get(id)
   if (!frames) return null
-  const i = Math.floor((((cycle01 % 1) + 1) % 1) * FRAMES) % FRAMES
+  const i = Math.floor(c01 * FRAMES) % FRAMES
   return frames[i] ?? null
 }
 

@@ -47,7 +47,23 @@
 //   --throttle <n>    CPU throttling rate; 6 is this project's ceiling — see
 //                     the 12x row in the ledger                     (default 6)
 //   --seconds <n>     recorded seconds per rep                     (default 22)
+//   --stage <n>       seed a save that RESUMES on stage n           (default: none)
 //   --chrome <path>   Chrome executable
+//
+// ── --stage, and why it is not optional for most experiments ──
+//
+// A fresh profile is a fresh save, and a fresh save starts on stage 1: three
+// survivors, one gate, a handful of props, no miniboss and no boss. That is a
+// perfectly good measurement of the OPENING, and a useless one for anything
+// whose cost scales with what is on the road — monster counts, bullet counts,
+// particle budgets, the sprite cache. It is the same trap the header above
+// describes for input, one layer further in: two arms compared on stage 1 are
+// two nearly empty roads.
+//
+// `--stage n` writes a plausible save (progress, coins, a few upgrade levels)
+// into `localStorage` BEFORE any app script runs, so the arm opens on a road
+// with the population the change is actually about. Both arms get the identical
+// seed, so it cannot favour either.
 //
 // Pin the tier with `?tier=` on BOTH arms whenever the change could move it.
 // Without that, an arm that is genuinely faster keeps a higher tier, draws more,
@@ -74,6 +90,7 @@ const B_QS = arg('b', '')
 const REPS = Number(arg('reps', 3))
 const THROTTLE = Number(arg('throttle', 6))
 const SECONDS = Number(arg('seconds', 22))
+const STAGE = Number(arg('stage', 0))
 const ONCE = argv.includes('--once')
 
 /** The target profile: a 2021 mid-range Android, portrait. */
@@ -129,6 +146,21 @@ const runOnce = async (qs) => {
 
   const evalIn = (expression) =>
     send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, sessionId)
+
+  if (STAGE > 0) {
+    // Before ANY app script on the page. Written post-boot it races the state
+    // layer's own debounced persist and loses, and the arm then measures the
+    // tutorial while claiming to measure stage 22.
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `try { localStorage.setItem('tower_state', JSON.stringify({
+        ts_stage: ${STAGE}, ts_coins: 50000, ts_best_stage: ${STAGE - 1},
+        ts_onboarded: true, ts_tutorial_seen: true, ts_results_seen: 6,
+        ts_shop_spotlight_seen: true, ts_guard_hint_seen: true,
+        ts_lever_hint_seen: true, ts_runs: 40,
+        ts_upgrades: { squad: 10, power: 10, rate: 6, range: 4, scavenge: 5 }
+      })) } catch (e) {}`
+    }, sessionId)
+  }
 
   const url = new URL(BASE)
   url.searchParams.set('perfprobe', '1')
@@ -208,7 +240,11 @@ const self = fileURLToPath(import.meta.url)
 const runArm = (qs) => {
   const out = execFileSync(process.execPath, [
     self, '--once', '--base', BASE, '--a', qs,
-    '--throttle', String(THROTTLE), '--seconds', String(SECONDS), '--chrome', CHROME
+    '--throttle', String(THROTTLE), '--seconds', String(SECONDS), '--chrome', CHROME,
+    // Forwarded, so both arms open on the same road. A child that fell back to
+    // stage 1 while the parent reported "--stage 22" would be the worst kind of
+    // wrong: a clean number about a different game.
+    '--stage', String(STAGE)
   ], { encoding: 'utf8' })
   return JSON.parse(out.trim().split('\n').pop())
 }

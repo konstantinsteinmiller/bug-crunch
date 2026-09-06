@@ -16,7 +16,10 @@ export const GAME_ICON_NAMES = [
   // Navigation
   'menu', 'home', 'back', 'forward', 'close', 'check',
   // Meta screens
-  'settings', 'shop', 'video', 'ads', 'book', 'info', 'help',
+  // `chest` is the shop's own mark: a strongbox with the lid up a crack, on
+  // the HUD button and the result screen's button alike, so the thing tapped
+  // during a run and the thing tapped after it are one object.
+  'settings', 'shop', 'chest', 'video', 'ads', 'book', 'info', 'help',
   // Audio
   'music', 'music-off', 'sound', 'sound-off',
   // Progression
@@ -34,7 +37,12 @@ export const GAME_ICON_NAMES = [
   // each other's weight in the HUD strip, so redraw them together or not at all.
   'squad', 'bolt', 'rate', 'range', 'flame', 'skull',
   // Active skills — see `SkillBar.vue`.
-  'bomb', 'shield'
+  'bomb', 'shield',
+  // The two per-stage weapons. They front a shop row AND the run's weapon
+  // badge, which is the same rule the five stat glyphs above follow: the thing
+  // bought and the thing carried must be one drawing, or the player has to
+  // learn the same object twice. See `game/weapons.ts`.
+  'rocket', 'gatling'
 ] as const
 
 export type GameIconName = (typeof GAME_ICON_NAMES)[number]

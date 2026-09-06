@@ -35,6 +35,7 @@ export type FxSound =
   | 'bossHit' | 'bossGuard' | 'bossRage' | 'bossSlam' | 'bossHeal' | 'bossDie'
   | 'stageClear' | 'wipe'
   | 'countUp'
+  | 'lever' | 'weaponOpen' | 'weaponTake' | 'rocketLaunch' | 'rocketBlast'
 
 // ─── Throttling ─────────────────────────────────────────────────────────────
 //
@@ -64,6 +65,15 @@ const THROTTLES: Partial<Record<FxSound, Throttle>> = {
   // can be running at once.
   gateSubTick: { minGapMs: 70, maxPerWindow: 4, windowMs: 400 },
   barricade: { minGapMs: 70, maxPerWindow: 4, windowMs: 350 },
+  // A rocket at a high fire rate is a couple of blasts a second, and each one is
+  // the biggest voice the player's own gun has. Budgeted like `bossSlam` would
+  // be if it repeated: enough to keep every shot audible, tight enough that a
+  // launcher firing into a pack does not become one continuous roar.
+  rocketBlast: { minGapMs: 110, maxPerWindow: 4, windowMs: 600 },
+  // The launch is the busier of the two — up to five tubes, each on its own
+  // clock — so it gets a slightly wider budget and a tighter gap. Losing one
+  // launch in a salvo is fine; the salvo still reads as a salvo.
+  rocketLaunch: { minGapMs: 55, maxPerWindow: 6, windowMs: 400 },
   // A three-leaf bank dismisses TWO leaves, spaced by the shockwave's travel
   // time (~90–200 ms). The budget has to let the whole cascade through — the
   // cascade IS the cue — while still refusing a second bank's worth on top of
@@ -481,6 +491,77 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       // loud.
       tone(ctx, { freq: 420, toFreq: 720, duration: 0.42, gain: vol(0.12), type: 'sine' })
       tone(ctx, { freq: 630, toFreq: 1080, duration: 0.5, gain: vol(0.07), type: 'triangle' })
+      break
+
+    // ─── The weapon puzzle ──────────────────────────────────────────────────
+    //
+    // Three cues that have to be heard as one rising sentence, because they are
+    // one: a mechanical CLACK, the same clack an octave up when the second
+    // lever lands, then metal tearing as the armour comes off, then the pickup.
+    // The player is looking at the road, not at the box, so the whole beat has
+    // to work with the eyes elsewhere.
+    case 'lever':
+      // `power` is how far through the puzzle this pull is, 0..1 — so the second
+      // lever answers the first a fifth higher. The interval is the feedback.
+      tone(ctx, {
+        freq: 330 + power * 160, toFreq: 190 + power * 90,
+        duration: 0.11, gain: vol(0.075), type: 'square', filter: 2400
+      })
+      noiseBurst(ctx, { duration: 0.07, gain: vol(0.05), filterFrom: 4200, filterTo: 900 })
+      break
+
+    case 'weaponOpen':
+      // Plate steel coming off: a low body under a long bright scrape.
+      tone(ctx, { freq: 150, toFreq: 62, duration: 0.34, gain: vol(0.1), type: 'sawtooth', filter: 1100 })
+      noiseBurst(ctx, { duration: 0.3, gain: vol(0.085), filterFrom: 1400, filterTo: 5200, type: 'bandpass', q: 0.8 })
+      break
+
+    case 'weaponTake': {
+      // A three-note fanfare, the only ascending one in the mix that is not a
+      // gate. It has to say "you were paid" without borrowing the stage-clear
+      // cue, which would tell the player the stage was over.
+      const root = 392
+      for (let i = 0; i < 3; i++) {
+        tone(ctx, {
+          freq: root * Math.pow(2, [0, 4, 7][i]! / 12),
+          duration: 0.18, gain: vol(0.07), type: 'triangle',
+          delay: i * 0.075, filter: 3200
+        })
+      }
+      noiseBurst(ctx, { duration: 0.22, gain: vol(0.045), filterFrom: 6000, filterTo: 1600 })
+      break
+    }
+
+    case 'rocketLaunch':
+      // ─── A missile leaving the tube ─────────────────────────────────────
+      //
+      // Three parts, in the order the ear expects them, and the order is the
+      // whole cue:
+      //
+      //   1. the CRACK of the motor lighting — very short, very bright, and the
+      //      only part that is exactly on the frame the round is spawned;
+      //   2. the pitch CLIMBING as the thing leaves and accelerates away. Every
+      //      other cue in this mixer sweeps DOWN (a hit decays, a gate lands, a
+      //      barrel goes off); this is the only rising one in the game, which is
+      //      what makes it recognisable under a fight;
+      //   3. the roar OPENING UP behind it — a bandpass walking from 600 Hz to
+      //      3.2 kHz rather than the usual collapse toward the floor.
+      //
+      // Plus a short low thump for the backblast, because points 1-3 are all
+      // above 600 Hz and a phone speaker would render the launch as a hiss.
+      noiseBurst(ctx, { duration: 0.045, gain: vol(0.06), filterFrom: 8000, filterTo: 2600, type: 'highpass', q: 0.8 })
+      tone(ctx, { freq: 80 + r * 30, toFreq: 300, duration: 0.24, gain: vol(0.055), type: 'sawtooth', filter: 1800 })
+      noiseBurst(ctx, { duration: 0.34, gain: vol(0.07), filterFrom: 600, filterTo: 3200, type: 'bandpass', q: 0.6 })
+      tone(ctx, { freq: 140, toFreq: 55, duration: 0.13, gain: vol(0.05), type: 'triangle', filter: 500 })
+      break
+
+    case 'rocketBlast':
+      // What the round does when it ARRIVES, a beat later and somewhere else.
+      // Deliberately closer to a barrel than to the squad's rifle, and
+      // deliberately falling where the launch above climbs — the pair is what
+      // tells the player, without looking, that their own shot connected.
+      tone(ctx, { freq: 120 + r * 40, toFreq: 46, duration: 0.22, gain: vol(0.09), type: 'sawtooth', filter: 900 })
+      noiseBurst(ctx, { duration: 0.26, gain: vol(0.07), filterFrom: 2600, filterTo: 400 })
       break
 
     case 'countUp':

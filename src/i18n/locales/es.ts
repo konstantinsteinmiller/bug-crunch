@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Minijefe',
     'fireRate': 'Ritmo',
     'incoming': '¡Ataque entrante!',
-    'dodge': 'Esquiva'
+    'dodge': 'Esquiva',
+    'weaponActive': '{name} listo',
+    'weaponLocked': '{name} bloqueado: {n} de {total} palancas disparadas'
+  },
+
+  'weapons': {
+    'rocket': 'Lanzacohetes',
+    'gatling': 'Ametralladora Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Cajas verdes: todos golpean más fuerte', 'desktop': 'Cajas verdes: todos golpean más fuerte' },
     'rate': { 'touch': 'Cajas azules: todos disparan más rápido', 'desktop': 'Cajas azules: todos disparan más rápido' },
     'boss': { 'touch': '¡Mantente fuera del círculo rojo!', 'desktop': '¡Mantente fuera del círculo rojo!' },
+    'lever': { 'touch': 'Dispara a las DOS palancas de los bordes: abren la caja de armas', 'desktop': 'Dispara a las DOS palancas de los bordes: abren la caja de armas' },
     'guard': { 'touch': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!', 'desktop': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Alcance',
       'scavenge': 'Carroñeo',
       'grenade': 'Granada',
-      'shield': 'Escudo'
+      'shield': 'Escudo',
+      'rocket': 'Potencia de cohetes',
+      'gatling': 'Potencia Gatling'
     },
     'descriptions': {
       'squad': 'Empieza cada nivel con más supervivientes.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Tu escuadrón abre fuego más lejos en la carretera.',
       'scavenge': 'Gana más monedas en cada partida.',
       'grenade': 'Lanza una granada para un estallido de daño.',
-      'shield': 'Reduce a la mitad el daño a tu escuadrón unos segundos.'
+      'shield': 'Reduce a la mitad el daño a tu escuadrón unos segundos.',
+      'rocket': 'Los lanzacohetes que desbloquees en un nivel hacen más daño.',
+      'gatling': 'Las Gatling que desbloquees en un nivel hacen más daño.'
     }
   },
 

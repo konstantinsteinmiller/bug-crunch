@@ -21,7 +21,8 @@
           :stroke-dashoffset="RING * (1 - s.charge)"
         )
 
-      GameIcon.skills__icon(:name="s.icon")
+      //- The glyph, or its painting once the art pipeline has one — see `ArtIcon`.
+      ArtIcon.skills__icon(kind="ui" :id="s.art" :fallback="s.icon")
 
       //- Seconds remaining, so the wait is a number and not a guess.
       span.skills__count(v-if="!s.ready") {{ Math.ceil(s.leftMs / 1000) }}
@@ -30,7 +31,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import GameIcon from '@/components/icons/GameIcon.vue'
+import ArtIcon from '@/components/icons/ArtIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import {
   skillCharge, skillOwned, skillReady, skillReadyIn, type SkillId
@@ -96,9 +97,9 @@ const rightOffset = computed(() => {
 
 const barStyle = computed(() => (rightOffset.value ? { right: rightOffset.value } : {}))
 
-const ORDER: ReadonlyArray<{ id: SkillId; icon: GameIconName; key: string }> = [
-  { id: 'grenade', icon: 'bomb', key: 'skills.grenade' },
-  { id: 'shield', icon: 'shield', key: 'skills.shield' }
+const ORDER: ReadonlyArray<{ id: SkillId; icon: GameIconName; art: string; key: string }> = [
+  { id: 'grenade', icon: 'bomb', art: 'skill-grenade', key: 'skills.grenade' },
+  { id: 'shield', icon: 'shield', art: 'skill-shield', key: 'skills.shield' }
 ]
 
 /**
@@ -111,6 +112,7 @@ const visible = computed(() =>
   ORDER.filter((s) => skillOwned(s.id)).map((s) => ({
     id: s.id,
     icon: s.icon,
+    art: s.art,
     label: t(s.key),
     ready: skillReady(s.id),
     charge: skillCharge(s.id),
@@ -168,6 +170,19 @@ const onUse = (id: SkillId): void => {
 .skills__icon
   width: 52%
   height: 52%
+
+// A painting carries its own colours and outline, so it sits larger than the
+// flat glyph — and the cooldown dim the glyph gets through `color` is done
+// with a filter here, so a spent skill still reads as spent.
+img.skills__icon
+  width: 66%
+  height: 66%
+  filter: saturate(0.35) brightness(0.55)
+  transition: filter 0.2s ease
+
+.skills__btn--ready img.skills__icon,
+.skills__btn--live img.skills__icon
+  filter: none
 
 .skills__ring
   position: absolute

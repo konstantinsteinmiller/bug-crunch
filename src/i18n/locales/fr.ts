@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Mini-boss',
     'fireRate': 'Rythme',
     'incoming': 'Attaque imminente !',
-    'dodge': 'Esquive'
+    'dodge': 'Esquive',
+    'weaponActive': '{name} prêt',
+    'weaponLocked': '{name} verrouillé — {n} leviers sur {total} touchés'
+  },
+
+  'weapons': {
+    'rocket': 'Lance-roquettes',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Caisses vertes : tous frappent plus fort', 'desktop': 'Caisses vertes : tous frappent plus fort' },
     'rate': { 'touch': 'Caisses bleues : tous tirent plus vite', 'desktop': 'Caisses bleues : tous tirent plus vite' },
     'boss': { 'touch': 'Reste hors du cercle rouge !', 'desktop': 'Reste hors du cercle rouge !' },
+    'lever': { 'touch': 'Tire sur les DEUX leviers au bord de la route — ils ouvrent la caisse', 'desktop': 'Tire sur les DEUX leviers au bord de la route — ils ouvrent la caisse' },
     'guard': { 'touch': 'Bouclier levé — tes tirs ne font rien. BOUGE !', 'desktop': 'Bouclier levé — tes tirs ne font rien. BOUGE !' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Portée',
       'scavenge': 'Récupération',
       'grenade': 'Grenade',
-      'shield': 'Bouclier'
+      'shield': 'Bouclier',
+      'rocket': 'Puissance roquette',
+      'gatling': 'Puissance Gatling'
     },
     'descriptions': {
       'squad': 'Commence chaque niveau avec plus de survivants.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Ton escouade ouvre le feu plus loin sur la route.',
       'scavenge': 'Gagne plus de pièces à chaque partie.',
       'grenade': 'Lance une grenade pour infliger de gros dégâts.',
-      'shield': 'Réduit de moitié les dégâts subis pendant quelques secondes.'
+      'shield': 'Réduit de moitié les dégâts subis pendant quelques secondes.',
+      'rocket': 'Les lance-roquettes trouvés dans un niveau font plus de dégâts.',
+      'gatling': 'Les Gatling trouvées dans un niveau font plus de dégâts.'
     }
   },
 

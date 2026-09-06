@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import type { GateOp } from '@/game/survival'
-import { bakeRadialSprite, getRamp, getSprite, putRamp, rgbString } from '@/use/useGradientRamps'
+import type { WeaponId } from '@/game/weapons'
+import {
+  bakeRadialSprite, getRamp, getSprite, putRamp, putSprite, rgbString
+} from '@/use/useGradientRamps'
+import { spriteFor } from '@/game/art'
 
 /**
  * ─── VFX: event bus + pooled particle system ────────────────────────────────
@@ -23,8 +27,15 @@ import { bakeRadialSprite, getRamp, getSprite, putRamp, rgbString } from '@/use/
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 export type FxEvent =
-  /** A survivor fired. Cheap and very frequent — throttled downstream. */
-  | { kind: 'shoot'; x: number; y: number }
+  /**
+   * A survivor fired. Cheap and very frequent — throttled downstream.
+   *
+   * `weapon` is which gun it left, because a launch is not a rifle shot. It
+   * shipped without this and the loudest weapon in the game played the squad's
+   * own tick — the only rocket sound anywhere was the one the BLAST made, a
+   * quarter of a second later and in the wrong place.
+   */
+  | { kind: 'shoot'; x: number; y: number; weapon?: WeaponId | null }
   /** A round landed on something. `on` picks the impact's colour and weight. */
   | { kind: 'hit'; x: number; y: number; on: 'gate' | 'crate' | 'barricade' | 'rock' | 'foe' | 'boss' }
   /** Sustained fire pushed a `+N` gate up by one — THE feedback moment — or a
@@ -209,6 +220,22 @@ export type FxEvent =
   /** …and ate a hit that would have taken a survivor. */
   | { kind: 'shieldSave'; x: number; y: number }
   /** A TNT barrel took its last round and lit its fuse. */
+  /**
+   * ─── The weapon puzzle ────────────────────────────────────────────────────
+   *
+   * Four events, and between them they are the ONLY thing that tells the player
+   * the beat exists. A lever that goes over silently is scenery; armour that
+   * vanishes between frames is a bug. `pulled`/`total` ride along so the pop-up
+   * can read "1 / 2" without the renderer having to go and ask the simulation.
+   */
+  | { kind: 'leverPull'; x: number; y: number; pulled: number; total: number }
+  /** Both levers are down: the armour over the box comes off. */
+  | { kind: 'weaponOpen'; x: number; y: number; weapon: WeaponId }
+  /** The box broke and the stage's weapon is in the player's hands. */
+  | { kind: 'weaponTake'; x: number; y: number; weapon: WeaponId }
+  /** A rocket went off. `radius` is the real blast, so what the player SEES is
+   *  the size of what actually hit. */
+  | { kind: 'rocketBlast'; x: number; y: number; radius: number }
   | { kind: 'barrelLit'; x: number; y: number }
   /** …and went. The big one: the arena's answer to a shielded boss. */
   | { kind: 'barrelBlast'; x: number; y: number }
@@ -727,6 +754,68 @@ const SMOKE_STOPS = (r: number, g: number, b: number): [number, string][] => [
   [1, `rgba(${r},${g},${b},0)`]
 ]
 
+/** The bake's sprite edge, matching `useGradientRamps`' own. */
+const PUFF_PX = 192
+
+/**
+ * The puff sprite for a colour: the painted puff tinted to it when the art
+ * pipeline has delivered one, otherwise the baked radial ramp.
+ *
+ * A painted puff is GREYSCALE by contract (see `artSheet.ts`), so tinting is a
+ * multiply by the emitter's colour with the puff's own alpha restored — three
+ * canvas ops, once per colour, into the same cache slot the ramp bake uses.
+ * That cache is dropped whenever the art layer changes, so a puff that decodes
+ * after the first burst still takes over at the next bake.
+ */
+const bakePuffSprite = (
+  key: number, r: number, g: number, b: number
+): HTMLCanvasElement | null => {
+  const painted = spriteFor('fx', 'smoke')
+  if (painted) {
+    try {
+      const c = document.createElement('canvas')
+      c.width = PUFF_PX
+      c.height = PUFF_PX
+      const t = c.getContext('2d')
+      if (t) {
+        t.drawImage(painted, 0, 0, PUFF_PX, PUFF_PX)
+        t.globalCompositeOperation = 'multiply'
+        t.fillStyle = rgbString(r, g, b)
+        t.fillRect(0, 0, PUFF_PX, PUFF_PX)
+        t.globalCompositeOperation = 'destination-in'
+        t.drawImage(painted, 0, 0, PUFF_PX, PUFF_PX)
+        return putSprite(key, c)
+      }
+    } catch { /* fall through to the ramp */ }
+  }
+  return bakeRadialSprite(key, SMOKE_STOPS(r, g, b))
+}
+
+/**
+ * The puff sprite the particle bucket blits for a colour — the playground's
+ * way of showing the painted puff through the game's own tinting path.
+ */
+export const puffSpriteFor = (r: number, g: number, b: number): HTMLCanvasElement | null => {
+  const key = SMOKE_RAMP | (r << 16) | (g << 8) | b
+  let spr = getSprite(key)
+  if (spr === undefined) spr = bakePuffSprite(key, r, g, b)
+  return spr
+}
+
+/**
+ * ONE puff, white, at the origin with radius `r` — the reference the painted
+ * puff is made from, drawn with the same two stops the bake rasterises. The
+ * game tints the painting per emitter, so the reference is colourless.
+ */
+export const paintSmokeRef = (ctx: CanvasRenderingContext2D, r: number): void => {
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r)
+  for (const [offset, colour] of SMOKE_STOPS(255, 255, 255)) g.addColorStop(offset, colour)
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(0, 0, r, 0, Math.PI * 2)
+  ctx.fill()
+}
+
 const drawBucket = (
   ctx: CanvasRenderingContext2D,
   toX: (wx: number) => number,
@@ -785,7 +874,7 @@ const drawBucket = (
         // realistic peak of 150 puffs: work-per-frame p95 1.20 ms -> 0.70 ms
         // unthrottled, p50 5.85 ms -> 3.55 ms at 4x CPU. See `PERF-LEDGER.md`.
         let spr = getSprite(rgbKey)
-        if (spr === undefined) spr = bakeRadialSprite(rgbKey, SMOKE_STOPS(pr[i]!, pg[i]!, pb[i]!))
+        if (spr === undefined) spr = bakePuffSprite(rgbKey, pr[i]!, pg[i]!, pb[i]!)
         if (spr) {
           // Same centre and same radius as the filled arc drew: the ramp's last
           // stop reaches the sprite's edge, so a `2 * size` box centred on the

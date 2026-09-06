@@ -408,15 +408,20 @@ export const gait = (t: number, periodMs: number, offset = 0): number =>
 /**
  * Where a foot sits relative to its neutral stance position.
  *
- * Stance takes 60% of the cycle — planted, sliding backwards at a CONSTANT
- * rate, because the ground does not accelerate. Swing takes the other 40%,
- * lifted and eased forward. The uneven split is what separates a walk from a
- * scissor motion: feet spend noticeably longer down than up.
+ * Stance takes `stance` of the cycle (60% for a walk) — planted, sliding
+ * backwards at a CONSTANT rate, because the ground does not accelerate. Swing
+ * takes the rest, lifted and eased forward. The uneven split is what separates
+ * a walk from a scissor motion: feet spend noticeably longer down than up.
+ *
+ * A RUN inverts it: stance nearer 40%, so that with the two legs half a cycle
+ * apart there is a moment when neither foot is down. That flight phase is the
+ * whole difference between running and walking quickly.
  */
-export const footStep = (phase: number, stride: number, lift: number): Pt => {
+export const footStep = (phase: number, stride: number, lift: number, stance = 0.6): Pt => {
   const u = (((phase % 1) + 1) % 1)
-  if (u < 0.6) {
-    const k = u / 0.6
+  const swing = 1 - stance
+  if (u < stance) {
+    const k = u / stance
     return [stride * (0.5 - k), 0]
   }
   // Swing, as a cubic Hermite whose END TANGENTS MATCH the stance slide.
@@ -428,10 +433,10 @@ export const footStep = (phase: number, stride: number, lift: number): Pt => {
   // watching the foot, and it is the classic "foot hitch". Matching tangents
   // lets the foot carry on backwards briefly as it lifts, then decelerate into
   // the plant.
-  const k = (u - 0.6) / 0.4
+  const k = (u - stance) / swing
   const k2 = k * k
   const k3 = k2 * k
-  const m = -stride * (0.4 / 0.6)
+  const m = -stride * (swing / stance)
   const x =
     (2 * k3 - 3 * k2 + 1) * (-0.5 * stride) +
     (k3 - 2 * k2 + k) * m +

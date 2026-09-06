@@ -31,6 +31,7 @@ export const ICON_LABEL_KEYS: Partial<Record<GameIconName, string>> = {
   // Named by the screens they open.
   settings: 'options.title',
   shop: 'upgrades.title',
+  chest: 'upgrades.title',
   leaderboard: 'leaderboard.title',
   close: 'close',
   music: 'options.music',

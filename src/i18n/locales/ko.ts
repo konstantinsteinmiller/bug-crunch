@@ -30,7 +30,14 @@ export default {
     'miniboss': '중간 보스',
     'fireRate': '연사',
     'incoming': '공격이 온다!',
-    'dodge': '회피'
+    'dodge': '회피',
+    'weaponActive': '{name} 준비 완료',
+    'weaponLocked': '{name} 잠김 — 레버 {total}개 중 {n}개 파괴'
+  },
+
+  'weapons': {
+    'rocket': '로켓 런처',
+    'gatling': '개틀링건'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': '초록 상자: 모두의 공격력 상승', 'desktop': '초록 상자: 모두의 공격력 상승' },
     'rate': { 'touch': '파란 상자: 모두 더 빨리 사격', 'desktop': '파란 상자: 모두 더 빨리 사격' },
     'boss': { 'touch': '붉은 원에서 벗어나세요!', 'desktop': '붉은 원에서 벗어나세요!' },
+    'lever': { 'touch': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다', 'desktop': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다' },
     'guard': { 'touch': '실드 전개 — 공격이 통하지 않는다. 피해!', 'desktop': '실드 전개 — 공격이 통하지 않는다. 피해!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': '사거리',
       'scavenge': '수집',
       'grenade': '수류탄',
-      'shield': '방패'
+      'shield': '방패',
+      'rocket': '로켓 위력',
+      'gatling': '개틀링 위력'
     },
     'descriptions': {
       'squad': '더 많은 생존자로 스테이지를 시작합니다.',
@@ -116,7 +126,9 @@ export default {
       'range': '부대가 더 멀리서 사격을 시작합니다.',
       'scavenge': '한 판마다 더 많은 코인을 얻습니다.',
       'grenade': '수류탄을 던져 큰 피해를 줍니다.',
-      'shield': '몇 초 동안 부대가 받는 피해를 절반으로 줄입니다.'
+      'shield': '몇 초 동안 부대가 받는 피해를 절반으로 줄입니다.',
+      'rocket': '스테이지에서 얻는 로켓 런처의 피해량이 증가합니다.',
+      'gatling': '스테이지에서 얻는 개틀링건의 피해량이 증가합니다.'
     }
   },
 

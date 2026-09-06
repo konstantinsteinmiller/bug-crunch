@@ -1,4 +1,5 @@
 import type { BossKind, MinibossKind } from '@/game/threats'
+import type { WeaponId } from '@/game/weapons'
 /**
  * ─── Survivalist — the rules in one file ────────────────────────────────────
  *
@@ -1723,6 +1724,13 @@ export interface Boss {
   attacks: number
   /** Seconds until the next summon wave, for `summoner`. */
   summonCd: number
+  /**
+   * Seconds until a heal is allowed again, for `healer`. Set to
+   * `HEAL_MIN_GAP_S` the moment one lands; a heal that comes due while this is
+   * still running falls through to a bolt. Counted in fight time rather than
+   * in casts, because the thing it bounds is a rate — see `HEAL_MIN_GAP_S`.
+   */
+  healCd: number
   design: string
   x: number
   y: number
@@ -1784,6 +1792,18 @@ export interface Pickup {
 export interface Unit {
   /** Slot index inside the formation; also the sprite-phase seed. */
   i: number
+  /**
+   * Stable per-body random in [0,1). Set once at spawn and never touched again.
+   *
+   * It exists because `i` is NOT stable: alive units take slots in array order,
+   * so every death renumbers everybody behind it. The renderer's draw budget
+   * needs a key that does not move — see `drawUnits`, which keeps the subset
+   * `seed < budget / n` so that a crowd too big to draw body-for-body is
+   * sampled evenly across the WHOLE formation instead of being cut down to its
+   * front rank. Keyed on `i`, a single casualty would reshuffle which bodies
+   * are visible and the crowd would strobe.
+   */
+  seed: number
   x: number
   y: number
   vx: number
@@ -1805,6 +1825,16 @@ export interface Bullet {
   vx: number
   damage: number
   life: number
+  /**
+   * Which weapon fired this round, or `null` for the squad's ordinary gun.
+   *
+   * Carried on the ROUND rather than read from the run's state at impact,
+   * because a weapon lasts to the end of the stage and a round does not: a
+   * rocket already in flight when the boss dies is still a rocket, and one
+   * fired a frame before a pickup must not retroactively become one. It is also
+   * what the renderer draws off — see `drawBullets`.
+   */
+  weapon: WeaponId | null
   /**
    * Id of the last gate leaf this round passed through, or -1.
    *

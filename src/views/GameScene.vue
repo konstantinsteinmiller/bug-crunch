@@ -7,8 +7,9 @@ import {
   eliteAlive, eliteHp01, challenge, declines,
   startStage, advanceStage, retryStage, step, steerTo, steerBy, steerOnly, runSummary,
   attackIncoming,
-  isChargingGate, getCrates, getGates, getDividers, getBoss, anchor, crowdRadius,
-  throwGrenade, raiseShield, shieldActive as isShieldUp
+  isChargingGate, getCrates, getGates, getDividers, getBoss, getLevers, anchor, crowdRadius,
+  throwGrenade, raiseShield, shieldActive as isShieldUp,
+  activeWeapon, puzzlePulled, puzzleTotal, puzzleWeapon
 } from '@/use/useSurvivalGame'
 import {
   drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX
@@ -20,8 +21,8 @@ import { DECLINE_MAX, LANE_HALF } from '@/game/survival'
 import { getState, setState } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
-  GUARD_HINT_KEY, ONBOARDED_KEY, RESULTS_SEEN_KEY, REWARD_DECLINE_KEY, SHOP_SPOTLIGHT_KEY,
-  TUTORIAL_KEY
+  GUARD_HINT_KEY, LEVER_HINT_KEY, ONBOARDED_KEY, RESULTS_SEEN_KEY, REWARD_DECLINE_KEY,
+  SHOP_SPOTLIGHT_KEY, TUTORIAL_KEY
 } from '@/keys'
 import useTowerEconomy from '@/use/useTowerEconomy'
 import { affordableCount, grantUpgrade } from '@/use/useUpgrades'
@@ -31,6 +32,7 @@ import { newTutorialClock, tickTutorial } from '@/use/useTutorialGate'
 import { frameStart, frameEnd, phaseStart, phaseEnd } from '@/use/usePerfProbe'
 import StageBanner from '@/components/game/StageBanner.vue'
 import IncomingWarning from '@/components/game/IncomingWarning.vue'
+import WeaponTag from '@/components/game/WeaponTag.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import { isGamePaused, isAdShowing } from '@/use/useGamePause'
 import { spawnCoinExplosion } from '@/use/useCoinExplosion'
@@ -524,6 +526,12 @@ const activeHint = computed<HintId | null>(() => {
   // has, so "my bullets do nothing" needs a word attached to it exactly once,
   // whenever the player first meets it, onboarded or not.
   if (bossGuarding.value && !guardHintSeen.value) return 'guard'
+  // The lever primer, on the same footing as the guard one and for the same
+  // reason: it arrives on stage 4, long after the onboarding ladder below has
+  // switched itself off, and a bonus nobody explains is a bonus nobody takes.
+  // Only while there is still something to shoot — a hint pointing at a puzzle
+  // the crowd has already run past teaches the wrong thing.
+  if (leverHintDue.value) return 'lever'
   if (onboarded.value) return null
   if (!hintsDone.value.has('move')) return 'move'
   if (phase.value === 'boss') return hintsDone.value.has('boss') ? null : 'boss'
@@ -557,6 +565,33 @@ watch(isChargingGate, (charging) => { if (charging) markHintDone('gate') })
 watch(damage, (now, before) => { if (now > before) markHintDone('crate') })
 watch(runFireRate, (now, before) => { if (now > before) markHintDone('rate') })
 watch(phase, (p) => { if (p === 'boss') markHintDone('boss') })
+
+/**
+ * The lever primer, shown exactly once in a player's life.
+ *
+ * Gated on a lever actually being ON SCREEN and still unpulled, so the words
+ * arrive while the thing they describe is visible — the whole failure mode this
+ * hint exists to prevent is a player reading "shoot the levers" and having no
+ * idea what a lever looks like. Retired by `leverHintSeen` the moment the first
+ * one goes over, which is the behaviour it was asking for.
+ */
+const leverHintSeen = ref(getState<boolean>(LEVER_HINT_KEY, false) === true)
+const leverHintDue = computed(() => {
+  void hintTick.value
+  if (leverHintSeen.value || puzzleWeapon.value === null) return false
+  if (puzzlePulled.value > 0) return false
+  const a = anchor()
+  return getLevers().some((lv) => !lv.pulled && lv.y - a.y > 0 && lv.y - a.y < 13)
+})
+// Persisted on the first pull rather than on the first sighting: a player who
+// saw the pill and did nothing has not learned it yet, and the road will offer
+// them another puzzle next stage.
+watch(puzzlePulled, (n) => {
+  if (n <= 0 || leverHintSeen.value) return
+  leverHintSeen.value = true
+  markHintDone('lever')
+  setState(LEVER_HINT_KEY, true)
+})
 
 /** True while the boss is planted behind its phase shield. Polled at the same
  *  5 Hz as the lane warnings — a shield lasts a full second, so 200 ms is
@@ -1118,6 +1153,17 @@ onUnmounted(() => {
       //- Touch-only, and only for the opening seconds — see `showSteerHint`.
       IncomingWarning(:show="attackWarning")
 
+      //- The lever puzzle, then the weapon it pays out. Hidden behind the
+      //- result screen for the same reason every other run readout is: the
+      //- stage is over and the overlay owns the screen.
+      WeaponTag(
+        v-if="!showResult"
+        :puzzle="puzzleWeapon"
+        :pulled="puzzlePulled"
+        :total="puzzleTotal"
+        :active="activeWeapon"
+      )
+
       StageBanner(
         :show="bannerShown"
         :stage="bannerStage"
@@ -1155,13 +1201,14 @@ onUnmounted(() => {
 
         div.scene__shop
           span.scene__spotlight(v-if="showShopSpotlight") {{ t('upgrades.spotlight') }}
-          //- The cart, not the old plus-with-sparkles. The result screen's
-          //- upgrade button is now a glyph too, and both open the same modal —
-          //- so they have to be the SAME glyph, or the second one has to be
-          //- learned all over again.
+          //- The chest — the same one the result screen's upgrade button
+          //- wears, because both open the same modal and the second must not
+          //- have to be learned all over again. The art pipeline can repaint
+          //- it (`art`); the glyph stands in until it does.
           FHudButton(
             tone="green"
-            icon="shop"
+            icon="chest"
+            art="chest"
             :attention="showShopSpotlight"
             :aria-label="t('upgrades.title')"
             @click="openUpgrades"
@@ -1280,7 +1327,8 @@ onUnmounted(() => {
               div.result__shop-tip(v-if="showUpgradeHint") {{ t('result.upgradeHint') }}
             FButton(
               icon-only
-              icon="shop"
+              icon="chest"
+              art="chest"
               :size="resultCompact ? 'sm' : 'md'"
               type="secondary"
               :is-disabled="adInFlight"

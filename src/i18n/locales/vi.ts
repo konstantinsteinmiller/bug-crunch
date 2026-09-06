@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Trùm nhỏ',
     'fireRate': 'Tốc độ',
     'incoming': 'Sắp bị tấn công!',
-    'dodge': 'Né'
+    'dodge': 'Né',
+    'weaponActive': '{name} sẵn sàng',
+    'weaponLocked': '{name} đã khoá — đã bắn {n}/{total} cần gạt'
+  },
+
+  'weapons': {
+    'rocket': 'Súng phóng rocket',
+    'gatling': 'Súng Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Thùng xanh lá: cả đội đánh mạnh hơn', 'desktop': 'Thùng xanh lá: cả đội đánh mạnh hơn' },
     'rate': { 'touch': 'Thùng xanh dương: cả đội bắn nhanh hơn', 'desktop': 'Thùng xanh dương: cả đội bắn nhanh hơn' },
     'boss': { 'touch': 'Tránh xa vòng tròn đỏ!', 'desktop': 'Tránh xa vòng tròn đỏ!' },
+    'lever': { 'touch': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí', 'desktop': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí' },
     'guard': { 'touch': 'Khiên bật — bắn vô ích. TRÁNH RA!', 'desktop': 'Khiên bật — bắn vô ích. TRÁNH RA!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Tầm bắn',
       'scavenge': 'Nhặt nhạnh',
       'grenade': 'Lựu đạn',
-      'shield': 'Khiên'
+      'shield': 'Khiên',
+      'rocket': 'Sức mạnh rocket',
+      'gatling': 'Sức mạnh Gatling'
     },
     'descriptions': {
       'squad': 'Bắt đầu mỗi màn với nhiều người sống sót hơn.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Đội của bạn khai hỏa xa hơn trên đường.',
       'scavenge': 'Kiếm nhiều xu hơn sau mỗi lượt.',
       'grenade': 'Ném lựu đạn để gây sát thương lớn.',
-      'shield': 'Giảm một nửa sát thương lên đội trong vài giây.'
+      'shield': 'Giảm một nửa sát thương lên đội trong vài giây.',
+      'rocket': 'Súng phóng rocket mở khoá trong màn gây nhiều sát thương hơn.',
+      'gatling': 'Súng Gatling mở khoá trong màn gây nhiều sát thương hơn.'
     }
   },
 

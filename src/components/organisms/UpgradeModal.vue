@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import FModal from '@/components/molecules/FModal.vue'
 import IconCoin from '@/components/icons/IconCoin.vue'
 import GameIcon from '@/components/icons/GameIcon.vue'
+import ArtIcon from '@/components/icons/ArtIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import useSounds from '@/use/useSound'
 import useTowerEconomy from '@/use/useTowerEconomy'
@@ -46,7 +47,22 @@ const TRACK_ICONS: Partial<Record<UpgradeId, GameIconName>> = {
   // the thing bought here and the thing pressed there are recognisably one
   // object — see `SkillBar.vue`.
   grenade: 'bomb',
-  shield: 'shield'
+  shield: 'shield',
+  // …and the two weapons, wearing the glyph that is painted on the box they
+  // come out of and on the badge that appears when they do. Same rule again:
+  // one object, one drawing, wherever the player meets it.
+  rocket: 'rocket',
+  gatling: 'gatling'
+}
+
+/**
+ * The tracks whose glyph the art pipeline can repaint, and the painting's id
+ * under `images/ui/`. The two skills, because their buttons in the run wear
+ * the same painting — see `SkillBar.vue` and `ArtIcon`.
+ */
+const TRACK_ART: Partial<Record<UpgradeId, string>> = {
+  grenade: 'skill-grenade',
+  shield: 'skill-shield'
 }
 
 /** Bumped on every purchase so the computed rows re-read the level refs. */
@@ -92,9 +108,16 @@ const buy = (row: Row): void => {
   playFx('damageUp')
 }
 
-/** The suffix a track's value carries. Both percentage tracks wear it: a bare
- *  `100 → 103` reads as a count of something, which Reach is not. */
-const suffix = (id: UpgradeId): string => (id === 'scavenge' || id === 'range' ? '%' : '')
+/**
+ * The suffix a track's value carries.
+ *
+ * Every track whose readout is a PERCENTAGE wears it: a bare `100 → 112` reads
+ * as a count of something, which neither Reach nor a weapon multiplier is.
+ */
+const PERCENT_TRACKS: ReadonlySet<UpgradeId> = new Set<UpgradeId>([
+  'scavenge', 'range', 'rocket', 'gatling'
+])
+const suffix = (id: UpgradeId): string => (PERCENT_TRACKS.has(id) ? '%' : '')
 </script>
 
 <template lang="pug">
@@ -116,7 +139,8 @@ const suffix = (id: UpgradeId): string => (id === 'scavenge' || id === 'range' ?
             //- Every one of these is the glyph the HUD already draws for the
             //- same stat during a run — the shop is where you buy the number
             //- you have been watching, so it must not be a second drawing of it.
-            GameIcon(:name="TRACK_ICONS[row.id] ?? 'star'")
+            ArtIcon(v-if="TRACK_ART[row.id]" kind="ui" :id="TRACK_ART[row.id] ?? ''" :fallback="TRACK_ICONS[row.id] ?? 'star'")
+            GameIcon(v-else :name="TRACK_ICONS[row.id] ?? 'star'")
 
           div.upgrade__body
             span.upgrade__name {{ t(`upgrades.names.${row.id}`) }}
@@ -203,6 +227,11 @@ const suffix = (id: UpgradeId): string => (id === 'scavenge' || id === 'range' ?
     width: 62%
     height: 62%
 
+  // A painted glyph carries its own outline and sits a little larger.
+  img
+    width: 76%
+    height: 76%
+
   &.is-squad
     color: #8fd6ff
   &.is-power
@@ -219,6 +248,12 @@ const suffix = (id: UpgradeId): string => (id === 'scavenge' || id === 'range' ?
     color: #ff9a5a
   &.is-shield
     color: #7fe3ff
+  // The two weapons, tinted to the fire they actually throw: the launcher's
+  // blast is orange-red, the gatling's tracers run white-hot.
+  &.is-rocket
+    color: #ff7a4a
+  &.is-gatling
+    color: #ffe98a
 
 .upgrade__body
   display: flex

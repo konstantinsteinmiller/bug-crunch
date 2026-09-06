@@ -3,6 +3,7 @@ import { flushSaveNow, saveDataVersion } from '@/use/useSaveStatus'
 import { getState, setState, towerState } from '@/use/useTowerState'
 import { UPGRADES_KEY } from '@/keys'
 import { RANGE_PER_LEVEL } from '@/game/survival'
+import { WEAPONS, type WeaponId } from '@/game/weapons'
 import { BASE_DAMAGE, BASE_FIRE_RATE, START_SQUAD } from '@/game/survival'
 
 /**
@@ -53,7 +54,28 @@ export interface UpgradeDef {
   valueAt: (level: number) => number
 }
 
-export type UpgradeId = 'squad' | 'power' | 'rate' | 'range' | 'scavenge' | 'grenade' | 'shield'
+export type UpgradeId =
+  | 'squad' | 'power' | 'rate' | 'range' | 'scavenge' | 'grenade' | 'shield'
+  | 'rocket' | 'gatling'
+
+/**
+ * What one level of a weapon track is worth.
+ *
+ * +12 % of the weapon's BASE damage per level, additive — so level 10 is a
+ * rocket doing 2.2x what an unupgraded one does, on top of the 5.5x the weapon
+ * already carries over the squad's own gun. Additive rather than compounding
+ * because these stack on a multiplier that is itself already large: a
+ * compounding track on top of a x5.5 base is a number that leaves the game
+ * inside twenty levels.
+ */
+export const WEAPON_POWER_STEP = 0.12
+
+/** Which shop track pays for which weapon. One place, so a third weapon is a
+ *  row in this map rather than a branch in four files. */
+export const WEAPON_TRACK: Record<WeaponId, UpgradeId> = {
+  rocket: 'rocket',
+  gatling: 'gatling'
+}
 
 /**
  * ─── The endless tail ───────────────────────────────────────────────────────
@@ -258,15 +280,57 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
     cost: (l) => Math.round(260 * Math.pow(1.4, l)),
     /** Seconds of protection. `0` reads as "not unlocked yet". */
     valueAt: (l) => Math.round(shieldSecondsAt(l) * 10) / 10
+  },
+
+  /**
+   * ─── The two weapon tracks ────────────────────────────────────────────────
+   *
+   * Bought SEPARATELY, and the separation is the point rather than an
+   * accounting detail. Which weapon a stage offers is fixed by the stage number
+   * (`weaponForStage`), so the two tracks are two different questions about the
+   * road ahead: a player stuck on an even stage is looking at a rocket every
+   * attempt, and levelling the launcher is a direct answer to the thing that is
+   * actually killing them. A single shared "weapon damage" track would have
+   * made both purchases the same purchase and thrown that away.
+   *
+   * They are the only tracks in the shop that pay nothing until something is
+   * EARNED on the road — a level here is worth exactly zero to a player who
+   * never solves a lever puzzle — and they are priced with that in mind:
+   * cheaper per level than `power`, which pays on every round of every stage,
+   * and endless like it, because a weapon multiplier is the one number a deep
+   * run can always spend more on.
+   *
+   * Ordered after the skills, so the shop reads as: the four stats, the two
+   * buttons, then the two things you have to go and find.
+   */
+  rocket: {
+    id: 'rocket',
+    maxLevel: Number.POSITIVE_INFINITY,
+    cost: endlessCost(140, 1.4, 14),
+    /** Shown as a percentage of the launcher's base damage. */
+    valueAt: (l) => Math.round((1 + l * WEAPON_POWER_STEP) * 100)
+  },
+  gatling: {
+    id: 'gatling',
+    maxLevel: Number.POSITIVE_INFINITY,
+    // Priced identically to the rocket on purpose. The two weapons are balanced
+    // to about the same single-target multiplier (see `game/weapons.ts`), so a
+    // price difference here would be a thumb on the scale for one half of the
+    // campaign's stages over the other.
+    cost: endlessCost(140, 1.4, 14),
+    valueAt: (l) => Math.round((1 + l * WEAPON_POWER_STEP) * 100)
   }
 }
 
-export const UPGRADE_ORDER: UpgradeId[] = ['squad', 'power', 'rate', 'range', 'scavenge', 'grenade', 'shield']
+export const UPGRADE_ORDER: UpgradeId[] = [
+  'squad', 'power', 'rate', 'range', 'scavenge', 'grenade', 'shield', 'rocket', 'gatling'
+]
 
 type Levels = Record<UpgradeId, number>
 
 const emptyLevels = (): Levels => ({
-  squad: 0, power: 0, rate: 0, range: 0, scavenge: 0, grenade: 0, shield: 0
+  squad: 0, power: 0, rate: 0, range: 0, scavenge: 0, grenade: 0, shield: 0,
+  rocket: 0, gatling: 0
 })
 
 const read = (): Levels => {
@@ -334,6 +398,24 @@ export const rangeBonus = computed(() => levels.value.range * RANGE_PER_LEVEL)
  * only currency that keeps its value all campaign.
  */
 export const gatePayoutBonus = computed(() => 1 + levels.value.squad * 0.04)
+
+/**
+ * Damage multiplier a weapon carries from the shop, 1.0 at level 0.
+ *
+ * A plain function rather than a computed, and read ONCE per tick by
+ * `stepShooting`: the multiplier only changes between runs, and a gatling at
+ * depth resolves this on the order of a hundred rounds a second.
+ */
+export const weaponPowerMul = (id: WeaponId): number =>
+  1 + levels.value[WEAPON_TRACK[id]] * WEAPON_POWER_STEP
+
+/**
+ * What the weapon is worth all in, for the shop's readout: the weapon's own
+ * multiplier times whatever the track has bought. Expressed against the squad's
+ * ordinary gun, which is the only baseline a player has to compare it to.
+ */
+export const weaponTotalMul = (id: WeaponId): number =>
+  Math.round(WEAPONS[id].rateMul * WEAPONS[id].damageMul * weaponPowerMul(id) * 10) / 10
 
 /** Grenade damage multiplier on the crowd's fire — 3x at level 0, 6x at 20. */
 export const grenadeMult = computed(

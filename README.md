@@ -179,13 +179,21 @@ and emits a per-platform CSP.
 | [`game-implementation-plan.md`](./game-implementation-plan.md) | Build state, architecture map, what's next, known trade-offs |
 | [`description.md`](./description.md) | Store copy: short/long description, how to play, controls |
 | [`retention-roadmap.md`](./retention-roadmap.md) | 18 prioritised retention / conversion features |
-| [`art-todo.md`](./art-todo.md) | Drop-in bitmap override manifest |
+| [`art-todo.md`](./art-todo.md) | Drop-in bitmap override manifest: every painted target and what stays live over it |
+| [`art-sheets/README.md`](./art-sheets/README.md) | The art pipeline: export the reference sheets, paint them, slice them back in, prove them |
 | [`sound-todo.md`](./sound-todo.md) | Audio cue map + what's worth commissioning |
 | [`worker/SETUP.md`](./worker/SETUP.md) | Deploying the leaderboard Worker + D1, start to finish |
 
 ## Dev tools
 
 * `/#/monsters` — the monster design bench (lazy; costs a player nothing).
+* `/#/art-sheets` — the art pipeline's export bench (dev only): bakes every
+  drawable through its own painter onto reference sheets and writes them, the
+  master prompts and the slice index into `art-sheets/`. `pnpm art:export`
+  drives it headlessly; `pnpm slice-sheets` cuts the paintings back in.
+* `/#/playground` — every painted drawable in motion (dev only), with one
+  button that flips the art layer live. `?art=on` / `?art=off` / `__art.*`
+  control the painted overrides on any build.
 * Type `cmarc` anywhere to toggle debug mode.
 * `localStorage.cheat = 'true'` + reload publishes the live simulation as
   `window.__run` and enables the cheat shortcuts (`ctrl+shift+alt` + `k` coins,

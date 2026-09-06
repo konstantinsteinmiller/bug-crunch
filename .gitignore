@@ -69,3 +69,9 @@ __screenshots__/
 # iOS xcframeworks downloaded by tauri-plugin-levelplay/build.rs
 /src-tauri/plugins/tauri-plugin-levelplay/ios/Frameworks/
 /src/assets/art/
+
+# Per-checkout browser profiles for the MCP servers (see .mcp.json). Repo-
+# relative so concurrent sessions — the main checkout and each agent worktree —
+# never contend for one profile directory.
+.mcp-browser-profiles
+/public/images/monsters/tinified.zip

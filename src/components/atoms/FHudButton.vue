@@ -2,6 +2,7 @@
 import { computed, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GameIcon from '@/components/icons/GameIcon.vue'
+import ArtIcon from '@/components/icons/ArtIcon.vue'
 import { resolveIconLabel } from '@/components/icons/iconLabels'
 import type { GameIconName } from '@/components/icons/iconNames'
 
@@ -32,6 +33,9 @@ interface Props {
   isDisabled?: boolean
   /** A glyph from the shared set. Ignored when the default slot is filled. */
   icon?: GameIconName
+  /** A painting under `images/ui/` that may stand in for the glyph once the
+   *  art pipeline has produced it — see `ArtIcon`. */
+  art?: string
   ariaLabel?: string
 }
 
@@ -63,7 +67,8 @@ const resolvedAriaLabel = computed<string | undefined>(
   )
     span.f-hud-button__shadow(aria-hidden="true")
     span.f-hud-button__body
-      GameIcon.f-hud-button__glyph(v-if="icon && !slots.default" :name="icon")
+      ArtIcon.f-hud-button__glyph(v-if="icon && art && !slots.default" kind="ui" :id="art" :fallback="icon")
+      GameIcon.f-hud-button__glyph(v-else-if="icon && !slots.default" :name="icon")
       slot
     span.f-hud-button__badge(v-if="$slots.badge")
       slot(name="badge")
@@ -125,6 +130,11 @@ const resolvedAriaLabel = computed<string | undefined>(
   .f-hud-button__glyph
     width: 54%
     height: 54%
+
+  // A painted glyph carries its own outline and sits larger than a flat one.
+  img.f-hud-button__glyph
+    width: 70%
+    height: 70%
 
   :slotted(svg), :slotted(img)
     width: 62%

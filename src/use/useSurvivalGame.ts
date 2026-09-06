@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   BARRICADE_COIN_MAX, BARRICADE_COIN_MIN,
   BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, bossGuardGates, dividerCrushFor,
@@ -15,7 +15,7 @@ import {
   PASSAGE_FIT_MARGIN,
   BOSS_MIN_KILL, SLAM_FRACTION_MAX, SLAM_MAX_FRACTION, SWEEP_FRACTION_MAX, endlessPressure,
   GATE_DEPTH, GATE_MAX_VALUE, GATE_SUB_MAX, GATE_TICK_MS, LANE_HALF, MAX_FIRE_RATE, MAX_SQUAD,
-  SHOOTERS, SLAM_CD_BASE, SLAM_CD_DECAY, SLAM_CD_MIN, SLAM_RADIUS,
+  SLAM_CD_BASE, SLAM_CD_DECAY, SLAM_CD_MIN, SLAM_RADIUS,
   SLAM_RADIUS_GROWTH, SLAM_RADIUS_MAX, STEER_SPRING,
   TUTORIAL_SLAM_FRACTION, TUTORIAL_SLAM_MIN_KILL, UNIT_R,
   CHARGED_EVERY, CHARGED_LEAD, CHARGED_WINDUP_MUL, slamRadiusFor,
@@ -29,6 +29,10 @@ import {
   type Gate, type Pickup, type Rock, type Unit
 } from '@/game/survival'
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
+import {
+  GUARD_H, LEVER_R, ROCKET_SPLASH_SHARE, STONE_H, WEAPONS, WEAPON_BOX_R, weaponStreams,
+  type Guard, type Lever, type Stone, type WeaponBox, type WeaponId
+} from '@/game/weapons'
 import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
 import {
   BOLT_BLAST_R,
@@ -58,6 +62,7 @@ import {
   HEAL_EVERY,
   HEAL_FRACTION,
   HEAL_MAX_CASTS,
+  HEAL_MIN_GAP_S,
   ROLLER_FRACTION,
   ROLLER_R,
   ROLLER_SPEED,
@@ -67,6 +72,7 @@ import {
   SUMMON_CD,
   SUMMON_DESIGN,
   SUMMON_HP_SHARE,
+  SUMMON_OPENING_CD,
   SUMMON_PER_WAVE,
   SUMMON_SPREAD,
   SUMMON_TELEGRAPH,
@@ -81,6 +87,7 @@ import {
   minibossKindFor,
   rollerLaneFor,
   rollerLaneX,
+  summonWaveSize,
   type BossBolt,
   type BossKind
 } from '@/game/threats'
@@ -89,7 +96,7 @@ import { difficultyFactor } from '@/use/useUser'
 import {
   __setUpgradeLevel,
   coinMagnetBonus, coinMultiplier, fireRate as metaFireRate, gatePayoutBonus, rangeBonus,
-  startSquad, unitDamage
+  startSquad, unitDamage, weaponPowerMul
 } from '@/use/useUpgrades'
 import { getState, setStates } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
@@ -157,6 +164,35 @@ export const progress01 = ref(0)
 /** 0..1 boss health, or 0 when there is no boss on screen. */
 export const bossHp01 = ref(0)
 /** True while a miniboss is alive — drives its HUD banner and off-screen marker. */
+/**
+ * ─── The stage's weapon ─────────────────────────────────────────────────────
+ *
+ * `null` until a weapon box is broken, and back to `null` the moment the next
+ * stage starts (`startStage` clears it). It is a PER-STAGE reward — see
+ * `game/weapons.ts` — so nothing here ever writes it to the save.
+ *
+ * Read by `stepShooting` for the multipliers and by the HUD for the badge, and
+ * stamped onto every round it fires so a projectile already in the air keeps
+ * behaving like the weapon that launched it.
+ */
+export const activeWeapon = ref<WeaponId | null>(null)
+
+/**
+ * The puzzle the player can currently do something about, for the HUD.
+ *
+ * These exist because the beat is otherwise invisible until it works: a player
+ * who shoots one lever and then loses the road has no way to know they were one
+ * shot away from a weapon, and "I did something and nothing happened" is how a
+ * mechanic gets written off as scenery. Two pips and a dimmed glyph is the
+ * whole affordance.
+ *
+ * `puzzleWeapon` is null whenever there is nothing on screen to solve — before
+ * the levers stream in, and again once the box is taken or left behind.
+ */
+export const puzzleWeapon = ref<WeaponId | null>(null)
+export const puzzlePulled = ref(0)
+export const puzzleTotal = ref(0)
+
 export const eliteAlive = ref(false)
 /** 0..1 health of the miniboss the player is currently fighting. */
 export const eliteHp01 = ref(0)
@@ -196,6 +232,10 @@ let crates: Crate[] = []
 let barricades: Barricade[] = []
 let rocks: Rock[] = []
 let barrels: Barrel[] = []
+let levers: Lever[] = []
+let stones: Stone[] = []
+let guards: Guard[] = []
+let weaponBoxes: WeaponBox[] = []
 let foes: Foe[] = []
 let pickups: Pickup[] = []
 let boss: Boss | null = null
@@ -274,6 +314,134 @@ let slamRelief = 1
 /** Obstacle-contact and trap multiplier for this stage — the third half. */
 let contactRelief = 1
 
+/**
+ * ─── Object pools: monsters and rounds ──────────────────────────────────────
+ *
+ * The two entity classes whose population is unbounded in the thing the player
+ * controls. A stage-90 road fields packs of forty at a time and the summoner
+ * adds waves on top; a gatling at the fire-rate ceiling emits on the order of
+ * two hundred rounds a second. Both are born, live under a second, and die —
+ * which is the exact shape that fills a nursery and buys a GC pause in the
+ * middle of a fight.
+ *
+ * Two changes, and they are separate wins:
+ *
+ *   ALLOCATION — a dead body's struct is kept and handed to the next spawn with
+ *     every field overwritten from `FOE_BLANK`. `Object.assign` from a template
+ *     rather than a hand-written reset, because a hand-written one silently
+ *     rots: add a field to `Foe` and the template stops compiling, while a
+ *     forgotten line in a reset function leaves a rolling ball's lane on an
+ *     ordinary creep and nobody finds out for a month.
+ *   REMOVAL — swap-and-pop instead of `splice`. Order in these two arrays is
+ *     not meaningful (the renderer sorts nothing off it and the collision scans
+ *     are order-independent), and `splice` on a four-hundred-entry array is a
+ *     memmove per removal against dozens of removals a frame.
+ *
+ * Both loops that remove run BACKWARD, which is what makes swap-and-pop safe:
+ * the element moved down into the hole came from the tail, which the loop has
+ * already visited.
+ *
+ * The pools survive `resetWorld`, which is the point — the next stage starts
+ * with its bodies already allocated.
+ */
+const FOE_POOL_MAX = 600
+const BULLET_POOL_MAX = 512
+
+const foePool: Foe[] = []
+const bulletPool: Bullet[] = []
+
+/**
+ * Every field a recycled body must forget.
+ *
+ * Typed as `Foe`, so adding a field to the struct without adding it here is a
+ * compile error rather than a haunting. Exported for `pooling.test.ts`, which
+ * checks the hand-written reset below against it key by key — see `resetFoe`.
+ */
+export const FOE_BLANK: Readonly<Foe> = {
+  id: 0, typeId: '', design: '', x: 0, y: 0, hp: 1, maxHp: 1, speed: 0,
+  bite: 0, biteShare: 0, biteCd: 0, scale: 1, flash: 0, phase: 0, dead: false,
+  flying: false, hold: 0, hitCd: 0, sweepCd: 0, sweepSpan: 0, sweepDir: 1,
+  sweepTold: false, kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
+  swayPhase: 0, elite: false
+}
+
+export const BULLET_BLANK: Readonly<Bullet> = {
+  x: 0, y: 0, vx: 0, vy: 0, damage: 0, life: 0, pierced: -1, weapon: null
+}
+
+/**
+ * Wipe a recycled body, field by field.
+ *
+ * `Object.assign(f, FOE_BLANK)` is the obvious way to write this and it was the
+ * first way it was written. It is also the reason the first measurement said
+ * pooling was **6.3 % SLOWER** than allocating fresh: `Object.assign` walks the
+ * source's own enumerable keys through a generic path, and against a
+ * twenty-nine-field template that costs more than V8 spends building a literal
+ * with a known shape. The pool was paying for its own saving twice over.
+ *
+ * Written out, the reset is a straight-line store to a monomorphic shape, and
+ * `pooling.test.ts` compares its output against `FOE_BLANK` key by key — so a
+ * field added to the interface and the template but forgotten here fails a test
+ * rather than leaking a rolling ball's lane onto an ordinary creep.
+ */
+const resetFoe = (f: Foe): Foe => {
+  f.id = 0; f.typeId = ''; f.design = ''
+  f.x = 0; f.y = 0
+  f.hp = 1; f.maxHp = 1
+  f.speed = 0; f.bite = 0; f.biteShare = 0; f.biteCd = 0
+  f.scale = 1; f.flash = 0; f.phase = 0
+  f.dead = false; f.flying = false
+  f.hold = 0; f.hitCd = 0
+  f.sweepCd = 0; f.sweepSpan = 0; f.sweepDir = 1; f.sweepTold = false
+  f.kind = 'scythe'; f.lane = 1; f.fuse = 0; f.reload = 0; f.kindTicks = 0
+  f.swayPhase = 0; f.elite = false
+  return f
+}
+
+const resetBullet = (b: Bullet): Bullet => {
+  b.x = 0; b.y = 0; b.vx = 0; b.vy = 0
+  b.damage = 0; b.life = 0; b.pierced = -1; b.weapon = null
+  return b
+}
+
+const takeFoe = (): Foe => {
+  const f = foePool.pop()
+  return f ? resetFoe(f) : { ...FOE_BLANK }
+}
+
+const takeBullet = (): Bullet => {
+  const b = bulletPool.pop()
+  return b ? resetBullet(b) : { ...BULLET_BLANK }
+}
+
+/** Test seam: prove `resetFoe` and `resetBullet` really do return the blank. */
+export const __resetForPoolTest = (f: Foe): Foe => resetFoe(f)
+export const __resetBulletForPoolTest = (b: Bullet): Bullet => resetBullet(b)
+
+/** Drop the entry at `i` and keep its struct. Safe ONLY from a backward loop —
+ *  see the header. */
+const releaseFoe = (i: number): void => {
+  const f = foes[i]!
+  const last = foes.pop()!
+  if (i < foes.length) foes[i] = last
+  if (foePool.length < FOE_POOL_MAX) foePool.push(f)
+}
+
+const releaseBullet = (i: number): void => {
+  const b = bullets[i]!
+  const last = bullets.pop()!
+  if (i < bullets.length) bullets[i] = last
+  if (bulletPool.length < BULLET_POOL_MAX) bulletPool.push(b)
+}
+
+/** Hand a whole array back at a stage boundary. The pools outlive the run. */
+const drain = <T>(live: T[], pool: T[], cap: number): void => {
+  for (const item of live) {
+    if (pool.length >= cap) break
+    pool.push(item)
+  }
+}
+
 export const getUnits = (): Unit[] => units
 export const getBullets = (): Bullet[] => bullets
 export const getGates = (): Gate[] => gates
@@ -281,6 +449,11 @@ export const getDividers = (): Divider[] => dividers
 export const getCrates = (): Crate[] => crates
 export const getBarricades = (): Barricade[] => barricades
 export const getBarrels = (): Barrel[] => barrels
+export const getLevers = (): Lever[] => levers
+/** The destructible boulders covering the levers. See `Stone`. */
+export const getStones = (): Stone[] => stones
+export const getGuards = (): Guard[] => guards
+export const getWeaponBoxes = (): WeaponBox[] => weaponBoxes
 export const getRocks = (): Rock[] => rocks
 export const getFoes = (): Foe[] => foes
 /** Gunner rounds in flight. The renderer draws them; the balance harness can
@@ -499,6 +672,11 @@ const clearFailures = (n: number): void => {
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 const resetWorld = (): void => {
+  // Reclaimed BEFORE the arrays are dropped: a stage change is the one moment
+  // the whole live set becomes garbage at once, and it is exactly the set the
+  // next stage is about to ask for.
+  drain(foes, foePool, FOE_POOL_MAX)
+  drain(bullets, bulletPool, BULLET_POOL_MAX)
   units = []
   bullets = []
   gates = []
@@ -506,6 +684,10 @@ const resetWorld = (): void => {
   crates = []
   barricades = []
   barrels = []
+  levers = []
+  stones = []
+  guards = []
+  weaponBoxes = []
   grenades = []
   rocks = []
   foes = []
@@ -529,12 +711,34 @@ const resetWorld = (): void => {
   entityId = 1
   eliteAlive.value = false
   eliteHp01.value = 0
+  puzzleWeapon.value = null
+  puzzlePulled.value = 0
+  puzzleTotal.value = 0
+}
+
+/**
+ * A body's `seed`, without spending a `Math.random()` draw.
+ *
+ * It has to be a hash rather than a roll: several sim tests pin `Math.random`
+ * to a fixed sequence and read the crowd's behaviour off it, so one extra draw
+ * per survivor would silently re-roll every obstacle, foe and gate after it.
+ * An avalanche hash of the spawn counter is uniform in [0, 1) and — the part
+ * that matters for what reads it — uncorrelated with the slot index that
+ * decides where in the sunflower the body stands.
+ */
+let unitSeedTick = 0
+const nextUnitSeed = (): number => {
+  let h = Math.imul(unitSeedTick++ ^ 0x9e3779b9, 2246822519) >>> 0
+  h ^= h >>> 13
+  h = Math.imul(h, 3266489917) >>> 0
+  return (h >>> 8) / 16777216
 }
 
 const spawnUnit = (x: number, y: number): void => {
   if (squadCount.value >= MAX_SQUAD) return
   units.push({
     i: units.length,
+    seed: nextUnitSeed(),
     x,
     y,
     vx: 0,
@@ -565,8 +769,20 @@ export const startStage = (n?: number): void => {
   squadCount.value = 0
   damage.value = unitDamage.value
   setFireRate(metaFireRate.value)
+  // What the shop was worth at the moment this stage opened. Everything the
+  // RUN adds on top — crates, gates — is measured against these, so a purchase
+  // made mid-stage can be folded in without eating what the road paid out.
+  // See `syncMetaToRun`.
+  metaDamage = unitDamage.value
+  metaRate = metaFireRate.value
+  metaSquad = startSquad.value
   runCoins.value = 0
   kills.value = 0
+  // The weapon does not survive the stage that gave it. See `game/weapons.ts`:
+  // the prize is for reading THIS road, and a launcher carried into stage 12
+  // because the player solved stage 11 would quietly re-balance every stage
+  // after it.
+  activeWeapon.value = null
   peakSquad.value = 0
   progress01.value = 0
   bossHp01.value = 0
@@ -621,6 +837,94 @@ export const startStage = (n?: number): void => {
     [RUNS_KEY]: Number(getState(RUNS_KEY, 0) || 0) + 1
   })
 }
+
+/**
+ * ─── A purchase reaches the run the player is already in ────────────────────
+ *
+ * The shop is reachable from the HUD **during a run**, and three of its tracks
+ * used to be latched at `startStage` and nowhere else: `damage.value`,
+ * `runFireRate` and the crowd itself are snapshots of `unitDamage`,
+ * `fireRate` and `startSquad` taken as the stage opened. Buy Squad,
+ * Firepower or Fire Rate mid-stage and the coins went, the level went up, and
+ * the run did not change by one survivor, one point of damage or one shot a
+ * second — measured: six levels of each bought at stage 7 moved squad 11 -> 11,
+ * damage 1 -> 1, rate 1.90 -> 1.90.
+ *
+ * Squad is the one players report, and that is not a coincidence: the HUD shows
+ * the live crowd, so it is the only one of the three where you can WATCH the
+ * number refuse to move. The other two were just as broken and quieter.
+ *
+ * (The rest of the shop was always live — reach, magnet, coin multiplier, gate
+ * payout, grenade, shield and the two weapon multipliers are read from their
+ * computed at the moment they are used, so they were never latched.)
+ *
+ * ── How it folds in ──
+ *
+ * The DELTA against the baseline the stage opened with, never the absolute
+ * value: `damage.value` is `unitDamage` plus every green crate broken so far,
+ * and overwriting it would refund the shop by confiscating the road's payout.
+ *
+ * ── Why increases only ──
+ *
+ * A level cannot legitimately fall, but the number CAN: a cloud save landing
+ * mid-run re-reads the levels (`useUpgrades` watches `saveDataVersion`), and a
+ * stale blob would briefly report less than the player has. Deleting live
+ * survivors on the strength of that is far worse than doing nothing, and the
+ * next `startStage` reconciles it either way.
+ */
+let metaSquad = 0
+let metaDamage = 0
+let metaRate = 0
+
+const syncMetaToRun = (): void => {
+  // Between stages there is nothing to fold into — `startStage` reads the
+  // current values directly and sets the baseline from them.
+  if (phase.value !== 'run' && phase.value !== 'boss') return
+
+  const dmg = unitDamage.value
+  if (dmg > metaDamage) {
+    damage.value += dmg - metaDamage
+    metaDamage = dmg
+  }
+
+  const rate = metaFireRate.value
+  if (rate > metaRate) {
+    // Through `setFireRate` so the purchase is clamped into the legal band like
+    // every other writer — a shop level may not push the run past MAX_FIRE_RATE.
+    setFireRate(runFireRate.value + (rate - metaRate))
+    metaRate = rate
+  }
+
+  const squad = startSquad.value
+  if (squad > metaSquad) {
+    const arriving = Math.round(squad - metaSquad)
+    metaSquad = squad
+    for (let i = 0; i < arriving; i++) {
+      // Into the body of the crowd rather than at a gate: these did not come
+      // through a door, and dropping them at the anchor lets the formation
+      // spring pack them in the way it does after any other change in size.
+      spawnUnit(
+        anchorX + (Math.random() - 0.5) * CROWD_MAX_R,
+        anchorY + (Math.random() - 0.5) * CROWD_MAX_R * CROWD_SQUASH
+      )
+    }
+    // The same full-squad flash a supply crate fires. The shop modal is over
+    // the canvas when this lands and the loop is paused behind it, so the flash
+    // is still on the bodies when the player closes it — which is the frame
+    // they are looking for the change in.
+    if (arriving > 0) for (const u of units) u.flash = 220
+  }
+}
+
+/**
+ * Watched rather than pushed from the shop.
+ *
+ * `useUpgrades` has no business knowing a run exists, and a purchase is not the
+ * only way a level moves — a cloud hydrate re-reads them too. Watching the
+ * three derived values covers every writer there will ever be, including the
+ * next one somebody adds.
+ */
+watch([unitDamage, metaFireRate, startSquad], syncMetaToRun)
 
 /** Advance to the next stage and start it. */
 export const advanceStage = (): void => startStage(stage.value + 1)
@@ -842,29 +1146,26 @@ const streamTrack = (): void => {
         for (let i = 0; i < count; i++) {
           const spread = (i / Math.max(1, count - 1) - 0.5) * 2 * e.spread
           const design = def.designs[i % def.designs.length] ?? def.designs[0]!
-          foes.push({
-            id: entityId++,
-            typeId: def.id,
-            design,
-            x: Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, spread + (Math.random() - 0.5) * 0.6)),
-            y: e.y + (Math.random() - 0.5) * 1.4,
-            hp, maxHp: hp,
-            speed: def.speed,
-            bite: Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value))),
-            biteShare: biteShareFor(def.id) * challengeBiteFactor(challenge.value),
-            biteCd: 0,
-            scale: def.scale,
-            flash: 0,
-            phase: Math.random(),
-            dead: false,
-            flying: def.flying,
-            swayPhase: Math.random() * Math.PI * 2,
-            hold: 0,
-            hitCd: 0,
-            sweepCd: 0, sweepSpan: 0, sweepDir: 1, sweepTold: false,
-            kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
-            elite: false
-          })
+          // Fields, not a literal: `takeFoe` hands back a recycled body with
+          // every field already reset from `FOE_BLANK`, so only what this
+          // archetype actually decides is written here. Anything omitted is the
+          // blank's value, which is why the reset is a typed template.
+          const f = takeFoe()
+          f.id = entityId++
+          f.typeId = def.id
+          f.design = design
+          f.x = Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, spread + (Math.random() - 0.5) * 0.6))
+          f.y = e.y + (Math.random() - 0.5) * 1.4
+          f.hp = hp
+          f.maxHp = hp
+          f.speed = def.speed
+          f.bite = Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value)))
+          f.biteShare = biteShareFor(def.id) * challengeBiteFactor(challenge.value)
+          f.scale = def.scale
+          f.phase = Math.random()
+          f.flying = def.flying
+          f.swayPhase = Math.random() * Math.PI * 2
+          foes.push(f)
         }
         break
       }
@@ -886,49 +1187,88 @@ const streamTrack = (): void => {
         // come off, so on stage 1 it bites like a normal foe of its type.
         const tutorial = stage.value <= 1
         const biteMul = tutorial ? 1 : 2
-        foes.push({
-          id: entityId++,
-          typeId: def.id,
-          design: def.designs[0] ?? 'snaggletusk',
-          x: 0,
-          y: e.y,
-          hp, maxHp: hp,
-          // Slower than its archetype on the walk in — but the walk in is not
-          // the fight. See `ELITE_HOLD_AHEAD`: it plants when it arrives.
-          speed: def.speed * 0.7,
-          bite: def.bite * biteMul,
-          biteShare: biteShareFor(def.id) * biteMul,
-          biteCd: 0,
-          scale: def.scale * 1.9,
-          flash: 0,
-          phase: Math.random(),
-          dead: false,
-          flying: false,
-          swayPhase: 0,
-          hold: ELITE_HOLD_MAX,
-          hitCd: 0,
-          // First sweep on a full cycle, so the walk in is not also a wind-up:
-          // the player gets the whole approach before anything is thrown.
-          sweepCd: ELITE_SWEEP_CD,
-          sweepTold: false,
-          sweepSpan: ELITE_SWEEP_CD,
-          sweepDir: Math.random() < 0.5 ? -1 : 1,
-          // Which fight this one is. Below stage 4 it is always the scythe the
-          // tutorial taught; from there it comes out of the pool.
-          kind: minibossKindFor(stage.value, elitesSpawned),
-          // DERIVED, not rolled. Which half of the road a `roller` owns is the
-          // entire content of that fight, and `Math.random()` in this game is
-          // for cosmetic jitter only — a stage has to be learnable, and a coin
-          // flip on which side is lethal is the one thing that cannot be
-          // learned. See `rollerLaneFor`.
-          lane: rollerLaneFor(stage.value, elitesSpawned),
-          fuse: 0,
-          reload: 0,
-          kindTicks: 0,
-          elite: true
-        })
+        const el = takeFoe()
+        el.id = entityId++
+        el.typeId = def.id
+        el.design = def.designs[0] ?? 'snaggletusk'
+        el.y = e.y
+        el.hp = hp
+        el.maxHp = hp
+        // Slower than its archetype on the walk in — but the walk in is not
+        // the fight. See `ELITE_HOLD_AHEAD`: it plants when it arrives.
+        el.speed = def.speed * 0.7
+        el.bite = def.bite * biteMul
+        el.biteShare = biteShareFor(def.id) * biteMul
+        el.scale = def.scale * 1.9
+        el.phase = Math.random()
+        el.hold = ELITE_HOLD_MAX
+        // First sweep on a full cycle, so the walk in is not also a wind-up:
+        // the player gets the whole approach before anything is thrown.
+        el.sweepCd = ELITE_SWEEP_CD
+        el.sweepSpan = ELITE_SWEEP_CD
+        el.sweepDir = Math.random() < 0.5 ? -1 : 1
+        // Which fight this one is. Below stage 4 it is always the scythe the
+        // tutorial taught; from there it comes out of the pool.
+        el.kind = minibossKindFor(stage.value, elitesSpawned)
+        // DERIVED, not rolled. Which half of the road a `roller` owns is the
+        // entire content of that fight, and `Math.random()` in this game is
+        // for cosmetic jitter only — a stage has to be learnable, and a coin
+        // flip on which side is lethal is the one thing that cannot be
+        // learned. See `rollerLaneFor`.
+        el.lane = rollerLaneFor(stage.value, elitesSpawned)
+        el.elite = true
+        foes.push(el)
         elitesSpawned++
         pushFx({ kind: 'eliteSpawn', x: 0, y: e.y })
+        break
+      }
+
+      case 'weapon': {
+        // ONE id for the whole beat, exactly like a gate bank's: it is what lets
+        // the last lever delete the armour over the box without either of them
+        // holding a reference to the other.
+        const puzzleId = entityId++
+        for (const lv of e.levers) {
+          levers.push({
+            id: entityId++, puzzleId, x: lv.x, y: lv.y,
+            // NOT scaled by `diff` or `hpRelief`. A lever charges attention, and
+            // the run that most needs a free weapon is exactly the run that
+            // cannot also afford to pay for one in DPS.
+            hp: lv.hp, maxHp: lv.hp,
+            pulled: false, flash: 0, pulledFor: 0
+          })
+        }
+        // The cover over each post. Scaled by difficulty and relief exactly as
+        // the walls are — the stone is an obstacle, and a stuck player who gets
+        // a softer road should not meet the one wall that ignored the softening
+        // standing in front of the beat that would unstick them.
+        for (const st of e.stones) {
+          const stoneHp = Math.max(1, Math.round(st.hp * diff * hpRelief))
+          stones.push({
+            id: entityId++, puzzleId, x: st.x, y: st.y, w: st.w,
+            hp: stoneHp, maxHp: stoneHp, flash: 0, dead: false,
+            spin: (Math.random() - 0.5) * 0.5,
+            seed: Math.floor(Math.random() * 1000)
+          })
+        }
+        const boxHp = Math.max(1, Math.round(e.box.hp * diff * hpRelief))
+        weaponBoxes.push({
+          id: entityId++, puzzleId, weapon: e.weapon,
+          x: e.box.x, y: e.box.y, hp: boxHp, maxHp: boxHp,
+          locked: true, openFor: 0, dead: false,
+          leversTotal: e.levers.length, leversPulled: 0,
+          spin: (Math.random() - 0.5) * 0.25
+        })
+        for (const g of e.guards) {
+          const hp = Math.round(g.hp * diff * hpRelief)
+          guards.push({
+            id: entityId++, puzzleId, x: g.x, y: e.guardY,
+            w: g.w, hp, maxHp: hp, flash: 0, dead: false
+          })
+        }
+        puzzleWeapon.value = e.weapon
+        puzzlePulled.value = 0
+        puzzleTotal.value = e.levers.length
         break
       }
 
@@ -998,6 +1338,10 @@ export const step = (dtMs: number): void => {
   stepBarricades(dt)
   stepRocks(dt)
   stepCrates(dt)
+  stepLevers(dt)
+  stepStones(dt)
+  stepGuards(dt)
+  stepWeaponBoxes(dt)
   stepBarrels(dt)
   stepGrenades(dt)
   stepPickups(dt)
@@ -1104,7 +1448,11 @@ const spawnBoss = (): void => {
   boss = {
     kind,
     attacks: 0,
-    summonCd: SUMMON_CD,
+    summonCd: SUMMON_OPENING_CD,
+    // Zero, not `HEAL_MIN_GAP_S`: the gap is a floor BETWEEN heals, and opening
+    // the fight on cooldown would delay the first one by ten seconds on top of
+    // the three casts it already waits.
+    healCd: 0,
     design: bossDesign(stage.value),
     x: 0,
     y: track.bossY,
@@ -1122,7 +1470,7 @@ const spawnBoss = (): void => {
     guard: 0,
     slamX: 0,
     slamY: 0,
-    charging: kind === 'healer' ? healCastDue(1) : false,
+    charging: kind === 'healer' ? healCastDue(1, 0, HEALER_CAST_CD) : false,
     dead: false,
     dying: 0
   }
@@ -1164,32 +1512,22 @@ const spawnBoss = (): void => {
     )
     for (let i = 0; i < kit.escort.count; i++) {
       const spread = (i - (kit.escort.count - 1) / 2) * 1.7
-      foes.push({
-        id: entityId++,
-        typeId: def.id,
-        design: def.designs[0] ?? 'grumpling',
-        x: spread,
-        y: track.bossY - 6 - (i % 2) * 1.4,
-        hp: ehp, maxHp: ehp,
-        speed: def.speed,
-        bite: def.bite,
-        biteShare: biteShareFor(def.id),
-        biteCd: 0,
-        scale: def.scale,
-        flash: 0,
-        phase: Math.random(),
-        dead: false,
-        flying: def.flying,
-        swayPhase: Math.random() * 6.28,
-        hold: 0,
-        hitCd: 0,
-        sweepCd: 0,
-        sweepSpan: 0,
-        sweepDir: 1,
-        sweepTold: false,
-        kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
-        elite: false
-      })
+      const f = takeFoe()
+      f.id = entityId++
+      f.typeId = def.id
+      f.design = def.designs[0] ?? 'grumpling'
+      f.x = spread
+      f.y = track.bossY - 6 - (i % 2) * 1.4
+      f.hp = ehp
+      f.maxHp = ehp
+      f.speed = def.speed
+      f.bite = def.bite
+      f.biteShare = biteShareFor(def.id)
+      f.scale = def.scale
+      f.phase = Math.random()
+      f.flying = def.flying
+      f.swayPhase = Math.random() * 6.28
+      foes.push(f)
     }
   }
 }
@@ -1242,6 +1580,19 @@ const collectSolids = (): void => {
   for (const r of rocks) {
     if (Math.abs(r.y - anchorY) > 6) continue
     solids.push({ x: r.x, y: r.y, halfW: r.w / 2 + UNIT_R, halfH: ROCK_H / 2 + UNIT_R })
+  }
+  // Armour plates. Solid to the formation like everything else here — the crowd
+  // flows around them rather than through them — but harmless on contact, which
+  // is the one rule they do not share with a wall. See `Guard`.
+  for (const g of guards) {
+    if (g.dead || Math.abs(g.y - anchorY) > 6) continue
+    solids.push({ x: g.x, y: g.y, halfW: g.w / 2 + UNIT_R, halfH: GUARD_H / 2 + UNIT_R })
+  }
+  // The lever stones, on the same terms as the armour: the formation flows
+  // around one, and a survivor who brushes it walks away. See `Stone`.
+  for (const s of stones) {
+    if (s.dead || Math.abs(s.y - anchorY) > 6) continue
+    solids.push({ x: s.x, y: s.y, halfW: s.w / 2 + UNIT_R, halfH: STONE_H / 2 + UNIT_R })
   }
   for (const c of crates) {
     if (c.dead || Math.abs(c.y - anchorY) > 6) continue
@@ -2042,50 +2393,212 @@ const stepGrenades = (dt: number): void => {
 }
 
 /**
+ * What a homing round should fly at, or `null` for "nothing worth turning for".
+ *
+ * The NEAREST live body ahead of the muzzle and inside the gun's reach, boss
+ * included. Nearest rather than biggest, or weakest, or most numerous: the
+ * player has to be able to predict where the next rocket goes without doing
+ * arithmetic, and "the closest thing in front of you" is the only rule that
+ * reads at a glance.
+ *
+ * Three refusals, and each is a rule about what the launcher is FOR:
+ *
+ *   • nothing behind the muzzle. A round that turns around is a round that
+ *     lands in the crowd, and the blast does not ask who is standing in it.
+ *   • nothing outside `range`. The gun's reach is a promise about the screen
+ *     (see `BULLET_RANGE`) and an auto-aimer that quietly outranged it would
+ *     make the Reach track meaningless for half the campaign.
+ *   • nothing but monsters and the boss. Crates, barrels and the puzzle's own
+ *     levers are targets the player CHOOSES, and a weapon that stole that
+ *     choice would spend the stage's whole supply of rockets on scenery.
+ *
+ * Scanned per round fired rather than cached, which is affordable precisely
+ * because the launcher is slow: one pass over the live monsters a couple of
+ * times a second, against the gatling's two hundred rounds in the same second.
+ */
+const aimTarget = (
+  fromX: number, fromY: number, range: number, taken: Array<Foe | Boss> | null = null
+): Foe | Boss | null => {
+  let best: Foe | Boss | null = null
+  let bestD = Number.POSITIVE_INFINITY
+  // Fallback for a salvo that has already claimed everything in reach: better
+  // to double up on the nearest body than to fire the last two rounds of a
+  // volley straight up an empty road.
+  let anyBest: Foe | Boss | null = null
+  let anyBestD = Number.POSITIVE_INFINITY
+  const top = anchorY + range
+
+  for (const f of foes) {
+    if (f.dead || f.y <= fromY + 0.6 || f.y > top) continue
+    const dx = f.x - fromX
+    const dy = f.y - fromY
+    const d = dx * dx + dy * dy
+    if (d < anyBestD) {
+      anyBestD = d
+      anyBest = f
+    }
+    if (d >= bestD) continue
+    // ── One rocket per body, while there are bodies ──
+    //
+    // Without this a salvo is five rounds into the SAME nearest monster: the
+    // muzzles are a couple of units apart and "nearest" almost always agrees
+    // across them. That is four rounds of overkill on a body the first one
+    // already killed, and on screen it is one explosion rather than a fan of
+    // five — the exact thing the volley exists to show.
+    if (taken && taken.includes(f)) continue
+    bestD = d
+    best = f
+  }
+  // The boss is a target like any other — it is the thing a stage's launcher
+  // most wants to be pointed at, and while it is guarded the round is eaten
+  // exactly as a forward one would be. Nothing here needs to know about the
+  // shield; `resolveBullet` already owns that rule.
+  if (boss && !boss.dead && boss.y > fromY + 0.6 && boss.y <= top) {
+    const dx = boss.x - fromX
+    const dy = boss.y - fromY
+    const d = dx * dx + dy * dy
+    if (d < anyBestD) {
+      anyBestD = d
+      anyBest = boss
+    }
+    // The boss is the one target a salvo is ALLOWED to stack on. It is the
+    // thing in the game with a health bar long enough to eat five rounds, and
+    // spreading a volley off it onto the escort would be a downgrade dressed
+    // as variety.
+    if (d < bestD) best = boss
+  }
+  return best ?? anyBest
+}
+
+/**
  * Emit bullets.
  *
- * Only `SHOOTERS` streams are ever visible, but the DPS is the whole squad's:
- * each round carries `squad × damage / shooters`. A hundred survivors therefore
- * hit a hundred times harder without costing a hundred times the draw calls,
- * and the damage numbers still add up to exactly `squad × damage × fireRate`.
+ * Only a handful of streams are ever visible — `SHOOTERS` for the squad's own
+ * gun, and whatever `weaponStreams` decides for a weapon — but the DPS is the
+ * whole squad's: each round carries `squad × damage / shooters`. A hundred
+ * survivors therefore hit a hundred times harder without costing a hundred
+ * times the draw calls, and the damage numbers still add up to exactly
+ * `squad × damage × fireRate`.
+ *
+ * That identity is why the stream count is a pure FEEL dial: it divides the
+ * damage and multiplies the cadence by the same factor, so it decides how many
+ * rounds the player sees and never how much they are worth.
  */
+
+/**
+ * Bodies a volley has already claimed, so the launcher's five rounds land on
+ * five different monsters rather than five times on the nearest one.
+ *
+ * Module-level and cleared per trigger rather than allocated: the launcher
+ * fires a few times a second for the length of a run, and this is the hot path.
+ * It holds at most `streamsMax` entries, which is why a linear `includes` in
+ * `aimTarget` is the right lookup.
+ */
+const salvoTargets: Array<Foe | Boss> = []
+
 const stepShooting = (dt: number): void => {
   if (phase.value !== 'run' && phase.value !== 'boss') return
   const alive = squadCount.value
   if (alive <= 0) return
 
-  const shooters = Math.min(alive, SHOOTERS)
-  const perBullet = (alive * damage.value) / shooters
+  // ── The weapon, resolved ONCE per tick ──
+  //
+  // Three numbers come out of it and none of them may be read per bullet: the
+  // shop multiplier behind `weaponPowerMul` is a Vue computed, and a gatling at
+  // depth emits a couple of hundred rounds a second.
+  //
+  // `streams` is a pure feel dial — see `game/weapons.ts`. It divides the
+  // damage and multiplies the cadence, so it cancels out of the DPS product
+  // exactly; what it changes is whether the player sees fourteen thin tracers
+  // or one fat rocket.
+  const weapon = activeWeapon.value
+  const def = weapon ? WEAPONS[weapon] : null
+  // Grows with the crowd for the launcher — see `weaponStreams`. It cancels out
+  // of the DPS product, so this decides how MANY rockets the player sees and
+  // nothing else.
+  const streams = weaponStreams(weapon, alive)
+  const damageMul = def ? def.damageMul * weaponPowerMul(weapon!) : 1
 
-  fireAccum += dt * shooters * runFireRate.value
+  const shooters = Math.min(alive, streams)
+  const perBullet = ((alive * damage.value) / shooters) * damageMul
+  // Read once per tick for the same reason `stepBullets` does: `rangeBonus` is
+  // a Vue computed, and only the homing branch below actually needs it.
+  const gunRange = def?.homing ? effectiveBulletRange(rangeBonus.value) : 0
+
+  // ── One trigger pull, `salvo` rounds ──
+  //
+  // The launcher fires all of its muzzles together (`WeaponDef.volley`); every
+  // other weapon fires them one at a time down the cadence. The cadence is
+  // divided by exactly the number of rounds a trigger produces, so the shot
+  // budget over any stretch of road is identical either way — this decides
+  // whether the player sees a salvo or a trickle, and nothing else.
+  const salvo = def?.volley ? shooters : 1
+  fireAccum += dt * (shooters / salvo) * runFireRate.value * (def?.rateMul ?? 1)
   // Hard cap the burst a single frame can produce, so a long frame (a tab
-  // regaining focus) cannot dump sixty bullets into one 16 ms slice.
-  let budget = 8
+  // regaining focus) cannot dump sixty bullets into one 16 ms slice. Counted in
+  // TRIGGERS, so a five-round volley costs one — a gatling frame and a launcher
+  // frame stay the same size in rounds.
+  let budget = Math.max(1, Math.floor(8 / salvo))
   while (fireAccum >= 1 && budget-- > 0) {
     fireAccum -= 1
+    // Each volley spreads across as many different bodies as it can find (see
+    // `aimTarget`). Cleared per TRIGGER, not per tick: the next volley is free
+    // to re-pick the same pack, and the list is a module-level scratch buffer
+    // so a run's worth of frames allocates nothing.
+    salvoTargets.length = 0
 
-    // Fire from a random survivor in the FRONT half of the crowd. Random beats
-    // "the first N in the array" here: the muzzle flashes scatter across the
-    // front rank instead of stuttering out of the same three bodies.
-    let from: Unit | null = null
-    for (let tries = 0; tries < 6 && !from; tries++) {
-      const u = units[Math.floor(Math.random() * units.length)]
-      if (u && u.dying <= 0 && u.y >= anchorY - 0.4) from = u
+    for (let shot = 0; shot < salvo; shot++) {
+      // Fire from a random survivor in the FRONT half of the crowd. Random beats
+      // "the first N in the array" here: the muzzle flashes scatter across the
+      // front rank instead of stuttering out of the same three bodies — and for
+      // a volley it is also what fans the salvo out across the rank rather than
+      // launching five rockets from one pair of shoulders.
+      let from: Unit | null = null
+      for (let tries = 0; tries < 6 && !from; tries++) {
+        const u = units[Math.floor(Math.random() * units.length)]
+        if (u && u.dying <= 0 && u.y >= anchorY - 0.4) from = u
+      }
+      if (!from) from = units.find((u) => u.dying <= 0) ?? null
+      if (!from) {
+        budget = 0
+        break
+      }
+
+      from.flash = 70
+      const b = takeBullet()
+      b.x = from.x
+      b.y = from.y + 0.35
+      b.damage = perBullet
+      b.life = BULLET_LIFE_MS
+      b.weapon = weapon
+
+      // ── Where it goes ──
+      //
+      // Everything but the launcher goes straight up the road with a touch of
+      // scatter, which is what makes the muzzle flashes read as a crowd rather
+      // than as one gun. A homing round takes the whole speed budget along the
+      // vector to its target instead — same speed, different direction — and
+      // keeps NO scatter, because a weapon that aims itself and then misses by
+      // half a unit is worse than one that never aimed.
+      const target = def?.homing
+        ? aimTarget(b.x, b.y, gunRange, salvo > 1 ? salvoTargets : null)
+        : null
+      if (target) {
+        if (salvo > 1) salvoTargets.push(target)
+        const dx = target.x - b.x
+        const dy = target.y - b.y
+        const len = Math.hypot(dx, dy) || 1
+        b.vx = (dx / len) * BULLET_SPEED
+        b.vy = (dy / len) * BULLET_SPEED
+      } else {
+        b.vx = (Math.random() - 0.5) * 0.5
+        b.vy = BULLET_SPEED
+      }
+      bullets.push(b)
+      // The weapon rides along: a launch is not a rifle shot, and the mixer needs
+      // to know which of the two it is drawing and playing.
+      pushFx({ kind: 'shoot', x: from.x, y: from.y + 0.35, weapon })
     }
-    if (!from) from = units.find((u) => u.dying <= 0) ?? null
-    if (!from) break
-
-    from.flash = 70
-    bullets.push({
-      x: from.x,
-      y: from.y + 0.35,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: BULLET_SPEED,
-      damage: perBullet,
-      life: BULLET_LIFE_MS,
-      pierced: -1
-    })
-    pushFx({ kind: 'shoot', x: from.x, y: from.y + 0.35 })
   }
   if (fireAccum > 4) fireAccum = 4
 }
@@ -2115,10 +2628,10 @@ const stepBullets = (dt: number): void => {
     // reaches slightly further in world terms, which is correct — it is still
     // on screen, and still short of the top.
     if (b.life <= 0 || b.y > anchorY + gunRange || Math.abs(b.x) > LANE_HALF + 1) {
-      bullets.splice(i, 1)
+      releaseBullet(i)
       continue
     }
-    if (resolveBullet(b)) bullets.splice(i, 1)
+    if (resolveBullet(b)) releaseBullet(i)
   }
 }
 
@@ -2133,6 +2646,92 @@ const resolveBullet = (b: Bullet): boolean => {
     if (Math.abs(f.x - b.x) > 0.44 * f.scale + BULLET_R) continue
     damageFoe(f, b.damage)
     pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'foe' })
+    // The blast is charged to everything AROUND the body that stopped the
+    // round; the body itself already took the round in full. See `detonateRound`.
+    if (b.weapon) detonateRound(b, f)
+    return true
+  }
+
+  // ── The stone over a lever, before the lever ──
+  //
+  // The two never share a y band — the stone is `LEVER_STONE_LEAD` in front —
+  // so this is an ordering statement rather than a tie-break: the round meets
+  // the cover first because the cover is first, and that is the whole cost the
+  // stone adds to the beat.
+  for (const s of stones) {
+    if (s.dead) continue
+    const dy = s.y - b.y
+    if (dy < -STONE_H / 2 || dy > STONE_H / 2 + 0.4) continue
+    if (Math.abs(s.x - b.x) > s.w / 2 + BULLET_R) continue
+    s.hp -= b.damage
+    s.flash = 1
+    // Sparks like the boulder it looks like, not like a wall: the picture the
+    // player already has for "that is stone" should not change just because
+    // this one answers to fire.
+    pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'rock' })
+    if (s.hp <= 0) {
+      s.dead = true
+      pushFx({ kind: 'barricadeBreak', x: s.x, y: s.y })
+    }
+    if (b.weapon) detonateRound(b)
+    return true
+  }
+
+  // ── Levers, before the boxes ──
+  //
+  // A lever lives at |x| = 3.4, further out than anything else on the road, so
+  // in practice nothing contends for the same round. The order is stated
+  // anyway: a lever is the one target in the game whose value is not in the
+  // damage it takes, and a crate that happened to drift into the same column
+  // must not be allowed to eat the shot that solves the stage.
+  for (const lv of levers) {
+    if (lv.pulled) continue
+    const dy = lv.y - b.y
+    if (dy < -LEVER_R || dy > LEVER_R + 0.4) continue
+    if (Math.abs(lv.x - b.x) > LEVER_R + BULLET_R) continue
+    lv.hp -= b.damage
+    lv.flash = 1
+    pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'barricade' })
+    if (lv.hp <= 0) pullLever(lv)
+    if (b.weapon) detonateRound(b)
+    return true
+  }
+
+  // The armour, before the box it is covering. It eats rounds like a wall and
+  // takes real damage — a crowd that would rather shoot through the lid than
+  // find the levers is allowed to try, and `stepWeaponBoxes` opens the box when
+  // nothing is covering it any more, however that came about.
+  for (const g of guards) {
+    if (g.dead) continue
+    const dy = g.y - b.y
+    if (dy < -GUARD_H / 2 || dy > GUARD_H / 2 + 0.4) continue
+    if (Math.abs(g.x - b.x) > g.w / 2 + BULLET_R) continue
+    g.hp -= b.damage
+    g.flash = 1
+    pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'barricade' })
+    if (g.hp <= 0) {
+      g.dead = true
+      pushFx({ kind: 'barricadeBreak', x: g.x, y: g.y })
+    }
+    if (b.weapon) detonateRound(b)
+    return true
+  }
+
+  // ── The prize ──
+  //
+  // A LOCKED box is skipped entirely rather than eating the round: while the
+  // armour is up the box is not a target, and a round that squeaked past the
+  // plates' edge must not quietly chip away at a puzzle the player has not
+  // solved. It flies on and dies at range like any other miss.
+  for (const wb of weaponBoxes) {
+    if (wb.dead || wb.locked) continue
+    const dy = wb.y - b.y
+    if (dy < -WEAPON_BOX_R || dy > WEAPON_BOX_R + 0.4) continue
+    if (Math.abs(wb.x - b.x) > WEAPON_BOX_R + BULLET_R) continue
+    wb.hp -= b.damage
+    pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'crate' })
+    if (wb.hp <= 0) takeWeaponBox(wb)
+    if (b.weapon) detonateRound(b)
     return true
   }
 
@@ -2144,6 +2743,7 @@ const resolveBullet = (b: Bullet): boolean => {
     c.hp -= b.damage
     pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'crate' })
     if (c.hp <= 0) breakCrate(c)
+    if (b.weapon) detonateRound(b)
     return true
   }
 
@@ -2163,6 +2763,7 @@ const resolveBullet = (b: Bullet): boolean => {
       bl.fuse = 0
       pushFx({ kind: 'barrelLit', x: bl.x, y: bl.y })
     }
+    if (b.weapon) detonateRound(b)
     return true
   }
 
@@ -2179,6 +2780,7 @@ const resolveBullet = (b: Bullet): boolean => {
       pushFx({ kind: 'barricadeBreak', x: bar.x, y: bar.y })
       spillCoins(bar.x, bar.y, BARRICADE_COIN_MIN, BARRICADE_COIN_MAX)
     }
+    if (b.weapon) detonateRound(b)
     return true
   }
 
@@ -2193,6 +2795,10 @@ const resolveBullet = (b: Bullet): boolean => {
     if (dy < -ROCK_H / 2 || dy > ROCK_H / 2 + 0.4) continue
     if (Math.abs(r.x - b.x) > r.w / 2 + BULLET_R) continue
     pushFx({ kind: 'hit', x: b.x, y: b.y, on: 'rock' })
+    // A rocket that ran into a boulder still goes off. It is the one place the
+    // stone is worth aiming AT: the blast reaches past it and the crowd behind
+    // has no other answer to a body sheltering there.
+    if (b.weapon) detonateRound(b)
     return true
   }
 
@@ -2270,14 +2876,286 @@ const resolveBullet = (b: Bullet): boolean => {
       if (boss.guard > 0) {
         boss.flash = 1
         pushFx({ kind: 'bossGuard', x: b.x, y: b.y })
+        // No blast either: the shield is the phase where the player's fire is
+        // supposed to do nothing, and a rocket splashing damage onto a guarded
+        // boss would quietly repeal the one beat that asks them to move.
         return true
       }
       damageBoss(boss, b.damage)
       pushFx({ kind: 'bossHit', x: b.x, y: b.y })
+      if (b.weapon) detonateRound(b, null, true)
       return true
     }
   }
   return false
+}
+
+/**
+ * ─── A rocket goes off ──────────────────────────────────────────────────────
+ *
+ * Called from every branch of `resolveBullet` that consumes a round, and a
+ * no-op for every weapon whose `splashR` is 0 — which is why the call sites can
+ * be a flat `if (b.weapon) detonateRound(b)` rather than a second thing to remember.
+ *
+ * `direct` is the body that stopped the round: it has already taken the damage
+ * in full and must not be charged twice. Everything else inside the radius takes
+ * `ROCKET_SPLASH_SHARE` of it, which is what keeps the launcher an answer to a
+ * CLUMP rather than a straight multiplier — twelve bodies is worth about four
+ * rounds, one body is worth exactly one.
+ *
+ * Deliberately does NOT touch levers. Splash solving a puzzle would mean the
+ * only way to fail the beat is to not own a weapon already, which makes the
+ * reward its own prerequisite.
+ */
+const detonateRound = (b: Bullet, direct: Foe | null = null, hitBoss = false): void => {
+  const r = b.weapon ? WEAPONS[b.weapon].splashR : 0
+  if (r <= 0) return
+  const share = b.damage * ROCKET_SPLASH_SHARE
+  const rr = r * r
+
+  for (const f of foes) {
+    if (f.dead || f === direct) continue
+    const dx = f.x - b.x
+    const dy = f.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    damageFoe(f, share)
+  }
+  for (const c of crates) {
+    if (c.dead) continue
+    const dx = c.x - b.x
+    const dy = c.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    c.hp -= share
+    if (c.hp <= 0) breakCrate(c)
+  }
+  for (const bar of barricades) {
+    if (bar.dead) continue
+    const dx = bar.x - b.x
+    const dy = bar.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    bar.hp -= share
+    bar.flash = 1
+    if (bar.hp <= 0) {
+      bar.dead = true
+      pushFx({ kind: 'barricadeBreak', x: bar.x, y: bar.y })
+      spillCoins(bar.x, bar.y, BARRICADE_COIN_MIN, BARRICADE_COIN_MAX)
+    }
+  }
+  for (const bl of barrels) {
+    if (bl.dead || bl.fuse >= 0) continue
+    const dx = bl.x - b.x
+    const dy = bl.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    bl.fuse = 0
+    pushFx({ kind: 'barrelLit', x: bl.x, y: bl.y })
+  }
+  for (const g of guards) {
+    if (g.dead) continue
+    const dx = g.x - b.x
+    const dy = g.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    g.hp -= share
+    g.flash = 1
+    if (g.hp <= 0) {
+      g.dead = true
+      pushFx({ kind: 'barricadeBreak', x: g.x, y: g.y })
+    }
+  }
+  // …and the lever stones, so a launcher is not simply worse at the beat: its
+  // rounds are few, and one that goes off beside a stone should crack it rather
+  // than being wasted on the geometry.
+  //
+  // The LEVER itself is deliberately absent from this list, as it is from every
+  // other blast in the game. A rocket that pulled levers with splash would hand
+  // the puzzle to whoever happened to be holding a launcher, and the beat is
+  // supposed to ask the same question on both halves of the campaign.
+  for (const s of stones) {
+    if (s.dead) continue
+    const dx = s.x - b.x
+    const dy = s.y - b.y
+    if (dx * dx + dy * dy > rr) continue
+    s.hp -= share
+    s.flash = 1
+    if (s.hp <= 0) {
+      s.dead = true
+      pushFx({ kind: 'barricadeBreak', x: s.x, y: s.y })
+    }
+  }
+  // `hitBoss` is the direct-hit case, already paid. A guarded boss is untouched
+  // by a blast for the same reason it is untouched by a round.
+  if (!hitBoss && boss && !boss.dead && boss.guard <= 0) {
+    const dx = boss.x - b.x
+    const dy = boss.y - b.y
+    if (dx * dx + dy * dy <= rr) damageBoss(boss, share)
+  }
+
+  pushFx({ kind: 'rocketBlast', x: b.x, y: b.y, radius: r })
+}
+
+/**
+ * A lever goes over.
+ *
+ * The count is the feedback: one pip on a two-pip badge is the difference
+ * between "that did nothing" and "one more". When the last one lands, the
+ * armour is not damaged — it is REMOVED, all of it, in the same frame, because
+ * the promise the beat makes is that solving it opens the box, not that it
+ * starts a second fight the player has no road left to win.
+ */
+const pullLever = (lv: Lever): void => {
+  if (lv.pulled) return
+  lv.pulled = true
+  lv.hp = 0
+  const box = weaponBoxes.find((w) => w.puzzleId === lv.puzzleId && !w.dead)
+  if (!box) return
+  box.leversPulled++
+  puzzlePulled.value = box.leversPulled
+  pushFx({
+    kind: 'leverPull', x: lv.x, y: lv.y,
+    pulled: box.leversPulled, total: box.leversTotal
+  })
+  if (box.leversPulled < box.leversTotal) return
+  unlockPuzzle(box)
+}
+
+/** Strip the armour and light the prize up. */
+const unlockPuzzle = (box: WeaponBox): void => {
+  // Idempotent: both the levers and `stepWeaponBoxes` can reach this, and the
+  // second caller must not fire the cascade a second time.
+  if (!box.locked || box.dead) return
+  box.locked = false
+  box.openFor = 0
+  for (const g of guards) {
+    if (g.puzzleId !== box.puzzleId || g.dead) continue
+    g.dead = true
+    pushFx({ kind: 'barricadeBreak', x: g.x, y: g.y })
+  }
+  pushFx({ kind: 'weaponOpen', x: box.x, y: box.y, weapon: box.weapon })
+}
+
+/** The box breaks and the stage's weapon comes out of it. */
+const takeWeaponBox = (box: WeaponBox): void => {
+  if (box.dead) return
+  box.dead = true
+  activeWeapon.value = box.weapon
+  puzzleWeapon.value = null
+  // A weapon is a bigger moment than a crate, and the crowd should show it —
+  // the same full-squad flash a supply crate fires, which is the game's
+  // established "everyone just got better" beat.
+  for (const u of units) u.flash = 260
+  pushFx({ kind: 'weaponTake', x: box.x, y: box.y, weapon: box.weapon })
+}
+
+/**
+ * Levers: a hit flash, a throw animation, and a despawn.
+ *
+ * No contact rule at all — see `Lever`. A post the crowd ran through is a beat
+ * the player missed, and the miss is the entire punishment.
+ */
+const stepLevers = (dt: number): void => {
+  for (let i = levers.length - 1; i >= 0; i--) {
+    const lv = levers[i]!
+    if (lv.flash > 0) lv.flash = Math.max(0, lv.flash - dt * 4)
+    if (lv.pulled) lv.pulledFor += dt
+    if (lv.y < anchorY - 6) levers.splice(i, 1)
+  }
+}
+
+/**
+ * Armour plates.
+ *
+ * ─── The only solid in the game that costs NOTHING to touch ─────────────────
+ *
+ * No contact rule at all — not a wall's `crushAgainst`, not even a crate's
+ * gentle `grindAgainst`. The plates are still solid to rounds and still in
+ * `collectSolids`, so the formation flows around them exactly the way it flows
+ * around a crate; what a survivor brushing one does not do is die.
+ *
+ * The reasoning is the one in `Guard`, taken to its conclusion. Every other
+ * obstacle on the road is part of a stage's difficulty budget: the generator
+ * places it, `earlyObstacleKeep` thins it, the balance harness counts it. These
+ * two are not. They are furniture bolted to an optional bonus, on every stage
+ * from 4, and a player steering an ordinary line has not opted into them.
+ *
+ * A crate's trickle was tried first and measured: a crowd sweeping the full
+ * width of the road paid three tolls in a row — two plates and the box — for
+ * about a third of itself, and a stage-4 run that had done nothing wrong died
+ * before it reached its miniboss. A bonus that bills a player who never engaged
+ * with it is a tax, whatever the rate.
+ *
+ * The BOX keeps the crate toll. That one is a reward the player chose to drive
+ * at, which is exactly the case the crate rule was written for.
+ */
+const stepGuards = (dt: number): void => {
+  for (let i = guards.length - 1; i >= 0; i--) {
+    const g = guards[i]!
+    if (g.flash > 0) g.flash = Math.max(0, g.flash - dt * 5)
+    if (g.dead || g.y < anchorY - 6) guards.splice(i, 1)
+  }
+}
+
+/**
+ * The stones over the levers.
+ *
+ * Same rules as the armour above, for the same reason: they are furniture on an
+ * optional beat, so they are solid to rounds and to the formation and harmless
+ * to touch. Nothing here reaches the lever behind — a stone that broke is just
+ * gone, and whether the post is then shot is the player's business.
+ */
+const stepStones = (dt: number): void => {
+  for (let i = stones.length - 1; i >= 0; i--) {
+    const s = stones[i]!
+    if (s.flash > 0) s.flash = Math.max(0, s.flash - dt * 5)
+    if (s.dead || s.y < anchorY - 6) stones.splice(i, 1)
+  }
+}
+
+/**
+ * The prize box.
+ *
+ * Grinds like a supply crate rather than killing like a wall: the player is
+ * being invited onto this shoulder, and a reward that punishes the approach as
+ * hard as a barricade would teach them to stop approaching rewards. The armour
+ * in front of it is the part that kills, and by the time the box is reachable
+ * the armour is gone.
+ */
+const stepWeaponBoxes = (dt: number): void => {
+  for (let i = weaponBoxes.length - 1; i >= 0; i--) {
+    const wb = weaponBoxes[i]!
+    if (!wb.locked) wb.openFor += dt
+    if (wb.dead || wb.y < anchorY - 6) {
+      weaponBoxes.splice(i, 1)
+      // Nothing left to solve: clear the badge so it does not sit on the HUD
+      // for the rest of the stage advertising a box that is behind the crowd.
+      if (!weaponBoxes.some((o) => !o.dead)) puzzleWeapon.value = null
+      continue
+    }
+    if (wb.y > anchorY + 6) continue
+
+    // ── The armour is gone, however it went ──
+    //
+    // Normally the last lever removes it. But the plates are ordinary walls with
+    // ordinary health, and a crowd big enough to chew through six barricades in
+    // the two seconds they are in range is entitled to the box it just paid for.
+    // Keying the unlock on "is anything still covering this" rather than on "did
+    // the levers do it" means the two paths cannot disagree — and a box sitting
+    // untouchable behind a hole the player made would read as a broken hitbox.
+    //
+    // Only while the box is still AHEAD of the crowd: `stepBarricades` culls the
+    // plates at `anchorY - 6` and the box survives a little longer than that, so
+    // without the test every missed puzzle would play its unlock cascade into
+    // the back of the camera.
+    if (wb.locked) {
+      if (wb.y <= anchorY) continue
+      if (guards.some((g) => g.puzzleId === wb.puzzleId && !g.dead)) continue
+      unlockPuzzle(wb)
+      continue
+    }
+
+    grindAgainst(wb.id, {
+      x: wb.x, halfW: WEAPON_BOX_R, y: wb.y, halfH: WEAPON_BOX_R,
+      cause: 'crate'
+    }, 0.12, dt)
+  }
 }
 
 /**
@@ -3013,7 +3891,7 @@ const stepFoes = (dt: number): void => {
     if (f.flash > 0) f.flash = Math.max(0, f.flash - dt * 4)
 
     if (f.dead || f.y < anchorY - 8) {
-      foes.splice(i, 1)
+      releaseFoe(i)
       continue
     }
     if (f.elite) {
@@ -3702,6 +4580,34 @@ const stepBoss = (dt: number): void => {
   }
 
   b.slamCd -= dt
+  // Runs on the same clock as the wind-up and for every kind, so it is never
+  // stale when a healer reads it. Only the healer ever does.
+  if (b.healCd > 0) b.healCd = Math.max(0, b.healCd - dt)
+
+  // ── The heal's gap, as an INVARIANT rather than a prediction ──
+  //
+  // `healCastDue` decides one cycle ahead, and a decision about the future is
+  // only as good as the clock it was made against: a guard phase re-arms the
+  // cycle at `bossTelegraph` (0.7 s) instead of a cast (1.7 s), and the heal
+  // armed against the longer fuse landed a second early — measured at 9.71 s
+  // against a 10 s floor.
+  //
+  // Patching each site that re-times a cycle is the version of this fix that
+  // rots: it is correct until the next one is added, and the failure it produces
+  // is a rare, run-dependent broken promise rather than anything that shows up
+  // in a diff. So the question is asked continuously instead, in the one place
+  // that owns the clock. `healCd` and `slamCd` drain at the same rate, so the
+  // comparison is invariant under time passing and can only trip when something
+  // has moved one without the other — exactly the bug class, and nothing else.
+  //
+  // Revoking here rather than at the moment the cast fires is what keeps the
+  // telegraph honest: the wind-up is still being drawn, so the player sees the
+  // tell change to a bolt and gets the bolt.
+  // `slamCd` is compared through a floor of zero, and `healCd` has to be over it
+  // rather than merely equal: the cast resolves on the tick `slamCd` goes
+  // NEGATIVE, and a bare `healCd > slamCd` is therefore true for a paid-off gap
+  // (0 > -0.004) on exactly that tick — which revoked every heal in the game.
+  if (b.kind === 'healer' && b.charging && b.healCd > Math.max(0, b.slamCd)) b.charging = false
 
   // Lock the target at the START of the telegraph, on the crowd's own position
   // plus a small lead. Locking early is what makes it dodgeable; aiming at the
@@ -3930,12 +4836,27 @@ const throwRake = (b: Boss): void => {
 /**
  * Is the `n`-th cast of a healer's fight the heal?
  *
- * Two conditions, and the second one is the whole safety of the archetype: past
+ * Three conditions, and the last two are the whole safety of the archetype: past
  * `HEAL_MAX_CASTS` the cycle falls through to a bolt, so a fight that goes long
  * stops regenerating instead of never ending. See `HEAL_MAX_CASTS`.
+ *
+ * `healCd` is the gap still owed since the last heal, and it is compared against
+ * `leadS` — the time until the cast being armed actually LANDS — rather than
+ * against zero, because of WHEN this is asked: the answer arms a cast in the
+ * future, so the question is "will the gap be paid off by the time it arrives",
+ * not "is it paid off yet". Asked against zero, every heal would land a full
+ * cycle late.
+ *
+ * The lead is a PARAMETER and not `HEALER_CAST_CD`, because it is not always a
+ * cast: a guard phase re-arms the cycle at `bossTelegraph` (0.7 s against a
+ * cast's 1.7 s) and the heal armed against the longer fuse then landed a second
+ * early — measured at 9.71 s against a 10 s floor. Whoever shortens the clock
+ * has to re-ask this question with the clock they actually set.
  */
-const healCastDue = (n: number): boolean =>
-  n % HEAL_EVERY === 0 && Math.floor(n / HEAL_EVERY) <= HEAL_MAX_CASTS
+const healCastDue = (n: number, healCd: number, leadS: number): boolean =>
+  n % HEAL_EVERY === 0 &&
+  Math.floor(n / HEAL_EVERY) <= HEAL_MAX_CASTS &&
+  healCd <= leadS
 
 const throwHealerCast = (b: Boss): void => {
   const healing = b.charging
@@ -3944,12 +4865,21 @@ const throwHealerCast = (b: Boss): void => {
   // Decide the NEXT cycle now, while it is beginning, for the same reason the
   // meteor decides its charged swing here: the telegraph is drawn from this flag
   // and it must never describe a different cast than the one that arrives.
-  b.charging = healCastDue(b.attacks + 1)
+  //
+  // A heal going out THIS cast starts its gap below, after this line — so the
+  // cooldown handed to the decision is the one that cast is about to set, not
+  // the one still on the boss. Read off `b.healCd` instead and a healer would
+  // wave its own next heal through on a gap it had not started yet.
+  b.charging = healCastDue(b.attacks + 1, healing ? HEAL_MIN_GAP_S : b.healCd, HEALER_CAST_CD)
 
   if (healing) {
     const before = b.hp
     b.hp = Math.min(b.maxHp, b.hp + b.maxHp * HEAL_FRACTION)
     bossHp01.value = Math.max(0, b.hp / b.maxHp)
+    // The gap is counted from the heal LANDING, which is here — not from the
+    // cast being armed, which is a cycle earlier and would shorten every gap by
+    // `HEALER_CAST_CD`.
+    b.healCd = HEAL_MIN_GAP_S
     pushFx({ kind: 'bossHeal', x: b.x, y: b.y, amount: b.hp - before, hp01: bossHp01.value })
     return
   }
@@ -4063,37 +4993,39 @@ const stepSummoner = (b: Boss, dt: number): void => {
   // slam is: the boss spends a whole fight walking in, so anything placed
   // relative to its body arrives after the fight is over.
   const waveY = anchorY + SUMMON_AHEAD
-  for (let i = 0; i < SUMMON_PER_WAVE; i++) {
-    const spread = (i / Math.max(1, SUMMON_PER_WAVE - 1) - 0.5) * 2 * SUMMON_SPREAD
-    foes.push({
-      id: entityId++,
-      typeId: def.id,
-      design: SUMMON_DESIGN,
-      x: Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, anchorX + spread)),
-      y: waveY + (i % 2) * 0.7,
-      hp,
-      maxHp: hp,
-      speed: def.speed,
-      bite: Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL)),
-      biteShare: biteShareFor(def.id) * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL,
-      biteCd: 0,
-      scale: def.scale,
-      flash: 0,
-      phase: Math.random(),
-      dead: false,
-      flying: false,
-      swayPhase: Math.random() * 6.28,
-      hold: 0,
-      hitCd: 0,
-      sweepCd: 0,
-      sweepSpan: 0,
-      sweepDir: 1,
-      sweepTold: false,
-      kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
-      elite: false
-    })
+  // Sized off the RAMP, not the flat budget — see `SUMMON_WAVE_RAMP`. The spread
+  // divides by this wave's own count for the same reason: keyed to the flat size
+  // instead, a two-body wave would arrive squeezed into the left third of the
+  // road rather than spanning it, and "wider than the crowd" is the whole reason
+  // a wave cannot simply be stood beside.
+  const size = summonWaveSize(b.attacks)
+  for (let i = 0; i < size; i++) {
+    // Constant SPACING, centred — not a constant span. Spanning
+    // `SUMMON_SPREAD` whatever the count put a two-body wave's pair on the
+    // two RAILS instead of in front of the crowd, where forward fire does
+    // not reach them and they walk in from the flanks: measured, the smaller
+    // opening wave made the marginal fight LONGER (23 s to 57 s) and cost
+    // more of the crowd than the bigger wave it replaced. At the full size
+    // this is arithmetically identical to what it replaced.
+    const step = (2 * SUMMON_SPREAD) / Math.max(1, SUMMON_PER_WAVE - 1)
+    const spread = (i - (size - 1) / 2) * step
+    const f = takeFoe()
+    f.id = entityId++
+    f.typeId = def.id
+    f.design = SUMMON_DESIGN
+    f.x = Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, anchorX + spread))
+    f.y = waveY + (i % 2) * 0.7
+    f.hp = hp
+    f.maxHp = hp
+    f.speed = def.speed
+    f.bite = Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL))
+    f.biteShare = biteShareFor(def.id) * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL
+    f.scale = def.scale
+    f.phase = Math.random()
+    f.swayPhase = Math.random() * 6.28
+    foes.push(f)
   }
-  pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: SUMMON_PER_WAVE, wave: b.attacks })
+  pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: size, wave: b.attacks })
 }
 
 /**
@@ -4141,6 +5073,11 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
       const tell = bossTelegraph(b.kind)
       b.slamCd = tell
       b.slamSpan = tell
+      // This path shortens a healer's fuse from a cast to a telegraph, which can
+      // pull an armed heal inside its gap. Nothing is done about it here: the
+      // invariant in `stepBoss` catches it on the next tick, before the
+      // telegraph this path announces has finished drawing. See it for why the
+      // correction lives there rather than at each site that re-times a cycle.
       // The guard picks its own target, here, at the moment the phase turns —
       // so `stepBoss` must not re-aim it a frame later on stale input.
       b.aimed = true
@@ -4216,6 +5153,10 @@ export const debugSkipToArena = (): void => {
   barricades.length = 0
   rocks.length = 0
   foes.length = 0
+  levers.length = 0
+  stones.length = 0
+  guards.length = 0
+  weaponBoxes.length = 0
   bolts.length = 0
   pickups.length = 0
   for (const u of units) u.y = anchorY
@@ -4231,6 +5172,15 @@ export const debugSetRangeLevel = (level: number): void => {
   __setUpgradeLevel('range', level)
 }
 export const debugAddFireRate = (n: number): void => setFireRate(runFireRate.value + n)
+
+/**
+ * Test/dev seam: hand the run a weapon without making it solve the puzzle.
+ *
+ * Writes the same ref the box does, so everything downstream — the shot budget,
+ * the splash, the HUD badge, the tracer colour — is on the shipping path. A seam
+ * that set its own private flag would pass while the real pickup was broken.
+ */
+export const debugGiveWeapon = (id: WeaponId | null): void => { activeWeapon.value = id }
 
 /** Test-only: wipe both the world and the persisted failure record. */
 export const __resetForTest = (): void => {

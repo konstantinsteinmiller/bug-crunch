@@ -170,6 +170,19 @@ export const bakeRadialSprite = (
   return made
 }
 
+/**
+ * Cache a sprite somebody else baked — the art layer's tinted smoke puff — in
+ * the same slot a ramp bake would take, so one lookup serves both and both are
+ * dropped together by `clearRamps`.
+ */
+export const putSprite = (
+  key: string | number, sprite: HTMLCanvasElement | null
+): HTMLCanvasElement | null => {
+  if (sprites.size >= 64) sprites.clear()
+  sprites.set(key, sprite)
+  return sprite
+}
+
 export const spriteCount = (): number => sprites.size
 
 // ─── Colour strings ─────────────────────────────────────────────────────────

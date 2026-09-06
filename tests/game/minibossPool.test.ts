@@ -80,6 +80,28 @@ const fresh = async (stage: number, squad: number): Promise<Game> => {
  * Nothing else is touched: the movement, the tell, the timing and the toll are
  * all the shipping code's.
  */
+/**
+ * Keep the crowd on its feet for the duration of a measurement.
+ *
+ * The sibling of `holdFight`, and it exists for the same stated reason: these
+ * tests are about the ELITE'S BEHAVIOUR, not about whether a given squad
+ * survives a given stage. Two of them steer rail-to-rail on a fixed cycle to
+ * prove a ball does not home, which is a line no player runs and one that walks
+ * the crowd through every solid on the road — so whether it reaches the elite at
+ * all comes down to how wide the crowd happens to be when it clips a barricade
+ * eighty units earlier. Measured, that flipped on stage-4 layout changes that
+ * have nothing to do with rollers, and the test then failed with "no roller ever
+ * streamed in": a precondition dressed as a result.
+ *
+ * Topping the squad up cannot launder a real regression, because nothing any of
+ * these tests assert is a function of squad size: they measure the ball's x, its
+ * `hold`, and the `elite` death tally.
+ */
+const keepStanding = (game: Game, floor: number): void => {
+  const short = floor - game.squadCount.value
+  if (short > 0) game.debugAddUnits(short)
+}
+
 const holdFight = (game: Game): Foe | undefined => {
   let first: Foe | undefined
   for (const f of game.getFoes()) {
@@ -213,6 +235,7 @@ describe('the roller owns half the road', () => {
     play(game, {
       steer: (_e, g) => (Math.floor(g.anchor().y / 4) % 2 === 0 ? -STEER_CLAMP : STEER_CLAMP),
       frame: (_f, g) => {
+        keepStanding(g, 120)
         const e = liveElite(g)
         if (e) {
           sawIt = true
@@ -273,6 +296,7 @@ describe('the roller owns half the road', () => {
     play(game, {
       steer: () => safe,
       frame: (_f, g) => {
+        keepStanding(g, 120)
         const e = liveElite(g)
         if (e) {
           sawIt = true

@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Minichefe',
     'fireRate': 'Ritmo',
     'incoming': 'Ataque a caminho!',
-    'dodge': 'Desvie'
+    'dodge': 'Desvie',
+    'weaponActive': '{name} pronto',
+    'weaponLocked': '{name} bloqueado — {n} de {total} alavancas atingidas'
+  },
+
+  'weapons': {
+    'rocket': 'Lança-foguetes',
+    'gatling': 'Metralhadora Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Caixas verdes: todos batem mais forte', 'desktop': 'Caixas verdes: todos batem mais forte' },
     'rate': { 'touch': 'Caixas azuis: todos atiram mais rápido', 'desktop': 'Caixas azuis: todos atiram mais rápido' },
     'boss': { 'touch': 'Fique fora do círculo vermelho!', 'desktop': 'Fique fora do círculo vermelho!' },
+    'lever': { 'touch': 'Atire nas DUAS alavancas nas bordas: elas abrem a caixa de arma', 'desktop': 'Atire nas DUAS alavancas nas bordas: elas abrem a caixa de arma' },
     'guard': { 'touch': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!', 'desktop': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Alcance',
       'scavenge': 'Coleta',
       'grenade': 'Granada',
-      'shield': 'Escudo'
+      'shield': 'Escudo',
+      'rocket': 'Poder do foguete',
+      'gatling': 'Poder da Gatling'
     },
     'descriptions': {
       'squad': 'Comece cada fase com mais sobreviventes.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Seu esquadrão abre fogo mais adiante na estrada.',
       'scavenge': 'Ganhe mais moedas em cada partida.',
       'grenade': 'Lance uma granada para causar dano pesado.',
-      'shield': 'Reduza pela metade o dano ao esquadrão por alguns segundos.'
+      'shield': 'Reduza pela metade o dano ao esquadrão por alguns segundos.',
+      'rocket': 'Lança-foguetes que você libera na fase causam mais dano.',
+      'gatling': 'Gatlings que você libera na fase causam mais dano.'
     }
   },
 

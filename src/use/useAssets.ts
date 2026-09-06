@@ -9,6 +9,8 @@ import {
 import { stageDesigns } from '@/game/foes'
 import { getState } from '@/use/useTowerState'
 import { STAGE_KEY } from '@/keys'
+import { artOverridesEnabled, preloadArtOverrides } from '@/game/art'
+import { criticalArtWants, preloadRemainingArt } from '@/game/artPreload'
 
 // Survivalist draws all gameplay art programmatically (Canvas 2D) and uses
 // inline SVG for HUD icons, so the preloader only has to decode two pieces of
@@ -235,17 +237,18 @@ const IMAGE_SHARE = 0.1
  *  bigger (13 designs x 16 frames against 3 x 14) and its frames are dearer, so
  *  it owns most of the bar. */
 const SURVIVOR_SHARE = 0.25
+/** Where the bake's share of the bar ends when painted art is on: the last
+ *  stretch belongs to the first stage's bitmaps, so the number keeps moving
+ *  instead of parking at 100% while they land. */
+const BAKE_END_WITH_ART = 0.7
 
 // ─── Critical image preload ────────────────────────────────────────────
-// The only bitmaps on the critical path are UI chrome. Gameplay art is
-// procedural, so there is nothing else to block first paint on.
-const CRITICAL_IMAGE_SRCS: ReadonlyArray<string> = [
-  // The splash logo used to be decoded here so FLogoProgress never painted a
-  // blank box. That logo was Tower Siege's and has been removed, so the splash
-  // is now text-only and there is nothing to pre-decode for it.
-  // Result-screen ribbon. Small, and needed the moment a siege ends.
-  '/images/bg/parchment-ribbon_553x188.webp'
-]
+// Nothing, any more. The splash logo was Tower Siege's and went with it; the
+// result screen's parchment ribbon was the last bitmap here, and it is now a
+// banner drawn from code (`uiArt.ts`) like everything else on the field. The
+// list stays so the next critical bitmap has somewhere to go — and so the
+// loading bar's image share is still accounted for.
+const CRITICAL_IMAGE_SRCS: ReadonlyArray<string> = []
 
 /** Block until `img.complete && naturalWidth > 0` (success) or `error`
  *  fires (failure). Cached images that already decoded resolve
@@ -276,6 +279,10 @@ let backgroundWarmStarted = false
 const runBackgroundWarmup = (): void => {
   if (backgroundWarmStarted) return
   backgroundWarmStarted = true
+  // The painted art the splash did NOT hold for: this stage's threats and the
+  // next stage's newcomers first, then the whole set on an idle slot. A no-op
+  // with overrides off. See `artPreload`.
+  void preloadRemainingArt()
   void (async () => {
     try {
       const sp = await import('@/use/useSoundPreload')
@@ -288,8 +295,8 @@ export default () => {
   const preloadAssets = async (): Promise<void> => {
     // ── HOT PATH ──
     // Survivalist has NO gameplay bitmaps: blocks, enemies, projectiles and the
-    // whole background are drawn from code. The only critical image left is the
-    // result-screen ribbon (the splash is text-only now), plus the renderer chunk.
+    // whole background are drawn from code, and so is the result screen's
+    // banner now. Nothing is on the critical image path but the renderer chunk.
     //
     // So the "loading" phase is effectively just the JS parse, which is exactly
     // the fast-start behaviour portals grade on. Everything else (SFX decode,
@@ -325,9 +332,26 @@ export default () => {
     // (`useSurvivalArt`) on purpose: the draw loop does not run until the scene
     // mounts, so gating the splash on a bake that only the scene kicks off would
     // deadlock the loading screen.
-    primeSurvivors()
-    primeMonsterSprites(foeDesigns())
+    // `fetch: false`: the painted strips are staged by `artPreload` below, not
+    // fired all at once from the priming call.
+    primeSurvivors({ fetch: false })
+    primeMonsterSprites(foeDesigns(), { fetch: false })
     await waitForSpriteStrips()
+
+    // ── Step 3: the painted art the first screen needs ──
+    //
+    // Only with overrides on — a portal build with the flag off waits for
+    // nothing and requests nothing. Held for, rather than started, because
+    // without the wait the art POPS IN: the game starts on the drawing and
+    // swaps to paint a second later, prop by prop. The whole point of painted
+    // art is the first impression. Tier 0 is a stage's worth, not the whole
+    // cast; see `artPreload`.
+    if (artOverridesEnabled()) {
+      await preloadArtOverrides(criticalArtWants(), (done, total) => {
+        const k = total > 0 ? done / total : 1
+        loadingProgress.value = Math.round((BAKE_END_WITH_ART + (1 - BAKE_END_WITH_ART) * k) * 100)
+      })
+    }
 
     loadingProgress.value = 100
     areAllAssetsLoaded.value = true
@@ -396,7 +420,8 @@ const waitForSpriteStrips = async (): Promise<void> => {
     bakeMonsterSlice(10)
     const baked = SURVIVOR_SHARE * survivorBakeProgress01()
       + (1 - SURVIVOR_SHARE) * monsterBakeProgress01(ids)
-    loadingProgress.value = Math.round((IMAGE_SHARE + (1 - IMAGE_SHARE) * baked) * 100)
+    const bakeEnd = artOverridesEnabled() ? BAKE_END_WITH_ART : 1
+    loadingProgress.value = Math.round((IMAGE_SHARE + (bakeEnd - IMAGE_SHARE) * baked) * 100)
     await new Promise((resolve) => setTimeout(resolve, 60))
   }
 }

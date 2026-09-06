@@ -13,18 +13,18 @@
       }"
       @click="handleOverlayClick"
     )
-      //- Parchment-ribbon header. Bitmap background scales to fit the
-      //- responsive wrap; the slot content (or a fallback "Rewards"
-      //- label) renders on top of the ribbon, centred horizontally and
-      //- biased above the bottom curl so the tails stay visible.
-      div.ribbon-wrap.relative.shrink-0(
+      //- The banner: a plate of dark iron sized by its own caption, so the
+      //- title is centred by flex and nothing else. The slot content (or a
+      //- fallback "Rewards" label) is the whole of what is in it — see
+      //- `.banner` for why it is a border-image rather than a picture.
+      div.banner.relative.shrink-0(
         v-if="$slots.ribbon"
         :class="{ 'is-compact': isCompact }"
+        :style="bannerStyle"
       )
-        div.ribbon-banner
-          div.ribbon-content
-            slot(name="ribbon")
-              span {{ t('rewards') }}
+        div.banner__text
+          slot(name="ribbon")
+            span {{ t('rewards') }}
 
       //- Content area. One bounded, scrollable flex child in every mode — see
       //- `.reward-body`.
@@ -53,13 +53,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots, watch, onUnmounted } from 'vue'
+import { computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
+import { BANNER, bannerDataUrl } from '@/game/uiArt'
+import { useArtImage } from '@/use/useArtImage'
 
 // "Compact" layout = the short-viewport treatment: mobile landscape OR any
 // short embed (≤500px tall, e.g. a CG iframe on a Chromebook). In both cases
-// the centred desktop layout overflows, so the ribbon shrinks and the
+// the centred desktop layout overflows, so the banner shrinks and the
 // tap/click-to-continue hint flows INLINE below the content (shrink-0) instead
 // of floating absolutely at the bottom — where it otherwise overlapped the
 // reward button.
@@ -81,7 +83,20 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const slots = useSlots()
+
+// ─── The banner's picture ────────────────────────────────────────────────────
+//
+// The drawing (`uiArt.ts`, baked once to a data URL) until the art pipeline's
+// painting at `images/ui/ribbon.webp` decodes with the art layer on — then
+// that, through the same three slices. The slice fraction and the end pieces'
+// width-to-height ratio come from `BANNER` rather than being typed into the
+// stylesheet, so the CSS cut and the painted end piece cannot drift apart.
+const paintedBanner = useArtImage('ui', 'ribbon')
+const bannerStyle = computed(() => ({
+  '--banner-src': `url("${paintedBanner.value ?? bannerDataUrl()}")`,
+  '--banner-slice': `${(BANNER.cap * 100).toFixed(2)}%`,
+  '--banner-cap': ((BANNER.cap * BANNER.w) / BANNER.h).toFixed(3)
+}))
 
 const isMobile = computed(() => {
   return typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
@@ -135,8 +150,8 @@ onUnmounted(() => {
   position: relative
   width: 100%
   // `0 1 auto`, not `1 1 auto`: the body takes the height its content needs and
-  // no more, so the overlay's own `justify-center` centres the RIBBON AND THE
-  // CONTENT AS ONE GROUP. Growing to fill instead pins the ribbon to the top of
+  // no more, so the overlay's own `justify-center` centres the BANNER AND THE
+  // CONTENT AS ONE GROUP. Growing to fill instead pins the banner to the top of
   // the screen and centres the content in whatever is left, which on a desktop
   // window opens a dead band between the two that reads as a loading state.
   // It still shrinks (and then scrolls) when the content cannot fit.
@@ -157,102 +172,57 @@ onUnmounted(() => {
   > *
     margin-block: auto
 
-// ─── Parchment ribbon ────────────────────────────────────────────────────────
+// ─── The banner ──────────────────────────────────────────────────────────────
+//
+// ONE image, three slices: an end piece each side kept at true size, and a
+// middle stretched to the caption. So the banner's height is the caption's
+// line and its width is the caption's width, and the title is centred by
+// flex because there is nothing else in the box.
+//
+// The parchment ribbon this replaces was a fixed-aspect bitmap with a flat
+// panel above two curled tails. Its caption had to be sized off the art,
+// lifted 14% to clear the curl, gutted 21% a side to miss the rods, and the
+// whole thing capped by a viewport-height ladder so it would hand its room
+// back to the buttons on a short screen. Every one of those numbers was a
+// guess about where the text would land, and in German on a 320px phone it
+// still landed on the rods. This one has no numbers to guess: the type sets
+// the box, and the box is the banner.
+//
+// `--banner-src`, `--banner-slice` and `--banner-cap` are set inline from
+// `BANNER` in `uiArt.ts`, which is also what the reference sheet is drawn
+// from — one set of numbers for the drawing, the painting and the cut.
+.banner
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  max-width: min(94vw, 36rem)
+  min-height: 2.5em
+  font-size: clamp(1.05rem, 4.4vw, 1.9rem)
+  margin-bottom: clamp(0.4rem, 2vh, 1.1rem)
+  border-style: solid
+  border-color: transparent
+  border-width: 0 calc(2.5em * var(--banner-cap, 0.4))
+  border-image-source: var(--banner-src)
+  border-image-slice: 0 var(--banner-slice, 17%) 0 var(--banner-slice, 17%) fill
+  border-image-width: 0 calc(2.5em * var(--banner-cap, 0.4))
+  border-image-repeat: stretch
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55))
 
-.ribbon-wrap
-  position: relative
-  // The art has a fixed aspect, so WIDTH is what sets the banner's height —
-  // which makes this ladder keyed on viewport HEIGHT rather than width. The
-  // ribbon is decoration; on a short screen it hands its room back to the
-  // buttons underneath it rather than pushing them off the bottom.
-  width: min(80vw, 460px)
-  margin-bottom: clamp(0.35rem, 2vh, 1.25rem)
-
-  @media (max-height: 50rem)
-    width: min(64vw, 340px)
-
-  @media (max-height: 42rem)
-    width: min(56vw, 280px)
-
-  @media (max-height: 34rem)
-    width: min(50vw, 240px)
-    margin-bottom: 0.25rem
-
-  // Landscape phone / short embed. Replaces the old `scale-90` utility, which
-  // shrank the ribbon's PAINT but not its layout box, leaving a dead band of
-  // margin exactly where vertical room was scarcest.
+  // Landscape phone / short embed: the caption is the banner, so shrinking the
+  // type shrinks the whole thing, layout box included.
   &.is-compact
-    width: min(46vw, 230px)
-    margin-top: -0.25rem
-    margin-bottom: 0.25rem
+    font-size: clamp(0.85rem, 3.4vw, 1.3rem)
+    margin-bottom: 0.3rem
 
-// Parchment ribbon bitmap (553×188 source). The aspect ratio is built
-// into the wrap's `aspect-ratio` so the image scales without distorting
-// the curled tails. We use `background-image` rather than an `<img>`
-// so the slot content can layer cleanly on top without z-index gymnastics.
-.ribbon-banner
-  position: relative
-  aspect-ratio: 553 / 188
-  width: 100%
-  // The caption is sized against THIS box, not the viewport — see
-  // `.ribbon-content`.
-  container-type: inline-size
-  background-image: url('/images/bg/parchment-ribbon_553x188.webp')
-  background-repeat: no-repeat
-  background-position: center
-  background-size: contain
-  display: flex
-  align-items: center
-  justify-content: center
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5))
-
-.ribbon-content
-  position: relative
-  // The ribbon art's flat parchment panel sits ABOVE the bottom curl,
-  // so the content lifts ~14% of the banner height to land visually
-  // centred on that panel.
-  margin-top: -14%
-  display: flex
-  align-items: center
-  justify-content: center
-  text-align: center
-  // 21%, measured off the art rather than guessed: the parchment's two vertical
-  // rods sit at 19.2–20.4% and 79.4–80.7% of the 553px source, so the flat panel
-  // the caption may use is the 59% between them. The previous 18% put the ends
-  // of a long word on top of both rods.
-  padding: 0 21%
-
-  // ── The caption is sized off the BANNER, not the viewport ──────────────────
-  //
-  // This used to be a viewport-sized caption in the caller plus a blanket
-  // `transform: scale(150%)` here, and the two had no way to agree: the scale
-  // multiplied whatever the caller asked for, so a long word (German
-  // "LEVEL GESCHAFFT!") came out 1.5x wider than the space the padding had
-  // reserved and printed straight over the parchment's curled tails.
-  //
-  // `cqw` is a percentage of the banner's own width, so the caption is a fixed
-  // fraction of the art at every viewport size and can never outgrow it. The
-  // `vw` line above is the fallback for engines without container queries;
-  // where they exist, the second declaration wins.
-  //
-  // The type is owned HERE rather than by each caller, because it belongs to
-  // the ribbon art, not to the screen that happens to be using it.
-  font-size: clamp(0.5rem, 2.9vw, 1.2rem)
-  font-size: clamp(0.5rem, 5.4cqw, 1.3rem)
-  line-height: 0.98
+.banner__text
+  padding: 0.15em 0.35em
   color: #fff
   font-weight: 900
   font-style: italic
   text-transform: uppercase
   letter-spacing: -0.01em
+  line-height: 1
+  text-align: center
   text-wrap: balance
   text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
-
-// NOTE: the two `@media (orientation: landscape)` ribbon overrides that used to
-// live here — one for <=500px and one for the 501–860px CG-iframe case that CG
-// QA caught overflowing on 2026-05-05 — are gone. Both were patching the same
-// thing from two directions, and both are now subsumed by the max-height ladder
-// on `.ribbon-wrap`, which caps the banner by available height in every
-// orientation instead of only in landscape.
-
 </style>

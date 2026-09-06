@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Mini bos',
     'fireRate': 'Tezlik',
     'incoming': 'Hujum kelmoqda!',
-    'dodge': 'Chetlan'
+    'dodge': 'Chetlan',
+    'weaponActive': '{name} tayyor',
+    'weaponLocked': '{name} qulflangan — {total} tadan {n} ta richag otildi'
+  },
+
+  'weapons': {
+    'rocket': 'Raketa otar',
+    'gatling': 'Gatling pulemyoti'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Yashil sandiq: hamma kuchliroq uradi', 'desktop': 'Yashil sandiq: hamma kuchliroq uradi' },
     'rate': { 'touch': 'Ko‘k sandiq: hamma tezroq otadi', 'desktop': 'Ko‘k sandiq: hamma tezroq otadi' },
     'boss': { 'touch': 'Qizil doiradan uzoqroq turing!', 'desktop': 'Qizil doiradan uzoqroq turing!' },
+    'lever': { 'touch': 'Yo‘l chetidagi IKKALA richagni ham ot — ular qurol sandig‘ini ochadi', 'desktop': 'Yo‘l chetidagi IKKALA richagni ham ot — ular qurol sandig‘ini ochadi' },
     'guard': { 'touch': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!', 'desktop': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Masofa',
       'scavenge': 'Yig‘ish',
       'grenade': 'Granata',
-      'shield': 'Qalqon'
+      'shield': 'Qalqon',
+      'rocket': 'Raketa kuchi',
+      'gatling': 'Gatling kuchi'
     },
     'descriptions': {
       'squad': 'Har bosqichni ko‘proq omon qolgan bilan boshlang.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Otryading yo‘lda uzoqroqdan o‘q ochadi.',
       'scavenge': 'Har o‘yindan ko‘proq tanga oling.',
       'grenade': "Og'ir zarar uchun granata uloqtiring.",
-      'shield': 'Bir necha soniya otryadga zararni yarmiga kamaytiradi.'
+      'shield': 'Bir necha soniya otryadga zararni yarmiga kamaytiradi.',
+      'rocket': 'Bosqichda ochilgan raketa otarlar ko‘proq zarar yetkazadi.',
+      'gatling': 'Bosqichda ochilgan gatlinglar ko‘proq zarar yetkazadi.'
     }
   },
 

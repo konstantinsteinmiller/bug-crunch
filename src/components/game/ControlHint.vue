@@ -24,10 +24,15 @@ import { mobileCheck } from '@/utils/function'
  *   guard   — the boss's phase shield, which is the one moment in the game
  *             where the player's fire deliberately stops working. Without a
  *             word for it, "my bullets do nothing" reads as a bug.
+ *   lever   — the weapon puzzle. The only hint here for a thing that is purely
+ *             a BONUS: every other lesson in this list is something that will
+ *             otherwise cost the player survivors, and this one costs them
+ *             nothing at all. It is here because a beat with no consequence for
+ *             missing it is a beat the road can never teach on its own.
  */
 
 export type HintId =
-  | 'move' | 'gate' | 'crate' | 'rate' | 'trap' | 'divider' | 'boss' | 'guard'
+  | 'move' | 'gate' | 'crate' | 'rate' | 'trap' | 'divider' | 'boss' | 'guard' | 'lever'
 
 interface Props {
   hint: HintId | null

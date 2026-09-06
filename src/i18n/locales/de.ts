@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Miniboss',
     'fireRate': 'Rate',
     'incoming': 'Angriff!',
-    'dodge': 'Ausweichen'
+    'dodge': 'Ausweichen',
+    'weaponActive': '{name} bereit',
+    'weaponLocked': '{name} gesperrt — {n} von {total} Hebeln getroffen'
+  },
+
+  'weapons': {
+    'rocket': 'Raketenwerfer',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Grüne Kisten: alle treffen härter', 'desktop': 'Grüne Kisten: alle treffen härter' },
     'rate': { 'touch': 'Blaue Kisten: alle schießen schneller', 'desktop': 'Blaue Kisten: alle schießen schneller' },
     'boss': { 'touch': 'Bleib aus dem roten Ring!', 'desktop': 'Bleib aus dem roten Ring!' },
+    'lever': { 'touch': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste', 'desktop': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste' },
     'guard': { 'touch': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!', 'desktop': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Reichweite',
       'scavenge': 'Plündern',
       'grenade': 'Granate',
-      'shield': 'Schild'
+      'shield': 'Schild',
+      'rocket': 'Raketenkraft',
+      'gatling': 'Gatling-Kraft'
     },
     'descriptions': {
       'squad': 'Starte jedes Level mit mehr Überlebenden.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Dein Trupp eröffnet das Feuer weiter vorn.',
       'scavenge': 'Verdiene mehr Münzen pro Lauf.',
       'grenade': 'Wirf eine Granate für einen schweren Schadensstoß.',
-      'shield': 'Halbiere für einige Sekunden den Schaden an deiner Truppe.'
+      'shield': 'Halbiere für einige Sekunden den Schaden an deiner Truppe.',
+      'rocket': 'Raketenwerfer, die du im Level freischaltest, machen mehr Schaden.',
+      'gatling': 'Gatlings, die du im Level freischaltest, machen mehr Schaden.'
     }
   },
 

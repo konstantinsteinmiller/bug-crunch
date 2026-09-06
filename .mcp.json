@@ -1,12 +1,23 @@
 {
+  "//": "Browser profiles are REPO-RELATIVE on purpose. They used to be absolute paths under ~/.cache, which meant every concurrent Claude Code session on this project — the main checkout plus each `.claude/worktrees/agent-*`, all of which carry their own copy of this file — asked for the SAME profile directory. The second one to start gets 'The browser is already running for …', and the fix it invites (closing the browser) belongs to somebody else's open work. Resolved against each server's cwd, which is its own checkout, every session gets its own profile and no session can lock another out. Changing this needs a Claude Code restart: MCP servers read their args at launch.",
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--user-data-dir=./.mcp-browser-profiles/chrome"
+      ]
     },
     "firefox": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--browser", "firefox"]
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "firefox",
+        "--user-data-dir=./.mcp-browser-profiles/firefox"
+      ]
     }
   }
 }

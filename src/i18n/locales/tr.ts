@@ -30,7 +30,14 @@ export default {
     'miniboss': 'Mini Patron',
     'fireRate': 'Hız',
     'incoming': 'Saldırı geliyor!',
-    'dodge': 'Kaç'
+    'dodge': 'Kaç',
+    'weaponActive': '{name} hazır',
+    'weaponLocked': '{name} kilitli — {total} kolun {n} tanesi vuruldu'
+  },
+
+  'weapons': {
+    'rocket': 'Roketatar',
+    'gatling': 'Gatling'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': 'Yeşil sandık: herkes daha sert vurur', 'desktop': 'Yeşil sandık: herkes daha sert vurur' },
     'rate': { 'touch': 'Mavi sandık: herkes daha hızlı ateş eder', 'desktop': 'Mavi sandık: herkes daha hızlı ateş eder' },
     'boss': { 'touch': 'Kırmızı halkanın dışında kal!', 'desktop': 'Kırmızı halkanın dışında kal!' },
+    'lever': { 'touch': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar', 'desktop': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar' },
     'guard': { 'touch': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!', 'desktop': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': 'Menzil',
       'scavenge': 'Toplayıcılık',
       'grenade': 'El Bombası',
-      'shield': 'Kalkan'
+      'shield': 'Kalkan',
+      'rocket': 'Roket Gücü',
+      'gatling': 'Gatling Gücü'
     },
     'descriptions': {
       'squad': 'Her bölüme daha çok hayatta kalanla başla.',
@@ -116,7 +126,9 @@ export default {
       'range': 'Takımın yolda daha ileriden ateş açar.',
       'scavenge': 'Her turdan daha çok altın kazan.',
       'grenade': 'Ağır hasar için el bombası at.',
-      'shield': 'Birkaç saniye boyunca alınan hasarı yarıya indirir.'
+      'shield': 'Birkaç saniye boyunca alınan hasarı yarıya indirir.',
+      'rocket': 'Bölümde açtığın roketatarlar daha çok hasar verir.',
+      'gatling': 'Bölümde açtığın Gatlingler daha çok hasar verir.'
     }
   },
 

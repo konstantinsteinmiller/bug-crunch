@@ -30,7 +30,14 @@ export default {
     'miniboss': '小首领',
     'fireRate': '射速',
     'incoming': '攻击来袭！',
-    'dodge': '闪避'
+    'dodge': '闪避',
+    'weaponActive': '{name} 就绪',
+    'weaponLocked': '{name} 未解锁 — 已击中 {n}/{total} 个拉杆'
+  },
+
+  'weapons': {
+    'rocket': '火箭筒',
+    'gatling': '加特林机枪'
   },
 
   'tutorial': {
@@ -45,6 +52,7 @@ export default {
     'crate': { 'touch': '绿色箱子：全队伤害提升', 'desktop': '绿色箱子：全队伤害提升' },
     'rate': { 'touch': '蓝色箱子：全队射速提升', 'desktop': '蓝色箱子：全队射速提升' },
     'boss': { 'touch': '远离红圈！', 'desktop': '远离红圈！' },
+    'lever': { 'touch': '击中路两侧的两个拉杆 —— 它们会打开武器箱', 'desktop': '击中路两侧的两个拉杆 —— 它们会打开武器箱' },
     'guard': { 'touch': '护盾开启——射击无效，快躲开！', 'desktop': '护盾开启——射击无效，快躲开！' }
   },
 
@@ -107,7 +115,9 @@ export default {
       'range': '射程',
       'scavenge': '拾荒',
       'grenade': '手雷',
-      'shield': '护盾'
+      'shield': '护盾',
+      'rocket': '火箭威力',
+      'gatling': '加特林威力'
     },
     'descriptions': {
       'squad': '每关开局的幸存者更多。',
@@ -116,7 +126,9 @@ export default {
       'range': '你的小队能在更远处开火。',
       'scavenge': '每局获得更多金币。',
       'grenade': '投掷手雷造成大量伤害。',
-      'shield': '数秒内使队伍受到的伤害减半。'
+      'shield': '数秒内使队伍受到的伤害减半。',
+      'rocket': '关卡中解锁的火箭筒伤害更高。',
+      'gatling': '关卡中解锁的加特林伤害更高。'
     }
   },
 
