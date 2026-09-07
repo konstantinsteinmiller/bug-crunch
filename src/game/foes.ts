@@ -246,10 +246,27 @@ export const bossDesign = (stage: number): string => {
  * `foeRoster` is cumulative, so a returning player deep in the run legitimately
  * needs most of the cast — but they need it because they will see it.
  */
-export const stageDesigns = (stage: number): string[] => {
+export const stageDesigns = (stage: number): string[] =>
+  [...new Set([...rosterDesigns(stage), bossDesign(stage)])]
+
+/**
+ * The designs stage `n` puts on the ROAD — its roster, without the thing at the
+ * end of it.
+ *
+ * The split exists for the network, not for the baker. A boss stands at
+ * `arenaY`, a whole stage away from the first frame, and its painted strip is
+ * the heaviest single file in the set; the roster is on screen in the opening
+ * seconds. So the art preloader holds the splash for this and fetches the boss
+ * right after (`artPreload`), while the BAKE still primes both — a canvas the
+ * idle pump has not reached yet is a red ellipse, and that pump keeps running
+ * long before the boss walks on.
+ *
+ * A boss design is usually a roster design too (stage 1's is the creep it has
+ * been fighting all along), so this is often the same set either way.
+ */
+export const rosterDesigns = (stage: number): string[] => {
   const set = new Set<string>()
   for (const id of foeRoster(stage)) for (const d of foeDef(id).designs) set.add(d)
-  set.add(bossDesign(stage))
   return [...set]
 }
 

@@ -229,6 +229,18 @@ export const loadAudioBuffer = async (src: string): Promise<AudioBuffer | null> 
  */
 const SPRITE_BAKE_TIMEOUT_MS = 6000
 
+/**
+ * How long the splash may wait on the FIRST SCREEN's paintings, ms.
+ *
+ * The same kind of ceiling as `SPRITE_BAKE_TIMEOUT_MS`, against a worse risk:
+ * the bake is local work that always finishes, and this is a network. Longer,
+ * because unlike the bake there is a real first impression on the other side of
+ * it and giving up at six seconds on a connection that would have delivered in
+ * seven costs exactly what the wait was for. Past it the player is let in and
+ * the paintings swap themselves in as they land.
+ */
+const CRITICAL_ART_TIMEOUT_MS = 10000
+
 /** Share of the loading bar given to image decodes; the rest is the sprite
  *  bake. The images are one file and the bake is hundreds of canvases, so the
  *  bar spends most of its life where the time actually goes. */
@@ -279,11 +291,23 @@ let backgroundWarmStarted = false
 const runBackgroundWarmup = (): void => {
   if (backgroundWarmStarted) return
   backgroundWarmStarted = true
-  // The painted art the splash did NOT hold for: this stage's threats and the
-  // next stage's newcomers first, then the whole set on an idle slot. A no-op
-  // with overrides off. See `artPreload`.
-  void preloadRemainingArt()
   void (async () => {
+    // ── Art first, all of it. Then sound. ──
+    //
+    // These two used to start together and race each other for the same
+    // connection, which is a trade the wrong way round: an SFX that has not
+    // decoded costs a frame of latency the first time it fires, while a strip
+    // that has not arrived is a red ellipse in the middle of the screen for as
+    // long as it takes. So the decode queue waits for the last painting.
+    //
+    // `preloadRemainingArt` holds for the page's own load before it starts and
+    // resolves only once tier 2 has settled; with overrides off it returns
+    // immediately and the sounds start exactly as they did before. See
+    // `artPreload`.
+    await preloadRemainingArt()
+    // Music is not in here at all, and does not need to be: `useSound` points
+    // the element at a track when a battle starts, so it is fetched on demand
+    // and never competes with anything.
     try {
       const sp = await import('@/use/useSoundPreload')
       await sp.preloadGameplaySounds()
@@ -344,13 +368,26 @@ export default () => {
     // nothing and requests nothing. Held for, rather than started, because
     // without the wait the art POPS IN: the game starts on the drawing and
     // swaps to paint a second later, prop by prop. The whole point of painted
-    // art is the first impression. Tier 0 is a stage's worth, not the whole
-    // cast; see `artPreload`.
+    // art is the first impression. Tier 0 is the first SCREEN's worth, not the
+    // whole cast; see `artPreload`.
+    //
+    // Bounded, exactly like the sprite bake above and for the same reason. Tier
+    // 0 is most of a megabyte on a first run from a cold cache, and every byte
+    // of it is behind a network nobody here controls: a CDN that stalls, a
+    // hotel wifi that resolves and never delivers, a portal iframe on a
+    // throttled connection. Without a ceiling the splash waits for it forever,
+    // which turns "the art did not load" — survivable, the renderer draws
+    // either way — into "the game did not load". So the wait is capped, and
+    // past the cap the player gets in and the paintings land as they arrive:
+    // `artChanged` repaints whatever had already been baked from the drawing.
     if (artOverridesEnabled()) {
-      await preloadArtOverrides(criticalArtWants(), (done, total) => {
-        const k = total > 0 ? done / total : 1
-        loadingProgress.value = Math.round((BAKE_END_WITH_ART + (1 - BAKE_END_WITH_ART) * k) * 100)
-      })
+      await Promise.race([
+        preloadArtOverrides(criticalArtWants(), (done, total) => {
+          const k = total > 0 ? done / total : 1
+          loadingProgress.value = Math.round((BAKE_END_WITH_ART + (1 - BAKE_END_WITH_ART) * k) * 100)
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_ART_TIMEOUT_MS))
+      ])
     }
 
     loadingProgress.value = 100

@@ -1685,14 +1685,53 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 
 # bolt-gunner — The gunner's round  (images/rounds/bolt-gunner.webp)
 
-Paint ONE game sprite in a single square (1:1) image.
+Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
+landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
-WHAT IT IS: The gunner's round: a fat slow orb of cold cyan witchfire around a dark iron core, with a short tail of fading cyan behind it. Small in its frame — the tail is longer than the head is wide.
+WHAT IT IS: The gunner's round: a fat slow orb of cold cyan witchfire around a dark iron core, with a streaming tail of fading cyan witchfire behind it. Small in its frame — the tail is longer than the head is wide.
 
-DRAW IT AT REST, pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.. Do not add motion blur, speed lines or
-a second copy of it: the game turns and moves it out of this one picture.
+READ THE PANELS. This is not one picture — it is 8 frames of ONE LOOP.
+The attached sheet is 4 columns x 2 rows = EXACTLY 8 panels, read left
+to right along the top row and then the row below.
+
+· 8 panels. Not 1, not 4, not 12, not 16. Exactly 2 rows of
+  4 — do not add a row, do not append the cycle again underneath.
+· Repaint EVERY panel. A sheet where one panel is painted and the rest are
+  copies of it is the failure this whole sheet exists to avoid.
+· THE 2 ROWS ARE NOT 2 STATES. The top row is panels 1-4 and the row
+  below is 5-8, of ONE continuous march. A sheet with one arrangement
+  repeated across the top row and a second repeated across the bottom is
+  what came back last time — it is two pictures, not eight, and it plays as
+  a thing that snaps between two poses.
+· All 8 panels are DIFFERENT from each other, and each differs from the one
+  beside it by the SAME small step. Even spacing is the animation; a sheet
+  that holds still and then jumps reads as dropped frames.
+· Each panel is exactly 1/4 of the width and 1/2 of the height,
+  on an exact grid with no gutters. The cut is done by arithmetic.
+
+WHAT MOVES: The IRON CORE and the orb around it do not move, change size or change place between panels — they are the same round, and the game measures its kill against that head. What animates is the WITCHFIRE: the tail licks and gutters, its tongues lengthening and shortening and curling off the axis, and loose sparks drift back down it. Panel 8 must lead back into panel 1.
+
+IT MUST LOOP. The game plays these end to end, forever, several times a
+second: after panel 8 it goes straight back to panel 1. So panel 8 has to
+flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a
+sequence that starts small and ends big — that pops once per loop, and at
+this speed a pop reads as a dropped frame.
+
+The SUBJECT keeps the same size, the same colours and the same place in the
+panel throughout — it is one object seen at eight moments, not eight
+objects. Only what is written under WHAT MOVES may change.
+
+EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the
+panel they belong to — nothing reaches across a panel edge into its
+neighbour, and the magenta between panels stays flat magenta. The sheet is
+cut on an exact grid, so anything that crosses a boundary is sliced in half
+and arrives in the game as a stray smear on the frame next door.
+
+ORIENTATION, in every panel: pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.. No motion blur and no speed
+lines — the movement is in the difference between the panels, and the
+game turns and travels the sprite itself.
 
 KEEP ANY GLOW TIGHT. A halo, aura or bloom spreading out into the background
 is measured as part of the object when the return is fitted back onto the
@@ -1737,7 +1776,7 @@ AVOID — this is exactly how earlier attempts went wrong:
 · Keep the subject the same subject and silhouette it already has. This is a
   restyle, not a redesign.
 
-SIZE AND PLACEMENT — this is the part that goes wrong.
+SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.
 Do not enlarge it to fill the frame. The reference leaves air around the
 subject and that air is not waste — it is where the things drawn live around
 it go. Keep the subject the same fraction of the frame that the reference
@@ -1764,27 +1803,75 @@ Fill every pixel that is not the object itself with solid, flat, pure magenta
   eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
   and mauve are the failure this whole clause is about.
 
+BEFORE YOU CALL IT FINISHED, count and check:
+· 4 panels across, 2 down, 8 in all — no extra row.
+· No two of the 8 panels are identical. In particular the 4 panels of a
+  row are 4 different moments, not one moment repeated across the row.
+· Every panel holds the same object at the same size, in the same place,
+  in the same colours.
+· Panel 8 leads back into panel 1.
+· Every pixel that is not the sprite is flat, vivid #FF00FF.
+
 OUTPUT — read this twice, it is where every previous attempt failed:
-· ONE image, exactly 512 x 512 pixels — square (1:1).
+· ONE image, exactly 2048 x 1024 pixels — landscape, 2:1.
   If your tool has an aspect-ratio control, set it to match. Returns have
   come back at the tool's default ratio before, which overrides this line —
   the setting wins, so change the setting.
-· ONE object. Not two, not a comparison, not variants side by side, not a
-  before-and-after pair.
+· ONE object, painted 8 times as 8 moments of one loop. Not variants,
+  not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
 
 ---
 
 # bolt-boss — The healer's bolt  (images/rounds/bolt-boss.webp)
 
-Paint ONE game sprite in a single square (1:1) image.
+Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
+landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
-WHAT IT IS: The healer's bolt: a sickly green orb of necrotic light with a pale core and a short trail behind it. Small in its frame.
+WHAT IT IS: The healer's bolt: a sickly green orb of necrotic light with a pale core and a trail of guttering green flame behind it. Small in its frame.
 
-DRAW IT AT REST, pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.. Do not add motion blur, speed lines or
-a second copy of it: the game turns and moves it out of this one picture.
+READ THE PANELS. This is not one picture — it is 8 frames of ONE LOOP.
+The attached sheet is 4 columns x 2 rows = EXACTLY 8 panels, read left
+to right along the top row and then the row below.
+
+· 8 panels. Not 1, not 4, not 12, not 16. Exactly 2 rows of
+  4 — do not add a row, do not append the cycle again underneath.
+· Repaint EVERY panel. A sheet where one panel is painted and the rest are
+  copies of it is the failure this whole sheet exists to avoid.
+· THE 2 ROWS ARE NOT 2 STATES. The top row is panels 1-4 and the row
+  below is 5-8, of ONE continuous march. A sheet with one arrangement
+  repeated across the top row and a second repeated across the bottom is
+  what came back last time — it is two pictures, not eight, and it plays as
+  a thing that snaps between two poses.
+· All 8 panels are DIFFERENT from each other, and each differs from the one
+  beside it by the SAME small step. Even spacing is the animation; a sheet
+  that holds still and then jumps reads as dropped frames.
+· Each panel is exactly 1/4 of the width and 1/2 of the height,
+  on an exact grid with no gutters. The cut is done by arithmetic.
+
+WHAT MOVES: The ORB and its pale core keep the same size and the same place in every panel — that head is the part that hits. What animates is the necrotic fire around and behind it: the halo breathes in and out, the trail writhes and splits, and flecks of green rot peel off it and fall behind. Panel 8 must lead back into panel 1.
+
+IT MUST LOOP. The game plays these end to end, forever, several times a
+second: after panel 8 it goes straight back to panel 1. So panel 8 has to
+flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a
+sequence that starts small and ends big — that pops once per loop, and at
+this speed a pop reads as a dropped frame.
+
+The SUBJECT keeps the same size, the same colours and the same place in the
+panel throughout — it is one object seen at eight moments, not eight
+objects. Only what is written under WHAT MOVES may change.
+
+EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the
+panel they belong to — nothing reaches across a panel edge into its
+neighbour, and the magenta between panels stays flat magenta. The sheet is
+cut on an exact grid, so anything that crosses a boundary is sliced in half
+and arrives in the game as a stray smear on the frame next door.
+
+ORIENTATION, in every panel: pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.. No motion blur and no speed
+lines — the movement is in the difference between the panels, and the
+game turns and travels the sprite itself.
 
 KEEP ANY GLOW TIGHT. A halo, aura or bloom spreading out into the background
 is measured as part of the object when the return is fitted back onto the
@@ -1829,7 +1916,7 @@ AVOID — this is exactly how earlier attempts went wrong:
 · Keep the subject the same subject and silhouette it already has. This is a
   restyle, not a redesign.
 
-SIZE AND PLACEMENT — this is the part that goes wrong.
+SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.
 Do not enlarge it to fill the frame. The reference leaves air around the
 subject and that air is not waste — it is where the things drawn live around
 it go. Keep the subject the same fraction of the frame that the reference
@@ -1856,26 +1943,136 @@ Fill every pixel that is not the object itself with solid, flat, pure magenta
   eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
   and mauve are the failure this whole clause is about.
 
+BEFORE YOU CALL IT FINISHED, count and check:
+· 4 panels across, 2 down, 8 in all — no extra row.
+· No two of the 8 panels are identical. In particular the 4 panels of a
+  row are 4 different moments, not one moment repeated across the row.
+· Every panel holds the same object at the same size, in the same place,
+  in the same colours.
+· Panel 8 leads back into panel 1.
+· Every pixel that is not the sprite is flat, vivid #FF00FF.
+
 OUTPUT — read this twice, it is where every previous attempt failed:
-· ONE image, exactly 512 x 512 pixels — square (1:1).
+· ONE image, exactly 2048 x 1024 pixels — landscape, 2:1.
   If your tool has an aspect-ratio control, set it to match. Returns have
   come back at the tool's default ratio before, which overrides this line —
   the setting wins, so change the setting.
-· ONE object. Not two, not a comparison, not variants side by side, not a
-  before-and-after pair.
+· ONE object, painted 8 times as 8 moments of one loop. Not variants,
+  not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
 
 ---
 
 # roller — The rolling boulder  (images/rounds/roller.webp)
 
-Paint ONE game sprite in a single square (1:1) image.
+Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
+landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
-WHAT IT IS: The rolling boulder: a huge iron-banded stone sphere studded with rusted spikes, dark, with a rim light along its lower edge, seen face-on. The SPHERE is a full circle about three quarters of the frame across, centred — in the reference it spans from 12% to 88% of the width — and the spikes reach out from it into the margin around it, never crossing the frame edge. The sphere is what kills; keep it that size.
+WHAT IT IS: The rolling boulder: a huge iron-banded stone sphere studded with rusted spikes, dark, with a rim light along its lower edge, seen face-on as it rolls straight at the viewer. The SPHERE is a full circle about three quarters of the frame across, centred — in the reference it spans from 12% to 88% of the width — and the spikes reach out from it into the margin around it, never crossing the frame edge. The sphere is what kills; keep it that size. Its ironwork reads as FOUR evenly spaced bands stacked down its face — flattened ellipses, widest across the middle of the ball and tighter toward its top and bottom edges, studded with rivets. Four bands across the face, evenly spaced, all the way from the top edge to the bottom: not one equator, not a cross, not a cage.
 
-LEAVE OUT WHAT THE GAME PAINTS LIVE. The game scrolls its own bands over it to sell the roll, so paint it still.
+READ THE PANELS. This is not one picture — it is 8 frames of ONE LOOP.
+The attached sheet is 4 columns x 2 rows = EXACTLY 8 panels, read left
+to right along the top row and then the row below.
+
+· 8 panels. Not 1, not 4, not 12, not 16. Exactly 2 rows of
+  4 — do not add a row, do not append the cycle again underneath.
+· Repaint EVERY panel. A sheet where one panel is painted and the rest are
+  copies of it is the failure this whole sheet exists to avoid.
+· THE 2 ROWS ARE NOT 2 STATES. The top row is panels 1-4 and the row
+  below is 5-8, of ONE continuous march. A sheet with one arrangement
+  repeated across the top row and a second repeated across the bottom is
+  what came back last time — it is two pictures, not eight, and it plays as
+  a thing that snaps between two poses.
+· All 8 panels are DIFFERENT from each other, and each differs from the one
+  beside it by the SAME small step. Even spacing is the animation; a sheet
+  that holds still and then jumps reads as dropped frames.
+· Each panel is exactly 1/4 of the width and 1/2 of the height,
+  on an exact grid with no gutters. The cut is done by arithmetic.
+
+WHAT MOVES: IT ROLLS, TOWARD THE VIEWER — this is the one sheet in the set where the
+object itself moves, and that movement is the whole animation.
+
+THREE returns have now come back without it. The first was the same ball
+copied eight times with sparks added. The second was TWO arrangements,
+one repeated across the top row and the other across the bottom, which
+plays as a thing that snaps between two poses. The third is the one to
+study, because it looked closest and was still not a roll: the bands
+slid down the face as four stripes of the SAME WIDTH, evenly spaced,
+like a pattern scrolling behind a porthole. Nothing narrowed, nothing
+crowded, and the studs never moved at all.
+
+That is the whole difference, so it is worth stating as geometry rather
+than as a feeling. These bands are HOOPS AROUND A SPHERE, not stripes
+on a disc, and a hoop on a sphere does two things a stripe never does:
+
+  · IT NARROWS. A band crossing the widest part of the ball spans
+    almost the full width of it. The same band, three quarters of the
+    way to the top edge, spans barely half that — and as it reaches the
+    edge it shrinks to nothing and is gone. Look at the reference: no
+    two bands in a panel are the same width.
+  · THEY CROWD. Because they are evenly spaced around the BALL and not
+    down the picture, the gaps between them look widest across the
+    middle and squeeze together toward the top and bottom edges. Two
+    bands near the top edge sit almost on top of each other.
+
+Get those two right and the ball turns whether or not anything else is
+perfect. Get them wrong and no amount of sparks will save it.
+
+The ball stays exactly the same size and exactly in the same place. What
+moves is its SURFACE: the bands, their rivets and any scars or pitting
+travel DOWNWARD together across the face — in at the top edge, down over
+the middle, out at the bottom — as if the ball were turning toward you.
+The rivets ride their band, so they spread apart as the band widens over
+the middle and close up again as it narrows toward an edge.
+
+Across the eight panels the surface travels DOWN by exactly ONE BAND
+GAP, in eight even steps of an eighth of a gap each. By panel 8 the
+band that started on the ball's widest point has moved almost all the
+way to where the band below it began, so the next step lands the
+following band exactly where the first one started — and that is panel 1
+again. The loop closes with no jump. Do not paint a whole revolution.
+
+The RING OF SPIKES around the outline is the one thing that does NOT
+travel. A ball rolling straight at you keeps its silhouette: the spikes
+stand out from the edge in the same places in all eight panels, exactly
+as the reference draws them. Do not slide them around the rim — that
+reads as a ball spinning on the spot rather than rolling at the viewer.
+The roll is carried entirely by the face.
+
+Under it all, sparks struck off the spikes where they bite the road and
+a low scorch of dust around the base. Those are the only things that may
+vary freely between panels — everything else has to line up.
+
+PANEL BY PANEL — measure each one against panel 1, not against its
+neighbour, or the error accumulates and the loop will not close:
+· panel 1: the starting arrangement — one band lies straight across the ball's widest point (its horizontal middle). Every other panel is measured from this one.
+· panel 2: every band has slid DOWN by 1/8 of the gap between two bands — the second of eight even steps, so the band that was on the widest point is now a little below it.
+· panel 3: every band has slid DOWN by 2/8 of the gap between two bands — the third of eight even steps, so the band that was on the widest point is now a little below it.
+· panel 4: every band has slid DOWN by 3/8 of the gap between two bands — the fourth of eight even steps, so the band that was on the widest point is now a little below it.
+· panel 5: every band has slid DOWN by 4/8 of the gap between two bands — HALF a gap. This is the panel least like panel 1 and it has to look it: the ball's widest point now falls in BARE IRON, exactly midway between two bands, where panel 1 had a band sitting on it.
+· panel 6: every band has slid DOWN by 5/8 of the gap between two bands — the sixth of eight even steps, so the band that was on the widest point is now a little below it.
+· panel 7: every band has slid DOWN by 6/8 of the gap between two bands — the seventh of eight even steps, so the band that was on the widest point is now a little below it.
+· panel 8: every band has slid DOWN by 7/8 of the gap between two bands. One more step of the same size brings the NEXT band onto the widest point, which is panel 1 again — that is how the loop closes. This panel is the one just before that.
+
+IT MUST LOOP. The game plays these end to end, forever, several times a
+second: after panel 8 it goes straight back to panel 1. So panel 8 has to
+flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a
+sequence that starts small and ends big — that pops once per loop, and at
+this speed a pop reads as a dropped frame.
+
+The SUBJECT keeps the same size, the same colours and the same place in the
+panel throughout — it is one object seen at eight moments, not eight
+objects. Only what is written under WHAT MOVES may change.
+
+EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the
+panel they belong to — nothing reaches across a panel edge into its
+neighbour, and the magenta between panels stays flat magenta. The sheet is
+cut on an exact grid, so anything that crosses a boundary is sliced in half
+and arrives in the game as a stray smear on the frame next door.
+
+LEAVE OUT WHAT THE GAME PAINTS LIVE. Nothing is painted over it any more. The game used to scroll its own bands across the ball to fake the roll; these eight frames ARE the roll, so paint the ironwork and let it turn.
 
 STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
 bestiary or the key art of a dungeon crawler. Match this in every panel:
@@ -1913,7 +2110,7 @@ AVOID — this is exactly how earlier attempts went wrong:
 · Keep the subject the same subject and silhouette it already has. This is a
   restyle, not a redesign.
 
-SIZE AND PLACEMENT — this is the part that goes wrong.
+SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.
 Do not enlarge it to fill the frame. The reference leaves air around the
 subject and that air is not waste — it is where the things drawn live around
 it go. Keep the subject the same fraction of the frame that the reference
@@ -1940,27 +2137,75 @@ Fill every pixel that is not the object itself with solid, flat, pure magenta
   eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
   and mauve are the failure this whole clause is about.
 
+BEFORE YOU CALL IT FINISHED, count and check:
+· 4 panels across, 2 down, 8 in all — no extra row.
+· No two of the 8 panels are identical. In particular the 4 panels of a
+  row are 4 different moments, not one moment repeated across the row.
+· Every panel holds the same object at the same size, in the same place,
+  in the same colours.
+· Panel 8 leads back into panel 1.
+· Every pixel that is not the sprite is flat, vivid #FF00FF.
+
 OUTPUT — read this twice, it is where every previous attempt failed:
-· ONE image, exactly 512 x 512 pixels — square (1:1).
+· ONE image, exactly 2048 x 1024 pixels — landscape, 2:1.
   If your tool has an aspect-ratio control, set it to match. Returns have
   come back at the tool's default ratio before, which overrides this line —
   the setting wins, so change the setting.
-· ONE object. Not two, not a comparison, not variants side by side, not a
-  before-and-after pair.
+· ONE object, painted 8 times as 8 moments of one loop. Not variants,
+  not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
 
 ---
 
 # meteor — The boss's rock  (images/rounds/meteor.webp)
 
-Paint ONE game sprite in a single square (1:1) image.
+Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
+landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
 WHAT IT IS: The boss's falling rock: a jagged black stone wrapped in orange fire, a white-hot core around the stone, and a flame tail streaming UPWARD from it — it falls down the screen. The stone sits in the LOWER part of the frame with the tail reaching the top.
 
-DRAW IT AT REST, falling: the stone low in the frame, the tail rising to the top edge. Do not add motion blur, speed lines or
-a second copy of it: the game turns and moves it out of this one picture.
+READ THE PANELS. This is not one picture — it is 8 frames of ONE LOOP.
+The attached sheet is 4 columns x 2 rows = EXACTLY 8 panels, read left
+to right along the top row and then the row below.
+
+· 8 panels. Not 1, not 4, not 12, not 16. Exactly 2 rows of
+  4 — do not add a row, do not append the cycle again underneath.
+· Repaint EVERY panel. A sheet where one panel is painted and the rest are
+  copies of it is the failure this whole sheet exists to avoid.
+· THE 2 ROWS ARE NOT 2 STATES. The top row is panels 1-4 and the row
+  below is 5-8, of ONE continuous march. A sheet with one arrangement
+  repeated across the top row and a second repeated across the bottom is
+  what came back last time — it is two pictures, not eight, and it plays as
+  a thing that snaps between two poses.
+· All 8 panels are DIFFERENT from each other, and each differs from the one
+  beside it by the SAME small step. Even spacing is the animation; a sheet
+  that holds still and then jumps reads as dropped frames.
+· Each panel is exactly 1/4 of the width and 1/2 of the height,
+  on an exact grid with no gutters. The cut is done by arithmetic.
+
+WHAT MOVES: The STONE keeps the same size and very nearly the same place in every panel — it may rock a few degrees, no more, because the game moves it down the screen itself. Everything else BURNS: the flame tail whips and forks, its tongues climbing and falling back, the white-hot shell around the stone flares and dims, and embers tear off the tail and stream away above it. This is the panel the whole sheet is for — the fire must be visibly a different fire in every one of the eight. Panel 8 must lead back into panel 1.
+
+IT MUST LOOP. The game plays these end to end, forever, several times a
+second: after panel 8 it goes straight back to panel 1. So panel 8 has to
+flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a
+sequence that starts small and ends big — that pops once per loop, and at
+this speed a pop reads as a dropped frame.
+
+The SUBJECT keeps the same size, the same colours and the same place in the
+panel throughout — it is one object seen at eight moments, not eight
+objects. Only what is written under WHAT MOVES may change.
+
+EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the
+panel they belong to — nothing reaches across a panel edge into its
+neighbour, and the magenta between panels stays flat magenta. The sheet is
+cut on an exact grid, so anything that crosses a boundary is sliced in half
+and arrives in the game as a stray smear on the frame next door.
+
+ORIENTATION, in every panel: falling: the stone low in the frame, the tail rising to the top edge. No motion blur and no speed
+lines — the movement is in the difference between the panels, and the
+game turns and travels the sprite itself.
 
 KEEP ANY GLOW TIGHT. A halo, aura or bloom spreading out into the background
 is measured as part of the object when the return is fitted back onto the
@@ -2005,7 +2250,7 @@ AVOID — this is exactly how earlier attempts went wrong:
 · Keep the subject the same subject and silhouette it already has. This is a
   restyle, not a redesign.
 
-SIZE AND PLACEMENT — this is the part that goes wrong.
+SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.
 Do not enlarge it to fill the frame. The reference leaves air around the
 subject and that air is not waste — it is where the things drawn live around
 it go. Keep the subject the same fraction of the frame that the reference
@@ -2034,24 +2279,71 @@ Fill every pixel that is not the object itself with solid, flat, pure magenta
   eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
   and mauve are the failure this whole clause is about.
 
+BEFORE YOU CALL IT FINISHED, count and check:
+· 4 panels across, 2 down, 8 in all — no extra row.
+· No two of the 8 panels are identical. In particular the 4 panels of a
+  row are 4 different moments, not one moment repeated across the row.
+· Every panel holds the same object at the same size, in the same place,
+  in the same colours.
+· Panel 8 leads back into panel 1.
+· Every pixel that is not the sprite is flat, vivid #FF00FF.
+
 OUTPUT — read this twice, it is where every previous attempt failed:
-· ONE image, exactly 512 x 512 pixels — square (1:1).
+· ONE image, exactly 2048 x 1024 pixels — landscape, 2:1.
   If your tool has an aspect-ratio control, set it to match. Returns have
   come back at the tool's default ratio before, which overrides this line —
   the setting wins, so change the setting.
-· ONE object. Not two, not a comparison, not variants side by side, not a
-  before-and-after pair.
+· ONE object, painted 8 times as 8 moments of one loop. Not variants,
+  not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
 
 ---
 
 # bomb — The bomber's charge  (images/rounds/bomb.webp)
 
-Paint ONE game sprite in a single square (1:1) image.
+Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
+landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
 WHAT IT IS: The bomber's charge: a black iron bomb with a lit fuse and a tight ember glow around it. Centred, about half the frame across.
+
+READ THE PANELS. This is not one picture — it is 8 frames of ONE LOOP.
+The attached sheet is 4 columns x 2 rows = EXACTLY 8 panels, read left
+to right along the top row and then the row below.
+
+· 8 panels. Not 1, not 4, not 12, not 16. Exactly 2 rows of
+  4 — do not add a row, do not append the cycle again underneath.
+· Repaint EVERY panel. A sheet where one panel is painted and the rest are
+  copies of it is the failure this whole sheet exists to avoid.
+· THE 2 ROWS ARE NOT 2 STATES. The top row is panels 1-4 and the row
+  below is 5-8, of ONE continuous march. A sheet with one arrangement
+  repeated across the top row and a second repeated across the bottom is
+  what came back last time — it is two pictures, not eight, and it plays as
+  a thing that snaps between two poses.
+· All 8 panels are DIFFERENT from each other, and each differs from the one
+  beside it by the SAME small step. Even spacing is the animation; a sheet
+  that holds still and then jumps reads as dropped frames.
+· Each panel is exactly 1/4 of the width and 1/2 of the height,
+  on an exact grid with no gutters. The cut is done by arithmetic.
+
+WHAT MOVES: The IRON BOMB does not move or change size between panels. What animates is the fire: the ember glow around the casing swells and shrinks, and the fuse burns with a flame that licks and flares. It is a fuse burning down, so the fire is a little angrier by panel 8 than at panel 1 — but panel 8 must still lead back into panel 1.
+
+IT MUST LOOP. The game plays these end to end, forever, several times a
+second: after panel 8 it goes straight back to panel 1. So panel 8 has to
+flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a
+sequence that starts small and ends big — that pops once per loop, and at
+this speed a pop reads as a dropped frame.
+
+The SUBJECT keeps the same size, the same colours and the same place in the
+panel throughout — it is one object seen at eight moments, not eight
+objects. Only what is written under WHAT MOVES may change.
+
+EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the
+panel they belong to — nothing reaches across a panel edge into its
+neighbour, and the magenta between panels stays flat magenta. The sheet is
+cut on an exact grid, so anything that crosses a boundary is sliced in half
+and arrives in the game as a stray smear on the frame next door.
 
 LEAVE OUT WHAT THE GAME PAINTS LIVE. The spark walking down the fuse is painted live, so no spark.
 
@@ -2098,7 +2390,7 @@ AVOID — this is exactly how earlier attempts went wrong:
 · Keep the subject the same subject and silhouette it already has. This is a
   restyle, not a redesign.
 
-SIZE AND PLACEMENT — this is the part that goes wrong.
+SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.
 Do not enlarge it to fill the frame. The reference leaves air around the
 subject and that air is not waste — it is where the things drawn live around
 it go. Keep the subject the same fraction of the frame that the reference
@@ -2125,13 +2417,22 @@ Fill every pixel that is not the object itself with solid, flat, pure magenta
   eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
   and mauve are the failure this whole clause is about.
 
+BEFORE YOU CALL IT FINISHED, count and check:
+· 4 panels across, 2 down, 8 in all — no extra row.
+· No two of the 8 panels are identical. In particular the 4 panels of a
+  row are 4 different moments, not one moment repeated across the row.
+· Every panel holds the same object at the same size, in the same place,
+  in the same colours.
+· Panel 8 leads back into panel 1.
+· Every pixel that is not the sprite is flat, vivid #FF00FF.
+
 OUTPUT — read this twice, it is where every previous attempt failed:
-· ONE image, exactly 512 x 512 pixels — square (1:1).
+· ONE image, exactly 2048 x 1024 pixels — landscape, 2:1.
   If your tool has an aspect-ratio control, set it to match. Returns have
   come back at the tool's default ratio before, which overrides this line —
   the setting wins, so change the setting.
-· ONE object. Not two, not a comparison, not variants side by side, not a
-  before-and-after pair.
+· ONE object, painted 8 times as 8 moments of one loop. Not variants,
+  not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
 
 ---

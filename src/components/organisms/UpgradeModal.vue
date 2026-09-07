@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import FModal from '@/components/molecules/FModal.vue'
 import IconCoin from '@/components/icons/IconCoin.vue'
 import GameIcon from '@/components/icons/GameIcon.vue'
-import ArtIcon from '@/components/icons/ArtIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import useSounds from '@/use/useSound'
 import useTowerEconomy from '@/use/useTowerEconomy'
@@ -43,9 +42,10 @@ const TRACK_ICONS: Partial<Record<UpgradeId, GameIconName>> = {
   power: 'bolt',
   rate: 'rate',
   range: 'range',
-  // The two ACTIVE tracks. They carry the same glyphs the in-run buttons do, so
-  // the thing bought here and the thing pressed there are recognisably one
-  // object — see `SkillBar.vue`.
+  // The two ACTIVE tracks, wearing the same glyphs the in-run buttons fall back
+  // to, so the thing bought here and the thing pressed there are recognisably
+  // one object. The run's buttons may swap in a painting of that glyph once the
+  // pipeline has one (`SkillBar.vue`); this list never does — see below.
   grenade: 'bomb',
   shield: 'shield',
   // …and the two weapons, wearing the glyph that is painted on the box they
@@ -56,14 +56,23 @@ const TRACK_ICONS: Partial<Record<UpgradeId, GameIconName>> = {
 }
 
 /**
- * The tracks whose glyph the art pipeline can repaint, and the painting's id
- * under `images/ui/`. The two skills, because their buttons in the run wear
- * the same painting — see `SkillBar.vue` and `ArtIcon`.
+ * ─── Why this list is glyphs all the way down ───────────────────────────────
+ *
+ * The two skills used to draw through `ArtIcon`, so a painting replaced their
+ * glyph once the pipeline produced one. In a HUD button that is right: the
+ * button is alone, and a painted bomb is simply a better bomb.
+ *
+ * In THIS list it is wrong, and it is wrong structurally rather than because a
+ * file is missing. `ART_CATALOGUE.ui` has exactly three paintable ids — the
+ * chest and the two skills — and there is no `ui/squad`, `ui/rate`, `ui/range`
+ * or `ui/gatling`, nor any reason to paint one: they are stat glyphs, not
+ * objects. So the shop can only ever show two painted rows above six drawn
+ * ones, in a single column, at the same size, side by side. That does not read
+ * as "these two are nicer", it reads as a half-finished screen.
+ *
+ * One list, one hand. If the skills ever want their paintings back here, every
+ * track needs one first.
  */
-const TRACK_ART: Partial<Record<UpgradeId, string>> = {
-  grenade: 'skill-grenade',
-  shield: 'skill-shield'
-}
 
 /** Bumped on every purchase so the computed rows re-read the level refs. */
 const version = ref(0)
@@ -139,8 +148,8 @@ const suffix = (id: UpgradeId): string => (PERCENT_TRACKS.has(id) ? '%' : '')
             //- Every one of these is the glyph the HUD already draws for the
             //- same stat during a run — the shop is where you buy the number
             //- you have been watching, so it must not be a second drawing of it.
-            ArtIcon(v-if="TRACK_ART[row.id]" kind="ui" :id="TRACK_ART[row.id] ?? ''" :fallback="TRACK_ICONS[row.id] ?? 'star'")
-            GameIcon(v-else :name="TRACK_ICONS[row.id] ?? 'star'")
+            //- Drawn, never painted: see the note on TRACK_ICONS above.
+            GameIcon(:name="TRACK_ICONS[row.id] ?? 'star'")
 
           div.upgrade__body
             span.upgrade__name {{ t(`upgrades.names.${row.id}`) }}

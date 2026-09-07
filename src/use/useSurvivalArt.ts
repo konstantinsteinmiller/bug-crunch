@@ -6,7 +6,7 @@ import {
   SLAM_RADIUS_MAX, VIEW_HEIGHT, UNIT_R,
   type Divider, type GateOp
 } from '@/game/survival'
-import { BOLT_R, ROLLER_R, ROLLER_WARN_AHEAD } from '@/game/threats'
+import { BOLT_R, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD } from '@/game/threats'
 import { GUARD_H, LEVER_R, STONE_H, WEAPON_BOX_R, type WeaponId } from '@/game/weapons'
 import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
@@ -28,6 +28,7 @@ import {
   monstersReady, primeMonsterSprites
 } from '@/game/monsterSprites'
 import { spriteFor, onArtChanged, type ArtKind } from '@/game/art'
+import { stripFrames } from '@/game/spriteStrip'
 import { stageDesigns } from '@/game/foes'
 import {
   drainFx, drawParticles, emit, emitDecal, emitText, getDecals, getTexts,
@@ -258,11 +259,331 @@ export interface PaintOpts {
    *  bench sets this: a reference sheet must never contain the painting it is
    *  about to be replaced by, or every re-roll drifts from the last. */
   procedural?: boolean
+  /**
+   * Where in ONE LOOP of the subject's own animation this frame is, 0..1.
+   *
+   * The whole of the animation contract, in one number. A painter given a
+   * cycle draws that moment of its flicker and nothing else — no clock, no
+   * `Date.now`, no per-body state — so the same call always produces the same
+   * picture. That is what lets the art bench bake eight panels of a real
+   * flame loop out of the same painter the game runs, and it is why the
+   * animation could not stay at the draw sites: a wake driven by wall-clock
+   * time cannot be exported as a reference sheet.
+   *
+   * Undefined means 0, which is one fixed frame of the loop — so every caller
+   * that does not animate keeps exactly the picture it had.
+   */
+  cycle?: number
 }
 
 /** The painting for `(kind, id)`, unless the caller wants the drawing. */
 const art = (kind: ArtKind, id: string, o?: PaintOpts): HTMLImageElement | null =>
   o?.procedural ? null : spriteFor(kind, id)
+
+/**
+ * One cel of a drop-in, and whether the ART itself is carrying the motion.
+ *
+ * `animated` is the flag the whole pipeline turns on. A drop-in at
+ * `images/rounds/<id>.webp` is either ONE painted panel — a still, which is
+ * frozen and needs the procedural wake drawn around it — or a strip of eight,
+ * which is a painted loop and must NOT have a second wake drawn over it. The
+ * panel count is read off the file (`stripFrames`), so which of the two a
+ * project has shipped is never declared anywhere and cannot fall out of date:
+ * drop an eight-panel strip in over a still and the procedural flame switches
+ * itself off on the next frame.
+ *
+ * Every round's panel is square, so the aspect is 1 for all of them.
+ */
+interface ArtCel { frame: CanvasImageSource; animated: boolean }
+
+const artCel = (kind: ArtKind, id: string, o?: PaintOpts): ArtCel | null => {
+  if (o?.procedural) return null
+  const frames = stripFrames(kind, id, 1)
+  if (!frames || frames.length === 0) return null
+  const first = frames[0]!
+  if (frames.length === 1) return { frame: first, animated: false }
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  return { frame: frames[Math.floor(c01 * frames.length) % frames.length] ?? first, animated: true }
+}
+
+/**
+ * ─── Flight animation: the wake, as ONE LOOP ────────────────────────────────
+ *
+ * Every projectile in this game was, on screen, a still picture being
+ * translated down the road — and that is not a figure of speech about the drawn
+ * art. Each painter's first branch is `drawImage(painted); return`, so once the
+ * painted overrides shipped, the trails the procedural fallbacks drew stopped
+ * rendering at all. What was left was a lovely hand-painted rock sliding down
+ * the screen without one pixel of it changing between frames. Player-reported,
+ * in exactly the right word: *"lifeless"*.
+ *
+ * ── Why this lives in the painters and is a function of `cycle01` ───────────
+ *
+ * The first fix drew the wake at the DRAW SITES off a wall clock, which
+ * animated the game and left the pipeline behind — and the pipeline is the
+ * point. The art bench (`ArtSheets.vue`) bakes its reference sheets by calling
+ * these same painters, so an effect that only exists at the draw site can never
+ * be exported, never be handed to a painter, and never come back as art. The
+ * player's actual ask was the other one: *make the flame part of the sheet*.
+ *
+ * So the wake is a pure function of `PaintOpts.cycle` — where in one loop this
+ * frame sits. That single change is what makes the whole round trip work:
+ *
+ *   · the BENCH renders panel k at `cycle = k / 8`, so a reference sheet is
+ *     eight real, distinct moments of the same flame rather than one picture
+ *     stamped eight times;
+ *   · the PAINTER hands those eight panels to the image model as a cycle, with
+ *     the same panel-count discipline the walk prompt fought for;
+ *   · the GAME plays the returned strip off the same `cycle01` it would have
+ *     fed the drawing, so a design can swap from drawn fire to painted fire
+ *     mid-flicker without a pop — the contract in `spriteStrip.ts`.
+ *
+ * ── Everything here is PERIODIC IN ONE LOOP, and that is not decoration ─────
+ *
+ * Every oscillator below is `sin(TAU × (cycle01 × n + phase))` with an INTEGER
+ * `n`. That is the difference between a cycle and a drift: at eight panels, a
+ * tongue wobbling at 7.5 Hz off a seconds clock does not arrive back where it
+ * started, so panel 8 does not join panel 1 — and a strip that does not join
+ * itself pops once per loop, forever, in a way that reads as a dropped frame.
+ * The frequencies are small integers so the loop closes exactly.
+ *
+ * ── The rule the wake keeps ─────────────────────────────────────────────────
+ *
+ * NOTHING here may change what the player reads as the lethal part. The gunner
+ * bolt is drawn at `BOLT_R`, the radius the kill is measured against, precisely
+ * so that what is seen is what hits — a round painted wider than it kills
+ * teaches a dodge bigger than it needs, and one painted narrower gets players
+ * killed. So the wake streams BEHIND the heading and none of it wraps the head.
+ */
+
+const TAU = Math.PI * 2
+
+/**
+ * Loops per second a round's wake plays at.
+ *
+ * At the pipeline's eight panels this is 8 x 1.6 = ~13 frames a second, which
+ * is where hand-painted fire wants to sit: much slower and the panels read as
+ * separate pictures, much faster and the flicker turns into a shimmer that the
+ * eye stops resolving as flame. It is one constant because the drawn wake and a
+ * painted strip must play at the SAME rate — that is the whole point of driving
+ * both from `cycle01`, and two rates would make the drop-in visibly change the
+ * animation's speed.
+ */
+export const ROUND_CYCLE_HZ = 1.6
+
+/**
+ * ─── The roller's loop is not on a clock, it is on the GROUND ───────────────
+ *
+ * Every other round's wake is fire, and fire flickers at whatever rate looks
+ * like fire. A rolling ball is the one projectile whose animation is a fact
+ * about the world: the surface has to travel as far as the ball does, or it
+ * skids. So this rate is derived, not chosen.
+ *
+ * A sphere rolling without slipping makes `v / 2πr` revolutions a second: at
+ * `ROLLER_SPEED` 3.4 and `ROLLER_R` 2.25 that is 0.24 — one turn every four
+ * seconds. The ball is four and a half units across and covers three and a half
+ * a second, so it genuinely does turn that slowly, and eight frames spread over
+ * a whole revolution would play at under two a second and read as a slideshow.
+ *
+ * ── What the loop actually is: ONE BAND SPACING ──
+ *
+ * The drawing marches four bands down the face and wraps them, which is the old
+ * 2D shorthand for a rolling ball rather than a projection of one. Read it as
+ * geometry and the count follows: four bands span the FRONT of the ball, and the
+ * front is half of it, so there are EIGHT around the whole ball. The picture
+ * therefore repeats every eighth of a revolution — when the next band arrives
+ * where the last one was — and that eighth is what the eight frames cover.
+ *
+ * So the loop runs at eight times the revolution rate: 1.92 a second, which is
+ * 15 frames a second of surface travelling at the speed of the ground. Fast
+ * enough to read as motion rather than as steps.
+ *
+ * (An earlier version of this called it a QUARTER turn, from counting the four
+ * bands as four around the whole ball rather than four across its face. That
+ * put the loop at 0.96/s — half the speed the surface actually moves — which is
+ * exactly the "it looks like it is skidding" error this constant exists to
+ * prevent. The band count and the roll rate have to be derived from the same
+ * picture or they disagree silently.)
+ */
+
+/** Bands visible across the FRONT of the ball at once — what `paintRollerBall`
+ *  marches, and what a painted panel shows. */
+export const ROLLER_BANDS_ON_FACE = 4
+
+/**
+ * Spikes around the silhouette.
+ *
+ * Fixed in angle and purely decorative: they live in the margin
+ * `ROLLER_ART_PAD` reserves, outside the sphere that actually kills. They are
+ * here so the REFERENCE shows the spiked ball its own prompt describes — a
+ * painter handed a bare sphere invents the studs, and invented studs do not
+ * move with the surface.
+ */
+export const ROLLER_RIM_SPIKES = 14
+
+/** Rivets shown along one band's visible arc. Enough to read as a row that
+ *  crowds toward the band's ends; few enough to stay dots at play size. */
+export const ROLLER_RIVETS_PER_BAND = 6
+
+/** …and therefore twice that around the whole ball, since the face is half of
+ *  it. This is the number the roll rate is derived from. */
+export const ROLLER_BANDS_AROUND = ROLLER_BANDS_ON_FACE * 2
+
+export const ROLLER_ROLL_HZ =
+  (ROLLER_SPEED / (2 * Math.PI * ROLLER_R)) * ROLLER_BANDS_AROUND
+
+/**
+ * How much `paintRollerBall`'s `spin` advances over one loop.
+ *
+ * `spin` wraps every 2 units across the ball's full height, and there are four
+ * bands in that span, so one band spacing is 0.5. The drawing and a painted
+ * strip therefore step the same distance per frame, which is the whole point of
+ * driving both from `cycle01`.
+ */
+export const ROLLER_SPIN_PER_LOOP = 2 / ROLLER_BANDS_ON_FACE
+
+/**
+ * Where in its loop a given body is, right now.
+ *
+ * Offset by the body's own id so a pack never flickers in lockstep — the thing
+ * that most reliably makes an effect read as a screen artefact rather than as
+ * something in the world. The golden-ratio step spreads any number of
+ * simultaneous rounds about as evenly as a cheap hash can.
+ */
+const roundCycle = (seconds: number, id: number): number =>
+  seconds * ROUND_CYCLE_HZ + id * 0.618
+
+/**
+ * A licking flame streaming along local −Y, from a body of radius `r`.
+ *
+ * Overlapping tongues rather than one tapered blob, because a blob scaled by a
+ * sine is a throb and tongues on staggered phases are a FLAME. Each tongue has
+ * its own harmonic and its own offset off the axis, so the plume writhes
+ * instead of pumping, and `seed` decorrelates one body from the next — two
+ * rounds in the air together must never flicker in lockstep, which is the most
+ * reliable way to make an effect read as a screen artefact rather than as
+ * something in the world.
+ *
+ * The caller owns the rotation. The flame goes straight up the local axis, so a
+ * caller that has already turned to its heading gets a trail behind it, and one
+ * that has not — the meteor, which falls straight down — gets a plume streaming
+ * up the screen.
+ */
+const paintTrailFlame = (
+  ctx: CanvasRenderingContext2D,
+  r: number, len: number, cycle01: number, seed: number,
+  hot: string, cool: string, cheap: boolean
+): void => {
+  const tongues = cheap ? 3 : 6
+  // ── The whip: what makes one panel a DIFFERENT picture from the next ──
+  //
+  // Six tongues on independent phases writhe convincingly and, panel to panel,
+  // average out — the envelope of the plume barely moves, so an exported sheet
+  // is eight pictures of the same flame and an image model asked to repaint it
+  // sensibly returns eight copies of one frame. The fix is a motion the whole
+  // plume shares: it leans and stretches as one body on the loop's own
+  // fundamental, and the per-tongue wobble rides on top of that.
+  //
+  // The lean is applied along the tongue rather than at its root, so the plume
+  // bends like fire instead of sliding sideways like a decal.
+  const whip = TAU * cycle01
+  const lean = Math.sin(whip) * r * 1.15
+  const stretch = 0.72 + 0.38 * Math.sin(whip + 1.1)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  for (let i = 0; i < tongues; i++) {
+    // Integer harmonics, so the loop closes; the phase is what keeps the six
+    // tongues from being one fat tongue.
+    const ph = seed * 0.137 + i * 0.382
+    const wob = Math.sin(TAU * (cycle01 * (2 + (i % 3)) + ph))
+    const reach = len * stretch
+      * (0.55 + 0.45 * (0.62 + 0.38 * Math.sin(TAU * (cycle01 * (1 + (i % 2)) + ph))))
+    const sway = lean + Math.sin(TAU * (cycle01 * (1 + (i % 3)) + ph * 1.7)) * r * 0.45
+    const steps = cheap ? 3 : 5
+    for (let k = 1; k <= steps; k++) {
+      const back = k / steps
+      // Fades and narrows toward the tip: a tongue of constant width is a
+      // streak, and a streak reads as a smear on the lens.
+      ctx.globalAlpha = 0.3 * (1 - back) ** 1.35
+      ctx.fillStyle = back < 0.5 ? hot : cool
+      ctx.beginPath()
+      ctx.ellipse(
+        sway * back + wob * r * 0.22 * back,
+        -reach * back,
+        r * (0.72 - back * 0.5),
+        r * (1.05 - back * 0.6),
+        0, 0, TAU
+      )
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+/**
+ * Embers shed off a burning body, drifting back along local −Y.
+ *
+ * The one part of the wake that is not attached to the object, and the reason
+ * it is worth the six arcs: everything else moves WITH the round, so at a
+ * constant screen position — which a falling meteor very nearly is, dropping
+ * toward a fixed mark — the whole effect can still read as static. Embers
+ * detach and fall behind, so the eye gets an unambiguous "this is travelling"
+ * even when nothing else has moved.
+ *
+ * Each ember walks its own sawtooth, offset by `i / 6`, so they are not a
+ * marching row — and a sawtooth in `cycle01` is periodic by construction.
+ */
+const paintEmbers = (
+  ctx: CanvasRenderingContext2D,
+  r: number, len: number, cycle01: number, seed: number, tint: string
+): void => {
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.fillStyle = tint
+  for (let i = 0; i < 6; i++) {
+    const ph = (((cycle01 + i / 6 + seed * 0.017) % 1) + 1) % 1
+    ctx.globalAlpha = 0.55 * (1 - ph) ** 1.6
+    const spread = Math.sin(TAU * (seed * 0.061 + i / 6)) * r * 1.15
+    ctx.beginPath()
+    ctx.arc(spread * ph, -len * ph, r * 0.2 * (1 - ph * 0.6), 0, TAU)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/**
+ * The corona around a charged round: two counter-breathing rings of light.
+ *
+ * The bolts are not on fire, they are charged, so they get a different verb
+ * from the meteor — a halo that swells and shrinks rather than a plume that
+ * writhes. Two rings in antiphase so the body is never uniformly bright: a
+ * single pulsing disc is a blinking light, and a blinking light on the road
+ * reads as a UI element rather than as a hazard.
+ *
+ * Sized UNDER the painted body on purpose. It is a glow the round sits inside,
+ * never a bigger silhouette around it — see the rule in the header.
+ */
+const paintFlightAura = (
+  ctx: CanvasRenderingContext2D,
+  r: number, cycle01: number, seed: number, inner: string, outer: string, cheap: boolean
+): void => {
+  const beat = Math.sin(TAU * (cycle01 + seed * 0.113))
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = 0.2 + 0.1 * beat
+  ctx.fillStyle = outer
+  ctx.beginPath()
+  ctx.arc(0, 0, r * (1.75 + beat * 0.16), 0, TAU)
+  ctx.fill()
+  if (!cheap) {
+    ctx.globalAlpha = 0.26 - 0.1 * beat
+    ctx.fillStyle = inner
+    ctx.beginPath()
+    ctx.arc(0, 0, r * (1.18 - beat * 0.12), 0, TAU)
+    ctx.fill()
+  }
+  ctx.restore()
+}
 
 // ─── Painters ───────────────────────────────────────────────────────────────
 //
@@ -857,11 +1178,52 @@ export const paintRollerBall = (
   ctx: CanvasRenderingContext2D, r: number, spin: number, scale: number,
   cheap: boolean, o?: PaintOpts
 ): void => {
-  const painted = art('round', 'roller', o)
-  if (painted) {
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  const cel = artCel('round', 'roller', o)
+
+  // No trail on this one, and that is the correction rather than an omission.
+  //
+  // A flame streaming off a rolling STONE was the wrong verb to begin with —
+  // this elite grinds, it is not thrown — and the plume reached `r * 2.2` out
+  // of a panel whose edge is at `ROLLER_ART_PAD` = 1.3, so on the reference
+  // sheet it crossed into the panel above and broke the one rule the cycle
+  // prompt insists on. What sells the roll is the SURFACE turning, below.
+
+  if (cel) {
     const R = r * ROLLER_ART_PAD
-    ctx.drawImage(painted, -R, -R, R * 2, R * 2)
+    ctx.drawImage(cel.frame, -R, -R, R * 2, R * 2)
   } else {
+    // ── The spikes, behind the ball ──
+    //
+    // The blurb has called this a spiked ball since the day it was written and
+    // the drawing never had a single spike on it, so the reference sheet was a
+    // bare banded sphere and the painter had to INVENT them. Having invented
+    // them it also had to guess how far they reach — `ROLLER_ART_PAD` exists to
+    // reserve exactly that margin — and, worst of all, nothing in front of it
+    // said the studs belong to the SURFACE. So they came back pinned in place
+    // while the ironwork slid underneath, which is a striped sphere with a
+    // slide on it rather than a ball that rolls.
+    //
+    // Fixed in angle, unlike the studs on the face below: the silhouette of a
+    // ball rolling straight at the viewer barely changes, and spikes that
+    // crawled around the rim would read as a ball spinning on the spot.
+    if (!cheap) {
+      const tip = r * (ROLLER_ART_PAD - 0.04)
+      const half = (Math.PI / ROLLER_RIM_SPIKES) * 0.42
+      ctx.beginPath()
+      for (let i = 0; i < ROLLER_RIM_SPIKES; i++) {
+        const a = (i / ROLLER_RIM_SPIKES) * Math.PI * 2
+        ctx.moveTo(Math.cos(a - half) * r * 0.94, Math.sin(a - half) * r * 0.94)
+        ctx.lineTo(Math.cos(a) * tip, Math.sin(a) * tip)
+        ctx.lineTo(Math.cos(a + half) * r * 0.94, Math.sin(a + half) * r * 0.94)
+        ctx.closePath()
+      }
+      ctx.fillStyle = '#4a5058'
+      ctx.fill()
+      ctx.strokeStyle = '#10131a'
+      ctx.lineWidth = Math.max(1.5, scale * 0.05)
+      ctx.stroke()
+    }
     // Built per frame rather than cached in `getRamp`: there are never more
     // than a couple of these on screen, so the two allocations are not the
     // frame's problem.
@@ -878,23 +1240,91 @@ export const paintRollerBall = (
   // Banding that turns with the roll. The spin is derived from how far the
   // ball has actually travelled (`phase` accumulates with time and the speed
   // is constant), so it can never look like it is sliding.
-  if (!cheap) {
+  // ── The rings that sell the roll ──
+  //
+  // Skipped entirely when the drop-in is an animated strip: eight painted
+  // frames of a turning ball ARE the roll, and scrolling a second set of bands
+  // over baked-in ironwork is what made the first painted roller read as a
+  // static ball with some dirt on it.
+  //
+  // Drawn HARDER than they were (0.28 alpha of a thin dark line, which was
+  // invisible at play size and — worse — invisible on the reference sheet, so
+  // the painter had nothing to copy). A ring now has a shaded side and a lit
+  // side, which is what makes it read as a band wrapping a sphere rather than
+  // as a line ruled across a disc.
+  if (!cheap && !cel?.animated) {
     ctx.save()
     ctx.beginPath()
     ctx.arc(0, 0, r * 0.97, 0, Math.PI * 2)
     ctx.clip()
-    ctx.globalAlpha = 0.28
-    ctx.strokeStyle = '#161a20'
-    ctx.lineWidth = Math.max(2, scale * 0.09)
-    for (let i = 0; i < 4; i++) {
-      const off = (((spin + i * 0.5) % 2) + 2) % 2 - 1
+    ctx.lineWidth = Math.max(2, scale * 0.11)
+    for (let i = 0; i < ROLLER_BANDS_ON_FACE; i++) {
+      // ── Where the band sits, in ANGLE rather than in screen y ──
+      //
+      // This is the difference between a ball and a barber's pole, and getting
+      // it wrong is what two painted returns copied. Every band used to be the
+      // same ellipse — `r * 0.98` wide whatever its height — translated down
+      // the face in even steps. Four identical stripes sliding at a constant
+      // rate across a disc is not a sphere turning; it has no horizon, nothing
+      // narrows, nothing bunches, and a painter shown that paints exactly that.
+      //
+      // A band is a parallel on the ball, so `off` is read as its LATITUDE:
+      // the height is `sin`, the width is `cos`. It therefore narrows to
+      // nothing as it wraps over the top and bottom edges, and — because even
+      // steps in angle are uneven steps in y — the bands crowd together near
+      // those edges and stretch apart across the middle. That crowding IS the
+      // read: it is the only cue in the picture that says the surface is
+      // curving away rather than scrolling past.
+      const off = (((spin + i * ROLLER_SPIN_PER_LOOP) % 2) + 2) % 2 - 1
+      const lat = off * Math.PI * 0.5
+      const y = Math.sin(lat) * r
+      const halfW = Math.cos(lat) * r * 0.98
+      // The band's own thickness foreshortens with it, so it stays a hoop
+      // lying on the surface instead of a ring hovering over the silhouette.
+      const halfH = Math.cos(lat) * r * 0.2
+      // …and it fades out as it reaches the edge, where a hoop on a sphere
+      // turns away from the viewer entirely.
+      const edge = Math.cos(lat) ** 1.5
+      if (halfW < 1 || halfH < 0.5) continue
+      ctx.globalAlpha = 0.18 + 0.42 * edge
+      ctx.strokeStyle = '#141820'
       ctx.beginPath()
-      ctx.ellipse(0, off * r, r * 0.98, r * 0.24, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, y, halfW, halfH, 0, 0, Math.PI * 2)
       ctx.stroke()
+      ctx.globalAlpha = 0.12 + 0.32 * edge
+      ctx.strokeStyle = '#c2cfe0'
+      ctx.beginPath()
+      ctx.ellipse(0, y - r * 0.045 * Math.cos(lat), halfW, halfH, 0, 0, Math.PI * 2)
+      ctx.stroke()
+
+      // ── Rivets, riding the band ──
+      //
+      // The one thing that makes the turn unarguable, and the thing the blurb
+      // has always asked for. A stripe sliding down a face can be read as a
+      // texture scrolling past; a row of OBJECTS that climbs over the top edge,
+      // crosses the face spreading apart and then closing up, and drops off the
+      // bottom cannot be read as anything but a surface turning.
+      //
+      // They are on the same clock as the band they sit on — one surface
+      // moving, not two — and they carry the foreshortening twice over: spaced
+      // by `sin` across the band so they crowd at its left and right ends, and
+      // sized by `cos` so the ones near the silhouette are the smallest.
+      for (let k = 0; k < ROLLER_RIVETS_PER_BAND; k++) {
+        const lon = (-1 + (2 * k) / (ROLLER_RIVETS_PER_BAND - 1)) * Math.PI * 0.42
+        const depth = Math.cos(lon)
+        const rr = r * 0.05 * depth * Math.cos(lat)
+        if (rr < 0.7) continue
+        ctx.globalAlpha = (0.3 + 0.5 * edge) * depth
+        ctx.fillStyle = '#b3bfcf'
+        ctx.beginPath()
+        ctx.arc(Math.sin(lon) * halfW, y - halfH * 0.12, rr, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
     ctx.restore()
   }
-  if (painted) return
+  // A painted ball brings its own rim light and outline.
+  if (cel) return
 
   // Rim light along the leading edge, and a hard outline so the silhouette
   // survives on top of a bright road.
@@ -934,40 +1364,54 @@ export const paintGunnerBolt = (
   ctx: CanvasRenderingContext2D, r: number, dx: number, dy: number, scale: number,
   cheap: boolean, o?: PaintOpts
 ): void => {
-  const painted = art('round', 'bolt-gunner', o)
-  if (painted) {
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  const cel = artCel('round', 'bolt-gunner', o)
+
+  // The burn, streaming back up the round's own line. `faceHeading` puts
+  // travel along +X and the flame streams along local −Y, so a quarter turn
+  // points it backwards.
+  const trail = (): void => {
     ctx.save()
     faceHeading(ctx, dx, dy)
-    ctx.drawImage(painted, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
+    ctx.rotate(-Math.PI / 2)
+    paintTrailFlame(ctx, r * 0.85, r * 6, c01, 7, '#d8f6ff', '#2f9ad8', cheap)
+    ctx.restore()
+  }
+
+  // ── One glow, not two ──
+  //
+  // The wake is only drawn HERE, on the two paths that have no glow of their
+  // own: a frozen painted still, and… nothing. The fully procedural body below
+  // already ends in a halo and a core, and adding a corona on top of it was
+  // measured on the reference sheet — the round came back as a flat grey-green
+  // disc with the trail washed out inside it, which is what two additive glows
+  // over one another always look like. So the procedural path gets the flame
+  // and lets its OWN halo breathe on the cycle instead.
+  if (cel) {
+    if (!cel.animated) {
+      paintFlightAura(ctx, r, c01, 2, '#eafcff', '#4fc9ff', cheap)
+      trail()
+    }
+    ctx.save()
+    faceHeading(ctx, dx, dy)
+    ctx.drawImage(cel.frame, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
       ROUND_BOX.side * r, ROUND_BOX.side * r)
     ctx.restore()
     return
   }
+  trail()
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
 
-  // The trail, back along the line it came down.
-  const steps = cheap ? 4 : 9
-  for (let i = steps; i >= 1; i--) {
-    const back = i / steps
-    ctx.globalAlpha = 0.3 * (1 - back) ** 1.3
-    ctx.fillStyle = '#4fc9ff'
-    ctx.beginPath()
-    ctx.ellipse(
-      -dx * back * r * 5,
-      dy * back * r * 5,
-      r * (1 - back * 0.6), r * (1.35 - back * 0.7),
-      0, 0, Math.PI * 2
-    )
-    ctx.fill()
-  }
-
   // Halo then core: one flat disc reads as a sticker, two read as something
-  // burning through the air.
-  ctx.globalAlpha = 0.55
+  // burning through the air. The halo BREATHES on the loop — it is the round's
+  // own glow doing what the extra corona was added to do, without being a
+  // second glow.
+  const beat = Math.sin(TAU * c01)
+  ctx.globalAlpha = 0.5 + beat * 0.12
   ctx.fillStyle = '#8fe4ff'
   ctx.beginPath()
-  ctx.arc(0, 0, r * 2.1, 0, Math.PI * 2)
+  ctx.arc(0, 0, r * (2.0 + beat * 0.2), 0, Math.PI * 2)
   ctx.fill()
   ctx.globalAlpha = 0.95
   ctx.fillStyle = '#eafcff'
@@ -998,40 +1442,50 @@ export const paintBossBolt = (
   ctx: CanvasRenderingContext2D, r: number, vx: number, vy: number, pulse: number,
   cheap: boolean, o?: PaintOpts
 ): void => {
-  const painted = art('round', 'bolt-boss', o)
-  if (painted) {
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  const cel = artCel('round', 'bolt-boss', o)
+
+  // The bolt's LINE is the thing the player has to step off, so the trail is
+  // what carries it — animated, and back along the heading.
+  const trail = (): void => {
+    ctx.save()
+    faceHeading(ctx, vx, vy)
+    ctx.rotate(-Math.PI / 2)
+    paintTrailFlame(ctx, r * 0.8, r * 5.5, c01, 13, '#bdffd6', '#2fb865', cheap)
+    ctx.restore()
+  }
+
+  // ── One glow, not two ──
+  //
+  // The wake is only drawn HERE, on the two paths that have no glow of their
+  // own: a frozen painted still, and… nothing. The fully procedural body below
+  // already ends in a halo and a core, and adding a corona on top of it was
+  // measured on the reference sheet — the round came back as a flat grey-green
+  // disc with the trail washed out inside it, which is what two additive glows
+  // over one another always look like. So the procedural path gets the flame
+  // and lets its OWN halo breathe on the cycle instead.
+  if (cel) {
+    if (!cel.animated) {
+      paintFlightAura(ctx, r, c01, 4, '#eafff0', '#3ad97a', cheap)
+      trail()
+    }
     ctx.save()
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = 1
     faceHeading(ctx, vx, vy)
-    ctx.drawImage(painted, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
+    ctx.drawImage(cel.frame, -ROUND_BOX.head * r, -ROUND_BOX.side * r / 2,
       ROUND_BOX.side * r, ROUND_BOX.side * r)
     ctx.restore()
     return
   }
+  trail()
   ctx.globalCompositeOperation = 'lighter'
-  if (!cheap) {
-    // A short trail behind the direction of travel, so the bolt's LINE is
-    // legible — which is the thing the player has to step off.
-    const len = Math.hypot(vx, vy) || 1
-    for (let i = 1; i <= 4; i++) {
-      const back = i / 4
-      ctx.globalAlpha = 0.3 * (1 - back)
-      ctx.fillStyle = '#7cf0a8'
-      ctx.beginPath()
-      ctx.arc(
-        -(vx / len) * back * r * 4,
-        (vy / len) * back * r * 4,
-        r * (1 - back * 0.6), 0, Math.PI * 2
-      )
-      ctx.fill()
-    }
-  }
-  // Halo and core, pulsing, so it is unmistakably a live thing.
-  ctx.globalAlpha = 0.5
+  // Halo and core, breathing on the loop as well as on the caller's `pulse`,
+  // so it is unmistakably a live thing.
+  ctx.globalAlpha = 0.45 + Math.sin(TAU * c01) * 0.12
   ctx.fillStyle = '#3ad97a'
   ctx.beginPath()
-  ctx.arc(0, 0, r * 2.1 * pulse, 0, Math.PI * 2)
+  ctx.arc(0, 0, r * 2.0 * pulse, 0, Math.PI * 2)
   ctx.fill()
   ctx.globalAlpha = 0.95
   ctx.fillStyle = '#eafff0'
@@ -1054,43 +1508,50 @@ export const paintMeteorRock = (
   ctx: CanvasRenderingContext2D, rockR: number, big: boolean, scale: number,
   cheap: boolean, o?: PaintOpts
 ): void => {
-  const painted = art('round', 'meteor', o)
-  if (painted) {
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  const cel = artCel('round', 'meteor', o)
+
+  // ── The fire ──
+  //
+  // Drawn UNDER the stone, and skipped entirely when the drop-in is a painted
+  // STRIP: eight painted frames already are the flame, and a second live plume
+  // over them is two fires burning at different rates on one rock. A painted
+  // STILL is frozen, so it keeps the live fire — see `artCel`.
+  if (!cel || !cel.animated) {
+    paintTrailFlame(
+      ctx, rockR, scale * (big ? 7.5 : 4.6), c01, big ? 3 : 11,
+      big ? '#ffb648' : '#ff9a3c', big ? '#ff4a12' : '#ff6a24', cheap
+    )
+    if (!cheap) paintEmbers(ctx, rockR, scale * (big ? 8.5 : 5.4), c01, big ? 5 : 17, '#ffd08a')
+  }
+
+  if (cel) {
     const s = METEOR_BOX.side * rockR
-    ctx.drawImage(painted, -s / 2, -METEOR_BOX.centre * rockR, s, s)
+    ctx.drawImage(cel.frame, -s / 2, -METEOR_BOX.centre * rockR, s, s)
     return
   }
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
 
-  // A continuous burning streak rather than a dotted line — the tail is
-  // what says "falling" while the rock itself is barely moving on screen.
-  const tailLen = scale * (big ? 7 : 4.2)
-  const steps = cheap ? 5 : 12
-  for (let i = 1; i <= steps; i++) {
-    const back = i / steps
-    ctx.globalAlpha = 0.34 * (1 - back) ** 1.4
-    ctx.fillStyle = big ? '#ff6a1e' : '#ffa04e'
-    ctx.beginPath()
-    ctx.ellipse(
-      0, -back * tailLen,
-      rockR * (1 - back * 0.75), rockR * (1.5 - back * 0.9),
-      0, 0, Math.PI * 2
-    )
-    ctx.fill()
-  }
-
   // Halo, then a white-hot core: two passes, because one flat glow reads
-  // as a sticker and two read as something burning.
-  ctx.globalAlpha = 0.5
+  // as a sticker and two read as something burning. Both FLARE on the loop —
+  // a shell of fire around a falling stone does not hold one brightness, and
+  // on the reference sheet it is the second thing (after the tail) that tells
+  // a painter these eight panels are eight moments and not eight copies.
+  const flare = 0.5 + 0.5 * Math.sin(TAU * (c01 + 0.25))
+  ctx.globalAlpha = 0.4 + flare * 0.22
   ctx.fillStyle = big ? '#ff9a3c' : '#ffbe72'
   ctx.beginPath()
-  ctx.arc(0, 0, rockR * 2.2, 0, Math.PI * 2)
+  // Capped at the 2.2 the halo has always been: `METEOR_BOX` leaves only 1.5
+  // radii of panel under the stone, so a halo that flares past 2.2 is cut flat
+  // by the panel edge — and a flat-bottomed halo in a REFERENCE is a
+  // flat-bottomed halo in the painting that comes back from it.
+  ctx.arc(0, 0, rockR * (2.0 + flare * 0.2), 0, Math.PI * 2)
   ctx.fill()
   ctx.globalAlpha = 0.9
   ctx.fillStyle = '#fff0c4'
   ctx.beginPath()
-  ctx.arc(0, 0, rockR * 1.25, 0, Math.PI * 2)
+  ctx.arc(0, 0, rockR * (1.15 + flare * 0.22), 0, Math.PI * 2)
   ctx.fill()
   ctx.globalCompositeOperation = 'source-over'
 
@@ -1115,10 +1576,17 @@ export const paintMeteorRock = (
 export const paintBombCharge = (
   ctx: CanvasRenderingContext2D, bodyR: number, glowR: number, o?: PaintOpts
 ): void => {
-  const painted = art('round', 'bomb', o)
-  if (painted) {
+  const c01 = (((o?.cycle ?? 0) % 1) + 1) % 1
+  const cel = artCel('round', 'bomb', o)
+
+  // The charge is burning down, so it gets the flame rather than the aura.
+  if (!cel || !cel.animated) {
+    paintTrailFlame(ctx, bodyR * 0.7, bodyR * 2.6, c01, 23, '#ffd88a', '#ff5a1e', false)
+  }
+
+  if (cel) {
     ctx.globalAlpha = 1
-    ctx.drawImage(painted, -bodyR * 2.2, -bodyR * 2.2, bodyR * 4.4, bodyR * 4.4)
+    ctx.drawImage(cel.frame, -bodyR * 2.2, -bodyR * 2.2, bodyR * 4.4, bodyR * 4.4)
     return
   }
   ctx.globalAlpha = 1
@@ -2935,9 +3403,21 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
         const my = fallFrom + (sy - fallFrom) * (p * p)
         const rockR = scale * (big ? 1 : 0.55)
 
+        // ── …and the fire it is falling in ──
+        //
+        // The fire belongs to `paintMeteorRock` now, and is asked for by the
+        // CYCLE rather than drawn here: that is what lets the art bench bake
+        // eight panels of it and a painted strip replace it. See the header
+        // above `paintTrailFlame`.
+        const cycle = roundCycle(c.t, 0)
         ctx.save()
         ctx.translate(sx, my)
-        paintMeteorRock(ctx, rockR, big, scale, cheap)
+        // The tumble. A few degrees of counter-rotation, not a spin: the
+        // painted rock carries its flame in the bitmap, and turning it far
+        // enough to see would point the painted fire sideways while the stone
+        // is still falling straight down.
+        ctx.rotate(Math.sin(TAU * cycle) * 0.09 + Math.sin(TAU * cycle * 2) * 0.04)
+        paintMeteorRock(ctx, rockR, big, scale, cheap, { cycle })
         ctx.restore()
       }
       continue
@@ -2983,7 +3463,12 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
         const bodyR = scale * (0.42 + beat * 0.1 * p)
         ctx.save()
         ctx.translate(sx, sy - scale * 0.5)
-        paintBombCharge(ctx, bodyR, bodyR * (1.8 + beat * 0.6))
+        // The fuse burns faster as it shortens, so the charge's own loop
+        // speeds up with `p` — the one round whose cadence is not the shared
+        // one, because "about to go off" has to be legible at the edge of
+        // vision without reading a number.
+        paintBombCharge(ctx, bodyR, bodyR * (1.8 + beat * 0.6),
+          { cycle: c.t * (1 + p * 2.2) })
         ctx.restore()
         ctx.globalAlpha = 1
         // The spark on the fuse, walking down toward the charge.
@@ -3106,8 +3591,30 @@ interface Rake {
 }
 
 /** How long a struck rake stays on the road, seconds. Long enough to read as a
- *  scar and short enough not to be mistaken for a live one. */
-const RAKE_AFTER_S = 0.34
+ *  scar and short enough not to be mistaken for a live one.
+ *
+ * It was 0.34 and is 0.46, bought for the blade below: a slash that crosses the
+ * lane in a third of a second and then holds as a scar needs the third of a
+ * second. The extra 0.12 is all scar — the strike is over at `t = life` and the
+ * kill is already paid, which is the property `RAKE_SLASH_S` protects. */
+const RAKE_AFTER_S = 0.46
+
+/**
+ * How much of the after-window the blade takes to cross a lane, seconds.
+ *
+ * Short, and deliberately shorter than the flash it travels under. The rake
+ * lands ALL AT ONCE at `t = life` — `throwRake` has already taken everybody in
+ * the lanes by the time a single pixel of this is drawn — so a blade that swept
+ * slowly would be telling the player a lie with real consequences: they would
+ * read the sweep as the hit arriving, believe the near end of the lane is still
+ * safe, and steer into a place that is already gone.
+ *
+ * What keeps it honest is the ORDER. The full-lane flash is painted first and
+ * covers every inch of the lane on the frame of the strike; the blade is a
+ * flourish drawn on top of a lane that has already been declared hit. At 0.16 s
+ * it is over before a player could act on it either way.
+ */
+const RAKE_SLASH_S = 0.16
 
 const rakes: Rake[] = []
 
@@ -3156,11 +3663,101 @@ const drawClawFurrows = (ctx: CanvasRenderingContext2D): void => {
         continue
       }
 
-      // The strike, then the scar. White-hot for a beat, then a dark gouge.
+      // ── The strike ──
+      //
+      // The whole lane, hot, on the first frame. This is the honest part and it
+      // is painted first and unconditionally: the rake takes everybody standing
+      // in the lane in one instant, so the picture of it has to be the whole
+      // lane in one instant. Everything after this is decoration on a fact the
+      // player has already been told.
       const fade = 1 - after
       ctx.globalAlpha = fade
-      ctx.fillStyle = after < 0.35 ? '#fff2d8' : '#2a1109'
+      ctx.fillStyle = after < 0.28 ? '#fff2d8' : '#2a1109'
       ctx.fillRect(cx - w, top, w * 2, bottom - top)
+
+      // ── …and the claw that made it ──
+      //
+      // A metallic crescent riding down the lane, the same verb the elite's
+      // scythe uses in `drawCasts` — a filled sweep with a hot leading edge,
+      // not a stroked arc. The elite swings ACROSS the road in front of itself
+      // and this rakes ALONG it, which is the difference between the two
+      // attacks and the reason the claw could not simply borrow the crescent
+      // unchanged.
+      //
+      // Steel rather than fire, and that is the read the player asked for: the
+      // lane fill says "burned", the blade says "cut". Three tones down the
+      // width — dark spine, bright body, white edge — is the cheapest thing
+      // that looks like metal rather than like a light.
+      const slash = Math.min(1, (after * RAKE_AFTER_S) / RAKE_SLASH_S)
+      if (slash < 1) {
+        // Eased so the blade is fastest in the middle of the lane: a constant
+        // sweep reads as a wipe transition, and acceleration reads as a swing.
+        const ease = slash < 0.5 ? 2 * slash * slash : 1 - (1 - slash) ** 2 * 2
+        const by = top + (bottom - top) * ease
+        const arc = w * 1.25
+        const lift = (bottom - top) * 0.16
+
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        // The wake the blade drags behind it, back up the lane it came down.
+        // Without it the crescent is a coin flipping down the road; with it the
+        // eye joins the frames into one stroke.
+        ctx.globalAlpha = 0.5 * (1 - slash)
+        // Cached under a CONSTANT key, not a per-width one: the gradient is
+        // authored in a normalised 0..-1 box and scaled into place below, so
+        // one object serves every lane at every zoom. A width-keyed cache here
+        // would build a new gradient per lane per resize for no difference.
+        const grad = getRamp('clawWake') ?? putRamp('clawWake', (() => {
+          const g = ctx.createLinearGradient(0, -1, 0, 0)
+          g.addColorStop(0, 'rgba(214,232,255,0)')
+          g.addColorStop(1, 'rgba(232,244,255,0.85)')
+          return g
+        })())
+        ctx.save()
+        ctx.translate(cx, by)
+        ctx.scale(1, Math.max(1, lift * 2))
+        ctx.fillStyle = grad
+        ctx.fillRect(-w * 0.72, -1, w * 1.44, 1)
+        ctx.restore()
+
+        // The blade itself: a crescent bowed in the direction of travel, so it
+        // reads as something cutting forward rather than as a disc.
+        ctx.globalAlpha = 0.9 * (1 - slash * 0.35)
+        ctx.fillStyle = '#8fa6c4'
+        ctx.beginPath()
+        ctx.moveTo(cx - arc, by - lift * 0.5)
+        ctx.quadraticCurveTo(cx, by + lift, cx + arc, by - lift * 0.5)
+        ctx.quadraticCurveTo(cx, by + lift * 0.35, cx - arc, by - lift * 0.5)
+        ctx.closePath()
+        ctx.fill()
+
+        // The edge. One hairline of white is what turns grey into steel.
+        ctx.globalAlpha = Math.min(1, 1 - slash * 0.2)
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = Math.max(2, scale * 0.05)
+        ctx.beginPath()
+        ctx.moveTo(cx - arc, by - lift * 0.5)
+        ctx.quadraticCurveTo(cx, by + lift, cx + arc, by - lift * 0.5)
+        ctx.stroke()
+
+        // Sparks off the tips, where a claw would actually strike the road.
+        if (!cheapFx) {
+          ctx.fillStyle = '#fff6d8'
+          for (let i = 0; i < 4; i++) {
+            const sp = (slash * 2.4 + i * 0.27) % 1
+            ctx.globalAlpha = 0.7 * (1 - sp)
+            const side = i % 2 ? 1 : -1
+            ctx.beginPath()
+            ctx.arc(
+              cx + side * arc * (0.85 + sp * 0.5),
+              by - lift * 0.5 - sp * lift * 1.6,
+              Math.max(1.2, scale * 0.045 * (1 - sp)), 0, Math.PI * 2
+            )
+            ctx.fill()
+          }
+        }
+        ctx.restore()
+      }
     }
     ctx.restore()
   }
@@ -3247,7 +3844,7 @@ const drawBossBolts = (ctx: CanvasRenderingContext2D): void => {
     const pulse = 0.85 + Math.sin(t * 14 + p.id) * 0.15
     ctx.save()
     ctx.translate(sx, sy)
-    paintBossBolt(ctx, r, p.vx, p.vy, pulse, cheapFx)
+    paintBossBolt(ctx, r, p.vx, p.vy, pulse, cheapFx, { cycle: roundCycle(t, p.id) })
     ctx.restore()
   }
   ctx.restore()
@@ -3340,7 +3937,23 @@ const drawRollers = (ctx: CanvasRenderingContext2D): void => {
 
     ctx.globalAlpha = 1
     ctx.translate(sx, sy)
-    paintRollerBall(ctx, r, -f.phase * 3.1, scale, cheapFx)
+    // The one round whose loop is NOT `roundCycle`: a rolling ball's animation
+    // is a fact about the ground it has covered, so it rides `f.phase` (which
+    // the sim advances by `dt`, and the ball travels at a constant
+    // `ROLLER_SPEED`) at the true rate. Both the drawn bands and a painted
+    // strip step the same distance per frame — see `ROLLER_ROLL_HZ`.
+    // POSITIVE, and the sign is the whole read. The ball rolls toward the
+    // crowd, so it travels DOWN the screen, so the face turned toward the
+    // player travels down with it — the way the near side of a wheel rolling
+    // at you does. `off` grows with `spin` and canvas y grows downward, so a
+    // positive spin is a ring moving down.
+    //
+    // It was negative, which scrolled the bands UP and therefore described a
+    // ball rolling AWAY. Nobody could see it at the old 0.28 alpha; now that
+    // the rings are legible, and now that a painted strip plays this exact
+    // number, it has to be right.
+    const roll = f.phase * ROLLER_ROLL_HZ
+    paintRollerBall(ctx, r, roll * ROLLER_SPIN_PER_LOOP, scale, cheapFx, { cycle: roll })
     ctx.restore()
   }
 }
@@ -3357,6 +3970,7 @@ const drawRollers = (ctx: CanvasRenderingContext2D): void => {
 const drawGunnerBolts = (ctx: CanvasRenderingContext2D): void => {
   const bolts = getBolts()
   if (bolts.length === 0) return
+  const t = nowMs() / 1000
   for (const b of bolts) {
     if (b.dead) continue
     const sx = worldToScreenX(b.x)
@@ -3364,7 +3978,19 @@ const drawGunnerBolts = (ctx: CanvasRenderingContext2D): void => {
     const r = BOLT_R * scale
     ctx.save()
     ctx.translate(sx, sy)
-    paintGunnerBolt(ctx, r, b.dx, b.dy, scale, cheapFx)
+
+    // The ground shadow the healer's bolt already had and this one did not. It
+    // is what stops a round reading as a sticker on the camera: an object with
+    // no contact patch is not in the world, it is on the lens.
+    ctx.save()
+    ctx.globalAlpha = 0.3
+    ctx.fillStyle = '#000'
+    ctx.beginPath()
+    ctx.ellipse(0, r * 1.5, r * 0.9, r * 0.32, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    paintGunnerBolt(ctx, r, b.dx, b.dy, scale, cheapFx, { cycle: roundCycle(t, b.id) })
     ctx.restore()
   }
 }

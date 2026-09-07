@@ -75,3 +75,11 @@ __screenshots__/
 # never contend for one profile directory.
 .mcp-browser-profiles
 /public/images/monsters/tinified.zip
+/public/images/bg/tinified.zip
+/public/images/fx/tinified.zip
+/public/images/gates/tinified.zip
+/public/images/heroes/tinified.zip
+/public/images/logo/tinified.zip
+/public/images/props/tinified.zip
+/public/images/rounds/tinified.zip
+/public/images/ui/tinified.zip

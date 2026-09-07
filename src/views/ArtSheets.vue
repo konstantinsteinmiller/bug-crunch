@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import {
   WALKS, STILLS, promptForWalk, promptForStill, GATE_POST, GATE_REF_POST_W,
+  framesOf, colsOf, rowsOf,
   type WalkSpec, type StillSpec
 } from '@/game/artSheet'
 import { paintMonsterFrame } from '@/game/monsterSprites'
@@ -11,7 +12,8 @@ import {
   paintCoin, paintCrateBody, paintBarrelBody, paintBoulder, paintBarricadeBody,
   paintWeaponBoxBody, paintGuardPlate, paintLeverPost, paintLeverArm, LEVER_ART,
   paintGateFrame, GATE_FRAME, paintPillarBody, hazardPatternFor,
-  paintRollerBall, ROLLER_ART_PAD, paintGunnerBolt, paintBossBolt, paintMeteorRock, METEOR_BOX,
+  paintRollerBall, ROLLER_ART_PAD, ROLLER_SPIN_PER_LOOP,
+  paintGunnerBolt, paintBossBolt, paintMeteorRock, METEOR_BOX,
   ROUND_BOX, paintBombCharge, paintGrenadeBody, paintTracerRef, FX_PAD,
   ROCKET_BOX, paintRocketBody,
   muzzleRamp, paintMuzzleFlash, paintScorch, paintRing, paintShieldDome,
@@ -186,7 +188,7 @@ const renderWalkAlpha = (walk: WalkSpec): HTMLCanvasElement => {
  * it with r at half the panel; a round is blitted into `ROUND_BOX`, so the
  * reference puts its head where `ROUND_BOX.head` says. Nothing is eyeballed.
  */
-const renderStillAlpha = (s: StillSpec): HTMLCanvasElement => {
+const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
   const cv = document.createElement('canvas')
   cv.width = s.w
   cv.height = s.h
@@ -194,6 +196,10 @@ const renderStillAlpha = (s: StillSpec): HTMLCanvasElement => {
   const S = s.w
   const cx = s.w / 2
   const cy = s.h / 2
+  // The bench's own paint options, plus WHERE IN ITS LOOP this panel is. Only
+  // the animated subjects read it; for everything else `cycle` is 0 and the
+  // reference is exactly the one still it always was.
+  const ref = { ...REF, cycle }
   ctx.save()
 
   switch (`${s.kind}/${s.id}`) {
@@ -289,32 +295,38 @@ const renderStillAlpha = (s: StillSpec): HTMLCanvasElement => {
     case 'round/bolt-gunner': {
       const r = S / ROUND_BOX.side
       ctx.translate(ROUND_BOX.head * r, cy)
-      paintGunnerBolt(ctx, r, 1, 0, r / BOLT_R, false, REF)
+      paintGunnerBolt(ctx, r, 1, 0, r / BOLT_R, false, ref)
       break
     }
     case 'round/bolt-boss': {
       const r = S / ROUND_BOX.side
       ctx.translate(ROUND_BOX.head * r, cy)
-      paintBossBolt(ctx, r, 1, 0, 1, false, REF)
+      paintBossBolt(ctx, r, 1, 0, 1, false, ref)
       break
     }
     case 'round/roller': {
       // The sphere at 1/1.3 of the panel: the margin is where the spikes go.
+      //
+      // The reference has to SHOW the roll, or the painter has nothing to
+      // follow — the first return came back as one ball copied eight times
+      // with sparks added, because that is exactly what the sheet in front of
+      // it looked like. `spin` therefore walks one ring spacing (a quarter
+      // turn) across the loop, which is what the game plays it back at.
       const r = S / 2 / ROLLER_ART_PAD
       ctx.translate(cx, cy)
-      paintRollerBall(ctx, r, 0, r / ROLLER_R, false, REF)
+      paintRollerBall(ctx, r, cycle * ROLLER_SPIN_PER_LOOP, r / ROLLER_R, false, ref)
       break
     }
     case 'round/meteor': {
       const R = S / METEOR_BOX.side
       ctx.translate(cx, METEOR_BOX.centre * R)
-      paintMeteorRock(ctx, R, false, R / 0.55, false, REF)
+      paintMeteorRock(ctx, R, false, R / 0.55, false, ref)
       break
     }
     case 'round/bomb': {
       const bodyR = S / 4.4
       ctx.translate(cx, cy)
-      paintBombCharge(ctx, bodyR, bodyR * 2.1, REF)
+      paintBombCharge(ctx, bodyR, bodyR * 2.1, ref)
       break
     }
     case 'round/grenade': {
@@ -453,11 +465,39 @@ const renderWalk = (walk: WalkSpec): HTMLCanvasElement => {
   return onGround(alpha, 'magenta')
 }
 
+/**
+ * One still, or one LOOP of an animated one, on the lattice.
+ *
+ * The grid is laid out exactly as a walk's is — panels are an integer multiple
+ * of the panel box from the origin, no gutters, no centring fudge — because
+ * that is what lets the slicer cut the return with integer arithmetic. Panel k
+ * is the painter called at `cycle = k / frames`, so the eight panels are eight
+ * real moments of the same fire rather than one picture stamped eight times.
+ *
+ * The FIT is measured on panel 0 only. It describes where the subject sits in
+ * ONE panel, which is the same box for all of them; measuring the union of
+ * eight frames of a whipping flame would hand the slicer a box the size of the
+ * biggest lick and shrink every panel to fit it.
+ */
 const renderStill = (s: StillSpec): HTMLCanvasElement => {
-  const alpha = renderStillAlpha(s)
-  const fit = fitOf(alpha, 1, 1, s.w, s.h)
+  const frames = framesOf(s)
+  const cols = colsOf(s)
+  const rows = rowsOf(s)
+
+  const alpha0 = renderStillAlpha(s, 0)
+  const fit = fitOf(alpha0, 1, 1, s.w, s.h)
   if (fit) fits.set(`${s.kind}/${s.id}`, fit)
-  return onGround(alpha, s.bg)
+  if (frames <= 1) return onGround(alpha0, s.bg)
+
+  const grid = document.createElement('canvas')
+  grid.width = s.w * cols
+  grid.height = s.h * rows
+  const g = grid.getContext('2d')!
+  for (let i = 0; i < frames; i++) {
+    const panel = i === 0 ? alpha0 : renderStillAlpha(s, i / frames)
+    g.drawImage(panel, (i % cols) * s.w, Math.floor(i / cols) * s.h)
+  }
+  return onGround(grid, s.bg)
 }
 
 /**
@@ -531,12 +571,14 @@ const buildIndex = () => ({
     })),
     ...STILLS.map((s) => ({
       id: s.id,
+      // An animated still's SHEET is its grid; its PANEL is still one box, and
+      // the panel is what every fit and every cap below is about.
       file: `${s.file}.png`,
-      width: s.w,
-      height: s.h,
-      cols: 1,
-      rows: 1,
-      frames: 1,
+      width: s.w * colsOf(s),
+      height: s.h * rowsOf(s),
+      cols: colsOf(s),
+      rows: rowsOf(s),
+      frames: framesOf(s),
       kind: s.kind,
       panel: { w: s.w, h: s.h },
       // A glow-only effect carries no fit: measured on solid pixels its box

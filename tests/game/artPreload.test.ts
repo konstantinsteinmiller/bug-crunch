@@ -33,11 +33,43 @@ const load = async (artOn: boolean) => {
 const has = (wants: readonly (readonly [string, string])[], kind: string, id: string): boolean =>
   wants.some(([k, i]) => k === kind && i === id)
 
+/** Let the microtask queue and one macrotask drain. */
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+/** Records every request AND settles it, so an awaited tier can finish. */
+const trackSettlingImages = (): string[] => {
+  const requested: string[] = []
+  class FakeImage extends EventTarget {
+    decoding = 'auto'
+    naturalWidth = 0
+    private _src = ''
+    get src(): string { return this._src }
+    set src(value: string) {
+      this._src = value
+      requested.push(value)
+      setTimeout(() => {
+        this.naturalWidth = 64
+        this.dispatchEvent(new Event('load'))
+      }, 0)
+    }
+  }
+  vi.stubGlobal('Image', FakeImage as unknown as typeof Image)
+  return requested
+}
+
+/** Pretend the connection reports Data Saver. Cleared in `beforeEach`. */
+const stubDataSaver = (): void => {
+  Object.defineProperty(navigator, 'connection', {
+    value: { saveData: true }, configurable: true
+  })
+}
+
 beforeEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   window.history.replaceState({}, '', '/')
   localStorage.removeItem('artOverrides')
+  delete (navigator as { connection?: unknown }).connection
   stage = 1
 })
 
@@ -73,7 +105,65 @@ describe('tier 0 — behind the splash', () => {
     expect(m.resumeStage()).toBe(7)
     expect(has(t0, 'monster', 'snaggletusk')).toBe(true)
     expect(has(t0, 'gate', 'frame-sub')).toBe(true)
-    expect(has(t0, 'ui', 'crown')).toBe(true)
+    // The crown belongs to an ELITE, which is a midpoint and not an opening —
+    // so it follows the splash rather than holding it.
+    expect(has(t0, 'ui', 'crown')).toBe(false)
+    expect(has(m.earlyArtWants(), 'ui', 'crown')).toBe(true)
+  })
+
+  it('holds for the first SCREEN: the squad, the gates, their post, the pickups', async () => {
+    // The list the splash is allowed to wait on, stated as the thing it is:
+    // what a first-time player is looking at in the opening seconds.
+    stage = 1
+    const m = await load(true)
+    const t0 = m.criticalArtWants()
+    for (const o of ['teal', 'amber', 'violet']) expect(has(t0, 'hero', o), o).toBe(true)
+    // The gates, and the divider post between two leaves — painted frames with
+    // a grey post between them read as a half-finished gate.
+    expect(has(t0, 'gate', 'frame-add')).toBe(true)
+    expect(has(t0, 'gate', 'frame-mul')).toBe(true)
+    expect(has(t0, 'prop', 'pillar')).toBe(true)
+    // Both pickup crates and the coin.
+    expect(has(t0, 'prop', 'crate-damage')).toBe(true)
+    expect(has(t0, 'prop', 'crate-rate')).toBe(true)
+    expect(has(t0, 'prop', 'coin')).toBe(true)
+    // The grenade button is on screen from the first second, so is its round.
+    expect(has(t0, 'round', 'grenade')).toBe(true)
+  })
+
+  it('never holds for a beat the player has not reached yet', async () => {
+    // Stage 6 carries a weapon puzzle, an elite and a boss. None of the three
+    // is on the first screen, so none of them may hold it.
+    stage = 6
+    const m = await load(true)
+    const t0 = m.criticalArtWants()
+    for (const id of ['lever-post', 'lever-arm', 'guard-plate', 'weapon-box', 'weapon-box-open']) {
+      expect(has(t0, 'prop', id), id).toBe(false)
+    }
+    expect(has(t0, 'ui', 'crown')).toBe(false)
+    // …and what a boss or a miniboss throws is all tier 1 too.
+    for (const id of ['roller', 'bomb', 'bolt-gunner', 'meteor', 'bolt-boss']) {
+      expect(has(t0, 'round', id), id).toBe(false)
+    }
+    expect(has(t0, 'fx', 'guard')).toBe(false)
+  })
+
+  it('leaves the boss OUT of the splash, and picks it up first thing after', async () => {
+    stage = 6
+    const m = await load(true)
+    const { bossDesign, rosterDesigns } = await import('@/game/foes')
+    const boss = bossDesign(6)
+    const t1 = m.earlyArtWants()
+    // Every boss design in the campaign so far is ALSO a roster design — a
+    // stage's boss is the creep it has been fighting, at boss scale — so tier 0
+    // legitimately carries it as a road foe and tier 1 has nothing to add.
+    // The split still has to exist: the day `BOSS_DESIGNS` names something the
+    // roster does not, the splash must not silently grow by a strip.
+    expect(rosterDesigns(6)).toContain(boss)
+    expect(has(t1, 'monster', boss)).toBe(false)
+    // The proof the rule is real: tier 0 asks for the roster, not `stageDesigns`.
+    const t0 = m.criticalArtWants().filter(([k]) => k === 'monster').map(([, id]) => id)
+    expect([...t0].sort()).toEqual([...rosterDesigns(6)].sort())
   })
 
   it('treats a broken save as a new player', async () => {
@@ -96,7 +186,9 @@ describe('tiers 1 and 2', () => {
     expect(has(t1, 'prop', 'barrel')).toBe(true)
     expect(has(t1, 'monster', 'thornwick')).toBe(true)
     expect(has(t1, 'monster', 'snaggletusk')).toBe(true)
-    expect(has(t1, 'round', 'grenade')).toBe(true)
+    // The grenade is tier 0 now — its button is on screen from the first
+    // second, so the round behind it is too.
+    expect(has(t1, 'round', 'grenade')).toBe(false)
     // The shield's button and the banner the stage ends on follow the splash.
     expect(has(t1, 'ui', 'skill-shield')).toBe(true)
     expect(has(t1, 'ui', 'ribbon')).toBe(true)
@@ -134,6 +226,58 @@ describe('tiers 1 and 2', () => {
     expect(has(m.earlyArtWants(), 'prop', 'weapon-box')).toBe(false)
   })
 
+  it('reaches the puzzle before the boss, in the order the road does', async () => {
+    stage = 6
+    const m = await load(true)
+    const t1 = m.earlyArtWants().map(([k, i]) => `${k}/${i}`)
+    const at = (key: string): number => t1.indexOf(key)
+    // The levers are the one thing the beat asks the player to NOTICE, and the
+    // beat is on the road before the arena is — so it is fetched before what
+    // the boss throws, and both before the next stage's newcomers.
+    expect(at('prop/lever-post')).toBeGreaterThanOrEqual(0)
+    expect(at('prop/lever-post')).toBeLessThan(at('prop/weapon-box'))
+    expect(at('prop/weapon-box')).toBeLessThan(at('prop/barrel'))
+    expect(at('prop/barrel')).toBeLessThan(at('monster/thornwick'))
+  })
+
+  it('skips the final sweep when the connection says data saver', async () => {
+    const requested = trackSettlingImages()
+    vi.stubGlobal('requestIdleCallback', (cb: () => void) => { cb(); return 1 })
+    stubDataSaver()
+    stage = 1
+    const m = await load(true)
+    await m.preloadRemainingArt()
+
+    // Tier 1 is what is on THIS road and still goes out in full…
+    for (const [, id] of m.earlyArtWants()) {
+      expect(requested.some((u) => u.includes(`/${id}.webp`)), id).toBe(true)
+    }
+    // …and tier 2 — art for stages the player may never reach — does not.
+    // Data saver is an explicit setting, and the procedural renderer is
+    // precisely the fallback it is asking for.
+    const wanted = new Set([
+      ...m.criticalArtWants().map(([k, i]) => `${k}/${i}`),
+      ...m.earlyArtWants().map(([k, i]) => `${k}/${i}`)
+    ])
+    const swept = m.allArtWants()
+      .filter(([k, i]) => !wanted.has(`${k}/${i}`))
+      .filter(([, id]) => requested.some((u) => u.includes(`/${id}.webp`)))
+    expect(swept).toEqual([])
+  })
+
+  it('runs the final sweep when it does not', async () => {
+    const requested = trackSettlingImages()
+    vi.stubGlobal('requestIdleCallback', (cb: () => void) => { cb(); return 1 })
+    stage = 1
+    const m = await load(true)
+    await m.preloadRemainingArt()
+    // The promise resolves only once the LAST painting has settled — which is
+    // what lets `useAssets` hold the SFX decode behind it.
+    for (const [, id] of m.allArtWants()) {
+      expect(requested.some((u) => u.includes(`/${id}.webp`)), id).toBe(true)
+    }
+  })
+
   it('sweeps every painting in the end, so nothing is orphaned', async () => {
     const m = await load(true)
     const { ART_CATALOGUE } = await import('@/game/artCatalogue')
@@ -158,9 +302,14 @@ describe('tiers 1 and 2', () => {
     vi.stubGlobal('requestIdleCallback', (cb: () => void) => { cb(); return 1 })
     const m = await load(true)
     const early = m.earlyArtWants()
+    const p = m.preloadRemainingArt()
+    // NOTHING on the spot: the tiers hold for the page's own load and then for
+    // an idle slot, so they never land in the window where the scene is
+    // mounting and the document is still fetching its own subresources.
+    expect(requested).toEqual([])
+    await tick()
     // Tier 1 awaits each probe, and the fakes never settle — so only the
     // first is asked for before the promise parks. That IS the serial order.
-    const p = m.preloadRemainingArt()
     expect(requested).toHaveLength(1)
     expect(requested[0]).toContain(`${early[0]![1]}.webp`)
     void p

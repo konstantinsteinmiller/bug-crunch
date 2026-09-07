@@ -1,10 +1,10 @@
-import { stageDesigns, arenaKit } from '@/game/foes'
+import { stageDesigns, rosterDesigns, bossDesign, arenaKit } from '@/game/foes'
 import { THREAT_POOL_FROM_STAGE, minibossKindFor, bossKindFor, SUMMON_DESIGN } from '@/game/threats'
 import { OUTFITS } from '@/game/heroSprites'
 import { stageHasWeapon, weaponForStage } from '@/game/weapons'
 import { allMonsterIds } from '@/game/monsterSprites'
 import { ART_CATALOGUE } from '@/game/artCatalogue'
-import { artSettled, artOverridesEnabled, spriteFor, type ArtWant } from '@/game/art'
+import { artSettled, artOverridesEnabled, type ArtWant } from '@/game/art'
 import { getState } from '@/use/useTowerState'
 import { STAGE_KEY } from '@/keys'
 
@@ -23,20 +23,45 @@ import { STAGE_KEY } from '@/keys'
  * its miniboss or boss kind can be fielded. Balance changes move the art with
  * them, and nothing here goes stale when a stage is retuned.
  *
- *   tier 0 — behind the splash, `fetchPriority: high`. What the player's stage
- *            puts on screen from its first second: the three survivors, the
- *            stage's cast, the road and the props every road has, the effects
- *            every second of play shows.
- *   tier 1 — right after the splash, normal priority, one at a time. The next
- *            stage's newcomers, the threats this stage's elites and boss throw,
- *            the skills.
- *   tier 2 — on an idle slot after tier 1 has settled, `fetchPriority: low`.
+ *   tier 0 — behind the splash, `fetchPriority: high`. What the FIRST SCREEN
+ *            shows: the squad, the roster walking at them, the horizon, the
+ *            gates and the post between their leaves, the pickups, and the
+ *            effects every shot makes.
+ *   tier 1 — once the page's own load is done and the thread has an idle slot,
+ *            normal priority, one at a time, in the order the stage reaches
+ *            them: the skills, the elite's crown, the weapon puzzle, the boss
+ *            and what it throws, then the next stage on the same terms.
+ *   tier 2 — after tier 1 has settled, `fetchPriority: low`, in one batch.
  *            Everything else, so nothing a resuming player skipped past is
- *            orphaned.
+ *            orphaned. Skipped outright on a data-saver connection.
  *
  * Nothing waits on tiers 1 or 2. A design whose strip has not arrived when it
  * first walks on simply draws its procedural body, exactly as it does with the
  * art switched off.
+ *
+ * ─── What tier 0 is FOR ─────────────────────────────────────────────────────
+ *
+ * The first-time player, on stage 1, from a cold cache. They are the only
+ * player who sees the game for the first time, and what they must see is a
+ * finished picture — so the splash holds for everything on screen in the
+ * opening seconds and for nothing that arrives later, however certain it is to
+ * arrive. Every file moved out of tier 0 is time off that player's first
+ * impression; every file left in that they cannot see yet is time spent on
+ * nothing.
+ *
+ * The line, therefore, is WHEN IT IS ON SCREEN, not whether the stage has it:
+ * the boss stands a stage away, the elite is a midpoint, the weapon puzzle is
+ * an optional beat partway down the road. All three are tier 1, and tier 1
+ * starts the moment the splash is down.
+ *
+ * ─── …and why sound is not here at all ──────────────────────────────────────
+ *
+ * `useAssets` runs the SFX decode only once this module's promise resolves —
+ * i.e. after every painting has landed — and the music element is pointed at a
+ * track by `useSound` when a battle starts, so it is fetched on demand and
+ * never competes. An SFX that has not decoded is a frame of latency the first
+ * time it fires; a strip that has not arrived is a red ellipse in the middle of
+ * the screen. The art wins every time.
  */
 
 /**
@@ -82,23 +107,40 @@ const threatWants = (stage: number): ArtWant[] => {
     }
   }
   if (arenaKit(stage).barrels > 0) wants.push(['prop', 'barrel'])
-  // The weapon puzzle's own box, both states — it is the one beat the player
-  // has to NOTICE, so neither state may pop in on the stage that shows it.
-  // …and the beat's own furniture: the armour over the box and the two levers
-  // that take it off. The lever is the one thing the player has to NOTICE, so
-  // nothing here may pop in on the stage that shows it.
-  if (stageHasWeapon(stage)) {
-    wants.push(['prop', 'weapon-box'], ['prop', 'weapon-box-open'],
-      ['prop', 'guard-plate'], ['prop', 'lever-post'], ['prop', 'lever-arm'])
-  }
-  // The launcher's rocket, on the stages whose box holds it — which is every
-  // other puzzle stage, not every other stage. See `weaponForStage`.
-  if (stageHasWeapon(stage) && weaponForStage(stage) === 'rocket') wants.push(['round', 'rocket'])
   return wants
 }
 
 /**
- * Tier 0: what the splash holds for.
+ * The weapon puzzle's furniture, on the stages that carry one.
+ *
+ * Not tier 0, and the reason is the beat's own shape: it sits partway down the
+ * road, on a shoulder, and it is OPTIONAL — a player who never looks at it pays
+ * nothing. Half the campaign's roads carry no puzzle at all, so holding a first
+ * screen for five files that may not be on this stage, and are a minute away
+ * when they are, is a slower start bought for nothing.
+ *
+ * It does go out FIRST in tier 1, though, ahead of the boss and its rounds. The
+ * whole mechanic is a test of attention — the levers are cheap to break and
+ * expensive to find — and a lever that arrives as a grey drawing and repaints
+ * itself two seconds later is the game moving the one thing it is asking the
+ * player to notice.
+ */
+const weaponPuzzleWants = (stage: number): ArtWant[] => {
+  if (!stageHasWeapon(stage)) return []
+  const wants: ArtWant[] = [
+    // The levers, then their cover, then the prize behind it: the order the
+    // player's eye travels the beat.
+    ['prop', 'lever-post'], ['prop', 'lever-arm'], ['prop', 'guard-plate'],
+    ['prop', 'weapon-box'], ['prop', 'weapon-box-open']
+  ]
+  // The launcher's rocket, on the stages whose box holds it — which is every
+  // other puzzle stage, not every other stage. See `weaponForStage`.
+  if (weaponForStage(stage) === 'rocket') wants.push(['round', 'rocket'])
+  return wants
+}
+
+/**
+ * Tier 0: what the splash holds for — the first screen, and only that.
  *
  * A resuming player's first screen is their own stage, not stage 1. Fetching
  * the starting cast for someone on stage 9 means the brutes they are about to
@@ -107,13 +149,29 @@ const threatWants = (stage: number): ArtWant[] => {
 export const criticalArtWants = (): ArtWant[] => {
   const stage = resumeStage()
   return uniq([
+    // The squad, and the roster walking at it.
+    //
+    // The ROSTER, not `stageDesigns` — which is the roster PLUS the boss. As
+    // the tables stand the split saves nothing at all: every design in
+    // `BOSS_DESIGNS` is also a road foe, so a stage's boss is the creep it has
+    // been fighting all along and tier 0 was already fetching it as scenery.
+    // It is written this way because the RULE is the point. A boss stands at
+    // `arenaY`, a whole stage from the first frame; the day the cast grows a
+    // design that only ever appears at the end of a road, the splash must not
+    // silently grow by the heaviest strip in the set. Tier 1 picks it up.
     ...OUTFITS.map((o): ArtWant => ['hero', o.id]),
-    ...stageDesigns(stage).map((id): ArtWant => ['monster', id]),
+    ...rosterDesigns(stage).map((id): ArtWant => ['monster', id]),
     // The horizon, and what every road has on it.
     ['bg', 'ridge-far'], ['bg', 'ridge-near'],
+    // The pickups and the road furniture, all of it inside the first screen or
+    // a few seconds past it.
     ['prop', 'crate-damage'], ['prop', 'crate-rate'], ['prop', 'barricade'],
     ['prop', 'boulder-1'], ['prop', 'boulder-2'], ['prop', 'boulder-3'],
-    ['prop', 'coin'], ['prop', 'pillar'],
+    ['prop', 'coin'],
+    // The divider post between two gate leaves. It is part of the gate as far
+    // as the player is concerned — a bank drawn with painted frames and a grey
+    // post between them reads as a half-finished gate, not as a late prop.
+    ['prop', 'pillar'],
     // Gates: the paying door is on every stage, the trap from stage 2, the
     // bill from stage 3 (see `track.ts`), the multiplier from the first bank
     // that rolls one.
@@ -122,26 +180,45 @@ export const criticalArtWants = (): ArtWant[] => {
     ...(stage >= 3 ? [['gate', 'frame-sub'] as ArtWant] : []),
     // What every second of play shows.
     ['round', 'tracer'], ['fx', 'muzzle'], ['fx', 'smoke'], ['fx', 'scorch'], ['fx', 'ring-shock'],
-    // Elites from stage 2 wear the crown.
-    ...(stage >= 2 ? [['ui', 'crown'] as ArtWant] : []),
     // The shop button and the grenade button are on screen from the first
-    // second of every run.
-    ['ui', 'chest'], ['ui', 'skill-grenade']
+    // second of every run — and the grenade's own round is 5 kB, so the one
+    // thing a first-time player DOES reach for is painted when they reach.
+    ['ui', 'chest'], ['ui', 'skill-grenade'], ['round', 'grenade']
   ])
 }
 
-/** Tier 1: what this stage's fights throw, and the next stage's newcomers. */
+/**
+ * Tier 1: the rest of THIS stage, in the order the road reaches it, and then
+ * the next stage on the same terms.
+ *
+ * The order is the whole value here, because tier 1 is awaited one file at a
+ * time: on a slow connection the thing the player meets in twenty seconds has
+ * to finish before the thing they meet in two minutes starts.
+ */
 export const earlyArtWants = (): ArtWant[] => {
   const stage = resumeStage()
   const have = new Set(criticalArtWants().map(([k, id]) => `${k}/${id}`))
   return uniq([
+    // Bought and thrown inside the first minute.
+    ['fx', 'shield'], ['fx', 'crest-shield'], ['ui', 'skill-shield'],
+    // The midpoint fight: an elite is a scaled-up roster design that is already
+    // here, so all it needs is the crown it wears.
+    ...(stage >= 2 ? [['ui', 'crown'] as ArtWant] : []),
+    // The optional beat on the shoulder, ahead of the boss because it is the
+    // one thing the player has to NOTICE.
+    ...weaponPuzzleWants(stage),
+    // The thing at the end of the road, and everything it throws.
+    ['monster', bossDesign(stage)],
     ...threatWants(stage),
-    ['round', 'grenade'], ['fx', 'shield'], ['fx', 'crest-shield'],
-    // The shield's button once it is bought, and the banner the stage ends on.
-    ['ui', 'skill-shield'], ['ui', 'ribbon'],
-    ['ui', 'crown'],
+    // The banner the stage ends on.
+    ['ui', 'ribbon'],
+    // …then the next stage, so a player who clears this one never waits again.
     ...stageDesigns(stage + 1).map((id): ArtWant => ['monster', id]),
-    ...threatWants(stage + 1)
+    ...weaponPuzzleWants(stage + 1),
+    ...threatWants(stage + 1),
+    // Stage 1 is the one road with no elite on it, and its player is two
+    // minutes from the stage that has one.
+    ['ui', 'crown']
   ]).filter(([k, id]) => !have.has(`${k}/${id}`))
 }
 
@@ -153,15 +230,74 @@ export const allArtWants = (): ArtWant[] => uniq([
     .flatMap(([kind, ids]) => ids.map((id): ArtWant => [kind, id]))
 ])
 
+/** How long the tiers will wait for the page's own load before going anyway. */
+const LOAD_CEILING_MS = 5000
+
+/** Resolve on the next idle slot, or after `timeout`, whichever comes first. */
+const idle = (timeout: number): Promise<void> => new Promise<void>((resolve) => {
+  const ric = (globalThis as {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number
+  }).requestIdleCallback
+  if (typeof ric === 'function') ric(() => resolve(), { timeout })
+  else setTimeout(resolve, Math.min(timeout, 1500))
+})
+
+/**
+ * Hold until the browser is done with the page's own load, and then until the
+ * main thread has a slot to spare.
+ *
+ * Tier 1 is forty-odd files that nobody is waiting for, and it used to start
+ * the instant the splash came down — straight into the window where the scene
+ * is mounting, the first frames are being composed and the document's own
+ * subresources may still be in flight. On a phone that is the moment the
+ * connection is busiest and the thread is most contended, spent on art for a
+ * fight a minute away.
+ *
+ * `load` is the honest signal for "the page has what it came for". It is
+ * bounded, because a single stalled subresource must never strand the tiers
+ * behind it, and followed by an idle slot so a busy thread gets one more
+ * chance to finish what it is doing first.
+ */
+const networkQuiet = async (): Promise<void> => {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined'
+    && document.readyState !== 'complete') {
+    await new Promise<void>((resolve) => {
+      const done = (): void => { window.removeEventListener('load', done); resolve() }
+      window.addEventListener('load', done, { once: true })
+      setTimeout(done, LOAD_CEILING_MS)
+    })
+  }
+  await idle(3000)
+}
+
+/**
+ * Has the player asked not to be spent?
+ *
+ * `saveData` is an explicit setting, not a guess about the network, and tier 2
+ * is the one tier that fetches art for stages the player may never reach. The
+ * procedural renderer is exactly the fallback a data saver is asking for, so
+ * the sweep is skipped outright — tiers 0 and 1 still run, because those are
+ * what is actually on screen.
+ */
+const dataSaver = (): boolean => {
+  if (typeof navigator === 'undefined') return false
+  return !!(navigator as { connection?: { saveData?: boolean } }).connection?.saveData
+}
+
 let started = false
 
 /**
  * Tiers 1 and 2. Idempotent; call it once the splash is down.
  *
+ * RESOLVES when the last painting has landed, and that is load-bearing:
+ * `useAssets` sequences the SFX decode behind this promise, so sound never
+ * takes bandwidth from a bitmap that is still on the wire. With overrides off
+ * it returns immediately and the sounds start as they always did.
+ *
  * Tier 1 is awaited one file at a time so that a slow connection still gets
  * the next stage's first newcomer before its last — a parallel burst would
- * let the biggest file win. Tier 2 goes out in one low-priority batch on an
- * idle callback, because by then order no longer matters and the browser's
+ * let the biggest file win. Tier 2 goes out in one low-priority batch after
+ * another idle slot, because by then order no longer matters and the browser's
  * own scheduler does a better job of fitting it around play than a chain
  * would.
  */
@@ -169,15 +305,12 @@ export const preloadRemainingArt = async (): Promise<void> => {
   if (started || !artOverridesEnabled()) return
   started = true
 
+  await networkQuiet()
   for (const [kind, id] of earlyArtWants()) await artSettled(kind, id)
 
-  const late = (): void => {
-    for (const [kind, id] of allArtWants()) spriteFor(kind, id, 'low')
-  }
-  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number })
-    .requestIdleCallback
-  if (typeof idle === 'function') idle(late, { timeout: 8000 })
-  else setTimeout(late, 1500)
+  if (dataSaver()) return
+  await idle(8000)
+  await Promise.allSettled(allArtWants().map(([kind, id]) => artSettled(kind, id, 'low')))
 }
 
 /** Test seam: forget that the tiers have run. */

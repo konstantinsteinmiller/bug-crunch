@@ -288,7 +288,100 @@ export interface StillSpec {
   glow?: boolean
   /** Colourless by contract; the game tints it. */
   greyscale?: boolean
+  /**
+   * ─── An ANIMATED still ──────────────────────────────────────────────────
+   *
+   * Panels of one loop, when the subject moves under its own power. Absent, or
+   * 1, is an ordinary still.
+   *
+   * A projectile is the case this exists for. A boss's meteor is a rock inside
+   * a fire, and a fire is not a shape — it is a shape changing. Painted as one
+   * panel it comes back beautiful and DEAD, because the renderer's only job
+   * with a still is to translate it down the road; a player watching it called
+   * that exactly what it is: lifeless. The fix is not a live glow drawn around
+   * the painting — that is two fires burning at different rates on one rock —
+   * it is to paint the fire moving, and the only way to ask a painter for that
+   * is to hand them the loop.
+   *
+   * Everything downstream already handles it. The slicer cuts any grid into one
+   * horizontal strip; `spriteStrip.ts` reads the panel count off the returned
+   * file rather than from a declaration here, so a design that will not hold
+   * for eight panels can come back as four with no code change; and
+   * `PaintOpts.cycle` means the drawn fallback and the painted strip play from
+   * the same clock, so the drop-in never changes the animation's speed.
+   *
+   * The grid is the walk's — 4 x 2 — because the walk prompt's panel-count
+   * discipline was expensive to arrive at and an image model that has been
+   * taught "two rows of four" for one sheet should not be asked for a different
+   * shape on the next.
+   */
+  frames?: number
+  cols?: number
+  rows?: number
+  /** What moves between the panels, and what must NOT. The prompt's
+   *  `READ THE PANELS`; only meaningful when `frames > 1`. */
+  cycle?: string
+  /**
+   * What each panel IS, one line per frame.
+   *
+   * The same medicine `HERO_PANELS` is: a painter copies what it is shown, and
+   * shown a grid it will happily paint one picture per ROW and repeat it four
+   * times. The survivor's stride came back that way three times running until
+   * every panel was named, and the roller came back that way twice — a sheet
+   * with one ring arrangement across the top row and a second across the
+   * bottom, which is two states rather than eight steps.
+   *
+   * So a cycle whose motion is MECHANICAL — a measurable displacement per
+   * frame, rather than free-form flicker — names its panels. Fire does not
+   * need this; a turning object does.
+   */
+  panels?: readonly string[]
 }
+
+/** Panels of one loop for an animated still, and the grid they sit in. */
+export const CYCLE_FRAMES = 8
+export const CYCLE_COLS = 4
+export const CYCLE_ROWS = CYCLE_FRAMES / CYCLE_COLS
+
+/** Frames of a spec's loop — 1 for an ordinary still. */
+export const framesOf = (s: StillSpec): number => s.frames ?? 1
+export const colsOf = (s: StillSpec): number => s.cols ?? 1
+export const rowsOf = (s: StillSpec): number => s.rows ?? 1
+
+/** The animation grid, for a subject whose motion has to be painted in. */
+const CYCLE = { frames: CYCLE_FRAMES, cols: CYCLE_COLS, rows: CYCLE_ROWS } as const
+
+/**
+ * The roller's eight steps, as fractions of ONE RING GAP.
+ *
+ * Generated rather than typed so the arithmetic cannot drift from
+ * `CYCLE_FRAMES`, and stated as a measurement because that is the only kind of
+ * instruction a painter cannot satisfy with "roughly the same but dirtier".
+ * Panel k is the surface displaced by (k−1)/8 of the gap between two rings —
+ * an eighth of a quarter-turn each, which is what the game plays back.
+ */
+const ROLLER_PANELS: readonly string[] = Array.from({ length: CYCLE_FRAMES }, (_, i) => {
+  const nth = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'][i]
+  if (i === 0) {
+    return 'the starting arrangement — one band lies straight across the ball\'s'
+      + ' widest point (its horizontal middle). Every other panel is measured'
+      + ' from this one'
+  }
+  const eighths = `${i}/${CYCLE_FRAMES}`
+  const step = `every band has slid DOWN by ${eighths} of the gap between two bands`
+  if (i * 2 === CYCLE_FRAMES) {
+    return `${step} — HALF a gap. This is the panel least like panel 1 and it has`
+      + ' to look it: the ball\'s widest point now falls in BARE IRON, exactly'
+      + ' midway between two bands, where panel 1 had a band sitting on it'
+  }
+  if (i === CYCLE_FRAMES - 1) {
+    return `${step}. One more step of the same size brings the NEXT band onto the`
+      + ' widest point, which is panel 1 again — that is how the loop closes.'
+      + ' This panel is the one just before that'
+  }
+  return `${step} — the ${nth} of eight even steps, so the band that was on the`
+    + ' widest point is now a little below it'
+})
 
 const still = (
   kind: ArtKind, id: string, name: string, blurb: string,
@@ -429,20 +522,94 @@ export const STILLS: StillSpec[] = [
     'The crowd\'s round: a short vertical streak of hot lead — a bright white-gold core with a thin ember-orange glow tail below it. It is one of a hundred on screen, so it is a streak, not an object. The streak spans the full height of the frame and about a quarter of its width, centred.',
     { maxEdge: 128, fit: false, authored: 'pointing UP: it flies up the screen, so the bright head is at the TOP and the tail trails DOWN', glow: true }),
   still('round', 'bolt-gunner', 'The gunner\'s round',
-    'The gunner\'s round: a fat slow orb of cold cyan witchfire around a dark iron core, with a short tail of fading cyan behind it. Small in its frame — the tail is longer than the head is wide.',
-    { fit: false, authored: 'pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.', glow: true }),
+    'The gunner\'s round: a fat slow orb of cold cyan witchfire around a dark iron core, with a streaming tail of fading cyan witchfire behind it. Small in its frame — the tail is longer than the head is wide.',
+    {
+      ...CYCLE, fit: false, glow: true,
+      authored: 'pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.',
+      cycle: 'The IRON CORE and the orb around it do not move, change size or change place between panels — they are the same round, and the game measures its kill against that head. What animates is the WITCHFIRE: the tail licks and gutters, its tongues lengthening and shortening and curling off the axis, and loose sparks drift back down it. Panel 8 must lead back into panel 1.'
+    }),
   still('round', 'bolt-boss', 'The healer\'s bolt',
-    'The healer\'s bolt: a sickly green orb of necrotic light with a pale core and a short trail behind it. Small in its frame.',
-    { fit: false, authored: 'pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.', glow: true }),
+    'The healer\'s bolt: a sickly green orb of necrotic light with a pale core and a trail of guttering green flame behind it. Small in its frame.',
+    {
+      ...CYCLE, fit: false, glow: true,
+      authored: 'pointing RIGHT: the head sits at 0.7 of the width with the tail trailing off to the LEFT. The game turns it to its heading.',
+      cycle: 'The ORB and its pale core keep the same size and the same place in every panel — that head is the part that hits. What animates is the necrotic fire around and behind it: the halo breathes in and out, the trail writhes and splits, and flecks of green rot peel off it and fall behind. Panel 8 must lead back into panel 1.'
+    }),
   still('round', 'roller', 'The rolling boulder',
-    'The rolling boulder: a huge iron-banded stone sphere studded with rusted spikes, dark, with a rim light along its lower edge, seen face-on. The SPHERE is a full circle about three quarters of the frame across, centred — in the reference it spans from 12% to 88% of the width — and the spikes reach out from it into the margin around it, never crossing the frame edge. The sphere is what kills; keep it that size.',
-    { fit: false, live: 'The game scrolls its own bands over it to sell the roll, so paint it still.' }),
+    'The rolling boulder: a huge iron-banded stone sphere studded with rusted spikes, dark, with a rim light along its lower edge, seen face-on as it rolls straight at the viewer. The SPHERE is a full circle about three quarters of the frame across, centred — in the reference it spans from 12% to 88% of the width — and the spikes reach out from it into the margin around it, never crossing the frame edge. The sphere is what kills; keep it that size. Its ironwork reads as FOUR evenly spaced bands stacked down its face — flattened ellipses, widest across the middle of the ball and tighter toward its top and bottom edges, studded with rivets. Four bands across the face, evenly spaced, all the way from the top edge to the bottom: not one equator, not a cross, not a cage.',
+    {
+      ...CYCLE, fit: false, panels: ROLLER_PANELS,
+      live: 'Nothing is painted over it any more. The game used to scroll its own bands across the ball to fake the roll; these eight frames ARE the roll, so paint the ironwork and let it turn.',
+      cycle: [
+        'IT ROLLS, TOWARD THE VIEWER — this is the one sheet in the set where the',
+        'object itself moves, and that movement is the whole animation.',
+        '',
+        'THREE returns have now come back without it. The first was the same ball',
+        'copied eight times with sparks added. The second was TWO arrangements,',
+        'one repeated across the top row and the other across the bottom, which',
+        'plays as a thing that snaps between two poses. The third is the one to',
+        'study, because it looked closest and was still not a roll: the bands',
+        'slid down the face as four stripes of the SAME WIDTH, evenly spaced,',
+        'like a pattern scrolling behind a porthole. Nothing narrowed, nothing',
+        'crowded, and the studs never moved at all.',
+        '',
+        'That is the whole difference, so it is worth stating as geometry rather',
+        'than as a feeling. These bands are HOOPS AROUND A SPHERE, not stripes',
+        'on a disc, and a hoop on a sphere does two things a stripe never does:',
+        '',
+        '  · IT NARROWS. A band crossing the widest part of the ball spans',
+        '    almost the full width of it. The same band, three quarters of the',
+        '    way to the top edge, spans barely half that — and as it reaches the',
+        '    edge it shrinks to nothing and is gone. Look at the reference: no',
+        '    two bands in a panel are the same width.',
+        '  · THEY CROWD. Because they are evenly spaced around the BALL and not',
+        '    down the picture, the gaps between them look widest across the',
+        '    middle and squeeze together toward the top and bottom edges. Two',
+        '    bands near the top edge sit almost on top of each other.',
+        '',
+        'Get those two right and the ball turns whether or not anything else is',
+        'perfect. Get them wrong and no amount of sparks will save it.',
+        '',
+        'The ball stays exactly the same size and exactly in the same place. What',
+        'moves is its SURFACE: the bands, their rivets and any scars or pitting',
+        'travel DOWNWARD together across the face — in at the top edge, down over',
+        'the middle, out at the bottom — as if the ball were turning toward you.',
+        'The rivets ride their band, so they spread apart as the band widens over',
+        'the middle and close up again as it narrows toward an edge.',
+        '',
+        'Across the eight panels the surface travels DOWN by exactly ONE BAND',
+        'GAP, in eight even steps of an eighth of a gap each. By panel 8 the',
+        'band that started on the ball\'s widest point has moved almost all the',
+        'way to where the band below it began, so the next step lands the',
+        'following band exactly where the first one started — and that is panel 1',
+        'again. The loop closes with no jump. Do not paint a whole revolution.',
+        '',
+        'The RING OF SPIKES around the outline is the one thing that does NOT',
+        'travel. A ball rolling straight at you keeps its silhouette: the spikes',
+        'stand out from the edge in the same places in all eight panels, exactly',
+        'as the reference draws them. Do not slide them around the rim — that',
+        'reads as a ball spinning on the spot rather than rolling at the viewer.',
+        'The roll is carried entirely by the face.',
+        '',
+        'Under it all, sparks struck off the spikes where they bite the road and',
+        'a low scorch of dust around the base. Those are the only things that may',
+        'vary freely between panels — everything else has to line up.'
+      ].join('\n')
+    }),
   still('round', 'meteor', 'The boss\'s rock',
     'The boss\'s falling rock: a jagged black stone wrapped in orange fire, a white-hot core around the stone, and a flame tail streaming UPWARD from it — it falls down the screen. The stone sits in the LOWER part of the frame with the tail reaching the top.',
-    { anchor: 'feet', fit: false, authored: 'falling: the stone low in the frame, the tail rising to the top edge', glow: true }),
+    {
+      ...CYCLE, anchor: 'feet', fit: false, glow: true,
+      authored: 'falling: the stone low in the frame, the tail rising to the top edge',
+      cycle: 'The STONE keeps the same size and very nearly the same place in every panel — it may rock a few degrees, no more, because the game moves it down the screen itself. Everything else BURNS: the flame tail whips and forks, its tongues climbing and falling back, the white-hot shell around the stone flares and dims, and embers tear off the tail and stream away above it. This is the panel the whole sheet is for — the fire must be visibly a different fire in every one of the eight. Panel 8 must lead back into panel 1.'
+    }),
   still('round', 'bomb', 'The bomber\'s charge',
     'The bomber\'s charge: a black iron bomb with a lit fuse and a tight ember glow around it. Centred, about half the frame across.',
-    { fit: false, live: 'The spark walking down the fuse is painted live, so no spark.', glow: true }),
+    {
+      ...CYCLE, fit: false, glow: true,
+      live: 'The spark walking down the fuse is painted live, so no spark.',
+      cycle: 'The IRON BOMB does not move or change size between panels. What animates is the fire: the ember glow around the casing swells and shrinks, and the fuse burns with a flame that licks and flares. It is a fuse burning down, so the fire is a little angrier by panel 8 than at panel 1 — but panel 8 must still lead back into panel 1.'
+    }),
   still('round', 'grenade', 'The player\'s grenade',
     'The player\'s grenade: a small iron-grey sphere with a band across its middle, centred, filling most of the frame.',
     { maxEdge: 128, authored: 'level: it tumbles in flight and the game turns it' }),
@@ -754,28 +921,107 @@ export const promptForWalk = (w: WalkSpec): string => {
   ].join('\n')
 }
 
-const shapeOf = (s: StillSpec): string =>
-  s.w === s.h ? 'square (1:1)'
-    : s.w * 9 === s.h * 21 ? 'landscape, 21:9'
-      : s.w * 9 === s.h * 16 ? 'landscape, 16:9'
-        : s.w === s.h * 2 ? 'landscape, 2:1'
-          : s.w * 16 === s.h * 9 ? 'portrait, 9:16'
-            : s.w > s.h ? `landscape, ${(s.w / s.h).toFixed(2)}:1`
-              : `portrait, 1:${(s.h / s.w).toFixed(2)}`
+/** The SHEET's pixels — a still is one panel, a cycle is its whole grid. */
+export const sheetW = (s: StillSpec): number => s.w * colsOf(s)
+export const sheetH = (s: StillSpec): number => s.h * rowsOf(s)
+
+const ratioOf = (w: number, h: number): string =>
+  w === h ? 'square (1:1)'
+    : w * 9 === h * 21 ? 'landscape, 21:9'
+      : w * 9 === h * 16 ? 'landscape, 16:9'
+        : w === h * 2 ? 'landscape, 2:1'
+          : w * 16 === h * 9 ? 'portrait, 9:16'
+            : w > h ? `landscape, ${(w / h).toFixed(2)}:1`
+              : `portrait, 1:${(h / w).toFixed(2)}`
+
+const shapeOf = (s: StillSpec): string => ratioOf(sheetW(s), sheetH(s))
 
 /** A ready-to-paste prompt for one still. No grid clause — there is no grid. */
+/**
+ * The panel-count block for an ANIMATED still.
+ *
+ * Lifted, deliberately, from `promptForWalk` — the same counting, the same
+ * refusals, the same "do not add a row". That discipline was arrived at the
+ * expensive way (returns came back as one panel, as a doubled grid, as a
+ * contact sheet with captions) and an image model that has been taught one
+ * sheet shape for the cast should not be handed a different one for a rock.
+ *
+ * The one thing it says that a walk's does not: WHAT IS ALLOWED TO MOVE. A
+ * creature's whole body moves through a stride, but a projectile is a solid
+ * object inside an effect, and only the effect may change. A meteor whose stone
+ * grows, shrinks or wanders between panels is a rock that pulses when it falls
+ * — and the head of a round is what the game measures its kill against, so a
+ * head that moves in the art is a hitbox that lies.
+ */
+const cyclePrompt = (s: StillSpec): string[] => {
+  const n = framesOf(s)
+  const cols = colsOf(s)
+  const rows = rowsOf(s)
+  return [
+    '',
+    `READ THE PANELS. This is not one picture — it is ${n} frames of ONE LOOP.`,
+    `The attached sheet is ${cols} columns x ${rows} rows = EXACTLY ${n} panels, read left`,
+    'to right along the top row and then the row below.',
+    '',
+    `· ${n} panels. Not 1, not ${cols}, not ${n + 4}, not ${n * 2}. Exactly ${rows} rows of`,
+    `  ${cols} — do not add a row, do not append the cycle again underneath.`,
+    '· Repaint EVERY panel. A sheet where one panel is painted and the rest are',
+    '  copies of it is the failure this whole sheet exists to avoid.',
+    `· THE ${rows} ROWS ARE NOT ${rows} STATES. The top row is panels 1-${cols} and the row`,
+    `  below is ${cols + 1}-${n}, of ONE continuous march. A sheet with one arrangement`,
+    `  repeated across the top row and a second repeated across the bottom is`,
+    '  what came back last time — it is two pictures, not eight, and it plays as',
+    '  a thing that snaps between two poses.',
+    `· All ${n} panels are DIFFERENT from each other, and each differs from the one`,
+    '  beside it by the SAME small step. Even spacing is the animation; a sheet',
+    '  that holds still and then jumps reads as dropped frames.',
+    '· Each panel is exactly 1/' + String(cols) + ' of the width and 1/' + String(rows) + ' of the height,',
+    '  on an exact grid with no gutters. The cut is done by arithmetic.',
+    '',
+    `WHAT MOVES: ${s.cycle ?? 'the effect around the subject, and only that.'}`,
+    ...(s.panels && s.panels.length === n
+      ? ['',
+        'PANEL BY PANEL — measure each one against panel 1, not against its',
+        'neighbour, or the error accumulates and the loop will not close:',
+        ...s.panels.map((line, i) => `· panel ${i + 1}: ${line}.`)]
+      : []),
+    '',
+    'IT MUST LOOP. The game plays these end to end, forever, several times a',
+    `second: after panel ${n} it goes straight back to panel 1. So panel ${n} has to`,
+    'flow into panel 1 as smoothly as panel 1 flows into panel 2. Do not build a',
+    'sequence that starts small and ends big — that pops once per loop, and at',
+    'this speed a pop reads as a dropped frame.',
+    '',
+    'The SUBJECT keeps the same size, the same colours and the same place in the',
+    'panel throughout — it is one object seen at eight moments, not eight',
+    'objects. Only what is written under WHAT MOVES may change.',
+    '',
+    'EVERY PANEL IS ITS OWN PICTURE. Flame, sparks and glow stay inside the',
+    'panel they belong to — nothing reaches across a panel edge into its',
+    'neighbour, and the magenta between panels stays flat magenta. The sheet is',
+    'cut on an exact grid, so anything that crosses a boundary is sliced in half',
+    'and arrives in the game as a stray smear on the frame next door.'
+  ]
+}
+
 export const promptForStill = (s: StillSpec): string => {
   const fill = !!s.fill
   const sky = s.bg === 'magenta-sky'
   const opaque = s.bg === 'opaque'
+  const cycle = framesOf(s) > 1
   return [
     `# ${s.id} — ${s.name}  (${s.target})`,
     '',
-    `Paint ONE game sprite in a single ${shapeOf(s)} image.`,
+    cycle
+      ? `Repaint an ${framesOf(s)}-frame ANIMATION LOOP of one game sprite, as a single`
+        + `
+${shapeOf(s)} sheet of ${colsOf(s)} x ${rowsOf(s)} panels.`
+      : `Paint ONE game sprite in a single ${shapeOf(s)} image.`,
     'The attached reference is exactly what to paint, at exactly the size and',
     'position it is drawn at. Match both.',
     '',
     `WHAT IT IS: ${s.blurb}`,
+    ...(cycle ? cyclePrompt(s) : []),
     ...(s.live ? ['', `LEAVE OUT WHAT THE GAME PAINTS LIVE. ${s.live}`] : []),
     ...(s.kind === 'gate'
       ? ['',
@@ -799,8 +1045,15 @@ export const promptForStill = (s: StillSpec): string => {
         '  posts is thrown away.']
       : []),
     ...(s.authored
-      ? ['', `DRAW IT AT REST, ${s.authored}. Do not add motion blur, speed lines or`,
-        'a second copy of it: the game turns and moves it out of this one picture.']
+      ? cycle
+        // A cycle sheet is asked for motion by definition, so the "at rest"
+        // clause would contradict `WHAT MOVES` two paragraphs above it. What
+        // survives is the ORIENTATION, which the game still turns.
+        ? ['', `ORIENTATION, in every panel: ${s.authored}. No motion blur and no speed`,
+          'lines — the movement is in the difference between the panels, and the',
+          'game turns and travels the sprite itself.']
+        : ['', `DRAW IT AT REST, ${s.authored}. Do not add motion blur, speed lines or`,
+          'a second copy of it: the game turns and moves it out of this one picture.']
       : []),
     ...(s.greyscale
       ? ['', 'GREYSCALE ONLY. Paint it in white through grey with alpha — no colour',
@@ -811,7 +1064,9 @@ export const promptForStill = (s: StillSpec): string => {
     '',
     fill ? STYLE_FILL : STYLE_PART,
     '',
-    'SIZE AND PLACEMENT — this is the part that goes wrong.',
+    cycle
+      ? 'SIZE AND PLACEMENT (this is per PANEL) — this is the part that goes wrong.'
+      : 'SIZE AND PLACEMENT — this is the part that goes wrong.',
     fill
       ? 'The subject fills its frame edge to edge, exactly as the reference does.\nDo not shrink it onto a card or leave a polite margin.'
       : 'Do not enlarge it to fill the frame. The reference leaves air around the\nsubject and that air is not waste — it is where the things drawn live around\nit go. Keep the subject the same fraction of the frame that the reference\nhas it, in the same place.',
@@ -856,14 +1111,27 @@ export const promptForStill = (s: StillSpec): string => {
         '  ground.',
         '· No shadow on the ground, no ground at all — the posts stand on magenta.']
       : []),
+    ...(cycle
+      ? ['',
+        'BEFORE YOU CALL IT FINISHED, count and check:',
+        `· ${colsOf(s)} panels across, ${rowsOf(s)} down, ${framesOf(s)} in all — no extra row.`,
+        `· No two of the ${framesOf(s)} panels are identical. In particular the ${colsOf(s)} panels of a`,
+        '  row are 4 different moments, not one moment repeated across the row.',
+        '· Every panel holds the same object at the same size, in the same place,',
+        '  in the same colours.',
+        `· Panel ${framesOf(s)} leads back into panel 1.`,
+        '· Every pixel that is not the sprite is flat, vivid #FF00FF.']
+      : []),
     '',
     'OUTPUT — read this twice, it is where every previous attempt failed:',
-    `· ONE image, exactly ${s.w} x ${s.h} pixels — ${shapeOf(s)}.`,
+    `· ONE image, exactly ${sheetW(s)} x ${sheetH(s)} pixels — ${shapeOf(s)}.`,
     '  If your tool has an aspect-ratio control, set it to match. Returns have',
     '  come back at the tool\'s default ratio before, which overrides this line —',
     '  the setting wins, so change the setting.',
-    '· ONE object. Not two, not a comparison, not variants side by side, not a',
-    '  before-and-after pair.',
+    cycle
+      ? `· ONE object, painted ${framesOf(s)} times as ${framesOf(s)} moments of one loop. Not `
+        + 'variants,\n  not a comparison, not a turnaround, not a before-and-after pair.'
+      : '· ONE object. Not two, not a comparison, not variants side by side, not a\n  before-and-after pair.',
     '· No frame, border, card, label, caption, arrow, annotation or drop shadow.'
   ].join('\n')
 }
