@@ -3,8 +3,13 @@
  *
  * A Cloudflare Worker over one D1 table. Two routes:
  *
- *   GET  /top    → the materialised top-100, edge-cached for `EDGE_TTL`
+ *   GET  /top    → the materialised top-100 PLUS the score histogram for the
+ *                  whole population, edge-cached for `EDGE_TTL`
  *   POST /score  → upsert one player's best, and return their rank + the board
+ *
+ * The histogram is what lets the client rank a player EXACTLY without asking:
+ * the published rows stop at 100, so on a board of thousands almost everyone is
+ * below the cut and could otherwise only be told "#100+".
  *
  * THE SCORE IS THE HIGHEST STAGE REACHED. Not a point total — the game's whole
  * progression is "how deep did you get", so the board is a depth chart and
@@ -151,6 +156,68 @@ const rebuildBoard = async (env: Env): Promise<Board> => {
   return board
 }
 
+/**
+ * The score histogram, densest-first — `[score, howManyPlayersHaveIt]`.
+ *
+ * This is the one query on the Worker whose cost scales with the player base:
+ * `GROUP BY score` reads every row. So it is NEVER run per request and never on
+ * the write path — it is materialised into `board_cache` beside the board and
+ * only recomputed once its row is older than `DIST_TTL_MS`. A read costs one
+ * row; a rebuild costs the table, a few times an hour at most.
+ *
+ * It rides along on `/top` because of what it buys the client: an EXACT rank
+ * for any score. Without it a player below the hundredth published row can only
+ * be told "#100+", which on a board of a few thousand is almost everyone.
+ */
+// An hour, not a few minutes. A rebuild reads the whole table, and the account
+// is close enough to the free tier's ceiling to have hit it — 24 rebuilds a day
+// over a few thousand rows is a rounding error against the allowance, where a
+// 15-minute TTL would be four times that for a histogram whose ranks move by a
+// handful of places in an hour.
+const DIST_TTL_MS = 60 * 60_000
+
+const rebuildDist = async (env: Env): Promise<[number, number][]> => {
+  const { results } = await env.DB
+    .prepare('SELECT score, COUNT(*) AS n FROM scores GROUP BY score ORDER BY score DESC')
+    .all<{ score: number; n: number }>()
+  const buckets: [number, number][] = (results ?? []).map((r) => [r.score, r.n])
+  await env.DB
+    .prepare(
+      "INSERT INTO board_cache (id, json, updated_at) VALUES ('dist', ?, ?)\n" +
+      'ON CONFLICT(id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at'
+    )
+    .bind(JSON.stringify(buckets), Date.now())
+    .run()
+  return buckets
+}
+
+const readDist = async (env: Env): Promise<[number, number][]> => {
+  const row = await env.DB
+    .prepare("SELECT json, updated_at FROM board_cache WHERE id = 'dist'")
+    .first<{ json: string; updated_at: number }>()
+  if (row?.json && Date.now() - row.updated_at < DIST_TTL_MS) {
+    try { return JSON.parse(row.json) as [number, number][] } catch { /* fall through */ }
+  }
+  return rebuildDist(env)
+}
+
+const sumDist = (dist: [number, number][]): number =>
+  dist.reduce((sum, [, n]) => sum + n, 0)
+
+/**
+ * The board as the client receives it: rows to list, plus the histogram to rank
+ * against.
+ *
+ * `total` is taken from the HISTOGRAM whenever there is one, not from the
+ * board's own `COUNT(*)`. The two are separate reads of a moving table, and a
+ * rank derived from the buckets has to be a rank out of the number those
+ * buckets add up to — otherwise the game can print "#1204 of 1203".
+ */
+const withDist = async (env: Env, board: Board): Promise<Board & { dist: [number, number][] }> => {
+  const dist = await readDist(env)
+  return { ...board, total: sumDist(dist) || board.total, dist }
+}
+
 /** Ties share a rank rather than being split — `COUNT(*) WHERE score > ?` + 1. */
 const rankOf = async (env: Env, score: number): Promise<number> => {
   const row = await env.DB
@@ -178,7 +245,7 @@ export default {
         for (const [k, v] of Object.entries(cors)) out.headers.set(k, v)
         return out
       }
-      const board = await readBoard(env)
+      const board = await withDist(env, await readBoard(env))
       const fresh = json(board, 200, { 'cache-control': `public, max-age=${EDGE_TTL}` })
       await cache.put(cacheKey, fresh.clone())
       for (const [k, v] of Object.entries(cors)) fresh.headers.set(k, v)
@@ -244,7 +311,7 @@ export default {
         changed = true
       }
 
-      const board = changed ? await rebuildBoard(env) : await readBoard(env)
+      const board = await withDist(env, changed ? await rebuildBoard(env) : await readBoard(env))
       if (changed) {
         await caches.default.delete(new Request(new URL('/top', url.origin).toString()))
       }

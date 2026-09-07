@@ -211,13 +211,32 @@ describe('monster strips — the red fallback ellipse', () => {
       expect(stageDesigns(stage)).toContain(bossDesign(stage))
     }
 
-    // Stage 1's boss costs NOTHING extra to bake, and that is not a coincidence:
+    // Stage 1's BOSS costs nothing extra to bake, and that is not a coincidence:
     // it is the same body as the creep already on that road (`bossDesign`), so
     // adding a climax to the opening did not add a frame strip to the stage most
     // sensitive to load time.
     const rosterDesigns = new Set(foeRoster(1).flatMap((id) => foeDef(id).designs))
     expect(rosterDesigns.has(bossDesign(1))).toBe(true)
-    expect(stageDesigns(1).length).toBe(rosterDesigns.size)
+
+    // Its ELITE does cost one, and that is a deliberate trade. A miniboss's body
+    // is now its attack (`MINIBOSS_DESIGN`) — Snaggletusk always cleaves — so the
+    // opening fields a body its creep roster does not contain. Paid because the
+    // alternative teaches the wrong thing: leaving early elites on the roster
+    // body puts a Cinderhound-shaped scythe on stage 3, and from stage 4 a
+    // Cinderhound is the bomber.
+    //
+    // Exactly one strip, and the stage stays inside the four-design ceiling
+    // asserted above. If stage-1 load ever needs it back, the lever is
+    // `minibossDesignsFor`, not this expectation.
+    const { minibossDesignsFor } = await import('@/game/threats')
+    expect(minibossDesignsFor(1)).toEqual(['snaggletusk'])
+    expect(stageDesigns(1).length).toBe(rosterDesigns.size + 1)
+    expect(stageDesigns(1)).toContain('snaggletusk')
+
+    // And from stage 7 the pairing is free: the brute archetype already puts
+    // both of its designs in the roster.
+    const roster7 = new Set(foeRoster(7).flatMap((id) => foeDef(id).designs))
+    for (const d of minibossDesignsFor(7)) expect(roster7.has(d)).toBe(true)
   })
 
   it('the idle baker stands down while gameplay is live', async () => {

@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Grasz offline. Postęp jest zapisywany tutaj.',
     'retry': 'Ponów', 'dismiss': 'zamknij'
   },
-  'loading': { 'tooLong': 'Ładowanie trwa zbyt długo? Wyłącz blokadę reklam i odśwież.' },
+  'loading': { 'tooLong': 'Ładowanie trwa zbyt długo? Wyłącz blokadę reklam i odśwież.', 'boo': 'Bu!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Odmowa dostępu: kup licencję.' }
 }

@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Stai giocando offline. I progressi sono salvati qui.',
     'retry': 'Riprova', 'dismiss': 'ignora'
   },
-  'loading': { 'tooLong': 'Il caricamento è troppo lento? Disattiva il blocco annunci e ricarica.' },
+  'loading': { 'tooLong': 'Il caricamento è troppo lento? Disattiva il blocco annunci e ricarica.', 'boo': 'Bu!', 'laugh': 'Ahahah!' },
   'license': { 'denied': 'Accesso negato: acquista una licenza.' }
 }

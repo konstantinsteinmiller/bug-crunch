@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Jugando sin conexión. Tu progreso se guarda aquí.',
     'retry': 'Reintentar', 'dismiss': 'descartar'
   },
-  'loading': { 'tooLong': '¿La carga tarda demasiado? Desactiva tu bloqueador de anuncios y recarga.' },
+  'loading': { 'tooLong': '¿La carga tarda demasiado? Desactiva tu bloqueador de anuncios y recarga.', 'boo': '¡Bu!', 'laugh': '¡Jajaja!' },
   'license': { 'denied': 'Acceso denegado: adquiere una licencia.' }
 }

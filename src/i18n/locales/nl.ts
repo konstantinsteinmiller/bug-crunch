@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Je speelt offline. Je voortgang wordt hier opgeslagen.',
     'retry': 'Opnieuw', 'dismiss': 'sluiten'
   },
-  'loading': { 'tooLong': 'Duurt het laden te lang? Schakel je adblocker uit en ververs.' },
+  'loading': { 'tooLong': 'Duurt het laden te lang? Schakel je adblocker uit en ververs.', 'boo': 'Boe!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Toegang geweigerd: koop een licentie.' }
 }

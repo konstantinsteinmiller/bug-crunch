@@ -265,6 +265,51 @@ DELETE FROM scores WHERE id NOT IN (
 DELETE FROM board_cache;
 ```
 
+## The histogram on `/top`, and the baked board
+
+`GET /top` returns the published rows **and** a histogram of every score:
+
+```json
+{ "updatedAt": 1757254334067, "total": 2422,
+  "entries": [ ... 100 rows ... ],
+  "dist": [[134,1],[74,1],[72,1], ...] }
+```
+
+`dist` is `[score, howManyPlayersHaveIt]`, ordered score-descending, so the
+client can compute the rank this Worker would — `COUNT(*) WHERE score > ?` plus
+one — for **any** score, without asking. That is what removes `#100+` from the
+game: the rows stop at 100, and on a board of thousands the hundredth row sits
+around stage 13, so almost every player is below the cut and could otherwise
+only be told "past the end".
+
+The histogram is materialised into `board_cache` under the id `dist` and rebuilt
+only when that row is older than `DIST_TTL_MS` (one hour). This matters: its
+`GROUP BY score` is the one query here that reads every row, so it must never
+run per request or on the write path.
+
+### Poki and Yandex bake it at build time
+
+Both portals forbid the request — Poki bans every external runtime request,
+Yandex's moderators reject third-party storage URLs — so both builds ship
+`VITE_LEADERBOARD_URL` empty and make no call at all. They still show a
+leaderboard, from a copy of this response embedded in the bundle. Every other
+build carries the same copy as its offline fallback.
+
+```bash
+pnpm leaderboard:snapshot        # writes data/leaderboard-snapshot.json
+pnpm build:poki                  # refreshes it first, then builds
+```
+
+`build:poki` and `build:yandex` refresh it themselves (with `--soft`, so an
+unreachable board can never break a build), and `vite.config.ts` refreshes it
+for anyone running `vite build` directly — skipping if the file was fetched in
+the last ten minutes, so one build makes one request. If the Worker is
+unreachable the committed file is used; if there is no file the game ships with
+no leaderboard, exactly as it did before. **Commit the JSON** — that is what
+makes an offline build reproducible.
+
+Set `LEADERBOARD_SNAPSHOT_URL` to point the refresh at a staging Worker.
+
 ## Playgama builds post to two boards
 
 On Playgama the best score also goes to the portal's own leaderboard through

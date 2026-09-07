@@ -545,8 +545,15 @@ describe('minibosses are the midpoint win, not the climax', () => {
     // Deliberately modest: the elite now PLANTS and blocks the road, so a squad
     // built to delete it in a single frame would leave the health banner with
     // nothing to track, and this test is about the banner.
-    game.debugAddUnits(60)
-    game.debugAddDamage(2)
+    //
+    // Halved again (60/+2 -> 30/+1) after the fight got short enough to fail
+    // INTERMITTENTLY: at 60 survivors the elite died in three sampled frames,
+    // which is one frame above the assertion below, so a one-point change in
+    // its health — `minibossHpScale` quantises to a tenth, so an onboarding
+    // tuning pass moves it by a point or two — flipped this red at random.
+    // At 30 the banner is sampled seven times and the margin is real.
+    game.debugAddUnits(30)
+    game.debugAddDamage(1)
     game.steerTo(-GATE_LEAF_X)
     drainFx()
 

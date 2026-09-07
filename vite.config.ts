@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url'
 import { resolve, dirname } from 'node:path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 
@@ -182,6 +183,110 @@ const artSheetsPlugin = (): Plugin => ({
   }
 })
 
+// ─── The baked leaderboard ─────────────────────────────────────────────────
+//
+// Ships `data/leaderboard-snapshot.json` as `virtual:leaderboard-snapshot` for
+// the builds that are not allowed to fetch a board at runtime — Poki forbids
+// every external runtime request, Yandex's moderators reject third-party
+// storage URLs, and both therefore build with `VITE_LEADERBOARD_URL` empty.
+//
+// Only those builds carry the bytes. A build with a live endpoint loads `null`
+// here and fetches the real board as it always has, so the snapshot costs the
+// other nine targets nothing.
+//
+// The refresh runs as a CHILD PROCESS of `scripts/leaderboard-snapshot.mjs` —
+// the same code path `pnpm leaderboard:snapshot` runs, so the build cannot
+// drift from the manual command, and a fetch that hangs or throws cannot take
+// the vite process with it. It is allowed to fail: the file is committed, so a
+// build with no network bakes the last known board instead of quietly shipping
+// without the feature.
+const SNAPSHOT_VIRTUAL_ID = 'virtual:leaderboard-snapshot'
+const SNAPSHOT_RESOLVED = '\0' + SNAPSHOT_VIRTUAL_ID
+const SNAPSHOT_FILE = resolve(
+  fileURLToPath(new URL('./data/leaderboard-snapshot.json', import.meta.url))
+)
+const SNAPSHOT_SCRIPT = resolve(
+  fileURLToPath(new URL('./scripts/leaderboard-snapshot.mjs', import.meta.url))
+)
+
+interface LeaderboardSnapshotFile {
+  /** When this process last pulled it off the Worker — the freshness clock. */
+  fetchedAt: number
+  updatedAt: number
+  total: number
+  entries: { rank: number; name: string; score: number; squad: number }[]
+  dist: [number, number][]
+}
+
+/** How recently the file must have been fetched for the build to accept it as
+ *  already current. Long enough that `build:poki`'s own refresh (and a run of
+ *  several portal builds back to back) costs the Worker ONE request. */
+const SNAPSHOT_FRESH_MS = 10 * 60_000
+
+const readSnapshotFile = (): LeaderboardSnapshotFile | null => {
+  if (!existsSync(SNAPSHOT_FILE)) return null
+  try {
+    const parsed = JSON.parse(readFileSync(SNAPSHOT_FILE, 'utf-8')) as Partial<LeaderboardSnapshotFile>
+    if (!Array.isArray(parsed.entries) || !Array.isArray(parsed.dist)) return null
+    if (!(Number(parsed.total) > 0)) return null
+    return {
+      fetchedAt: Number(parsed.fetchedAt) || 0,
+      updatedAt: Number(parsed.updatedAt) || 0,
+      total: Number(parsed.total),
+      entries: parsed.entries,
+      dist: parsed.dist
+    }
+  } catch {
+    return null
+  }
+}
+
+const leaderboardSnapshotPlugin = (needed: boolean): Plugin => ({
+  name: 'survivalist-leaderboard-snapshot',
+  buildStart() {
+    if (!needed) return
+    // The `build:poki` / `build:yandex` scripts refresh it themselves, so the
+    // file is usually seconds old by the time this runs. Refetching would be a
+    // second round trip for the same bytes — and building five portal targets
+    // in a row would be five. This hook is the SAFETY NET for anyone invoking
+    // `vite build --mode poki` directly, which is why it stays.
+    const onDisk = readSnapshotFile()
+    const fresh = onDisk !== null && Date.now() - onDisk.fetchedAt < SNAPSHOT_FRESH_MS
+    if (!fresh) {
+      try {
+        execFileSync(process.execPath, [SNAPSHOT_SCRIPT], { stdio: 'inherit', timeout: 60_000 })
+      } catch {
+        // Offline, or the Worker is down. The committed file stands in.
+        console.warn(
+          '[leaderboard] could not refresh the snapshot — building with the committed copy.'
+        )
+      }
+    }
+    const snap = readSnapshotFile()
+    if (snap) {
+      console.log(
+        `[leaderboard] baking ${snap.total} players / ${snap.entries.length} rows `
+        + `(board of ${new Date(snap.updatedAt).toISOString().slice(0, 10)})`
+      )
+    } else {
+      // Not a build failure: `leaderboardEnabled` goes false and the game ships
+      // exactly as it does today, with no board and no rank cell.
+      console.warn(
+        `[leaderboard] no usable snapshot at ${SNAPSHOT_FILE} — this build has no leaderboard.`
+      )
+    }
+  },
+  resolveId(id) {
+    if (id === SNAPSHOT_VIRTUAL_ID) return SNAPSHOT_RESOLVED
+    return null
+  },
+  load(id) {
+    if (id !== SNAPSHOT_RESOLVED) return null
+    if (!needed) return 'export default null'
+    return `export default ${JSON.stringify(readSnapshotFile())}`
+  }
+})
+
 // Read the package version directly so APP_VERSION resolves regardless of
 // how vite is invoked. `process.env.npm_package_version` is only set when
 // vite runs via `pnpm run <script>` — running `pnpm vite` directly leaves
@@ -243,6 +348,19 @@ export default defineConfig(({ mode, command }) => {
   plugins.push(mawCampaignOverridesPlugin())
   // Art-sheet export endpoint. `apply: 'serve'`, so it is not in any build.
   plugins.push(artSheetsPlugin())
+
+  // The baked board. EVERY build carries it, for two different jobs.
+  //
+  // On Poki and Yandex — the portals that forbid the request, which `loadEnv`
+  // surfaces here as an empty `VITE_LEADERBOARD_URL` — it IS the leaderboard.
+  //
+  // On the live builds it is the bottom rung of `useLeaderboard`'s offline
+  // ladder: the thing a player sees when the fetch fails and their device has
+  // no cache of its own yet. That is not hypothetical — the Worker's D1
+  // row-read allowance ran out mid-afternoon and `/top` threw for every live
+  // build, which without this shows a first-time player "Couldn't reach the
+  // leaderboard". It costs ~1.7 kB gzipped per build.
+  plugins.push(leaderboardSnapshotPlugin(true))
 
   // Only push the obfuscator if both conditions are met
   if (isProduction && shouldObfuscate) {

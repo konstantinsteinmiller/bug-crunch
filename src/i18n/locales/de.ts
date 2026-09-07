@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Offline-Modus. Dein Fortschritt wird hier gespeichert.',
     'retry': 'Erneut versuchen', 'dismiss': 'ausblenden'
   },
-  'loading': { 'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.' },
+  'loading': { 'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.', 'boo': 'Buh!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Zugriff verweigert: Bitte erwerbe eine Lizenz.' }
 }

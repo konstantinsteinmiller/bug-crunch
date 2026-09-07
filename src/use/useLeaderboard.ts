@@ -2,6 +2,7 @@ import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { getState, setState } from '@/use/useTowerState'
 import { POSTED_NAME_KEY, SUBMITTED_STAGE_KEY } from '@/keys'
 import { resolveIdentity, type PlayerIdentity } from '@/use/usePlayerIdentity'
+import { boardSnapshot, rankFromDist } from '@/use/leaderboardSnapshot'
 
 /**
  * ─── The global board, client side ──────────────────────────────────────────
@@ -35,14 +36,28 @@ const ENDPOINT: string = (import.meta.env.VITE_LEADERBOARD_URL ?? '').replace(/\
 const SECRET: string = import.meta.env.VITE_LEADERBOARD_SECRET ?? ''
 
 /**
- * No endpoint configured → the whole feature is absent, not broken.
+ * Is there a live endpoint to talk to?
  *
- * This is what ships the game with no leaderboard on the portals that refuse
- * third-party storage endpoints (Yandex rejects them outright at moderation):
- * `.env.yandex.local` sets the URL to empty and every UI entry point, every
- * fetch and every localStorage write below switches off together.
+ * GATES EVERY NETWORK CALL IN THIS FILE, and it is deliberately no longer the
+ * same question as "does the game have a leaderboard". The portals that refuse
+ * the request build with the URL empty — Poki forbids every external runtime
+ * request, Yandex rejects third-party storage URLs at moderation — and they now
+ * ship a BAKED board rather than no board at all.
+ *
+ * So `ensureBoard`, `submitScore` and `reportRun` gate on this; everything the
+ * player can see gates on `leaderboardEnabled`. Confusing the two would post a
+ * run to `''`.
  */
-export const leaderboardEnabled: boolean = ENDPOINT.length > 0
+const LIVE: boolean = ENDPOINT.length > 0
+
+/**
+ * Does this build have a board at all — live or baked?
+ *
+ * What the HUD button, the modal and the result screen's rank chip read. With
+ * neither, the feature is absent rather than broken: every UI entry point
+ * switches off together and `rankFor` returns 0, which hides the cell.
+ */
+export const leaderboardEnabled: boolean = LIVE || boardSnapshot !== null
 
 /**
  * 6 s, matching the worker's own budget note.
@@ -69,6 +84,15 @@ interface Board {
   updatedAt: number
   total: number
   entries: BoardEntry[]
+  /**
+   * `[score, howManyPlayersHaveIt]`, score-DESC, over the WHOLE population.
+   *
+   * The published `entries` stop at a hundred rows; this does not. It is what
+   * turns "#100+" — which on a board of thousands is nearly every player — into
+   * a real number like "#1130 of 2345". Optional only because a board cached by
+   * an older build predates it; the next successful read replaces it.
+   */
+  dist?: [number, number][]
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -91,6 +115,14 @@ export const leaderboardFailed: ComputedRef<boolean> = computed(() => failed.val
 /** Rows actually published. The result screen needs it to say `#100+` — the
  *  cut-off is whatever the server chose to send, not a number hardcoded here. */
 export const boardSize: ComputedRef<number> = computed(() => board.value?.entries.length ?? 0)
+/**
+ * Which rung of the offline ladder the board on screen came from.
+ *
+ * QA, tests and the debug HUD only — deliberately never surfaced to the player.
+ * Telling them the board is a few days old is the "notice" this whole mechanism
+ * exists to avoid; they are looking for their rank, and it is the same rank.
+ */
+export const boardProvenance = (): 'live' | 'cache' | 'snapshot' | null => boardSource
 
 /**
  * Resolved once per page load and reused.
@@ -127,12 +159,15 @@ const sign = async (message: string): Promise<string> => {
   return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-const adoptBoard = (next: unknown): void => {
+/** @returns whether `next` was a board and was adopted. The caller needs to
+ *  know: a shape it rejected is a FAILURE, not a quiet no-op, and it must not
+ *  be written to the cache or counted as a successful read. */
+const adoptBoard = (next: unknown): boolean => {
   // The response is remote input: a portal's captive proxy can answer 200 with
   // an HTML login page, and `JSON.parse` succeeding proves nothing about shape.
-  if (!next || typeof next !== 'object') return
+  if (!next || typeof next !== 'object') return false
   const raw = next as Partial<Board>
-  if (!Array.isArray(raw.entries)) return
+  if (!Array.isArray(raw.entries)) return false
   board.value = {
     updatedAt: Number(raw.updatedAt) || 0,
     total: Number(raw.total) || raw.entries.length,
@@ -143,10 +178,109 @@ const adoptBoard = (next: unknown): void => {
         name: typeof e.name === 'string' ? e.name : '',
         score: Number(e.score) || 0,
         squad: Number(e.squad) || 0
-      }))
+      })),
+    // Remote input like everything else: each bucket must be a pair of finite
+    // numbers or the rank walk silently returns nonsense.
+    dist: Array.isArray(raw.dist)
+      ? raw.dist
+        .filter((b): b is [number, number] =>
+          Array.isArray(b) && b.length === 2 &&
+          Number.isFinite(Number(b[0])) && Number.isFinite(Number(b[1])))
+        .map(([sc, n]) => [Number(sc), Number(n)] as [number, number])
+      : undefined
   }
   total.value = board.value.total
+  return true
 }
+
+// ─── The offline ladder ─────────────────────────────────────────────────────
+//
+// THE BOARD MUST NEVER LOOK BROKEN. It is a decoration, and a decoration that
+// says "Couldn't reach the leaderboard" has failed twice — once at the request
+// and once at the player, who reads it as a bug in the game rather than a quiet
+// afternoon on someone's free tier. (It is not hypothetical: the Worker's D1
+// row-read allowance ran out mid-day and `/top` threw for every live build.)
+//
+// So there are three sources, strongest first, and the game shows the best one
+// it has WITHOUT ever announcing which:
+//
+//   1. this session's live fetch  — current
+//   2. the cache from a previous session — hours or days old
+//   3. the snapshot baked at build time — weeks old, but it always exists
+//
+// Only the top rung needs a network. The other two are why a player who opens
+// the board on a plane, behind Edge's tracking prevention, or on the day the
+// quota ran out, sees a leaderboard rather than an apology.
+
+type BoardSource = 'live' | 'cache' | 'snapshot' | null
+let boardSource: BoardSource = null
+/** Whether THIS session has a live board. Distinct from `board.value !== null`,
+ *  which is now true from boot on most devices — without the split, restoring
+ *  the cache would convince `ensureBoard` it had already read and no session
+ *  would ever refresh. */
+let fetched = false
+
+/**
+ * Deliberately NOT a `ts_`-prefixed key and not a field inside `tower_state`.
+ *
+ * Both of those round-trip to the platform's cloud save (see `isPayloadKey`),
+ * and this is a ~6 kB cache of PUBLIC data that is identical for every player.
+ * Syncing it would pay for the same hundred rows once per player, on every
+ * save, against Poki's 1 MB ceiling — to protect a device that has its own copy
+ * anyway. It is a per-device cache, so it lives per-device.
+ */
+const BOARD_CACHE_KEY = 'tower_board_cache'
+
+const readBoardCache = (): Board | null => {
+  try {
+    const raw = localStorage.getItem(BOARD_CACHE_KEY)
+    return raw ? JSON.parse(raw) as Board : null
+  } catch {
+    // Private mode, a corrupt entry, or no storage at all. No cache is a
+    // supported state; it just means the ladder starts a rung lower.
+    return null
+  }
+}
+
+const writeBoardCache = (b: Board): void => {
+  try {
+    localStorage.setItem(BOARD_CACHE_KEY, JSON.stringify(b))
+  } catch { /* quota or private mode — the live board is still on screen */ }
+}
+
+/**
+ * Stand the best offline board up at module load, before anything renders.
+ *
+ * This is what removes the spinner and the error state from a returning
+ * player's experience entirely: `pending` and `failed` are both still false and
+ * the table is already populated, so the modal opens onto rows and the result
+ * chip has a rank on the first stage of the session. When the live fetch lands
+ * a moment later it silently replaces all of it.
+ */
+const seedOfflineBoard = (): void => {
+  if (!LIVE) {
+    // Nothing to wait for. The snapshot IS the board here.
+    if (boardSnapshot && adoptBoard(boardSnapshot)) boardSource = 'snapshot'
+    return
+  }
+  // On a live build, only the CACHE may be seeded up front — never the
+  // snapshot. Both rank the same way now, but against different populations
+  // (the snapshot's is weeks old), and seeding it would show a rank out of the
+  // stale total that then shifts when the live board lands. There is nothing to
+  // buy by it either: a player's rank is hidden until they have cleared a
+  // stage, by which time the fetch has long resolved. The snapshot is reached
+  // only once a fetch has actually failed, where nothing can contradict it.
+  const cached = readBoardCache()
+  if (cached && adoptBoard(cached)) boardSource = 'cache'
+}
+
+/** Last rung, taken only when a read failed and nothing else is on screen. */
+const fallBackToSnapshot = (): void => {
+  if (board.value !== null || !boardSnapshot) return
+  if (adoptBoard(boardSnapshot)) boardSource = 'snapshot'
+}
+
+seedOfflineBoard()
 
 // ─── Reads ──────────────────────────────────────────────────────────────────
 
@@ -163,7 +297,10 @@ const adoptBoard = (next: unknown): void => {
  * one edge-cached GET.
  */
 export const ensureBoard = async (): Promise<void> => {
-  if (!leaderboardEnabled || board.value !== null || pending.value) return
+  // `fetched`, not `board.value !== null` — the offline ladder has usually
+  // already put a board on screen, and testing the value would mean a device
+  // with a cache never refreshed it again.
+  if (!LIVE || fetched || pending.value) return
   pending.value = true
   try {
     // No headers at all, on purpose: any request header beyond the CORS-safelist
@@ -172,12 +309,26 @@ export const ensureBoard = async (): Promise<void> => {
     const res = await withTimeout(`${ENDPOINT}/top`)
     if (!res.ok) {
       failed.value = true
+      fallBackToSnapshot()
       return
     }
-    adoptBoard(await res.json())
+    // A rejected SHAPE is a failure too — a captive portal answering 200 with a
+    // login page used to leave `failed` false and the board untouched, which
+    // read as "loaded, and empty".
+    if (!adoptBoard(await res.json())) {
+      failed.value = true
+      fallBackToSnapshot()
+      return
+    }
+    boardSource = 'live'
+    fetched = true
+    // Banked for the next session, whatever it meets. This is the only place a
+    // cache is written from a read; `submitScore` writes the other one.
+    if (board.value) writeBoardCache(board.value)
     failed.value = false
   } catch {
     failed.value = true
+    fallBackToSnapshot()
   } finally {
     pending.value = false
   }
@@ -193,7 +344,7 @@ export const ensureBoard = async (): Promise<void> => {
  * instead of being silently forgotten.
  */
 export const submitScore = async (score: number, squad: number): Promise<boolean> => {
-  if (!leaderboardEnabled) return false
+  if (!LIVE) return false
   pending.value = true
   try {
     const { id, name } = await identity()
@@ -220,7 +371,14 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
     // score we posted would let `rankFor` claim a rank the server never gave.
     submittedScore.value = Number(data.best) || 0
     if (data.total !== undefined) total.value = Number(data.total) || 0
-    adoptBoard(data.board)
+    // A `/score` reply carries the fresh board too, so a submitting player
+    // refreshes the cache without a second request. `data.board` is optional —
+    // a rejected shape here is normal and must not be treated as a failure.
+    if (adoptBoard(data.board)) {
+      boardSource = 'live'
+      fetched = true
+      if (board.value) writeBoardCache(board.value)
+    }
     failed.value = false
     return true
   } catch {
@@ -250,7 +408,10 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
  * served from the edge cache.
  */
 export const reportRun = async (bestStage: number, bestSquad: number): Promise<void> => {
-  if (!leaderboardEnabled) return
+  // A baked build has nothing to report TO. The rank it shows comes from the
+  // snapshot, which no run can change, so this is the one entry point that stays
+  // switched off where `leaderboardEnabled` is true.
+  if (!LIVE) return
   try {
     // Both numbers come off the save blob, which a cloud restore can hand back
     // anything for, and the worker rejects a non-integer outright.
@@ -307,9 +468,35 @@ export const rankFor = (score: number): number => {
   // on the first screen they ever see.
   if (score <= 0) return 0
 
+  // On a baked build the histogram IS the board, and it answers for the whole
+  // population: no published cut to fall off, no `OUTSIDE_BOARD`, and a real
+  // number — "#1847 of 2363" — from the player's very first cleared stage.
+  //
+  // That is why the snapshot carries a histogram and not just rows. The top-100
+  // alone would have been useless: on a board of a few thousand the hundredth
+  // row sits around stage 13, well past where a first session reaches, so every
+  // new player would have seen `#100+` and nothing else — in exactly the
+  // session Poki's fit test grades.
+  //
   const table = board.value
   if (!table) return 0
 
+  // THE histogram path, and the one every rung takes now — live, cached or
+  // baked. It ranks against the whole population, so the answer is an exact
+  // "#1130" rather than "past the end of what we published", and it is the same
+  // arithmetic the Worker runs, so a player's rank does not change when the
+  // board underneath it does.
+  if (table.dist && table.dist.length > 0) return rankFromDist(table.dist, score)
+
+  // A board cached by a build that predates the histogram. Rank against the
+  // BAKED one instead of the hundred published rows: its population is a few
+  // weeks stale, so the rank is off by the number of players who joined since —
+  // about a percent — where the row-derived answer would be "#100+", i.e. no
+  // answer at all. Lasts until this device's next successful read.
+  if (boardSnapshot?.dist.length) return rankFromDist(boardSnapshot.dist, score)
+
+  // Last resort: no histogram anywhere. Only the published rows are visible, so
+  // below the cut the true rank genuinely is unknowable.
   const above = table.entries.filter((e) => e.score > score).length
   // Below every published row AND the table is a truncated slice of a bigger
   // population — the true rank is somewhere past the cut and cannot be derived.

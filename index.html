@@ -42,43 +42,123 @@
           pointer-events: none;
       }
 
-      /* A procedurally-drawn "tower" built from CSS boxes: three stacked
-         blocks that pulse in sequence. Zero bytes, and it previews the game's
-         actual subject matter instead of a generic spinner. */
-      .splash-tower {
+      /* The greeting card, minus its punchline.
+         ------------------------------------------------------------------
+         What stood here was Tower Siege's: three stacked blocks pulsing in
+         sequence, carried over with the splash flow. It is now the same
+         picture `FLogoProgress.vue` draws — the wispling floating over the
+         title — at the SAME size in the SAME place, so when Vue mounts and
+         this element fades out, nothing moves. The speech bubble is the only
+         thing that is not here, and it pops in on top of this once the fade
+         has finished (see `LURK_MS` in that component).
+
+         Duplicated rather than shared because this has to paint before any
+         stylesheet or module has been fetched. Change one, change both.
+
+         The two `<img>` sources are absolute public paths — Vite rewrites
+         them against the build's base, the same as the favicon and manifest
+         links above, so the relative-base portal builds resolve them too. */
+      .splash-greet {
+          position: relative;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 0.6vmin;
+          gap: 0.55rem;
+          width: clamp(200px, 58vmin, 340px);
       }
 
-      .splash-tower i {
+      .splash-stage {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 340 / 200;
+      }
+
+      /* One panel of the painted 8-panel walk strip. The strip inside is 8x as
+         wide, so a steps(8) slide of -100% of its own width lands on each panel
+         in turn. */
+      /* Solved for the ghost's INK, not the panel box it is padded inside —
+         see the long note on `.wisp` in FLogoProgress.vue. */
+      .splash-wisp {
+          position: absolute;
+          left: -5.3%;
+          bottom: -5.8%;
+          height: 131.5%;
+          aspect-ratio: 228 / 256;
+          overflow: hidden;
+          animation: splash-float 2.6s ease-in-out infinite;
+      }
+
+      /* max-width beats the app stylesheet's image reset once it lands, and the
+         height beats the tag's own width/height attributes — those are
+         presentational hints, and they are on the tag so this does not reflow
+         when the file decodes. */
+      .splash-wisp img {
           display: block;
-          width: 9vmin;
-          height: 9vmin;
-          border: 0.7vmin solid #0f1a30;
-          border-radius: 1.4vmin;
-          background-image: linear-gradient(160deg, #d99a53, #a9682f 45%, #6b3f1d);
-          box-shadow: inset 0 0.8vmin 0 rgba(255, 255, 255, 0.22);
-          animation: splash-block 1.4s ease-in-out infinite;
+          max-width: none;
+          width: 800%;
+          height: 100%;
+          animation: splash-walk 2.6s steps(8, end) infinite;
       }
 
-      .splash-tower i:nth-child(2) { animation-delay: 0.16s; }
-      .splash-tower i:nth-child(3) {
-          animation-delay: 0.32s;
-          background-image: linear-gradient(160deg, #7a63ad, #4b3d70 45%, #2a2140);
+      /* The wordmark's ink runs from y=216 to y=295 of the 512 icon; the rest
+         of the file is transparent padding. Crop to a band around it. */
+      .splash-logo {
+          width: 100%;
+          aspect-ratio: 512 / 103;
+          overflow: hidden;
       }
 
-      @keyframes splash-block {
-          0%, 100% { opacity: 0.35; transform: translateY(0); }
-          50%      { opacity: 1;    transform: translateY(-0.8vmin); }
+      .splash-logo img {
+          display: block;
+          width: 100%;
+          height: auto;
+          margin-top: -39.84%;
+      }
+
+      /* The loading read-out's placeholder. It is here for the SPACE as much as
+         the number: without it the card is one line shorter than the one
+         FLogoProgress draws, so the whole composition would jump upward at the
+         handover. The colour, size and shadow match `.percentage-text` +
+         `.text-shadow` + `.text-amber-500` in the app's stylesheet, which has
+         not loaded yet at this point. */
+      .splash-progress {
+          font-size: clamp(0.9rem, 4vw, 1.35rem);
+          font-weight: 900;
+          /* The app stylesheet's default, restated: the UA's own 'normal' is
+             tighter, and a line 7 px shorter here would centre the whole card
+             3 px lower than the one Vue draws. */
+          line-height: 1.5;
+          color: #fe9a00;
+          text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+      }
+
+      @keyframes splash-walk {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-100%); }
+      }
+
+      @keyframes splash-float {
+          0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+          50%      { transform: translateY(-6%) rotate(1.5deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+          .splash-wisp { animation: none; }
       }
   </style>
 </head>
 <body>
 <div id="static-splash">
-  <div class="splash-tower" role="img" aria-label="Survivalist">
-    <i></i><i></i><i></i>
+  <div class="splash-greet">
+    <div class="splash-stage">
+      <div class="splash-wisp">
+        <img src="/images/monsters/wispling.webp" alt="" width="1824" height="256" fetchpriority="high">
+      </div>
+    </div>
+    <div class="splash-logo">
+      <img src="/images/logo/logo_512x512.png" alt="Survivalist" width="512" height="512" fetchpriority="high">
+    </div>
+    <span class="splash-progress">0%</span>
   </div>
 </div>
 <!-- Load the SDK before your game code -->

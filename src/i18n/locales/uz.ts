@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Oflayn o‘ynayapsiz. Yutuqlaringiz shu yerda saqlanadi.',
     'retry': 'Qayta urinish', 'dismiss': 'yashirish'
   },
-  'loading': { 'tooLong': 'Yuklash juda uzoq davom etyaptimi? Reklama bloklagichni o‘chirib, sahifani yangilang.' },
+  'loading': { 'tooLong': 'Yuklash juda uzoq davom etyaptimi? Reklama bloklagichni o‘chirib, sahifani yangilang.', 'boo': 'Bu!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' }
 }

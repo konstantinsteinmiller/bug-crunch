@@ -12,11 +12,11 @@ import {
   activeWeapon, puzzlePulled, puzzleTotal, puzzleWeapon
 } from '@/use/useSurvivalGame'
 import {
-  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX
+  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX, getScale
 } from '@/use/useSurvivalArt'
 import { renderScaleTier, resetVfx } from '@/use/useVfx'
 import { warmAudio, playFx } from '@/use/useGameAudio'
-import { DECLINE_MAX, LANE_HALF } from '@/game/survival'
+import { CROWD_MAX_R, CROWD_SCREEN_Y, DECLINE_MAX, LANE_HALF, UNIT_R } from '@/game/survival'
 
 import { getState, setState } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
@@ -115,6 +115,27 @@ const measureInsets = (): { top: number; bottom: number } => ({
   bottom: (bottomBarRef.value?.getBoundingClientRect().height ?? 0) + 8
 })
 
+/**
+ * Hand the measured HUD to the camera, and the camera's own geometry to the
+ * controls that have to dodge the crowd.
+ *
+ * One function because the two are the same measurement: the bottom strip is
+ * both what the camera must not frame the crowd underneath AND what the skill
+ * row sits on top of, and reading it twice at different moments is how the two
+ * end up disagreeing by a few pixels on a phone that just rotated.
+ */
+const applyViewport = (): void => {
+  const insets = measureInsets()
+  setViewport(cssW, cssH, insets.top, insets.bottom)
+  hudBottomPx.value = insets.bottom
+  // The deepest a survivor is ever drawn: the anchor row, plus a full-size
+  // crowd's radius, plus one body. Sized off the MAXIMUM rather than the live
+  // radius on purpose — a control that slid up the screen as the squad grew
+  // would be a moving target, and the whole point of the placement is that the
+  // player can reach for it without looking.
+  squadFloorPx.value = cssH * CROWD_SCREEN_Y + (CROWD_MAX_R + UNIT_R) * getScale()
+}
+
 const resize = (): void => {
   const canvas = canvasRef.value
   if (!canvas) return
@@ -152,8 +173,7 @@ const resize = (): void => {
   canvas.style.height = `${cssH}px`
   ctx = canvas.getContext('2d')
   ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
-  const insets = measureInsets()
-  setViewport(cssW, cssH, insets.top, insets.bottom)
+  applyViewport()
   // Half the road, in CSS pixels — measured through the renderer's own
   // projection rather than guessed at as a percentage of the viewport, so the
   // steer hint sits between the same rails the crowd does on every aspect ratio.
@@ -390,6 +410,17 @@ const onKeyUp = (e: KeyboardEvent): void => { keys.delete(e.code) }
 const STEER_HINT_MS = 5000
 
 const laneHalfPx = ref(0)
+/**
+ * The lowest pixel a survivor can ever be drawn at, and the top of the bottom
+ * HUD strip. Between them is the one band of screen the crowd never occupies,
+ * which is where the skill buttons go — see `SkillBar.vue`.
+ *
+ * Measured through the renderer's own projection and the HUD's own box rather
+ * than assumed as a percentage, for the same reason `laneHalfPx` is: a control
+ * placed against the crowd has to move with the camera on every aspect ratio.
+ */
+const squadFloorPx = ref(0)
+const hudBottomPx = ref(0)
 const steerHintDone = ref(false)
 const steerHintArmed = ref(false)
 let steerHintTimer: number | null = null
@@ -1090,8 +1121,7 @@ onMounted(() => {
   // reads — cheaper and far more robust than observing a handful of elements.
   insetTimer = window.setInterval(() => {
     if (cssW === 0) return
-    const insets = measureInsets()
-    setViewport(cssW, cssH, insets.top, insets.bottom)
+    applyViewport()
   }, 1000)
 })
 
@@ -1171,11 +1201,15 @@ onUnmounted(() => {
       )
       SteerHint(:lane-half-px="laneHalfPx" :show="showSteerHint")
 
-      //- Right edge, above the bottom bar — see `SkillBar.vue` for why there.
+      //- Centred under the squad, in the strip between the crowd and the bottom
+      //- bar — and back out at the right edge when a viewport has no such strip.
+      //- See `SkillBar.vue` for the whole argument.
       SkillBar(
         v-if="!showResult"
         :shield-live="shieldLive"
         :lane-half-px="laneHalfPx"
+        :squad-floor-px="squadFloorPx"
+        :hud-bottom-px="hudBottomPx"
         @use="onUseSkill"
       )
 

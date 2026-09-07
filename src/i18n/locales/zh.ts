@@ -158,6 +158,6 @@ export default {
     'pausedBody': '正在离线游戏。你的进度会保存在本地。',
     'retry': '重试', 'dismiss': '忽略'
   },
-  'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。' },
+  'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。', 'boo': '哇！', 'laugh': '哈哈哈！' },
   'license': { 'denied': '访问被拒绝：请购买许可证。' }
 }

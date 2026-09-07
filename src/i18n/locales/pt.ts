@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Jogando offline. Seu progresso está salvo aqui.',
     'retry': 'Tentar de novo', 'dismiss': 'dispensar'
   },
-  'loading': { 'tooLong': 'O carregamento está demorando? Desative seu bloqueador de anúncios e recarregue.' },
+  'loading': { 'tooLong': 'O carregamento está demorando? Desative seu bloqueador de anúncios e recarregue.', 'boo': 'Bu!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Acesso negado: adquira uma licença.' }
 }

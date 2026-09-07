@@ -262,7 +262,13 @@ export default {
     'dismiss': 'dismiss'
   },
   'loading': {
-    'tooLong': 'Loading taking too long? Try disabling your ad blocker and refresh.'
+    'tooLong': 'Loading taking too long? Try disabling your ad blocker and refresh.',
+    // The splash mascot's two-beat gag: the little ghost pops out with the
+    // first line, then drops the act and giggles. Both are onomatopoeia, so
+    // every locale wants its OWN startle noise and laugh, not a translation
+    // of the English letters.
+    'boo': 'Boo!',
+    'laugh': 'Hahaha!'
   },
   'license': {
     'denied': 'Access Denied: Please purchase a license.'

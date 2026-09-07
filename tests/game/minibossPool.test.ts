@@ -25,7 +25,8 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  BOSS_MIN_KILL, CROWD_MAX_R, ELITE_DRAG_LEAD, FOE_REACH, LANE_HALF, UNIT_R, endlessPressure
+  BOSS_MIN_KILL, CROWD_MAX_R, ELITE_DRAG_LEAD, FOE_REACH, LANE_HALF, UNIT_R,
+  earlyBigHitMul, endlessPressure
 } from '@/game/survival'
 import {
   BOLT_R, BOLT_SPEED, BOMBER_BLAST_R, BOMBER_FRACTION, BOMBER_FUSE,
@@ -360,10 +361,16 @@ describe('the roller owns half the road', () => {
     expect(squadAtHit, 'the crowd was gone before the ball got there').toBeGreaterThan(40)
 
     // The share, exactly: `ROLLER_FRACTION` of whatever was standing there, with
-    // `BOSS_MIN_KILL` under it. Computed from the constants rather than from a
-    // snapshot, so a tuning pass moves the test along with the game.
+    // `BOSS_MIN_KILL` under it and the onboarding cut over both — stage 4 is
+    // inside `earlyBigHitMul`'s window, and every percentage hit in the game
+    // carries that cut. Computed from the constants rather than from a snapshot,
+    // so a tuning pass moves the test along with the game.
+    const cut = earlyBigHitMul(ROLLER_STAGE)
     const share = ROLLER_FRACTION * endlessPressure(ROLLER_STAGE)
-    const want = Math.max(BOSS_MIN_KILL, Math.ceil(squadAtHit * share))
+    const want = Math.max(
+      Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+      Math.ceil(squadAtHit * share * cut)
+    )
     expect(took, `a roll took ${took} from a crowd of ${squadAtHit}`).toBe(want)
     // …and it does not get a second go at the same crowd on the way out. The
     // ball is not a body that bites, and it is not solid: one roll, one bill.
@@ -494,7 +501,12 @@ describe('the bomber comes to where you are', () => {
 
   it('takes half the squad off a crowd that stayed where it was', async () => {
     const r = await bomberRun({ lure: 0, escape: 0 })
-    const want = Math.max(BOSS_MIN_KILL, Math.ceil(r.squadAtBlast * BOMBER_FRACTION))
+    // …less the onboarding cut, which stage 5 is still inside (`earlyBigHitMul`).
+    const cut = earlyBigHitMul(BOMBER_STAGE)
+    const want = Math.max(
+      Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+      Math.ceil(r.squadAtBlast * BOMBER_FRACTION * cut)
+    )
     expect(r.killedByBlast, `the blast took ${r.killedByBlast} of ${r.squadAtBlast}`).toBe(want)
     // The premise of the number: the blast really was big enough to reach that
     // many bodies, so what stopped it was the PRICE and not the geometry. If

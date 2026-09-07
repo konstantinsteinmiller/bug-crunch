@@ -1,5 +1,5 @@
 <template lang="pug">
-  div.skills(:style="barStyle")
+  div.skills(ref="barRef" :class="{ 'skills--under': under }" :style="barStyle")
     button.skills__btn(
       v-for="s in visible"
       :key="s.id"
@@ -29,30 +29,61 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ArtIcon from '@/components/icons/ArtIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import {
   skillCharge, skillOwned, skillReady, skillReadyIn, type SkillId
 } from '@/use/useSkills'
+import {
+  SKILL_ROW_HUD_GAP_PX, skillRowFitsUnderSquad
+} from '@/components/game/skillBarPlacement'
 
 /**
  * ─── The skill bar ──────────────────────────────────────────────────────────
  *
  * Two buttons, and the whole design problem is WHERE.
  *
- * The road runs down the middle of the screen and the crowd sits low in it, so
- * the centre is unavailable at any height a thumb can reach. The bottom corners
- * are already spoken for — mute/board/settings on the left, the shop on the
- * right — and a control that overlaps either of those gets pressed by accident
- * on a phone.
+ * ─── Why not the right edge ─────────────────────────────────────────────────
  *
- * So the bar sits on the RIGHT EDGE, stacked vertically, just above the bottom
- * bar: inside the natural arc of a right thumb, clear of the shop button below
- * it, and outside the lane rails on every viewport the game supports. It is
- * anchored to the HUD's own bottom inset, so it rides above the safe-area on a
- * notched phone rather than under it.
+ * It used to live out there, stacked vertically just outside the right rail,
+ * on a thumb argument: inside the arc of a right hand, clear of the corners
+ * that mute/board/settings and the shop already own.
+ *
+ * That argument ignores what a MOUSE has to do to reach it. On a desktop the
+ * crowd follows the cursor while it is over the road, so a player reaching for
+ * a skill drags their whole squad across the lane and parks it against the
+ * right rail on the way — every single time. The button was reachable and the
+ * cost of reaching it was the run. Steering already stops at the rails (see
+ * `onPointerMove` in the scene), so the crowd is not dragged out of the road —
+ * it is dragged to the WRONG SIDE of it, which is worse than either.
+ *
+ * ─── So it sits under the squad ─────────────────────────────────────────────
+ *
+ * Centred on the road, low, in the band between the deepest a survivor is ever
+ * drawn (`squadFloorPx`) and the top of the bottom HUD strip (`hudBottomPx`).
+ * The camera already keeps the crowd out of that strip — `setViewport` is given
+ * the HUD's measured height precisely so the squad is never framed underneath
+ * it — which makes this the one piece of screen the crowd cannot reach.
+ *
+ * Two things fall out of it, and both are the point:
+ *
+ *   • the cursor travels DOWN the same column it was already in, so the crowd
+ *     does not move at all on the way to the button;
+ *   • the button is a long way from where the cursor sits while steering, so a
+ *     left click meant for the road does not land on a skill. The row is pushed
+ *     as low as the strip allows rather than centred in it, because every pixel
+ *     of that gap is bought from the same budget.
+ *
+ * ─── …unless the screen has no such band ────────────────────────────────────
+ *
+ * A landscape phone has none: measured at 844x390, the crowd's own footprint
+ * ends 3 px above the HUD strip, and a row placed there would sit on the squad.
+ * So the placement is CONDITIONAL — it takes the band when the band clears a
+ * full-size crowd, and otherwise falls back to the old right-edge column, which
+ * is out beside the road where a crowd never is. Portrait phones and desktops
+ * measure 48 px and 18 px of clearance respectively and take the band.
  *
  * `pointerdown` rather than `click`, and stopped: the canvas underneath treats
  * a pointer as steering, and a skill press must not also throw the crowd
@@ -76,13 +107,56 @@ interface Props {
    * rather than out at the window edge: a mouse reaching for a skill should not
    * have to cross the whole margin. On a phone the road fills the screen, there
    * is no margin to sit in, and the bar stays at the edge.
+   *
+   * Only used by the fallback layout; the placement under the squad is centred
+   * on the road, which is the middle of the viewport on every aspect ratio.
    */
   laneHalfPx: number
+  /** The lowest pixel a survivor can ever be drawn at — the scene measures it
+   *  off the camera, for a FULL-SIZE crowd. */
+  squadFloorPx: number
+  /** Height of the bottom HUD strip in CSS pixels, safe-area included: what
+   *  the row sits on top of. */
+  hudBottomPx: number
 }
 const props = defineProps<Props>()
 
+const barRef = ref<HTMLElement | null>(null)
+/** One button's height, and the viewport's, both re-read on resize.
+ *
+ * A BUTTON rather than the bar: the fallback stacks two of them and the
+ * placement lays them in a row, so measuring the container would feed the
+ * layout's own height back into the choice between the two layouts and pin it
+ * to whichever it started in. A button is the same size in both. */
+const btnPx = ref(0)
+const viewPx = ref(0)
+
+const measure = (): void => {
+  if (typeof window === 'undefined') return
+  viewPx.value = window.innerHeight
+  const first = barRef.value?.firstElementChild
+  btnPx.value = first ? first.getBoundingClientRect().height : 0
+}
+
+onMounted(() => {
+  measure()
+  window.addEventListener('resize', measure)
+})
+onUnmounted(() => {
+  if (typeof window !== 'undefined') window.removeEventListener('resize', measure)
+})
+
+/** Is there room under the squad? See `skillBarPlacement.ts` for the rule and
+ *  the measurements behind it. */
+const under = computed(() => skillRowFitsUnderSquad({
+  viewportPx: viewPx.value,
+  hudBottomPx: props.hudBottomPx,
+  squadFloorPx: props.squadFloorPx,
+  buttonPx: btnPx.value
+}))
+
 /**
- * Where the bar sits horizontally.
+ * Where the bar sits horizontally, in the fallback.
  *
  * `null` on a narrow screen — the stylesheet's edge anchoring is correct there.
  * On a wide one it is pinned a short gap right of the rail.
@@ -95,7 +169,19 @@ const rightOffset = computed(() => {
   return `${Math.max(8, margin - 74)}px`
 })
 
-const barStyle = computed(() => (rightOffset.value ? { right: rightOffset.value } : {}))
+const barStyle = computed(() => {
+  // Centred on the road and parked on the HUD strip. `left`/`transform` beat
+  // the stylesheet's edge anchoring, and `right: auto` releases it.
+  if (under.value) {
+    return {
+      left: '50%',
+      right: 'auto',
+      bottom: `${Math.round(props.hudBottomPx + SKILL_ROW_HUD_GAP_PX)}px`,
+      transform: 'translateX(-50%)'
+    }
+  }
+  return rightOffset.value ? { right: rightOffset.value } : {}
+})
 
 const ORDER: ReadonlyArray<{ id: SkillId; icon: GameIconName; art: string; key: string }> = [
   { id: 'grenade', icon: 'bomb', art: 'skill-grenade', key: 'skills.grenade' },
@@ -121,6 +207,11 @@ const visible = computed(() =>
   }))
 )
 
+// A skill bought mid-run adds a button, and the first one to appear is what
+// `measure` reads its size from — so the count is a re-measure trigger as much
+// as a resize is.
+watch(() => visible.value.length, () => { void nextTick(measure) })
+
 const onUse = (id: SkillId): void => {
   if (!skillReady(id)) return
   emit('use', id)
@@ -136,9 +227,17 @@ const onUse = (id: SkillId): void => {
   display: flex
   flex-direction: column
   gap: clamp(0.4rem, 2.2vw, 0.7rem)
-  // The HUD layer is pointer-events: none; the buttons opt back in.
+  // The HUD layer is pointer-events: none; the buttons opt back in. Note that
+  // the CONTAINER stays transparent to the canvas in both layouts, so the gap
+  // between the two buttons is still road the player can steer through.
   pointer-events: none
   z-index: 30
+
+// Under the squad: a row, because the band it sits in is short and the road is
+// wide. The inline style carries the position — see `barStyle`.
+.skills--under
+  flex-direction: row
+  align-items: center
 
 .skills__btn
   position: relative

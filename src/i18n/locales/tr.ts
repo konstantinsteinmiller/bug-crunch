@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Çevrimdışı oynuyorsun. İlerlemen burada kaydediliyor.',
     'retry': 'Yeniden dene', 'dismiss': 'kapat'
   },
-  'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.' },
+  'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.', 'boo': 'Bö!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' }
 }

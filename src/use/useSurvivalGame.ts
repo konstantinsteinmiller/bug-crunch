@@ -81,9 +81,11 @@ import {
   bossGuardPayoff,
   bossHpMulFor,
   bossKindFor,
+  clawCoreHalfW,
   clawFurrowHalfW,
   clawLaneXs,
   inClawFurrow,
+  minibossDesignFor,
   minibossKindFor,
   rollerLaneFor,
   rollerLaneX,
@@ -1190,7 +1192,16 @@ const streamTrack = (): void => {
         const el = takeFoe()
         el.id = entityId++
         el.typeId = def.id
-        el.design = def.designs[0] ?? 'snaggletusk'
+        // Which fight this one is. Below stage 4 it is always the scythe the
+        // tutorial taught; from there it comes out of the pool. Resolved HERE,
+        // before the body, because the body is now derived from it.
+        el.kind = minibossKindFor(stage.value, elitesSpawned)
+        // THE MODEL IS THE TELL — see `MINIBOSS_DESIGN`. The archetype still
+        // sets the stats (a brute is a wall, a hound is a sprint), but it no
+        // longer picks the body: Snaggletusk always cleaves, Thornwick always
+        // fires, Cinderhound always plants a bomb. A player who has met one
+        // before can start moving on the silhouette instead of on the wind-up.
+        el.design = minibossDesignFor(el.kind)
         el.y = e.y
         el.hp = hp
         el.maxHp = hp
@@ -1207,9 +1218,6 @@ const streamTrack = (): void => {
         el.sweepCd = ELITE_SWEEP_CD
         el.sweepSpan = ELITE_SWEEP_CD
         el.sweepDir = Math.random() < 0.5 ? -1 : 1
-        // Which fight this one is. Below stage 4 it is always the scythe the
-        // tutorial taught; from there it comes out of the pool.
-        el.kind = minibossKindFor(stage.value, elitesSpawned)
         // DERIVED, not rolled. Which half of the road a `roller` owns is the
         // entire content of that fight, and `Math.random()` in this game is
         // for cosmetic jitter only — a stage has to be learnable, and a coin
@@ -4822,6 +4830,21 @@ const throwRake = (b: Boss): void => {
   // covers about 30 % of that same disc, so it spends about 30 % of the crowd.
   // Both come to "roughly a third of everyone" on a crowd that did not move,
   // and to nothing at all on one that did.
+  // ── The core, first and without a budget ──
+  //
+  // Down the middle quarter of each gouge the claw is THROUGH the crowd, not
+  // across it, and everything there dies (see `CLAW_CORE_FRACTION`). Run before
+  // the budgeted pass so a graze can never spend the allowance on units the
+  // core was going to take anyway — `killUnit` sets `dying`, so the pass below
+  // skips them and bills only what the outer strip actually cost.
+  const coreHalfW = clawCoreHalfW(halfW)
+  for (const u of units) {
+    if (u.dying > 0) continue
+    if (Math.abs(u.y - b.slamY) > CLAW_HALF_DEPTH) continue
+    if (!inClawFurrow(u.x, lanes, coreHalfW)) continue
+    killUnit(u, Math.sign(u.x - b.slamX) || 1, 'slam')
+  }
+
   let budget = bossHitBudget(bossHitShare())
   for (const u of units) {
     if (budget <= 0) break

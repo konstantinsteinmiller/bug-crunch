@@ -1,5 +1,5 @@
 import { earlyFoeHpMul } from '@/game/survival'
-import { bossKindFor, SUMMON_DESIGN } from '@/game/threats'
+import { bossKindFor, minibossDesignsFor, SUMMON_DESIGN } from '@/game/threats'
 /**
  * ─── The cast that wants your crowd ─────────────────────────────────────────
  *
@@ -247,7 +247,13 @@ export const bossDesign = (stage: number): string => {
  * needs most of the cast — but they need it because they will see it.
  */
 export const stageDesigns = (stage: number): string[] =>
-  [...new Set([...rosterDesigns(stage), bossDesign(stage)])]
+  // The elites' bodies belong here too, and did not before: a miniboss's design
+  // now comes from its FIGHT (`MINIBOSS_DESIGN`) rather than from the archetype
+  // the track placed, so a stage can field a body its roster never mentions.
+  // Snaggletusk on stage 1 is the plain case — the roster there is three creeps.
+  // Left out, the elite draws as the red fallback ellipse until the per-frame
+  // slice baker catches up, which is the exact bug this list exists to prevent.
+  [...new Set([...rosterDesigns(stage), ...minibossDesignsFor(stage), bossDesign(stage)])]
 
 /**
  * The designs stage `n` puts on the ROAD — its roster, without the thing at the

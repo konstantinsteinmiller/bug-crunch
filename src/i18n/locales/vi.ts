@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Đang chơi ngoại tuyến. Tiến trình được lưu tại đây.',
     'retry': 'Thử lại', 'dismiss': 'bỏ qua'
   },
-  'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.' },
+  'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.', 'boo': 'Hù!', 'laugh': 'Ha ha ha!' },
   'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' }
 }

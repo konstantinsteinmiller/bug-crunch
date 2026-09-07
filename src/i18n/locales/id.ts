@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Bermain offline. Progresmu disimpan di sini.',
     'retry': 'Coba lagi', 'dismiss': 'tutup'
   },
-  'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.' },
+  'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.', 'boo': 'Dor!', 'laugh': 'Hahaha!' },
   'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' }
 }

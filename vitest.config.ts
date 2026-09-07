@@ -20,8 +20,28 @@ const stubCampaignOverridesPlugin = () => ({
   }
 })
 
+// Same story for `virtual:leaderboard-snapshot`, which `leaderboardSnapshot.ts`
+// imports statically.
+//
+// It stubs to `null` — a build with a LIVE endpoint — on purpose, so the
+// existing leaderboard suite keeps asserting the real "no endpoint, no
+// leaderboard" contract. The static-board specs mock `@/use/leaderboardSnapshot`
+// itself to supply a board, which is why that module exists as a thin
+// re-export rather than the virtual id being imported all over the app.
+const stubLeaderboardSnapshotPlugin = () => ({
+  name: 'stub-leaderboard-snapshot',
+  resolveId(id: string) {
+    if (id === 'virtual:leaderboard-snapshot') return '\0virtual:leaderboard-snapshot'
+    return null
+  },
+  load(id: string) {
+    if (id === '\0virtual:leaderboard-snapshot') return 'export default null'
+    return null
+  }
+})
+
 export default defineConfig({
-  plugins: [vue(), stubCampaignOverridesPlugin()],
+  plugins: [vue(), stubCampaignOverridesPlugin(), stubLeaderboardSnapshotPlugin()],
   // Vite's production config (`vite.config.ts`) injects `APP_VERSION` at
   // build time via `define`. Vitest doesn't run that plugin, so any
   // module that reads `APP_VERSION` at import time (e.g. `useUser.ts`)

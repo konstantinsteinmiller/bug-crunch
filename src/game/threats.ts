@@ -71,6 +71,61 @@ export const minibossKindFor = (stage: number, index = 0): MinibossKind => {
   return MINIBOSS_POOL[(stage - THREAT_POOL_FROM_STAGE + index) % n] ?? 'scythe'
 }
 
+/**
+ * ─── The model IS the tell ──────────────────────────────────────────────────
+ *
+ * One monster design per fight, permanently. A player who has met Snaggletusk
+ * once knows the next one cleaves the ground in front of it, and can be moving
+ * before the wind-up starts.
+ *
+ * Without this the two were independent: the design came from whichever
+ * archetype the track happened to place (`brute` → Snaggletusk, `hound` →
+ * Cinderhound) and the kind came from the stage cycle, so the same body fought
+ * four different ways and nothing about a miniboss could be learned in advance.
+ * Every OTHER threat in this game is a pure function of the stage for exactly
+ * that reason — see the note at the top of this file — and the elites were the
+ * one place the rule was not carried through to what the player actually sees.
+ *
+ * The pairing is also a silhouette argument, not just a lookup:
+ *
+ *   • SNAGGLETUSK — low, heavy, tusked, front-loaded. It cleaves what is in
+ *     front of it. The oldest fight, and the body reads as a charge.
+ *   • THORNWICK — tall, rooted, a canopy for a head. It does not close; it
+ *     stands off and fires. The one design that cannot plausibly rush you.
+ *   • CINDERHOUND — burning, quick, throws itself forward. It plants the bomb
+ *     and leaves. Fire is already its whole read.
+ *   • RATTLEJACK — the light hound-weight body, for the ball that owns a lane.
+ *
+ * Kept beside the pool because they are one decision: adding a fifth kind means
+ * adding a fifth body here, and a kind with no body of its own would silently
+ * reuse another's and undo the lesson.
+ */
+export const MINIBOSS_DESIGN: Readonly<Record<MinibossKind, string>> = {
+  scythe: 'snaggletusk',
+  gunner: 'thornwick',
+  bomber: 'cinderhound',
+  roller: 'rattlejack'
+}
+
+/** The body that always carries `kind`. */
+export const minibossDesignFor = (kind: MinibossKind): string => MINIBOSS_DESIGN[kind]
+
+/**
+ * Every miniboss body stage `stage` can put on screen — what the baker has to
+ * have ready before the road starts.
+ *
+ * Deliberately conservative rather than exact. A stage fields between one and
+ * six elites and the kind cycles with the index, so from `THREAT_POOL_FROM_STAGE`
+ * on it is simplest and safest to assume all four; working out the precise count
+ * would mean duplicating `placeMinibosses`'s rules in a second file, where they
+ * would rot apart. The cost is at most two extra strips on stages 4-6 — from
+ * stage 7 the brute archetype puts both of its designs in the roster anyway.
+ */
+export const minibossDesignsFor = (stage: number): string[] =>
+  stage < THREAT_POOL_FROM_STAGE
+    ? [MINIBOSS_DESIGN.scythe]
+    : [...new Set(MINIBOSS_POOL.map((k) => MINIBOSS_DESIGN[k]))]
+
 /** Which boss kind stage `stage` ends with. */
 export const bossKindFor = (stage: number): BossKind => {
   if (stage < THREAT_POOL_FROM_STAGE) return 'meteor'
@@ -572,6 +627,33 @@ export const inClawFurrow = (x: number, lanes: readonly number[], halfW: number)
   for (const lx of lanes) if (Math.abs(x - lx) <= halfW) return true
   return false
 }
+
+/**
+ * The middle quarter of a gouge — where the claw does not graze but RIPS.
+ *
+ * The rest of a furrow is priced like every other big hit in this game: a share
+ * of the crowd, capped by `bossHitBudget`, so a rake that catches a thousand
+ * survivors and one that catches forty both cost about the same fraction. That
+ * is the right rule for the part of the attack a crowd can be half-caught by.
+ *
+ * It is the wrong rule for the centre line. Down the middle of each gouge the
+ * claw is through the crowd rather than across it, and a budget there means the
+ * player watches the boss pass straight through their formation and take a
+ * measured tithe — which reads as the attack missing.
+ *
+ * So the core kills EVERYTHING it touches, with no budget at all. It is
+ * survivable because it is small: a quarter of a strip that is already the
+ * narrowest thing the boss throws, or about 0.17 world units against a crowd
+ * disc up to 3.3 across. Standing in a pocket costs nothing; drifting a little
+ * costs the graze; being caught dead centre costs that column of the crowd.
+ *
+ * Expressed as a fraction of the FULL strip width, so "the middle 25 %" stays
+ * true as `CLAW_FURROW_GROWTH` widens the gouge over a long fight.
+ */
+export const CLAW_CORE_FRACTION = 0.25
+
+/** Half-width of the lethal core of a gouge, from the gouge's own half-width. */
+export const clawCoreHalfW = (halfW: number): number => halfW * CLAW_CORE_FRACTION
 
 // ─── The healer ─────────────────────────────────────────────────────────────
 //

@@ -581,8 +581,34 @@ export const dividerCrushFor = (stage: number): CrushRamp => ({
  * and these say what those beats cost a beginner. A balance pass on the game
  * proper moves the authored numbers; a balance pass on ONBOARDING moves these.
  *
- * Every one of them returns 1 from stage 6 on, so the game the player eventually
- * arrives at is untouched.
+ * Most of them return 1 from stage 6 on, so the game the player eventually
+ * arrives at is untouched. The three that do not — the pack, the crate and the
+ * elite — hold a last thin slice of relief over stage 6 and let go on 7, for
+ * the reason in the next block.
+ *
+ * ─── …and the way OUT of it is a curve too ──────────────────────────────────
+ *
+ * The relief used to be two steps (stages 1-3, then 4-5) that both snapped shut
+ * at once. A player reported a hard jump at 3 -> 4 and another at 5 -> 6, and
+ * adding up what is standing on each built road says the same thing
+ * (`tests/sim/scratch.ramp.test.ts` prints the table):
+ *
+ *   3 -> 4   total foe health on the road x3.14, and the first boulder and
+ *            barricade in the game land on that road.
+ *   5 -> 6   foe health x2.48, crate health x2.71, elite health x4.14 — the
+ *            second elite starts here — and the first passage.
+ *
+ * Every neighbouring jump is x1.0-1.6, so those two are where the difficulty
+ * actually lives, and not in the authored beats: the roads themselves grow
+ * smoothly, and it is the relief coming off in two big handfuls that makes the
+ * step. So it comes off in small ones instead, over 4, 5 and (for the three
+ * heaviest) 6. That brings the road load — foes plus elites — from x2.18 to
+ * x1.85 across 3 -> 4 and from x3.07 to x2.80 across 5 -> 6.
+ *
+ * What is left in those two numbers is CONTENT rather than tuning: the first
+ * scenery that can kill arrives on stage 4, and stage 6 is the first road with
+ * a second elite and a passage on it. Softening those means moving a beat, not
+ * turning a dial, so they are deliberately left where the design put them.
  */
 
 /** Below this, the road carries no boulders and no barricades at all. */
@@ -596,22 +622,55 @@ export const HARD_OBSTACLE_FROM_STAGE = 4
  * which is where they are introduced properly. The gate pillar is deliberately
  * NOT covered — it is part of how a bank works, not scenery, and it has its own
  * (already gentler) early curve in `dividerCrushFor`.
+ *
+ * It stops at 5 and is deliberately NOT tapered across 6, even though stage 6
+ * looks like the worst scenery jump in the game (5 blocks to 21). Measured, all
+ * twenty-one of stage 6's blocks are the ribs of ONE passage — the beat
+ * `PASSAGE_STAGE` introduces there — and a passage with half its ribs missing
+ * is not a gentler passage, it is a corridor with a hole in it. That jump is a
+ * new IDEA arriving, which is what stage 6 is for; the health and density
+ * curves below are what carry the softening instead.
  */
 export const earlyObstacleKeep = (stage: number): number =>
   stage < HARD_OBSTACLE_FROM_STAGE ? 0 : stage <= 5 ? 0.5 : 1
 
-/** Ordinary foes are softer while the player is learning to shoot them. */
+/**
+ * Ordinary foes are softer while the player is learning to shoot them.
+ *
+ * Stages 1 and 2 are the two the relief was too generous on — they play as
+ * having no resistance at all, which is a tutorial that teaches nothing about
+ * the verb it exists to teach. Both are 15 % tougher than they were (0.6 ->
+ * 0.69, 0.7 -> 0.805): enough that a body takes a beat to kill, far short of
+ * anything that can end a first session. Their elite and their boss are NOT in
+ * this, and on purpose: `bossHpScale` does not move until stage 5, so both are
+ * flat across 2-4 and lifting stage 2 alone would leave stage 3's boss weaker
+ * than the one before it.
+ *
+ * Stage 2 therefore carries LESS relief than stage 3, which is not a typo: the
+ * stage-3 road has fewer bodies on it than the stage-2 road, so the two land on
+ * near-identical total health (69 against 68) and the ramp stays flat across a
+ * stage whose new idea is the hound's SPEED rather than its health.
+ *
+ * Stage 4 then takes a step instead of the whole staircase. The old curve went
+ * 0.7 -> 1 there, and stage 4's authored road already more than doubles the
+ * bodies on it (4 -> 9), so the two together tripled the health a player met
+ * between one stage and the next — the jump that got reported. Stage 5 is left
+ * at full price on purpose: it was never the stage anybody complained about,
+ * and discounting it would only move the cliff to 5 -> 6.
+ */
 export const earlyFoeHpMul = (stage: number): number =>
-  stage <= 1 ? 0.6 : stage <= 3 ? 0.7 : 1
+  stage <= 1 ? 0.69 : stage <= 2 ? 0.805 : stage <= 3 ? 0.7 : stage <= 4 ? 0.8 : 1
 
 /** …and there are fewer of them per pack. A hard cap, not a scale: stage 1
  *  shows ONE monster at a time so the verb is unmistakable. */
 export const earlyPackCap = (stage: number): number =>
   stage <= 1 ? 1 : stage <= 3 ? 2 : Number.POSITIVE_INFINITY
 
-/** Stages 4-5 keep real packs, thinned. */
+/** Stages 4-6 keep real packs, thinned — hardest on 4, where the roster and the
+ *  road both step up at once, and nearly gone by 6. */
 export const earlyPackMul = (stage: number): number =>
-  stage >= HARD_OBSTACLE_FROM_STAGE && stage <= 5 ? 0.6 : 1
+  stage < HARD_OBSTACLE_FROM_STAGE ? 1
+    : stage <= 4 ? 0.5 : stage <= 5 ? 0.6 : stage <= 6 ? 0.8 : 1
 
 /**
  * Crates come apart in well under half the shots.
@@ -621,10 +680,14 @@ export const earlyPackMul = (stage: number): number =>
  * authored `fixedHp` (stage 1's teaching wall, pinned at 1) is already priced
  * for exactly this and is left alone.
  */
-export const earlyCrateHpMul = (stage: number): number => (stage <= 5 ? 0.6 : 1)
+export const earlyCrateHpMul = (stage: number): number =>
+  stage <= 5 ? 0.6 : stage <= 6 ? 0.8 : 1
 
+/** Stage 6 is the first road with TWO elites on it (`placeMinibosses`), which
+ *  is a x2 nobody can tune away — so the last 10 % of the health discount is
+ *  spent there rather than on stage 5. */
 export const earlyMinibossHpMul = (stage: number): number =>
-  stage <= 3 ? 0.7 : stage <= 5 ? 0.8 : 1
+  stage <= 3 ? 0.7 : stage <= 5 ? 0.8 : stage <= 6 ? 0.9 : 1
 
 export const earlyBossHpMul = (stage: number): number =>
   stage <= 3 ? 0.6 : stage <= 5 ? 0.8 : 1
@@ -636,8 +699,14 @@ export const earlyBossHpMul = (stage: number): number =>
  * A first-timer who cannot dodge yet should come out of a boss fight with a
  * squad, not with a result screen — the fight is where they learn what the
  * telegraph meant, and they have to live long enough to use it.
+ *
+ * It steps rather than snaps for the same reason as the rest: a slam that goes
+ * from 60 % to full between two consecutive stages is a 67 % rise in the single
+ * biggest hit in the game, landing on the same road that introduces the first
+ * boulder. Stages 4-5 pay 80 % of it and stage 6 pays the lot.
  */
-export const earlyBigHitMul = (stage: number): number => (stage <= 3 ? 0.6 : 1)
+export const earlyBigHitMul = (stage: number): number =>
+  stage <= 3 ? 0.6 : stage <= 5 ? 0.8 : 1
 
 export const BOSS_GUARD_GATES = [0.66, 0.33] as const
 

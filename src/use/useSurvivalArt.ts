@@ -18,7 +18,7 @@ import {
   activeWeapon, getGuards, getLevers, getStones, getWeaponBoxes,
   nowMs, phase, runFireRate, squadCount, stage
 } from '@/use/useSurvivalGame'
-import { HEAL_FRACTION } from '@/game/threats'
+import { CLAW_CORE_FRACTION, HEAL_FRACTION } from '@/game/threats'
 import {
   HERO_CYCLE_MS, HERO_FOOT_R, HERO_FRAME_ASPECT, HERO_HEIGHT_R, outfitIndex, outfitTone,
   primeSurvivors, survivorFrame
@@ -2085,11 +2085,52 @@ const tintSilhouette = (img: HTMLImageElement, colour: string): HTMLCanvasElemen
 }
 
 /**
+ * Opaque column range of a silhouette, cached per image.
+ *
+ * A painted ridge does not necessarily reach the edges of the frame it was
+ * returned in — `ridge-far` came back with 19 fully transparent columns down
+ * each side and `ridge-near` with 29. Stretching the WHOLE frame to the
+ * viewport stretches those margins with it, so on a wide screen the silhouette
+ * stopped ~37 px short of each edge and the sky showed through in a vertical
+ * strip down both sides. Invisible in portrait, where the lane covers the
+ * backdrop entirely, and unmissable on a desktop.
+ *
+ * Measuring the real bounds instead of trusting the frame means the art spans
+ * the viewport whatever margin a future re-export happens to carry.
+ */
+const silhouetteTrim = new Map<string, { x0: number; x1: number }>()
+
+const trimOf = (c: HTMLCanvasElement, key: string): { x0: number; x1: number } => {
+  const hit = silhouetteTrim.get(key)
+  if (hit) return hit
+  // The whole frame, if anything below fails: drawing too much is the old
+  // behaviour, and a wrong trim would crop the art.
+  let box = { x0: 0, x1: c.width - 1 }
+  try {
+    const g = c.getContext('2d')
+    if (g) {
+      const d = g.getImageData(0, 0, c.width, c.height).data
+      const columnHasInk = (x: number): boolean => {
+        for (let y = 0; y < c.height; y++) if (d[(y * c.width + x) * 4 + 3]! > 16) return true
+        return false
+      }
+      let x0 = 0
+      while (x0 < c.width && !columnHasInk(x0)) x0++
+      let x1 = c.width - 1
+      while (x1 > x0 && !columnHasInk(x1)) x1--
+      if (x1 > x0) box = { x0, x1 }
+    }
+  } catch { /* tainted canvas — fall back to the full frame */ }
+  silhouetteTrim.set(key, box)
+  return box
+}
+
+/**
  * One parallax ridge across a `w`-wide, `h`-tall backdrop: a jagged
  * silhouette wobbling `amp` about `yBase` and filled down to the bottom, in
  * `colour`. Seeded, so it is stable across frames. The painted band is laid
- * with its ridge line on `yBase` and tiled across, and the ground below it
- * is filled in the same colour so the two join.
+ * with its ridge line on `yBase` and stretched edge to edge, and the ground
+ * below it is filled in the same colour so the two join.
  */
 export const paintRidge = (
   ctx: CanvasRenderingContext2D, id: 'ridge-far' | 'ridge-near',
@@ -2102,7 +2143,12 @@ export const paintRidge = (
     if (band) {
       const bandH = Math.max(1, Math.round(w / (RIDGE_BAND.w / RIDGE_BAND.h)))
       const top = Math.round(yBase - RIDGE_BAND.line * bandH)
-      ctx.drawImage(band, 0, top, w, bandH)
+      // Source-cut to the art's own opaque bounds, so it is the SILHOUETTE that
+      // spans the viewport rather than the frame it arrived in. Keyed on the
+      // source, not the tint: the colour swap is `source-in`, so every tint of
+      // one image has identical alpha.
+      const trim = trimOf(band, painted.src)
+      ctx.drawImage(band, trim.x0, 0, trim.x1 - trim.x0 + 1, band.height, 0, top, w, bandH)
       ctx.fillStyle = colour
       ctx.fillRect(0, top + bandH - 1, w, Math.max(0, h - (top + bandH - 1)))
       return
@@ -2138,6 +2184,7 @@ export const invalidateArtSurfaces = (): void => {
   laneTile = null
   laneTileKey = ''
   tinted.clear()
+  silhouetteTrim.clear()
   clearRamps()
 }
 onArtChanged(invalidateArtSurfaces)
@@ -3651,6 +3698,18 @@ const drawClawFurrows = (ctx: CanvasRenderingContext2D): void => {
         ctx.globalAlpha = 0.16 + p * 0.2
         ctx.fillStyle = '#ff5a3c'
         ctx.fillRect(cx - w, top, w * 2, cut - top)
+        // The lethal core, drawn during the WIND-UP and not after it.
+        //
+        // The outer strip costs a share of the crowd; this middle quarter kills
+        // everything it touches with no budget at all (`CLAW_CORE_FRACTION`).
+        // An instant kill the player cannot see coming is the one thing this
+        // game's telegraphs exist to prevent — the same rule that moved the
+        // meteor's ring onto a falling rock — so the core is brighter than the
+        // strip around it and lands on screen at the same moment.
+        const coreW = w * CLAW_CORE_FRACTION
+        ctx.globalAlpha = 0.3 + p * 0.5
+        ctx.fillStyle = '#ffd9a0'
+        ctx.fillRect(cx - coreW, top, coreW * 2, cut - top)
         ctx.globalAlpha = 0.4 + p * 0.45
         ctx.strokeStyle = '#ffb07a'
         ctx.lineWidth = Math.max(1.5, scale * 0.05)
@@ -3674,6 +3733,11 @@ const drawClawFurrows = (ctx: CanvasRenderingContext2D): void => {
       ctx.globalAlpha = fade
       ctx.fillStyle = after < 0.28 ? '#fff2d8' : '#2a1109'
       ctx.fillRect(cx - w, top, w * 2, bottom - top)
+      // The core again, so the scar says which part of the strip did the
+      // killing — the player has to be able to read where they were standing.
+      const strikeCoreW = w * CLAW_CORE_FRACTION
+      ctx.fillStyle = after < 0.28 ? '#ffffff' : '#5a1f0d'
+      ctx.fillRect(cx - strikeCoreW, top, strikeCoreW * 2, bottom - top)
 
       // ── …and the claw that made it ──
       //
@@ -7052,11 +7116,20 @@ const applyFx = (e: FxEvent): void => {
           gravity: 13, rot: Math.random() * 6, vrot: (Math.random() - 0.5) * 14
         })
       }
-      for (let i = 0; i < 6; i++) {
-        emit({
-          x: e.x, y: e.y, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2,
-          life: 900, size: 0.5, color: [90, 92, 100], shape: 3, alpha: 0.5, drag: 1.4
-        })
+      // The dust the wreck throws up — and the most expensive thing a broken
+      // barricade does. These are the widest, longest-lived particles the event
+      // emits (size 0.5 against the chips' 0.16, 900 ms against 620) and they
+      // are large translucent blits, so their cost is fill rate at exactly the
+      // moment the road is busiest. Off from `low` down, like the gate
+      // dismissal's smoke above: the chips already say the barricade broke, and
+      // nothing the player must react to is carried by the smoke.
+      if (!cheapFx) {
+        for (let i = 0; i < 6; i++) {
+          emit({
+            x: e.x, y: e.y, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2,
+            life: 900, size: 0.5, color: [90, 92, 100], shape: 3, alpha: 0.5, drag: 1.4
+          })
+        }
       }
       break
 

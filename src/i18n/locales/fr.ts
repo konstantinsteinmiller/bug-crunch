@@ -158,6 +158,6 @@ export default {
     'pausedBody': 'Vous jouez hors ligne. Votre progression est enregistrée ici.',
     'retry': 'Réessayer', 'dismiss': 'ignorer'
   },
-  'loading': { 'tooLong': 'Le chargement est trop long ? Désactivez votre bloqueur de publicités et rechargez.' },
+  'loading': { 'tooLong': 'Le chargement est trop long ? Désactivez votre bloqueur de publicités et rechargez.', 'boo': 'Bouh !', 'laugh': 'Hahaha !' },
   'license': { 'denied': 'Accès refusé : veuillez acheter une licence.' }
 }
