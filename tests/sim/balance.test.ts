@@ -27,7 +27,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { aggregate, loadGame, median, runOne, runSamples } from './harness'
+import {
+  aggregate, loadGame, median, newGraph, runOne, runSamples, seedRandom, STEP_MS
+} from './harness'
 import { average, careless, good, optimal } from './policies'
 import { probeStage, runCareer } from './career'
 import { cheapest, value } from './shop'
@@ -458,4 +460,126 @@ describe('the harness itself', () => {
     })
     expect(snapshot()).toBe(before)
   }, 60_000)
+})
+
+/**
+ * ─── Adaptive difficulty, stages 1–5 ────────────────────────────────────────
+ *
+ * The tables live in `tests/sim/scratch.adaptive.test.ts` and the pure-function
+ * contracts in `tests/game/adaptiveBoss.test.ts`. These three are the ones that
+ * have to keep passing, and each guards one end of the brief the system was
+ * built to satisfy:
+ *
+ *   playing well has to BUY something, and under an adaptive bar what it buys
+ *   is a shorter climax rather than an easier one;
+ *   nobody may delete the boss, however overwhelming they arrive;
+ *   nobody may be handed a bar that outlives the ten-second ceiling.
+ *
+ * All three are measured through the shipping simulation, because the failure
+ * mode being guarded against is precisely a pure function that is correct in
+ * isolation and wired up wrong.
+ */
+describe('adaptive difficulty: the opening five stages size their boss', () => {
+  it('buys a shorter climax for the player who read the road', async () => {
+    // The reward, stated as the design states it. Stage 1 is excluded for the
+    // same reason it is excluded from the DPS ordering above: its boss is a
+    // curtain call, its swing is a token, and there is nothing there to be
+    // faster at.
+    for (const stage of [2, 3, 5]) {
+      const best = aggregate(await runSamples(stage, optimal, SEEDS))
+      const mid = aggregate(await runSamples(stage, average, SEEDS))
+      expect(
+        best.bossSeconds.med,
+        `stage ${stage}: a perfect run's climax is no shorter than a sloppy one's — ` +
+          `${best.bossSeconds.med.toFixed(1)}s against ${mid.bossSeconds.med.toFixed(1)}s`
+      ).toBeLessThan(mid.bossSeconds.med)
+    }
+  }, 300_000)
+
+  it('never lets an overwhelming run delete the boss', async () => {
+    // THE COMPLAINT, as a test. A returning player with the shop behind them
+    // used to arrive at the opening stages with a fifty-fold firepower
+    // advantage and put the boss down in about half a second — three instant
+    // chunks of health bar between two guard animations, which is not a climax.
+    //
+    // Driven through the arena seam rather than a career because the point is
+    // the CEILING: this crowd is stronger than any road in the first five
+    // stages can actually deliver, which is exactly the case a fixed bar could
+    // not survive.
+    for (const stage of [2, 5]) {
+      const { game, state } = await newGraph()
+      state.__resetTowerState()
+      const restore = seedRandom(4242)
+      try {
+        game.startStage(stage)
+        game.debugSkipToArena()
+        game.debugAddUnits(600 - game.squadCount.value)
+        game.debugAddDamage(4 - game.damage.value)
+        game.debugAddFireRate(4 - game.runFireRate.value)
+        for (let i = 0; i < 400 && game.phase.value !== 'boss'; i++) game.step(STEP_MS)
+
+        let steps = 0
+        let firing = 0
+        const cap = Math.ceil((30 * 1000) / STEP_MS)
+        while (steps < cap && game.phase.value === 'boss' && !game.getBoss()?.dead) {
+          const b = game.getBoss()
+          if (b && !b.dead && b.guard <= 0) firing++
+          game.step(STEP_MS)
+          steps++
+        }
+        expect(game.getBoss()?.dead, `stage ${stage}: an overwhelming run could not finish`).toBe(true)
+        // Seconds the bar was actually MOVING, guard phases excluded — the
+        // quantity `adaptiveBossSeconds` names. Asserted rather than the
+        // stopwatch because the guard phases would carry a melting bar past a
+        // stopwatch check on their own, which is how the old build looked fine.
+        expect(
+          (firing * STEP_MS) / 1000,
+          `stage ${stage}: the boss melted instead of being fought`
+        ).toBeGreaterThan(2)
+      } finally {
+        restore()
+      }
+    }
+  }, 120_000)
+
+  it('leaves a hopeless crowd a bar it can finish inside ten seconds', async () => {
+    // The other end of the brief: a player who arrives with twelve survivors
+    // "can't be helped", but if they hold their nerve and read the telegraphs
+    // the fight has to be winnable rather than a formality on the way to a
+    // result screen. Ten seconds is the stated limit.
+    //
+    // The crowd DODGES here, and that is the contract: standing still with a
+    // squad this size is what the un-discounted swing exists to punish, and
+    // those cells are wipes by design (see `HOPELESS_SLAM_MUL`).
+    const { game, state } = await newGraph()
+    state.__resetTowerState()
+    const restore = seedRandom(77)
+    try {
+      game.startStage(3)
+      game.debugSkipToArena()
+      game.debugAddUnits(12 - game.squadCount.value)
+      for (let i = 0; i < 400 && game.phase.value !== 'boss'; i++) game.step(STEP_MS)
+
+      let steps = 0
+      const cap = Math.ceil((30 * 1000) / STEP_MS)
+      while (steps < cap && game.phase.value === 'boss' && !game.getBoss()?.dead) {
+        const b = game.getBoss()
+        // Off the line of whatever is being aimed, which is all the fight asks.
+        if (b && !b.dead && b.aimed) {
+          const away = [b.slamX - 4.3, b.slamX + 4.3].filter((x) => Math.abs(x) <= 3.9)
+          game.steerTo(away[0] ?? (b.slamX > 0 ? -3.9 : 3.9))
+        }
+        game.step(STEP_MS)
+        steps++
+      }
+      expect(game.getBoss()?.dead, 'twelve survivors who dodge properly cannot finish the boss')
+        .toBe(true)
+      expect(
+        (steps * STEP_MS) / 1000,
+        'the hopeless-crowd fight ran past the ten-second ceiling'
+      ).toBeLessThanOrEqual(10)
+    } finally {
+      restore()
+    }
+  }, 120_000)
 })

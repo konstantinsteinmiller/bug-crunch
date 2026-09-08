@@ -50,10 +50,14 @@ export const createGamepixProvider = (): AdProvider => {
         console.warn('[ads/gamepix] plugin init failed', e)
       }
     },
-    showRewardedAd: () => showRewardedAdGP(),
-    showMidgameAd: async () => {
+    // `onImpression` has to reach the plugin: `useAds` releases its wait 6 s
+    // in unless something reports that a real ad opened, which denied the
+    // reward for fully-watched videos and revealed the result screen on top of
+    // a playing interstitial.
+    showRewardedAd: (onImpression) => showRewardedAdGP(onImpression),
+    showMidgameAd: async (onImpression) => {
       // Discard the boolean — the cross-provider contract is void.
-      await showMidgameAdGP()
+      await showMidgameAdGP(onImpression)
     }
   }
 }

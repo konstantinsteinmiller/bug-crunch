@@ -31,6 +31,56 @@ import { syncGameplayLifecycle as syncCrazyGameplay } from '@/use/useCrazyGames'
 import { pokiGameplayStart, pokiGameplayStop } from '@/utils/pokiPlugin'
 import { setMonsterBakeAllowed } from '@/game/monsterSprites'
 
+// ─── What counts as live gameplay ───────────────────────────────────────────
+//
+// The RULE lives here, next to the platforms it is a contract with; the scene
+// owns only the reactive wiring that feeds it. Pure and total, so the contract
+// can be asserted without mounting a canvas.
+//
+// The phase union is restated rather than imported from `useSurvivalGame` on
+// purpose: that module is the whole simulation, and a platform-contract module
+// must not drag it into anything that imports it.
+export interface GameplayLiveInputs {
+  /** The run's own state machine. Only `run` / `boss` are being PLAYED. */
+  phase: 'run' | 'boss' | 'clear' | 'wipe'
+  /** The result screen is up — the run is over and a decision is pending. */
+  showResult: boolean
+  /** Any blocking modal (shop, options, leaderboard). */
+  anyModalOpen: boolean
+  /** A rewarded / interstitial ad is on screen. */
+  adShowing: boolean
+  /** `document.visibilityState === 'hidden'` — the player switched away. */
+  visibilityHidden: boolean
+  /** The portal's SDK asked us to pause (its own overlay, chrome, ad frame). */
+  platformPaused: boolean
+  /** The onboarding lightbox holds the road frozen before the first input. */
+  tutorialActive: boolean
+}
+
+/**
+ * Is the player actually playing right now?
+ *
+ * Every input is a reason gameplay is NOT live, and each one is a real
+ * requirement rather than a nicety:
+ *
+ *   • `visibilityHidden` / `platformPaused` were both missing here until the
+ *     GamePix release pass. They already halt the simulation (they OR into
+ *     `isGamePaused`), but halting the sim and TELLING the portal are two
+ *     different things — without them a tab switch left an open gameplay
+ *     bracket: CrazyGames kept counting the session, and Poki held the screen
+ *     wake lock `gameplayStart()` takes on a page nobody was looking at.
+ *   • `tutorialActive` — reporting a start for a run the player has not begun
+ *     is the kind of thing portal moderation rejects.
+ */
+export const isGameplayLive = (i: GameplayLiveInputs): boolean =>
+  (i.phase === 'run' || i.phase === 'boss')
+  && !i.showResult
+  && !i.anyModalOpen
+  && !i.adShowing
+  && !i.visibilityHidden
+  && !i.platformPaused
+  && !i.tutorialActive
+
 /**
  * Report whether gameplay is live. Idempotent on every platform: each portal
  * arm collapses a repeat of the state it is already in, so callers may fire it

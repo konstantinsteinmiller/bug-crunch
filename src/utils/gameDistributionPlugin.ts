@@ -387,7 +387,7 @@ export const createGameDistributionSaveStrategy = (): SaveStrategy =>
  *
  * No-op (resolves false) when the SDK is not active.
  */
-export const showRewardedAdGD = (): Promise<boolean> => {
+export const showRewardedAdGD = (onImpression?: () => void): Promise<boolean> => {
   return new Promise((resolve) => {
     const sdk = gdsdk ?? window.gdsdk
     if (!sdk || typeof sdk.showAd !== 'function') {
@@ -408,11 +408,30 @@ export const showRewardedAdGD = (): Promise<boolean> => {
       watchedComplete = true
     })
 
+    // ─── The impression edge ─────────────────────────────────────────────
+    //
+    // `useAds` arms a 6 s "the ad never opened" cap on every request so an SDK
+    // that accepts a request and then answers nothing (blocked ad hosts) can't
+    // strand the game. `onImpression` is the only thing that tells it a real ad
+    // IS on screen — unreported, that cap fires mid-video: the reward is denied
+    // for a fully-watched ad and the result screen appears six seconds into a
+    // still-playing interstitial.
+    //
+    // `SDK_GAME_PAUSE` is GD's documented "pause your game, the ad layer is up"
+    // event, so it is the open edge. Report at most once per cycle.
+    let adOpened = false
+    const unsubOpen = onSdkEvent('SDK_GAME_PAUSE', () => {
+      if (adOpened) return
+      adOpened = true
+      onImpression?.()
+    })
+
     try {
       debugLog('invoke showAd(rewarded)')
       sdk.showAd('rewarded').then(
         () => {
           unsubComplete()
+          unsubOpen()
           setDebug({ lastShowResult: `rewarded → completed=${watchedComplete}` })
           debugLog(`show_rewarded → completed=${watchedComplete}`)
           // An ad cycle actually ran (completed OR user-skipped). Enter the
@@ -424,6 +443,7 @@ export const showRewardedAdGD = (): Promise<boolean> => {
         },
         (err: any) => {
           unsubComplete()
+          unsubOpen()
           const msg = describeAdError(err)
           setDebug({ lastShowResult: `rewarded error: ${msg}`, lastError: msg })
           debugLog(`show_rewarded error: ${msg}`)
@@ -437,6 +457,7 @@ export const showRewardedAdGD = (): Promise<boolean> => {
       )
     } catch (e) {
       unsubComplete()
+      unsubOpen()
       const msg = describeAdError(e)
       setDebug({ lastShowResult: `rewarded threw: ${msg}`, lastError: msg })
       debugLog(`show_rewarded threw: ${msg}`)
@@ -459,7 +480,7 @@ export const showRewardedAdGD = (): Promise<boolean> => {
  * `gdsdk.showAd()` with no argument defaults to the interstitial ad type.
  * No-op (resolves immediately) when the SDK is not active.
  */
-export const showMidgameAdGD = (): Promise<void> => {
+export const showMidgameAdGD = (onImpression?: () => void): Promise<void> => {
   return new Promise((resolve) => {
     const sdk = gdsdk ?? window.gdsdk
     if (!sdk || typeof sdk.showAd !== 'function') {
@@ -468,10 +489,19 @@ export const showMidgameAdGD = (): Promise<void> => {
       resolve()
       return
     }
+    // The open edge — see `showRewardedAdGD`.
+    let adOpened = false
+    const unsubOpen = onSdkEvent('SDK_GAME_PAUSE', () => {
+      if (adOpened) return
+      adOpened = true
+      onImpression?.()
+    })
+
     try {
       debugLog('invoke showAd()')
       sdk.showAd().then(
         () => {
+          unsubOpen()
           setDebug({ lastShowResult: 'interstitial → closed' })
           debugLog('show_interstitial → closed')
           // An interstitial that played trips the SAME min-gap cooldown a
@@ -482,6 +512,7 @@ export const showMidgameAdGD = (): Promise<void> => {
           resolve()
         },
         (err: any) => {
+          unsubOpen()
           const msg = describeAdError(err)
           setDebug({ lastShowResult: `interstitial error: ${msg}`, lastError: msg })
           debugLog(`show_interstitial error: ${msg}`)
@@ -490,6 +521,7 @@ export const showMidgameAdGD = (): Promise<void> => {
         }
       )
     } catch (e) {
+      unsubOpen()
       const msg = describeAdError(e)
       setDebug({ lastShowResult: `interstitial threw: ${msg}`, lastError: msg })
       debugLog(`show_interstitial threw: ${msg}`)

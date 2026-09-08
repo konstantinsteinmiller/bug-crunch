@@ -747,8 +747,21 @@ export const earlyCrateHpMul = (stage: number): number =>
 export const earlyMinibossHpMul = (stage: number): number =>
   stage <= 3 ? 0.7 : stage <= 5 ? 0.8 : stage <= 6 ? 0.9 : 1
 
-export const earlyBossHpMul = (stage: number): number =>
-  stage <= 3 ? 0.6 : stage <= 5 ? 0.8 : 1
+/**
+ * The boss's own onboarding discount used to live here, as
+ * `earlyBossHpMul` — 0.6 on stages 1-3, 0.8 on 4-5, against an authored bar.
+ *
+ * It is gone rather than retuned. A flat discount is the right shape only if
+ * every player arrives at the door with roughly the same firepower, and measured
+ * they do not: the spread between a run that reads the road and one that barely
+ * steers is 65x on stage 5. A single multiplier can be a climax for one of them
+ * or the other, never both, which is why the same number produced a boss that
+ * melted for the good player and one that was unkillable for the bad one.
+ *
+ * Stages 1-5 now price the boss against the run instead — see
+ * `game/adaptive.ts`. Everything else in this block still applies: the road's
+ * relief is about the ROAD, and it is untouched.
+ */
 
 /**
  * How hard a boss's slam and an elite's sweep hit in the opening stages.
@@ -1851,6 +1864,18 @@ export interface Boss {
   attacks: number
   /** Seconds until the next summon wave, for `summoner`. */
   summonCd: number
+  /**
+   * Seconds until the next FLANK body, for a summoner whose wave budget is
+   * spent and whose crowd is down to a handful — see `SUMMON_MERCY_SQUAD`.
+   *
+   * Separate from `summonCd` on purpose: that one is the wall's clock and is
+   * also what a guard phase re-times, so sharing it would let a phase turn
+   * re-time the mercy trickle (or the trickle swallow a phase's payoff).
+   */
+  mercyCd: number
+  /** Flank bodies called up so far. Drives the ramp that shortens the gap, so
+   *  the fight's end is guaranteed rather than merely likely. */
+  mercySpawns: number
   /**
    * Seconds until a heal is allowed again, for `healer`. Set to
    * `HEAL_MIN_GAP_S` the moment one lands; a heal that comes due while this is

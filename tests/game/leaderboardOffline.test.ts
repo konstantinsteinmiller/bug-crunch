@@ -247,6 +247,16 @@ describe('the baked snapshot is the bottom rung, reached only on failure', () =>
       handler: async () => reply({ rank: 9, best: 1, total: 400, board: LIVE_BOARD })
     })
 
+    // The premise, stated rather than inherited: nothing has been posted yet.
+    // `reportRun` writes only on a new personal best, and an earlier case in
+    // this file posts stage 42 successfully — which persists. Under a full-suite
+    // run that value has been observed surviving into this test, and then every
+    // stage below it is a no-op and the climb costs ZERO writes: a failure that
+    // reads exactly like the throttle being broken, and is not.
+    const { setState } = await import('@/use/useTowerState')
+    const { SUBMITTED_STAGE_KEY } = await import('@/keys')
+    setState(SUBMITTED_STAGE_KEY, 0)
+
     for (let stage = 1; stage <= 12; stage++) await lb.reportRun(stage, 100)
 
     const writes = sent.filter((u) => u.endsWith('/score'))

@@ -41,13 +41,15 @@ export const createPlaygamaProvider = (): AdProvider => {
         console.warn('[ads/playgama] plugin init failed', e)
       }
     },
-    showRewardedAd: async () => {
+    // Forwarded so `useAds` sees the bridge's 'opened' state — its 6 s "never
+    // opened" cap otherwise releases the wait in the middle of every real ad.
+    showRewardedAd: async (onImpression) => {
       const m = await loadPlugin()
-      return m.showRewardedPG()
+      return m.showRewardedPG(onImpression)
     },
-    showMidgameAd: async () => {
+    showMidgameAd: async (onImpression) => {
       const m = await loadPlugin()
-      return m.showInterstitialPG()
+      return m.showInterstitialPG(onImpression)
     }
   }
 }

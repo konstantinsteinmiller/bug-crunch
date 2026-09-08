@@ -8,7 +8,6 @@ import {
   minDamageCrates,
   minibossHp,
   minRateCrates,
-  tutorialBossHp,
   gateBandFor,
   MIN_RUN_GAP,
   SUB_EARLIEST,
@@ -23,6 +22,7 @@ import {
   type TrackEvent
 } from '@/game/track'
 import { bossDesign, foeDef } from '@/game/foes'
+import { adaptiveBossStage } from '@/game/adaptive'
 import {
   BOSS_BASE_HP, bossGuardGates, gateMulOpen, SLAM_MAX_FRACTION, TUTORIAL_SLAM_FRACTION
 } from '@/game/survival'
@@ -620,13 +620,15 @@ describe('a stage gives the run what it needs', () => {
     expect(foeDef(typeId).designs[0]).toBe(bossDesign(1))
   })
 
-  it('prices the stage-1 boss as a victory lap, not as a test', () => {
-    // It has to fall over. A first-time player arrives with a squad they only
-    // half understand, and the beat exists to end the level on a win.
-    expect(tutorialBossHp()).toBeLessThan(BOSS_BASE_HP * 0.2)
-    // …and still be worth more than the elite they just beat, or it is not a
-    // climax, it is a straggler.
-    expect(tutorialBossHp()).toBeGreaterThan(minibossHp(1, false, 'tutorial'))
+  it('shapes the stage-1 boss as a victory lap, not as a test', () => {
+    // Its HEALTH used to be asserted here, against a flat `tutorialBossHp`. It
+    // no longer has one: stage 1 is inside the adaptive band, so the bar is
+    // priced at the arena door against the crowd that reached it, and the
+    // "cannot lose your first climax" guarantee is bought by the ladder's
+    // bottom rung instead of by a constant. `tests/game/adaptiveBoss.test.ts`
+    // asserts that contract; what stays here is the part that is still authored
+    // — the SHAPE of the fight, which no amount of adaptation touches.
+    expect(adaptiveBossStage(1)).toBe(true)
 
     // One guard phase, not the usual two: the gate is what stops a well-played
     // squad deleting it in half a second, and two is where the slams came from.

@@ -7473,6 +7473,23 @@ const applyFx = (e: FxEvent): void => {
       break
     }
 
+    case 'summonFlank': {
+      // The wave's arrival, scaled down to one body and stripped of the shake:
+      // a wave is the fight turning, a flank body is the fight ending, and the
+      // second should not announce itself louder than the first.
+      playFx('eliteSpawn', 0.35)
+      const n = minFx ? 3 : cheapFx ? 6 : 12
+      for (let i = 0; i < n; i++) {
+        emit({
+          x: e.x + (Math.random() - 0.5) * 1.6,
+          y: e.y + (Math.random() - 0.5) * 1.2,
+          vx: (Math.random() - 0.5) * 1.8, vy: 1.6 + Math.random() * 2.6,
+          life: 480, size: 0.13, color: [120, 130, 145], shape: 3, drag: 1.5, gravity: 5
+        })
+      }
+      break
+    }
+
     case 'summonWave': {
       // Borrowed from the miniboss arrival, because that is what it is: bodies
       // walking onto the road with a health bar's worth of intent behind them.

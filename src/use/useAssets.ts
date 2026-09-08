@@ -46,6 +46,15 @@ export const getAudioContext = (): AudioContext | null => {
   } catch {
     return null
   }
+  // Born into an already-suspended world. A context constructed on a page that
+  // has seen a user gesture starts `running`, so one created AFTER a mute has
+  // landed (a portal `soundOff` at boot, a tab hidden before the first sound, an
+  // ad opening before any SFX has played) would come up audible underneath it —
+  // `suspendAllAudio` had already run and had nothing to suspend. The depth
+  // counter is the honest record of whether anything wants silence right now.
+  if (suspendDepth > 0) {
+    try { void sharedAudioCtx.suspend() } catch { /* older impls */ }
+  }
   armResumeOnGesture()
   return sharedAudioCtx
 }

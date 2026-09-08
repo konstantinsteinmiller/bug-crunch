@@ -212,6 +212,14 @@ export type FxEvent =
   /** A summoner spent one of its waves. `wave` is which — the last one should
    *  land differently from the first, because it is the last. */
   | { kind: 'summonWave'; x: number; y: number; count: number; wave: number }
+  /**
+   * A single body clawing up beside a summoner whose wall is spent and whose
+   * crowd is down to a handful — the mercy trickle that lets a decided fight
+   * end. Deliberately its OWN event rather than a one-body `summonWave`: the
+   * wave is the budgeted wall and its count is what the specs measure, and a
+   * trickle logged as a wave would read as the wall never ending.
+   */
+  | { kind: 'summonFlank'; x: number; y: number }
   | { kind: 'grenadeThrow'; x: number; y: number }
   /** The player's grenade went off. */
   | { kind: 'grenade'; x: number; y: number }

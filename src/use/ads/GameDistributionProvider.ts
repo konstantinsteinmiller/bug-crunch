@@ -85,13 +85,17 @@ export const createGameDistributionProvider = (): AdProvider => {
         console.warn('[ads/gd] plugin init failed', e)
       }
     },
-    showRewardedAd: async () => {
+    // `onImpression` is forwarded so `useAds` can tell a playing ad apart from
+    // a request that went nowhere — its 6 s cap otherwise releases the wait
+    // mid-ad, denying a watched reward and revealing the result screen under a
+    // live interstitial.
+    showRewardedAd: async (onImpression) => {
       const m = await loadPlugin()
-      return m.showRewardedAdGD()
+      return m.showRewardedAdGD(onImpression)
     },
-    showMidgameAd: async () => {
+    showMidgameAd: async (onImpression) => {
       const m = await loadPlugin()
-      return m.showMidgameAdGD()
+      return m.showMidgameAdGD(onImpression)
     }
   }
 }

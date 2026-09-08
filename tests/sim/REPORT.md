@@ -17,6 +17,12 @@ The study is excluded from the default suite (it runs 500 full games). The fast
 regression that guards the conclusions — `tests/sim/balance.test.ts` — is in the
 default suite and takes ~4 s.
 
+> **Stages 1–5 no longer have an authored boss bar.** They size it against the
+> run that reaches the arena — see [Adaptive difficulty, stages 1–5](#adaptive-difficulty-stages-15)
+> at the end of this file. Every boss-HP number in the sections below is the
+> history that led there, and is no longer the shipping behaviour for those five
+> stages; stages 6+ are unchanged.
+
 Method: fixed 16.67 ms step, seeded `Math.random`, state wiped between runs,
 medians with min–max across seeds. Five scripted policies:
 
@@ -441,3 +447,146 @@ no-ads career walling at **stage 4** with 82 foe deaths and running clean.
   question, not a harness one.
 * Stages 6+ are generated rather than authored; they are covered by the career
   study but not by the per-stage probes here.
+
+---
+
+# Adaptive difficulty, stages 1–5
+
+Reproduce every number below with:
+
+```bash
+SIM_ADAPT=1 npx vitest run tests/sim/scratch.adaptive.test.ts --reporter=verbose
+# PowerShell: $env:SIM_ADAPT=1; npx vitest run … --reporter=verbose
+```
+
+The regressions that keep it honest are in the default suite:
+`tests/game/adaptiveBoss.test.ts` (the pure functions) and the
+*adaptive difficulty* block in `balance.test.ts` (the wiring).
+
+## The complaint
+
+Two failures from the live Poki build, reported as one:
+
+* the opening stages are **too easy**, and players leave inside the first
+  minute for want of anything to do;
+* a player who deliberately plays badly to see what happens **still kills the
+  boss in about half a second**, which is not a reward, it is an anticlimax.
+
+They are the same bug. The spread in firepower arriving at the arena door is
+enormous — measured, **65×** between `optimal` and `careless` on stage 5 — and a
+single authored health bar has to be a climax for both ends of it. It cannot be.
+
+Measured before the change:
+
+| stage | policy | squad | DPS | boss HP | stopwatch | seconds of FIRE |
+| --- | --- | --- | --- | --- | --- | --- |
+| 5 | `optimal` | 468 | 4 984 | 1 240 | 3.0 s | **0.25 s** |
+| 5 | `average` | 82 | 246 | 1 240 | 7.5 s | 5.2 s |
+| 5 | `careless` | 21 | 40 | 1 240 | — | never killed it |
+
+The stage-5 `optimal` row is the complaint, exactly. The bar was worth a quarter
+of a second of shooting; the three seconds the stopwatch showed were guard
+phases, and the health bar teleported between them in three instant chunks.
+
+The arena probe says the same thing without the road in the way. A 400-strong
+crowd spent **0.6–1.1 s** of fire on every stage-1-to-5 boss, and a 12-strong
+crowd killed none of them at all: stages 2, 3, 4 and 5 were **0/3 seeds**.
+
+## What replaced it
+
+Stages 1–5 no longer author a boss bar. They price one, at the moment the arena
+opens, at *the firepower that walked in × the seconds this run has earned the
+fight to last* — and the second term runs the opposite way to the first, so
+**playing well buys a shorter fight rather than an easier one**.
+
+| rung | share of the perfect-play crowd | seconds of straight fire |
+| --- | --- | --- |
+| near-perfect | ≥ 0.75 | 3.0 |
+| some mistakes | 0.45 | 5.0 |
+| a bad run | 0.20 | 6.0 |
+| 1–12 survivors | pinned by head count | 6.8 |
+
+Four supporting pieces, each of which was needed and none of which was obvious:
+
+| # | piece | why |
+| --- | --- | --- |
+| 1 | `perfectSquadFor` | the yardstick — walks the real road, takes the best leaf of every bank, pumps it for the measured four-tick approach. Deterministic, because `buildTrack` seeds from the stage number, and it moves with the shop so a purchase is never scored as a bad run |
+| 2 | `expectedDamage` | the bar is the damage the crowd will actually deliver, integrated with the real slam cadence, rage and floor — not `dps × seconds`. Flat multiplication ran **40 %** long at the bottom of the ladder, turning a 7.3 s target into a 12.6 s stopwatch |
+| 3 | `WALK_IN_SECONDS` | the boss spawns 12 units out and `BULLET_RANGE` is 10.8, so ~0.7 s of every climax is the crowd shooting at something out of reach. It costs no damage and real crowd |
+| 4 | `adaptiveBigHitMul` | the swing stops being soft for a run that built nothing — see *the floor*, below |
+
+Three constants came out entirely:
+
+| constant | was | why it is gone |
+| --- | --- | --- |
+| `earlyBossHpMul` | 0.6 on stages 1–3, 0.8 on 4–5 | a flat discount is only the right shape if everybody arrives with similar firepower. They do not |
+| `tutorialBossHp` | 3 × the tutorial elite | stage 1's "you cannot lose your first climax" guarantee is now bought by the ladder's bottom rung, which is also right for the returning player the constant could not see |
+| `TUTORIAL_BOSS_MULT` | 3 | ditto |
+
+## The floor, which nearly went with it
+
+The first working cut broke the game's oldest invariant: a run that never
+touches the screen cleared **stage 3 on two seeds in three**, because the only
+thing that had ever stopped it was a health bar too big for a crowd that small.
+
+Raising the swing alone did not fix it — the integration in (2) simply *paid* for
+the harder swing and brought the bar down to match, cancelling it exactly. The
+fix is to decouple the two, and the decoupling is now the floor:
+
+* the **bar** is always priced for a player taking the beginner's discount, so
+  "beatable in N seconds" is a generous promise and never a trap;
+* the **swing** is the one this run earned — and for a crowd that built nothing
+  it is `HOPELESS_SLAM_MUL` = 1.45× the authored share, bounded by
+  `SLAM_FRACTION_MAX`, which the design had already set as the most a single
+  swing may ever take.
+
+Dodge and you finish inside the promise. Stand still with a crowd you never
+built and you run out of survivors first — which is the brief's own sentence,
+"can't be helped and should be smacked by the boss attacks", as a mechanism.
+
+## Where it landed
+
+Stopwatch seconds, median of 3 seeds, boss fights that were reached:
+
+| stage | `optimal` | `good` | `average` | `careless` |
+| --- | --- | --- | --- | --- |
+| 1 | **4.3 s** | 4.3 s | 5.1 s | 5.9 s |
+| 2 | **5.5 s** | 6.3 s | 7.3 s | wiped |
+| 3 | **5.5 s** | 5.8 s | 7.1 s | wiped |
+| 4 | **7.4 s** | 8.2 s | 9.8 s | never reached |
+| 5 | **5.5 s** | 6.3 s | 7.0 s | wiped |
+
+The ordering is monotone on every stage, which is the design: a better crowd is
+a shorter climax. Against the old table — 3.0 s for `optimal` on stage 5 and
+20.2 s for `average` — the whole spread has collapsed from 17 seconds to about
+two, and the fast end is now three to four seconds of the bar actually *moving*
+rather than a quarter of a second of it vanishing.
+
+The fight alone, at the two ends of the ladder that a road cannot deliver:
+
+| crowd | before (fire / outcome) | after (fire / stopwatch) |
+| --- | --- | --- |
+| 400, full build | 0.6–1.1 s | **3.2–4.8 s** / 4.4–7.2 s |
+| 12, no build, dodging | never killed it on s2–s5 | **4.6–7.2 s** / 6.9–8.4 s |
+| 12, no build, standing still | never killed it on s2–s5 | wiped, by design |
+
+## Known and deliberate
+
+* **Stage 4 runs a second or two long for its quality of play.** It is the first
+  road carrying boulders and barricades, and `optimal` finishes it having lost
+  **50** survivors against 1 on stages 2, 3 and 5. Losses compound through
+  multiplier leaves — twenty lost before a `×2` cost forty — so the doors-only
+  yardstick over-states what stage 4 can hand over and even a flawless run
+  scores 0.46 there. Left alone: stage 4 is where the game stops being a
+  tutorial by design, and closing the gap would mean inventing a per-body
+  attrition rate. A made-up number in the yardstick is worse than a measured
+  wart.
+* **A crowd of 12 standing still is a wipe on every stage.** That is the brief's
+  "smacked by the boss attacks" branch, and it is what keeps the floor.
+  Dodging turns the same fight into a win inside ten seconds.
+* **Stages 6+ are untouched.** The authored curve resumes exactly at 6, because
+  by then the player has committed, the shop is the point, and a bar that is
+  always precisely as big as you are is a bar your upgrades can never beat.
+* **The autobalancer now multiplies the clock rather than the bar** on these
+  stages — Hard is a longer climax, a stuck player gets a shorter one — clamped
+  to `[2.0, 7.5]` seconds because `challengeFactor` alone reaches ×12.7.

@@ -49,6 +49,7 @@
 // start instead of permanently missing the placement.
 import { isGameMonetize, isGameDistribution } from '@/use/useUser'
 import { isInterstitialReady, showMidgameAd } from '@/use/useAds'
+import { markInterstitialShown } from '@/use/useAdGate'
 
 let firstStartAdShown = false
 
@@ -66,6 +67,10 @@ export const playFirstStartInterstitial = async (): Promise<void> => {
   // one-shot; retry on the next start.
   if (!isInterstitialReady.value) return
   firstStartAdShown = true
+  // Seed the shared 121 s clock — same reasoning as the first-LOAD placement:
+  // this ad bypasses `canShowInterstitial()` by design, but the next request
+  // still owes the full gap from here rather than from the first result screen.
+  markInterstitialShown()
   await showMidgameAd()
 }
 

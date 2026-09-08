@@ -165,6 +165,28 @@ export const canOfferReward = computed(
  * coalescing in a background tab, or the few milliseconds between our check and
  * the SDK's. The extra second costs nothing and turns a rejected request into a
  * filled one.
+ *
+ * ─── Why one number and not a per-platform table ────────────────────────────
+ *
+ * The pacing is time-based on EVERY build — not keyed to stages or waves — so
+ * the only thing that could vary per portal is the length of the gap. Walking
+ * the shipped targets, 121 s is the maximum of every documented minimum, so a
+ * table would today hold nine identical entries:
+ *
+ *   • CrazyGames  — one midgame ad per 2 min; an early request is rejected.
+ *   • Playgama    — Bridge's own `minimumDelayBetweenInterstitial` is 120 s.
+ *   • Yandex      — ≥ 60 s apart, and none in the first 60 s after load. 121 s
+ *                   satisfies both, and the "first call starts the clock"
+ *                   behaviour below covers the post-load half.
+ *   • Poki        — paced server-side; the SDK's own bad-event gate is the only
+ *                   client-side limit and it is about event SPACING, not ads.
+ *   • GamePix / GameDistribution / GameMonetize — frequency-capped inside the
+ *                   SDK, with published guidance of one interstitial every
+ *                   2-3 min. 121 s is the floor, their cap is the ceiling.
+ *
+ * If a portal ever publishes a LONGER minimum, raise it here for that build
+ * rather than reintroducing a stage counter — a stage-keyed cadence drifts with
+ * how fast the player is, which is exactly what the portals' rules are not.
  */
 const INTERSTITIAL_MIN_GAP_MS = 121_000
 

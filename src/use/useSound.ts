@@ -2,6 +2,7 @@ import { prependBaseUrl } from '@/utils/function'
 import useUser, { MUSIC_TRACK_FILES } from '@/use/useUser'
 import { getAudioContext, loadAudioBuffer, resourceCache, registerHtmlAudio, unregisterHtmlAudio, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isGamePaused } from '@/use/useGamePause'
+import { isPlatformAudioMuted } from '@/use/useGamePauseAudio'
 import { isMobileAudioMuted } from '@/use/useMobileAudioMute'
 
 import { ref, onMounted, watch, onUnmounted } from 'vue'
@@ -29,6 +30,33 @@ const shouldPlay = ref(false)
  * false` stops any in-flight fade. The next round's `startBattleMusic()`
  * brings it back. Idempotent and null-safe.
  */
+/** Set by `useMusic()` — see the assignment there for why it exists. */
+let restartTrack: (() => void) | null = null
+
+/**
+ * Bring the battle music back after an ad that interrupted a LIVE run.
+ *
+ * `forceStopMusic` deliberately clears the play INTENT (`shouldPlay`), so the
+ * pause gate cannot restart the track underneath an ad that is still open. Its
+ * contract is that "the next round's `startBattleMusic()` brings it back", and
+ * for the between-rounds interstitial that is exactly right — the next round is
+ * one button press away.
+ *
+ * The GamePix first-LOAD interstitial breaks that assumption: it fires from the
+ * splash, while stage 1 is already running, and stages 1-2 hand over without a
+ * result screen — so the next `startBattleMusic()` is two or three stages and
+ * several minutes away. Measured in a real browser against the built GamePix
+ * bundle: the ad no-filled and the game stayed SILENT for the rest of the
+ * opening. Nothing threw, and no test covered it.
+ *
+ * No-ops when the music was never wanted, and it goes through the normal start
+ * path — so if the portal is muted this re-asserts the intent and stays silent,
+ * and the unmute watcher sounds it later.
+ */
+export const resumeMusicAfterAd = (): void => {
+  restartTrack?.()
+}
+
 export const forceStopMusic = (): void => {
   shouldPlay.value = false
   try {
@@ -159,6 +187,17 @@ export const useMusic = () => {
           playWithFade()
         }
       })
+
+      // And the same false-edge re-fire for the PORTAL mute. Without it a
+      // player who unmutes the portal chrome gets a permanently silent game:
+      // `shouldPlay` is already true, `resumeAllAudio` only restarts elements
+      // it actually paused (a track that never started isn't one of them), and
+      // nothing else would ever call the start again.
+      watch(isPlatformAudioMuted, (muted) => {
+        if (!muted && shouldPlay.value && bgMusic.value && bgMusic.value.paused) {
+          playWithFade()
+        }
+      })
     })
     onUnmounted(() => {
       if (bgMusic.value) unregisterHtmlAudio(bgMusic.value)
@@ -181,6 +220,12 @@ export const useMusic = () => {
     shouldPlay.value = true
     loadAndPlayTrack()
   }
+
+  // Publish the starter at module scope so a caller that is not a component —
+  // `useFirstLoadInterstitial`, which fires from the splash — can bring the
+  // music back after an ad. Every `useMusic()` call closes over the same
+  // module-level `bgMusic`, so a later overwrite is the same function.
+  restartTrack = startBattleMusic
 
   const stopBattleMusic = () => {
     shouldPlay.value = false
@@ -213,6 +258,19 @@ export const useMusic = () => {
     // true so the `isMobileAudioMuted`-drop watcher in `initMusic` re-fires this
     // the moment they unmute (if a battle is still running).
     if (isMobileAudioMuted.value) return
+
+    // PORTAL hard-mute (GamePix `soundOff`, and every portal that mutes without
+    // pausing). This is NOT covered by `isGamePaused` — a portal mute is
+    // deliberately audio-only, gameplay carries on — so without this line the
+    // music start walks straight past it.
+    //
+    // It is the reload flow that makes this mandatory rather than tidy: QA mutes
+    // the portal chrome and reloads, the SDK reports "muted" during boot before
+    // this element exists, `setPlatformAudioMuted` suspends an audio layer that
+    // is still empty, and then the run's `startBattleMusic()` sounds. Reading
+    // the flag HERE is what closes that, and the watcher below restarts the
+    // track when the portal unmutes.
+    if (isPlatformAudioMuted.value) return
 
     // Browsers block autoplay until user interaction
     bgMusic.value.play().then(() => {

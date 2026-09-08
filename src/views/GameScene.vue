@@ -34,14 +34,14 @@ import StageBanner from '@/components/game/StageBanner.vue'
 import IncomingWarning from '@/components/game/IncomingWarning.vue'
 import WeaponTag from '@/components/game/WeaponTag.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
-import { isGamePaused, isAdShowing } from '@/use/useGamePause'
+import { isGamePaused, isAdShowing, isVisibilityHidden, isPlatformPaused } from '@/use/useGamePause'
 import { spawnCoinExplosion } from '@/use/useCoinExplosion'
 import { isInterstitialReady, showMidgameAd } from '@/use/useAds'
 import {
   canShowInterstitial, markInterstitialShown, adInFlight, canOfferReward, claimReward, isRewardGated
 } from '@/use/useAdGate'
 import { signalGameplayLoaded, triggerHappytime } from '@/use/useCrazyGames'
-import { syncGameplayLifecycle } from '@/use/useGameplayLifecycle'
+import { syncGameplayLifecycle, isGameplayLive } from '@/use/useGameplayLifecycle'
 import { isAnyModalOpen } from '@/use/useModalState'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
 import { mobileCheck } from '@/utils/function'
@@ -1025,16 +1025,18 @@ const openUpgrades = (): void => {
 // Poki gets the same pair through a guard that keeps consecutive events at
 // least 120 ms apart (its SDK disables monetization after 10 pairs closer than
 // 50 ms — see `pokiPlugin.ts`).
-const isLiveGameplay = computed(() =>
-  (phase.value === 'run' || phase.value === 'boss')
-  && !showResult.value
-  && !isAnyModalOpen.value
-  && !isAdShowing.value
-  // The onboarding hold is not gameplay: the road is frozen and no stage is
-  // running. Reporting `gameplayStart` here would open a session the player has
-  // not begun, which is exactly the kind of thing portal moderation rejects.
-  && !tutorialActive.value
-)
+// The scene wires the reactive inputs; `isGameplayLive` holds the rule, next
+// to the platform contracts it answers to — and where it can be asserted
+// without mounting a canvas.
+const isLiveGameplay = computed(() => isGameplayLive({
+  phase: phase.value,
+  showResult: showResult.value,
+  anyModalOpen: isAnyModalOpen.value,
+  adShowing: isAdShowing.value,
+  visibilityHidden: isVisibilityHidden.value,
+  platformPaused: isPlatformPaused.value,
+  tutorialActive: tutorialActive.value
+}))
 watch(isLiveGameplay, syncGameplayLifecycle, { immediate: true })
 
 // The hint's clock starts when the road does — not at mount, which on a first

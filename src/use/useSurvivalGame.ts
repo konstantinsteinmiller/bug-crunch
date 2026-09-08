@@ -3,7 +3,7 @@ import {
   BARRICADE_COIN_MAX, BARRICADE_COIN_MIN,
   BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, bossGuardGates, dividerCrushFor,
   GATE_SCALE_STEP, gatePumpCap, gatePumpStep, gateTickMs, isScaleOp,
-  earlyBigHitMul, earlyBossHpMul,
+  earlyBigHitMul,
   BULLET_LIFE_MS, BULLET_R, BULLET_SPEED, effectiveBulletRange,
   CHALLENGE_MAX, CHALLENGE_STEP,
   COIN_MAGNET_BASE, COIN_PULL_LEAD, CRATE_DAMAGE_GAIN,
@@ -33,7 +33,11 @@ import {
   GUARD_H, LEVER_R, ROCKET_SPLASH_SHARE, STONE_H, WEAPONS, WEAPON_BOX_R, weaponStreams,
   type Guard, type Lever, type Stone, type WeaponBox, type WeaponId
 } from '@/game/weapons'
-import { buildTrack, tutorialBossHp, type Track } from '@/game/track'
+import { buildTrack, perfectSquadFor, type Track } from '@/game/track'
+import {
+  adaptiveBigHitMul, adaptiveBossHp, adaptiveBossSeconds, adaptiveBossStage,
+  clampAdaptiveSeconds
+} from '@/game/adaptive'
 import {
   BOLT_BLAST_R,
   BOLT_FLIGHT_S,
@@ -73,6 +77,12 @@ import {
   SUMMON_CD,
   SUMMON_DESIGN,
   SUMMON_HP_SHARE,
+  SUMMON_MERCY_CD,
+  SUMMON_MERCY_CD_MIN,
+  SUMMON_MERCY_FLANK,
+  SUMMON_MERCY_GRACE,
+  SUMMON_MERCY_RAMP,
+  SUMMON_MERCY_SQUAD,
   SUMMON_OPENING_CD,
   SUMMON_PER_WAVE,
   SUMMON_SPREAD,
@@ -317,6 +327,29 @@ let hpRelief = 1
 let slamRelief = 1
 /** Obstacle-contact and trap multiplier for this stage — the third half. */
 let contactRelief = 1
+/**
+ * The crowd a flawless run of this stage could have assembled.
+ *
+ * Latched at `startStage`, because it depends on what the shop was worth when
+ * the stage opened and a purchase made mid-run must not move the yardstick the
+ * run is about to be measured against. See `game/adaptive.ts`.
+ */
+let perfectSquad = 0
+/**
+ * What one of the boss's swings is worth this fight, as a multiplier on the
+ * stage's authored share.
+ *
+ * `earlyBigHitMul` outside the adaptive band; inside it, the run's own reading —
+ * the beginner's discount for a crowd that worked the road, and up to
+ * `HOPELESS_SLAM_MUL` for one that did not.
+ *
+ * Latched when the arena opens, not read live, and the difference matters. Live,
+ * it would rise as the crowd it is measuring shrank: one bad slam would make the
+ * next one 2.4× heavier, and a mid-table player who mistimed a single dodge
+ * would fall down the ladder inside the fight they were already losing. The bar
+ * is decided by the road; so is the swing that is aimed at it.
+ */
+let bossSwingMul = 1
 
 /**
  * ─── Object pools: monsters and rounds ──────────────────────────────────────
@@ -811,6 +844,15 @@ export const startStage = (n?: number): void => {
     * rewardDeclineFactor(declines.value)
   slamRelief = slamReliefFor(failures)
   contactRelief = contactReliefFor(failures)
+
+  // The yardstick the opening stages' boss is priced against — read here, once,
+  // from the shop's value at this moment. `syncMetaToRun` can grow the crowd
+  // mid-stage; it must not also grow the crowd the run is being compared to, or
+  // buying Squad halfway down the road would retroactively demote the run.
+  perfectSquad = perfectSquadFor(target, startSquad.value, gatePayoutBonus.value)
+  // Re-read at `spawnBoss` from the crowd that actually arrives; until then the
+  // stage's authored value, so nothing can read a stale fight's number.
+  bossSwingMul = earlyBigHitMul(target)
 
   anchorX = 0
   anchorY = 0
@@ -1426,39 +1468,126 @@ const stepAnchor = (dt: number): void => {
   }
 }
 
-const spawnBoss = (): void => {
-  // Sized against the DPS a stage actually produces — see `BOSS_BASE_HP`.
-  //
-  // Stage 1 is priced separately and far lower (`tutorialBossHp`). The general
-  // curve starts at a full `BOSS_BASE_HP` because from stage 2 the boss is the
-  // stage's test; stage 1's is its curtain call, and a first-time player has to
-  // win it. Difficulty and relief still apply on top, so a player who has been
-  // struggling meets an even softer one.
-  // The opening stages' cut is applied to BOTH prices, the tutorial's own and
-  // the general curve, so stage 1's victory lap gets easier along with the rest
-  // rather than being the one boss that ignored the onboarding pass.
-  // …and by the KIND, which is the other half of the same sentence. A healer
-  // gives 60 % of its bar back and a summoner spends a quarter of it on bodies,
-  // so charging all four kinds the same printed number would make the same stage
-  // four different lengths. See `bossHpMulFor`.
-  const kind = bossKindFor(stage.value)
-  const base = (stage.value <= 1
-    ? tutorialBossHp()
-    : BOSS_BASE_HP * bossHpScale(stage.value)) * earlyBossHpMul(stage.value) * bossHpMulFor(kind)
-  const hp = Math.max(
-    stage.value <= 1 ? 1 : 60,
-    Math.round(base * difficultyFactor() * hpRelief)
+/**
+ * ─── The adaptive bar, resolved ─────────────────────────────────────────────
+ *
+ * Everything that decides how big the opening stages' boss is, in one place and
+ * read exactly once — at the instant the arena opens. See `game/adaptive.ts`
+ * for why the stages 1–5 boss is priced against the run instead of the stage.
+ *
+ * The three inputs, and why each is read the way it is:
+ *
+ * FIREPOWER  `squad × damage × fire rate`, with the weapon's multiplier folded
+ *            in exactly as `stepShooting` folds it in. A launcher divides the
+ *            damage and multiplies the cadence so the streams cancel, but
+ *            `damageMul` does NOT cancel — a run that solved the puzzle really
+ *            is hitting harder, and a bar that ignored it would hand the best
+ *            reward on the road a boss that melts.
+ * TARGET     from the crowd alone, against the ceiling latched at
+ *            `startStage`.
+ * THE DIALS  the difficulty setting and the autobalancer multiply the CLOCK,
+ *            not the bar. That is the same intent expressed in the unit the
+ *            fight is now denominated in: Hard means a longer climax, a player
+ *            who keeps dying here gets a shorter one, and a clear streak winds
+ *            it back up. Clamped, because `challengeFactor` alone reaches ×12.7.
+ */
+const adaptiveHp = (kind: BossKind, openingCd: number): number => {
+  const weapon = activeWeapon.value
+  const def = weapon ? WEAPONS[weapon] : null
+  const damageMul = def ? def.damageMul * weaponPowerMul(weapon!) : 1
+
+  const seconds = clampAdaptiveSeconds(
+    adaptiveBossSeconds(squadCount.value, perfectSquad) * difficultyFactor() * hpRelief
   )
+  // ── The bar is priced on the SOFT swing, and the fight may throw a hard one ──
+  //
+  // `bossHitShare` returns what this boss will actually hit for, and that is
+  // deliberately NOT what the bar is priced against. Feeding the punitive swing
+  // into the model would have the model pay for it: a crowd charged double per
+  // slam decays twice as fast, the integration sees it, and the bar comes down
+  // to match — so `adaptiveBigHitMul` would cancel itself out exactly, which is
+  // what it did on the first attempt (a run that never touched the screen still
+  // cleared stage 3 on two seeds in three).
+  //
+  // So the two are decoupled on purpose, and the decoupling IS the floor:
+  //
+  //   the BAR is always priced for a player who takes the beginner's discount,
+  //   so the "beatable in N seconds" promise is generous and never a trap;
+  //   the SWING is the one this run earned, so a crowd that arrived with
+  //   nothing burns down faster than the bar it was handed was priced for.
+  //
+  // Dodge and you finish inside the promise. Stand still with a crowd you never
+  // built, and you run out of survivors first — which is the whole of "can't be
+  // helped and should be smacked by the boss attacks".
+  const soft = earlyBigHitMul(stage.value)
+  return adaptiveBossHp({
+    squad: squadCount.value,
+    perSurvivorDps: damage.value * runFireRate.value * damageMul,
+    slamShare: bossHitShare(1, soft),
+    // The FLOOR, not the budget: the model re-applies `max(floor, squad ×
+    // share)` at every step as the crowd shrinks, which is what the fight does.
+    // Handing it the budget at full strength would charge a crowd of twenty the
+    // bite a crowd of four hundred pays.
+    slamMinKill: bossHitFloor(soft),
+    guardPhases: bossGuardGates(stage.value).length,
+    openingCd,
+    slamCd: SLAM_CD_BASE,
+    slamCdDecay: SLAM_CD_DECAY,
+    slamCdMin: SLAM_CD_MIN
+  // `bossHpMulFor` survives the switch and has to: it corrects for health that
+  // never appears on the bar (a healer's give-back, a summoner's bodies), and
+  // that correction is about the KIND rather than about the curve the bar came
+  // from. Without it the same target would buy four different fight lengths.
+  }, seconds * bossHpMulFor(kind))
+}
+
+const spawnBoss = (): void => {
+  // Two prices, and which one applies is the whole of `game/adaptive.ts`.
+  //
+  // Stages 1-5 are sized against the run that turned up: the firepower in the
+  // arena times the seconds this player has earned the fight to last. Stage 1
+  // used to be priced separately and far lower (a flat `tutorialBossHp`) so a
+  // first-timer could not lose their first climax, and it no longer needs to
+  // be — a first-timer arrives with a small crowd and is handed the bottom of
+  // the ladder automatically, while the returning player who used to delete
+  // that same boss in half a second now gets three seconds of real fight.
+  //
+  // From stage 6 the authored curve takes over untouched: by then the player
+  // has committed, and a bar that is always exactly as big as you are is a bar
+  // your upgrades can never beat.
+  //
+  // The KIND prices both of them. A healer gives 60 % of its bar back and a
+  // summoner spends a quarter of it on bodies, so charging all four the same
+  // printed number would make the same stage four different lengths. See
+  // `bossHpMulFor`.
+  const kind = bossKindFor(stage.value)
+  const adaptive = adaptiveBossStage(stage.value)
   // The healer runs its own clock (`HEALER_CAST_CD`), and its first cycle has to
   // be the one it will actually throw: `charging` marks the every-third heal for
   // a healer exactly as it marks the charged swing for a meteor — decided when
   // the cycle BEGINS, so the telegraph and the effect can never disagree about
   // which cast is being wound up.
   const openCd = kind === 'healer' ? HEALER_CAST_CD : 2.6
+  // Resolved BEFORE the bar, and read by it: the model has to know what the
+  // fight is going to do to this crowd. See `bossSwingMul`.
+  bossSwingMul = adaptive
+    ? adaptiveBigHitMul(earlyBigHitMul(stage.value), squadCount.value, perfectSquad)
+    : earlyBigHitMul(stage.value)
+  const hp = adaptive
+    ? adaptiveHp(kind, openCd)
+    : Math.max(60, Math.round(
+      BOSS_BASE_HP * bossHpScale(stage.value) * bossHpMulFor(kind)
+        * difficultyFactor() * hpRelief
+    ))
   boss = {
     kind,
     attacks: 0,
     summonCd: SUMMON_OPENING_CD,
+    // The mercy trickle's clock, armed at its full grace. It only ever runs
+    // once the wave budget is spent AND the crowd is a handful — see
+    // `stepSummonerMercy`.
+    mercyCd: SUMMON_MERCY_GRACE,
+    mercySpawns: 0,
     // Zero, not `HEAL_MIN_GAP_S`: the gap is a floor BETWEEN heals, and opening
     // the fight on cooldown would delay the first one by ten seconds on top of
     // the three casts it already waits.
@@ -4761,25 +4890,30 @@ const aimBoss = (b: Boss, leadMul = 1): void => {
  * CADENCE differs from the meteor's — the arithmetic and the deliberate discount
  * on top of it are both written down at `BOLT_SHARE_MUL`.
  */
-const bossHitShare = (mul = 1): number =>
-  (stage.value <= 1
-    ? TUTORIAL_SLAM_FRACTION
-    : Math.min(
-      SLAM_FRACTION_MAX,
-      SLAM_MAX_FRACTION * endlessPressure(stage.value)
-    ) * slamRelief) * earlyBigHitMul(stage.value) * mul
+const bossHitShare = (mul = 1, discount = bossSwingMul): number => (stage.value <= 1
+  // The tutorial's swing is a token and stays one — the discount can make it a
+  // token that lands, never one that hurts.
+  ? TUTORIAL_SLAM_FRACTION * discount * mul
+  : Math.min(
+    // Clamped AFTER the run has been read, not before: `bossSwingMul` may push
+    // above 1 for a crowd that arrived with nothing (see `HOPELESS_SLAM_MUL`),
+    // and `SLAM_FRACTION_MAX` is the ceiling the design already set on what one
+    // swing may take. Reading the run may not raise that ceiling.
+    SLAM_FRACTION_MAX,
+    SLAM_MAX_FRACTION * endlessPressure(stage.value) * slamRelief * discount
+  ) * mul)
 
 /**
  * …and the floor under it. `BOSS_MIN_KILL` intends a real hit on a thinned-out
  * crowd; it is still bounded by the shape, so nothing outside the attack is ever
  * billed for the crowd being small.
  */
-const bossHitBudget = (share: number): number => Math.max(
-  Math.max(1, Math.round(
-    (stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL) * earlyBigHitMul(stage.value)
-  )),
-  Math.ceil(squadCount.value * share)
-)
+const bossHitFloor = (discount = bossSwingMul): number => Math.max(1, Math.round(
+  (stage.value <= 1 ? TUTORIAL_SLAM_MIN_KILL : BOSS_MIN_KILL) * discount
+))
+
+const bossHitBudget = (share: number): number =>
+  Math.max(bossHitFloor(), Math.ceil(squadCount.value * share))
 
 /** Resolve the cycle that just ran out. */
 const throwBossAttack = (b: Boss): void => {
@@ -5029,7 +5163,84 @@ const stepBossBolts = (dt: number): void => {
  * finished contributing and simply stands there — which is the point, and the
  * only reason the fight has a floor under it. See the note on `SUMMON_WAVES_MAX`.
  */
+/**
+ * One summoned body, placed.
+ *
+ * Shared by the wave and by the flank trickle below so the two can never drift
+ * apart on health, bite, design or clamping — the only thing that differs
+ * between them is WHERE they come up, and that difference is the whole point.
+ */
+const placeSummon = (b: Boss, x: number, y: number): void => {
+  const def = foeDef(SUMMON_TYPE)
+  // Priced off the BOSS's bar, not the stage's husk — see `SUMMON_HP_SHARE`.
+  // `b.maxHp` already carries everything that sized the boss — the stage curve
+  // or, on stages 1-5, the run's own firepower, and the difficulty factor and
+  // retry relief either way — so the wall softens for a stuck player exactly as
+  // the boss does and there is no second place for those to be applied.
+  const hp = Math.max(1, Math.round(b.maxHp * SUMMON_HP_SHARE))
+  const f = takeFoe()
+  f.id = entityId++
+  f.typeId = def.id
+  f.design = SUMMON_DESIGN
+  f.x = Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, x))
+  f.y = y
+  f.hp = hp
+  f.maxHp = hp
+  f.speed = def.speed
+  f.bite = Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL))
+  f.biteShare = biteShareFor(def.id) * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL
+  f.scale = def.scale
+  f.phase = Math.random()
+  f.swayPhase = Math.random() * 6.28
+  foes.push(f)
+}
+
+/**
+ * The mercy trickle: what a summoner does once its wall is spent and the crowd
+ * it spent the wall on is down to a handful.
+ *
+ * This exists because of a reported run in which the wave cap worked perfectly
+ * and produced a fight with no exit — one survivor, an empty road, and twelve
+ * minutes of holding the trigger against a bar that would eventually have
+ * fallen. See the note above `SUMMON_MERCY_SQUAD` in `threats.ts`.
+ *
+ * Two properties it must have, and both are load-bearing:
+ *
+ *   • it can NEVER touch a fight the player might still win. The gate is the
+ *     squad size, re-read every tick, so a crowd that is still a crowd resets
+ *     the clock and nothing is ever called up;
+ *   • and once it starts it must FINISH the fight, so the gap shortens with
+ *     every body. A fixed trickle a stubborn squad survives would trade a long
+ *     grind for a longer one.
+ */
+const stepSummonerMercy = (b: Boss, dt: number): void => {
+  if (squadCount.value > SUMMON_MERCY_SQUAD) {
+    // Still a fight. Re-arm the grace so a crowd cut down later gets the full
+    // beat rather than whatever was left of an older one.
+    b.mercyCd = SUMMON_MERCY_GRACE
+    b.mercySpawns = 0
+    return
+  }
+  b.mercyCd -= dt
+  if (b.mercyCd > 0) return
+  b.mercyCd = Math.max(
+    SUMMON_MERCY_CD_MIN,
+    SUMMON_MERCY_CD * Math.pow(SUMMON_MERCY_RAMP, b.mercySpawns)
+  )
+  // Alternating flanks: one body at a time, beside the boss, so it walks the
+  // arena in full view instead of rising in the crowd's face the way a wave
+  // does. A squad with anything left shoots it on the way down.
+  const side = b.mercySpawns % 2 === 0 ? 1 : -1
+  b.mercySpawns++
+  const x = b.x + side * SUMMON_MERCY_FLANK
+  placeSummon(b, x, b.y)
+  pushFx({ kind: 'summonFlank', x, y: b.y })
+}
+
 const stepSummoner = (b: Boss, dt: number): void => {
+  // Runs on its own clock, and only once the wall is spent — the budget is
+  // still the fight's floor, and this is only ever what happens after it.
+  if (b.attacks >= SUMMON_WAVES_MAX) stepSummonerMercy(b, dt)
   b.summonCd -= dt
   if (b.summonCd > 0) return
   // A guard phase is paid off with a WAVE rather than a swing — see
@@ -5046,12 +5257,6 @@ const stepSummoner = (b: Boss, dt: number): void => {
   b.attacks++
   b.summonCd = SUMMON_CD
 
-  const def = foeDef(SUMMON_TYPE)
-  // Priced off the BOSS's bar, not the stage's husk — see `SUMMON_HP_SHARE`.
-  // `b.maxHp` already carries the stage scaling, the difficulty factor and the
-  // retry relief, so the wall softens for a stuck player exactly as the boss
-  // does and there is no second place for those to be applied.
-  const hp = Math.max(1, Math.round(b.maxHp * SUMMON_HP_SHARE))
   // They come up out of the road in front of the CROWD, not out of the boss —
   // see `SUMMON_AHEAD`. Sited off `anchorX`/`anchorY` for the same reason the
   // slam is: the boss spends a whole fight walking in, so anything placed
@@ -5073,21 +5278,7 @@ const stepSummoner = (b: Boss, dt: number): void => {
     // this is arithmetically identical to what it replaced.
     const step = (2 * SUMMON_SPREAD) / Math.max(1, SUMMON_PER_WAVE - 1)
     const spread = (i - (size - 1) / 2) * step
-    const f = takeFoe()
-    f.id = entityId++
-    f.typeId = def.id
-    f.design = SUMMON_DESIGN
-    f.x = Math.max(-LANE_HALF + 0.5, Math.min(LANE_HALF - 0.5, anchorX + spread))
-    f.y = waveY + (i % 2) * 0.7
-    f.hp = hp
-    f.maxHp = hp
-    f.speed = def.speed
-    f.bite = Math.max(1, Math.round(def.bite * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL))
-    f.biteShare = biteShareFor(def.id) * challengeBiteFactor(challenge.value) * SUMMON_BITE_MUL
-    f.scale = def.scale
-    f.phase = Math.random()
-    f.swayPhase = Math.random() * 6.28
-    foes.push(f)
+    placeSummon(b, anchorX + spread, waveY + (i % 2) * 0.7)
   }
   pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: size, wave: b.attacks })
 }

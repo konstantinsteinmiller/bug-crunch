@@ -37,8 +37,8 @@ export const gamepixCustomLoading = (): void => {}
 export const gamepixGameLoading = (_pct?: number): void => {}
 export const gamepixGameLoaded = (): void => {}
 
-export const showRewardedAdGP = async (): Promise<boolean> => false
-export const showMidgameAdGP = async (): Promise<boolean> => false
+export const showRewardedAdGP = async (_onImpression?: () => void): Promise<boolean> => false
+export const showMidgameAdGP = async (_onImpression?: () => void): Promise<boolean> => false
 export const showRewardedGP = showRewardedAdGP
 export const showInterstitialGP = showMidgameAdGP
 

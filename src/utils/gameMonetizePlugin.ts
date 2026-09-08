@@ -31,7 +31,12 @@
 //      Rewarded resolves `true` ONLY when the ad played to the end (the IMA
 //      terminal event `ALL_ADS_COMPLETED` — GameMonetize HTML5 has NO dedicated
 //      rewarded-complete event); interstitial resolves on ad close. Both fall
-//      back from `sdk.showAd(...)` to `sdk.showBanner()`.
+//      back from `sdk.showAd(...)` to `sdk.showBanner()`. Both also take an
+//      `onImpression` callback, fired on the FIRST `SDK_GAME_PAUSE` of the
+//      cycle — the ad genuinely opened. `useAds` needs that edge: its short
+//      "never opened" cap otherwise releases the wait 6 s in, mid-video, which
+//      denies the reward for a fully-watched ad and reveals the result screen
+//      on top of a still-open interstitial.
 //
 //   4. `preloadRewardedGM()` — preload-backed FILL signal. When the SDK build
 //      exposes `preloadAd`, a resolved preload sets `isGmRewardedFilled` true so
@@ -368,9 +373,13 @@ export const createGameMonetizeSaveStrategy = (): SaveStrategy => new GameMoneti
  * `showBanner()` returns void). A bare `SDK_GAME_START` — resume after a
  * no-fill / error / skip with no completion event — resolves `false`.
  *
+ * `onImpression` fires once, the moment the ad actually opens (first
+ * `SDK_GAME_PAUSE`), so `useAds` can tell a real video apart from a request
+ * that went nowhere and leave its stuck-ad cap alone for the ad's duration.
+ *
  * No-op (resolves false) when the SDK is not active.
  */
-export const showRewardedAdGM = (): Promise<boolean> => {
+export const showRewardedAdGM = (onImpression?: () => void): Promise<boolean> => {
   return new Promise((resolve) => {
     const s = getSdk()
     if (!s) {
@@ -418,6 +427,10 @@ export const showRewardedAdGM = (): Promise<boolean> => {
     const unsubAllAds = onSdkEvent(EVT_ALL_ADS_COMPLETED, () => { completed = true })
     const unsubComplete = onSdkEvent(EVT_REWARDED_COMPLETE, () => { completed = true })
     const unsubPause = onSdkEvent(EVT_GAME_PAUSE, () => {
+      // First pause of the cycle IS the impression: the SDK only asks the game
+      // to pause once its ad layer is up. Report it before flipping
+      // `adStarted` so the callback runs exactly once per ad.
+      if (!adStarted) onImpression?.()
       adStarted = true
       clearTimeout(noFillTimer)
     })
@@ -439,9 +452,11 @@ export const showRewardedAdGM = (): Promise<boolean> => {
  * Show an interstitial (midgame) ad. Resolves when the ad closes (or on a
  * no-fill / timeout) so callers can `await` it before resuming the next match.
  * `sdk.showAd()` with no argument (or `sdk.showBanner()`) is the interstitial.
+ * `onImpression` fires once when the ad actually opens (first
+ * `SDK_GAME_PAUSE`) — see `showRewardedAdGM` for why `useAds` needs it.
  * No-op (resolves immediately) when the SDK is not active.
  */
-export const showMidgameAdGM = (): Promise<void> => {
+export const showMidgameAdGM = (onImpression?: () => void): Promise<void> => {
   return new Promise((resolve) => {
     const s = getSdk()
     if (!s) {
@@ -468,6 +483,8 @@ export const showMidgameAdGM = (): Promise<void> => {
     }
 
     const unsubPause = onSdkEvent(EVT_GAME_PAUSE, () => {
+      // The impression edge — see `showRewardedAdGM`.
+      if (!adStarted) onImpression?.()
       adStarted = true
       clearTimeout(noFillTimer)
     })

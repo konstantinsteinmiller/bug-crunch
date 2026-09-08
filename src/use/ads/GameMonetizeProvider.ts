@@ -54,7 +54,13 @@ export const createGameMonetizeProvider = (): AdProvider => {
         console.warn('[ads/gamemonetize] plugin init failed', e)
       }
     },
-    showRewardedAd: () => showRewardedAdGM(),
-    showMidgameAd: () => showMidgameAdGM()
+    // `onImpression` MUST be forwarded. `useAds` arms a 6 s "the ad never
+    // opened" cap on every request and releases the wait when it expires; the
+    // callback is the only thing that tells it a real ad is on screen. Dropped
+    // (as it was), a fully-watched rewarded video resolved after the cap had
+    // already returned `granted = false`, and the result screen appeared six
+    // seconds into every interstitial.
+    showRewardedAd: (onImpression) => showRewardedAdGM(onImpression),
+    showMidgameAd: (onImpression) => showMidgameAdGM(onImpression)
   }
 }

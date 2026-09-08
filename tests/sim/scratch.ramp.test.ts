@@ -22,12 +22,18 @@
  * Read with `earlyFoeHpMul` and the rest of the onboarding curves in
  * `survival.ts` — they are the dials this table responds to, and the block
  * comment there records what it said before and after the last pass.
+ *
+ * The `boss` column reads 0 for stages 1-5 and that is not a bug: their boss is
+ * no longer a property of the road at all. It is priced at the arena door
+ * against the firepower that walked in (`game/adaptive.ts`), and
+ * `tests/sim/scratch.adaptive.test.ts` is the probe that measures it.
  */
 import { describe, it } from 'vitest'
-import { buildTrack, minibossHp, tutorialBossHp } from '@/game/track'
+import { buildTrack, minibossHp } from '@/game/track'
 import { bossHpScale, foeDef, foeHpScale } from '@/game/foes'
+import { adaptiveBossStage } from '@/game/adaptive'
 import {
-  BOSS_BASE_HP, earlyBossHpMul, earlyCrateHpMul, earlyFoeHpMul, earlyObstacleKeep, earlyPackMul
+  BOSS_BASE_HP, earlyCrateHpMul, earlyFoeHpMul, earlyObstacleKeep, earlyPackMul
 } from '@/game/survival'
 import { bossHpMulFor, bossKindFor } from '@/game/threats'
 
@@ -73,8 +79,14 @@ const budget = (stage: number): Budget => {
       b.crateHp += e.crates.reduce((s, c) => s + c.hp, 0)
     }
   }
-  b.boss = (stage <= 1 ? tutorialBossHp() : BOSS_BASE_HP * bossHpScale(stage))
-    * earlyBossHpMul(stage) * bossHpMulFor(bossKindFor(stage))
+  // Stages 1-5 have no authored bar to add up: their boss is priced against the
+  // run that reaches it (`game/adaptive.ts`), so the honest entry is "not a
+  // property of this road". Printed as 0 rather than guessed at, because a
+  // guessed number here would go straight into the jump table below and invent
+  // a cliff — or hide one.
+  b.boss = adaptiveBossStage(stage)
+    ? 0
+    : BOSS_BASE_HP * bossHpScale(stage) * bossHpMulFor(bossKindFor(stage))
   return b
 }
 

@@ -239,7 +239,7 @@ export const playgamaGameplayStop = (): void => {
 // ─── Ad show wrappers ─────────────────────────────────────────────────────
 
 /** Shows an interstitial; resolves on `closed` or `failed`. Never rejects. */
-export const showInterstitialPG = async (): Promise<void> => {
+export const showInterstitialPG = async (onImpression?: () => void): Promise<void> => {
   await playgamaPlugin()
   const bridge = getBridge()
   if (!bridge?.advertisement?.showInterstitial) return
@@ -255,7 +255,13 @@ export const showInterstitialPG = async (): Promise<void> => {
       resolve()
     }
     const off = bridge.advertisement?.on?.(evName, (state: string) => {
-      if (state === 'loading' || state === 'opened') { opened = true; return }
+      // 'opened' is the impression edge `useAds` needs: unreported, its 6 s
+      // "never opened" cap releases the wait mid-ad and the result screen goes
+      // up on top of a playing interstitial. ('loading' still counts as "this
+      // request went somewhere" for the no-fill grace below, but only a real
+      // open is reported as an impression.)
+      if (state === 'opened') { opened = true; onImpression?.(); return }
+      if (state === 'loading') { opened = true; return }
       if (state === 'closed' || state === 'failed') finish()
     })
     try {
@@ -285,7 +291,7 @@ export const showInterstitialPG = async (): Promise<void> => {
 /** Shows a rewarded video. Resolves `true` only when the bridge fired
  *  `rewarded` BEFORE the `closed` / `failed` edge (Playgama's docs note
  *  the grant edge is `'rewarded'`, not `'closed'`). */
-export const showRewardedPG = async (): Promise<boolean> => {
+export const showRewardedPG = async (onImpression?: () => void): Promise<boolean> => {
   await playgamaPlugin()
   const bridge = getBridge()
   if (!bridge?.advertisement?.showRewarded) return false
@@ -302,7 +308,11 @@ export const showRewardedPG = async (): Promise<boolean> => {
       resolve(rewarded)
     }
     const off = bridge.advertisement?.on?.(evName, (state: string) => {
-      if (state === 'loading' || state === 'opened') { opened = true; return }
+      // The impression edge — see `showInterstitialPG`. Without it a player who
+      // watched a full rewarded video was handed `granted = false`, because the
+      // cap in `useAds` had already released the wait six seconds in.
+      if (state === 'opened') { opened = true; onImpression?.(); return }
+      if (state === 'loading') { opened = true; return }
       if (state === 'rewarded') {
         rewarded = true
         return

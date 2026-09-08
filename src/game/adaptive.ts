@@ -1,0 +1,437 @@
+/**
+ * ─── Adaptive difficulty, stages 1–5 ────────────────────────────────────────
+ *
+ * The opening five stages size their boss against the run that actually turned
+ * up, instead of against a curve authored for an imaginary average player.
+ *
+ * ─── The problem it exists to fix ───────────────────────────────────────────
+ *
+ * A fixed health bar cannot serve both ends of the funnel, and measured on the
+ * live build it was serving neither (`tests/sim/scratch.adaptive.test.ts`,
+ * before this file existed):
+ *
+ *   stage 5, `optimal`   468 survivors, 4 984 DPS against a 1 240 bar. The bar
+ *                        is worth a quarter of a second of fire; the three
+ *                        seconds the stopwatch showed were guard phases, and
+ *                        the health bar teleported between them in three
+ *                        instant chunks. Nothing about that reads as a fight.
+ *   stage 5, a 40-crowd  76 DPS against the same bar: never killed it, on any
+ *                        seed. Sixteen seconds of shooting and then a wipe.
+ *
+ * Both are the same bug from opposite sides. A player who reads the road
+ * perfectly and one who barely steers arrive at the same door with a **65×**
+ * spread in firepower, and one authored number cannot be a climax for both. So
+ * the number stops being authored.
+ *
+ * ─── What it promises ───────────────────────────────────────────────────────
+ *
+ * The boss is priced at *the firepower that walked into the arena × how long
+ * this player has earned the fight to last*. The second term is the whole
+ * design, and it runs the opposite way to the first: **playing well buys a
+ * SHORTER fight, not an easier one.**
+ *
+ *   near-perfect crowd   ~3 s of straight fire. The reward for a clean road is
+ *                        watching a boss that would flatten anybody else come
+ *                        apart under sustained fire — three seconds is long
+ *                        enough to feel like power and far too short to be a
+ *                        grind.
+ *   some mistakes        ~5 s.
+ *   a bad run            ~6 s.
+ *   1–12 survivors       ~6.8 s, and no more. This player cannot be helped and
+ *                        the design does not try: they will be smacked by every
+ *                        slam they fail to read and they will probably lose. If
+ *                        they hold their nerve, the bar is beatable — a fight
+ *                        that is unwinnable at the second the arena opens is a
+ *                        result screen with extra steps.
+ *
+ * ─── Why "seconds of straight fire" and not stopwatch seconds ───────────────
+ *
+ * The two are different, by a fixed and knowable amount: the boss owes the
+ * player a guard phase at each of `bossGuardGates`, and during one it is immune
+ * while it plants and swings. Measured, a phase costs about 1.15 s, so a stage
+ * with two of them (everything from stage 2) runs about 2.3 s longer on a
+ * stopwatch than it does on this clock, and stage 1 — one gate — about 1.15 s.
+ *
+ * The ladder is written in FIRE seconds because that is the number the player
+ * experiences as the fight: it is how long the bar is moving. Targeting the
+ * stopwatch instead would hand a strong player a three-second fight containing
+ * seven tenths of a second of shooting, which is precisely the melting bar this
+ * file was written to stop.
+ *
+ * The stopwatch times that fall out are measured rather than predicted, because
+ * the walk-in and the DPS a dodging crowd gives up by moving are both in them.
+ * Across the scripted policies on stages 1–5 they run **4.3 s** for a run that
+ * read the road, 5.8–6.3 s for a good one, 7.0–7.3 s for a sloppy one and
+ * 8.4 s for twelve survivors who dodge properly — inside the 5–8 s window the
+ * climax was always designed for (see `BOSS_BASE_HP`), with the bottom rung
+ * under the ten-second ceiling the brief sets for a hopeless crowd. The full
+ * table is in `tests/sim/REPORT.md`.
+ *
+ * ─── What it deliberately does NOT do ───────────────────────────────────────
+ *
+ * It reads the crowd, and only the crowd, to decide the target. It would be
+ * easy to score the run on DPS instead — the crates are where the real spread
+ * lives — but DPS is already the other half of the formula, and scoring on it
+ * too would mean a player who found every crate was charged for it twice. The
+ * crowd is also the thing the player can see: the HUD counts it, the gates
+ * print it, and "I had a big army so the boss went down fast" is a sentence a
+ * seven-year-old can say out loud.
+ *
+ * It also stops at stage 5. From stage 6 the authored curve takes over
+ * unchanged — by then the player has committed, the shop matters, and a boss
+ * whose bar is always exactly as big as you are is a boss your upgrades cannot
+ * beat.
+ */
+
+/**
+ * The last stage the adaptive bar covers.
+ *
+ * Five, because that is where the onboarding curves in `survival.ts` already
+ * let go, and because the retention data this was built from says the decision
+ * to stay or leave is made inside the first few stages: a session that survives
+ * them runs 5–22 minutes.
+ */
+export const ADAPTIVE_BOSS_STAGES = 5
+
+/** True for the stages whose boss is priced by this file. */
+export const adaptiveBossStage = (stage: number): boolean =>
+  stage >= 1 && stage <= ADAPTIVE_BOSS_STAGES
+
+/**
+ * ─── The ladder ─────────────────────────────────────────────────────────────
+ *
+ * Seconds of straight fire the boss should be worth, against the share of the
+ * perfect-play crowd the player actually assembled (`perfectSquadFor`).
+ *
+ * Read as a curve rather than as four cases: the value is interpolated between
+ * neighbouring rungs, so there is no cliff a player can feel themselves fall
+ * off, and no threshold worth gaming.
+ *
+ * The top rung is a PLATEAU rather than a peak at 1.0, and where it sits is the
+ * one number here that is about honesty rather than feel. `perfectSquadFor` is
+ * a ceiling nobody reaches: it assumes every bank is read correctly, every
+ * pumpable leaf is pumped for the whole approach, and not one survivor is lost
+ * on the road. Measured, the benchmark `optimal` policy lands at **0.75–0.86**
+ * of it, so 0.75 is where "played it about as well as it can be played"
+ * actually sits. A peak at 1.0 would reserve the best reward in the game for a
+ * run that cannot happen.
+ *
+ * ─── The one stage where the yardstick is soft ──────────────────────────────
+ *
+ * Stage 4 is an outlier and it is recorded here rather than tuned away, because
+ * the cause is a real property of that road. It is the first stage carrying
+ * boulders and barricades, and `optimal` finishes it having lost **50**
+ * survivors against 1 on stages 2, 3 and 5. Losses on a road with multipliers on
+ * it compound — twenty survivors lost before a `×2` leaf cost forty — so the
+ * doors-only ceiling over-states what stage 4 can actually hand over, and even a
+ * flawless run scores about 0.46 there.
+ *
+ * The consequence is that stage 4's climax runs a second or two longer than its
+ * neighbours' for the same quality of play. That is left alone: stage 4 is where
+ * this game stops being a tutorial by design (it is the stage that stops a
+ * no-input run dead), and a slightly heavier fight is the right note for it.
+ * Modelling road attrition to close the gap would mean inventing a per-body loss
+ * rate, and a made-up number in the yardstick is worse than a measured wart.
+ */
+export const ADAPTIVE_RUNGS: ReadonlyArray<{ perf: number; seconds: number }> = [
+  { perf: 0.75, seconds: 3.0 },
+  { perf: 0.45, seconds: 5.0 },
+  { perf: 0.20, seconds: 6.0 },
+  { perf: 0.00, seconds: 6.8 }
+]
+
+/**
+ * Crowds at or under this are the "cannot be helped" band from the brief.
+ *
+ * It is an ABSOLUTE count and not a share, because at this size the share stops
+ * describing anything: twelve survivors is a hopeless crowd on stage 2, where
+ * the ceiling is 252, and an equally hopeless one on stage 5, where it is 616.
+ * The ratio would call them 5 % and 2 % and hand out two different fights for
+ * the same doomed squad.
+ *
+ * Its only job is to pin the bottom of the ladder — see `adaptiveBossSeconds`.
+ * Everything else that happens to this player (a slam taking a third of them,
+ * a rage cadence they cannot outrun) is the ordinary game, untouched.
+ */
+export const ADAPTIVE_TINY_SQUAD = 12
+
+/**
+ * The band the target is allowed to end up in after the autobalancer has had
+ * its say.
+ *
+ * The multipliers that reach this file are unbounded in the direction that
+ * matters: `challengeFactor` reaches ×12.7 on a ninety-stage clear streak and
+ * `rewardDeclineFactor` stacks on top of it. Applied raw to a target, a
+ * returning player replaying stage 2 could be handed a ninety-second boss —
+ * which is not a harder climax, it is a broken one.
+ *
+ * The ceiling is set from the brief's own hard number. "Within max 10 seconds"
+ * is the one limit stated as a limit, and 7.5 s of fire is what leaves it
+ * intact once the guard phases, the walk-in and the DPS a dodging crowd gives
+ * up by moving are all paid: measured, the worst cell in the ladder — twelve
+ * survivors dodging properly on stage 1 — lands at 9.9 s.
+ *
+ * The floor is what stops the bar melting. Under about two seconds the player is
+ * watching chunks disappear rather than watching a bar go down, and that is the
+ * failure this file exists to fix.
+ */
+export const ADAPTIVE_MIN_SECONDS = 2.0
+export const ADAPTIVE_MAX_SECONDS = 7.5
+
+/**
+ * Seconds of straight fire this run has earned the boss to last.
+ *
+ * @param squad   survivors that walked into the arena.
+ * @param perfect the ceiling for this stage — `perfectSquadFor`.
+ */
+export const adaptiveBossSeconds = (squad: number, perfect: number): number => {
+  // A hopeless crowd gets the bottom rung outright, whatever the ratio says.
+  if (squad <= ADAPTIVE_TINY_SQUAD) return ADAPTIVE_RUNGS[ADAPTIVE_RUNGS.length - 1]!.seconds
+
+  const perf = perfect > 0 ? Math.max(0, squad / perfect) : 0
+  const top = ADAPTIVE_RUNGS[0]!
+  if (perf >= top.perf) return top.seconds
+
+  for (let i = 1; i < ADAPTIVE_RUNGS.length; i++) {
+    const hi = ADAPTIVE_RUNGS[i - 1]!
+    const lo = ADAPTIVE_RUNGS[i]!
+    if (perf < lo.perf) continue
+    const span = hi.perf - lo.perf
+    const t = span > 0 ? (perf - lo.perf) / span : 1
+    return lo.seconds + (hi.seconds - lo.seconds) * t
+  }
+  return ADAPTIVE_RUNGS[ADAPTIVE_RUNGS.length - 1]!.seconds
+}
+
+
+/**
+ * ─── The crowd does not survive the fight it is being sized for ─────────────
+ *
+ * A target of seven seconds spent against the DPS measured at the arena door is
+ * not seven seconds of fight, and the gap is not small. The boss's entire job is
+ * to kill survivors: by the fourth second the crowd producing that DPS is
+ * smaller than the crowd the bar was priced against, so the fight over-runs —
+ * measured on the first cut of this file, by 40 % at the bottom of the ladder,
+ * which is how a 7.3 s target became a 12.6 s stopwatch and broke the one
+ * promise the brief states as a limit.
+ *
+ * It is worst exactly where it can be afforded least. A slam takes
+ * `max(BOSS_MIN_KILL, squad × share)` — a floor and a share — so a crowd of
+ * twenty loses a far bigger PROPORTION of itself per swing than a crowd of four
+ * hundred, and it is already the crowd with the longest target. Rage compounds
+ * it: every swing thrown pulls the next one closer, so a long fight is not just
+ * more swings, it is more swings per second.
+ *
+ * So the bar is priced against the damage the crowd will actually deliver,
+ * integrated rather than multiplied. `expectedDamage` walks the fight forward in
+ * small steps with the real slam machinery — the same cadence, the same decay,
+ * the same floor — and adds up what the shrinking crowd puts out. That number IS
+ * the health, which is what makes the target mean what it says.
+ *
+ * It is a model, not a simulation, and it is wrong in one direction on purpose:
+ * see `SLAM_CONNECT_RATE`.
+ */
+
+/**
+ * How much of a guard phase costs the player, in seconds.
+ *
+ * The boss plants, becomes immune to gunfire, and stays that way until it has
+ * thrown the swing it owes. Measured across the arena ladder at 1.1–1.2 s a
+ * phase, and the count is `bossGuardGates(stage).length` — one on stage 1, two
+ * from stage 2.
+ *
+ * It matters here for one reason: the slam clock runs during a guard phase and
+ * the damage clock does not. A fight targeted at seven seconds of fire is
+ * nine-and-a-bit seconds of standing in front of a boss that is swinging the
+ * whole time, so the crowd decays for the longer of the two windows while paying
+ * out over the shorter one.
+ */
+export const GUARD_PHASE_SECONDS = 1.15
+
+/**
+ * Seconds at the top of the fight in which the crowd cannot hurt anything.
+ *
+ * The boss spawns twelve units up the road and walks down to its hold position,
+ * and `BULLET_RANGE` is 10.8 — so the first stretch of every climax is the crowd
+ * shooting at a creature that is not yet in reach, with the round's own flight
+ * time on top. Measured against a bar worth a sixth of a second of fire, the
+ * stopwatch still read 0.8 s.
+ *
+ * It buys the model nothing in damage and costs it real crowd: the boss's
+ * opening swing is already armed while this is running.
+ */
+export const WALK_IN_SECONDS = 0.7
+
+/**
+ * What one swing CYCLE costs the crowd, as a multiple of the swing's own bite.
+ *
+ * It reads like a dodge probability and it is not one, which is why it is not
+ * called one. A boss fight takes survivors in more ways than the swing that is
+ * being counted: a summoner's skeletons bite the crowd while the bar is being
+ * shot at, a healer's bolts land between casts, and the claw's rake has a core
+ * that ignores the budget entirely. None of those are worth modelling
+ * individually — they differ per kind and per seed — but together they are why
+ * the first cut of this file, which counted swings alone at two-thirds
+ * connection, still ran 25 % long at the bottom of the ladder.
+ *
+ * So the number is calibrated rather than derived: one swing's bite per cycle is
+ * where measured time-to-kill lands on target across the ladder
+ * (`tests/sim/scratch.adaptive.test.ts`). It over-states what a good dodger
+ * loses and under-states what a rooted player loses, and that spread is the
+ * fight rather than an error in the model — a player who reads the telegraphs
+ * finishes inside their target, which is exactly the reward dodging should buy.
+ */
+export const SLAM_CONNECT_RATE = 1
+
+/**
+ * Everything the model needs to know about how this boss hits.
+ *
+ * Passed in rather than imported so the file stays free of the simulation: the
+ * caller already resolves `bossHitShare()` and the `bossHitBudget` floor for
+ * this stage, difficulty and retry relief included, and re-deriving them here
+ * would be a second copy of the rules that could disagree with the first.
+ */
+export interface AdaptiveFight {
+  /** Survivors at the arena door. */
+  squad: number
+  /** `damage × fire rate × weapon multiplier` — DPS of ONE survivor. */
+  perSurvivorDps: number
+  /** Fraction of the crowd one swing takes — `bossHitShare()`. */
+  slamShare: number
+  /** …and the floor under it, in bodies — the `bossHitBudget` minimum. */
+  slamMinKill: number
+  /** Guard phases this stage's boss owes — `bossGuardGates(stage).length`. */
+  guardPhases: number
+  /** Seconds before the first swing. The boss opens on a full cooldown. */
+  openingCd: number
+  /** Cadence: first gap, how much each swing shortens it, and the floor. */
+  slamCd: number
+  slamCdDecay: number
+  slamCdMin: number
+}
+
+/** Integration step. Fine enough that a swing never lands a tenth late. */
+const MODEL_STEP = 1 / 60
+
+/**
+ * The damage this crowd will deliver over `seconds` of straight fire, given
+ * what the boss will do to it in the meantime.
+ */
+export const expectedDamage = (fight: AdaptiveFight, seconds: number): number => {
+  const fire = Math.max(0, seconds)
+  const wall = fire + WALK_IN_SECONDS + Math.max(0, fight.guardPhases) * GUARD_PHASE_SECONDS
+  if (wall <= 0) return 0
+
+  // Guard phases are spread evenly rather than placed at the health gates they
+  // actually sit on. Placing them properly would need the answer this function
+  // is computing, and it buys nothing: the crowd decays smoothly, so where the
+  // immune windows fall inside the fight changes the total by less than the
+  // seeds themselves resolve.
+  const firing = fire / wall
+
+  let squad = Math.max(0, fight.squad)
+  let cd = fight.openingCd
+  let slams = 0
+  let damage = 0
+
+  for (let t = 0; t < wall; t += MODEL_STEP) {
+    damage += squad * fight.perSurvivorDps * firing * MODEL_STEP
+    cd -= MODEL_STEP
+    if (cd > 0) continue
+    slams++
+    const bite = Math.max(fight.slamMinKill, Math.ceil(squad * fight.slamShare))
+    squad = Math.max(0, squad - bite * SLAM_CONNECT_RATE)
+    cd = Math.max(fight.slamCdMin, fight.slamCd - slams * fight.slamCdDecay)
+  }
+  return damage
+}
+
+/**
+ * The health an adaptive boss is worth: exactly the damage the run that turned
+ * up will land inside its target.
+ *
+ * @param seconds the target from `adaptiveBossSeconds`, already multiplied by
+ *                the difficulty setting and the autobalancer and clamped into
+ *                the band.
+ */
+export const adaptiveBossHp = (fight: AdaptiveFight, seconds: number): number =>
+  // A floor, in case a run somehow arrives with no measurable firepower at all:
+  // a boss with a one-point bar is a softlock dressed as a victory.
+  Math.max(30, Math.round(expectedDamage(fight, seconds)))
+
+/** Clamp a target into the band the fight is allowed to occupy. */
+export const clampAdaptiveSeconds = (seconds: number): number =>
+  Math.max(ADAPTIVE_MIN_SECONDS, Math.min(ADAPTIVE_MAX_SECONDS, seconds))
+
+/**
+ * ─── …and the swing stops being soft ────────────────────────────────────────
+ *
+ * The opening stages discount the boss's swing (`earlyBigHitMul`: 60 % on
+ * stages 1-3, 80 % on 4-5) so that a first-timer who cannot dodge yet comes out
+ * of their first boss fight with a squad rather than a result screen. That is
+ * the right protection for the road they are learning on, and it becomes the
+ * wrong one the moment the bar stops being fixed.
+ *
+ * Measured: with the adaptive bar in and the discount left alone, a run that
+ * never touches the screen cleared stage 3 on two seeds in three. The floor the
+ * game is built on — "the one instruction is tap to move, and a run that never
+ * obeys it does not clear a stage" — was gone, because the only thing that had
+ * ever enforced it was a health bar too big for a crowd that small.
+ *
+ * The brief is explicit about where the floor should live instead: a player who
+ * arrives with nothing "can't be helped and should be smacked by the boss
+ * attacks". So the discount is spent on the runs it was written for and taken
+ * back from the ones it was never meant to cover. A crowd that read the road
+ * keeps it; a crowd that did not gets the full authored swing, which is what
+ * turns "not enough damage" back into "losing" rather than "slow".
+ *
+ * It can only ever UNDO the discount. The swing never exceeds what the stage
+ * authored, so nothing here can invent a difficulty the design did not ask for.
+ *
+ * Stage 1 is untouched in practice: its swing is `TUTORIAL_SLAM_FRACTION`, a
+ * token worth a body or two whatever this returns, and a careless run is
+ * supposed to finish the tutorial.
+ */
+
+/** At or above this share of the perfect crowd, the discount applies in full. */
+export const SLAM_SOFT_PERF = 0.45
+/** At or below it, the swing is as heavy as this stage's rules allow. */
+export const SLAM_HARD_PERF = 0.2
+
+/**
+ * How hard the swing lands on a run that built nothing, against the swing the
+ * stage authored for everybody else.
+ *
+ * Above 1, which needs saying out loud: for the bottom of the ladder this stops
+ * being "no discount" and becomes a real thump. Undoing the discount alone was
+ * measured and was not enough — a run that never touched the screen still
+ * cleared stages 3 and 5, because three swings at the authored share take two
+ * thirds of a crowd and two thirds is survivable.
+ *
+ * It is bounded by the game's own ceiling rather than by a new one:
+ * `SLAM_FRACTION_MAX` is what the design already says a single swing may take,
+ * and the caller clamps to it. Nothing here can push the boss past a limit the
+ * game had not already written down.
+ */
+export const HOPELESS_SLAM_MUL = 1.45
+
+/**
+ * What one swing is worth against this run, as a multiplier on the stage's
+ * authored discount.
+ *
+ * Returns the beginner's discount for a crowd that read the road, and climbs to
+ * `HOPELESS_SLAM_MUL` for one that did not.
+ *
+ * @param authored `earlyBigHitMul(stage)` — what the stage grants a beginner.
+ */
+export const adaptiveBigHitMul = (authored: number, squad: number, perfect: number): number => {
+  // A hopeless crowd is charged in full whatever the ratio makes of it, for the
+  // same reason the ladder pins its bottom rung by head count: at this size the
+  // share has stopped describing anything.
+  if (squad <= ADAPTIVE_TINY_SQUAD) return HOPELESS_SLAM_MUL
+  const perf = perfect > 0 ? Math.max(0, squad / perfect) : 0
+  if (perf >= SLAM_SOFT_PERF) return authored
+  if (perf <= SLAM_HARD_PERF) return HOPELESS_SLAM_MUL
+  const t = (perf - SLAM_HARD_PERF) / (SLAM_SOFT_PERF - SLAM_HARD_PERF)
+  return HOPELESS_SLAM_MUL + (authored - HOPELESS_SLAM_MUL) * t
+}

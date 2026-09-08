@@ -115,6 +115,27 @@ const INTERSTITIAL_MAX_HOLD_MS = 30_000
  *  the start of each interstitial. Lets the wrapper distinguish "the SDK is
  *  bracketing this ad with pause/resume" from "no callbacks at all". */
 let interstitialPauseObserved = false
+
+// ─── Ad-open (impression) reporting ────────────────────────────────────────
+//
+// `useAds` arms a 6 s "the ad never opened" cap around every request and
+// releases the wait when it expires, so it can hand the game back after an SDK
+// that accepts a request and then answers nothing (Edge's Tracking Prevention
+// blocking the ad hosts mid-flight is the shipped example). The only thing that
+// tells it a REAL ad is on screen is the `onImpression` callback — without it,
+// the cap fires in the middle of every genuine ad: a fully-watched rewarded
+// video resolves after `granted` was already read as false, and the result
+// screen appears six seconds into an interstitial that is still playing.
+//
+// The callback is stored per in-flight ad and fired at most once.
+let adImpressionCb: (() => void) | null = null
+const reportAdOpened = (): void => {
+  const cb = adImpressionCb
+  if (!cb) return
+  adImpressionCb = null
+  try { cb() } catch (e) { console.warn('[gamepix] onImpression threw', e) }
+}
+
 let resumeResolvers: Array<() => void> = []
 const signalPlatformResume = (): void => {
   if (resumeResolvers.length === 0) return
@@ -232,6 +253,9 @@ const onPlatformPause = (): void => {
   // wrapper knows to hold the gate until the matching resume (see
   // `showMidgameAdGP`). Cleared at the start of each interstitial.
   interstitialPauseObserved = true
+  // The SDK only asks the game to pause once its ad layer is actually up, so
+  // this is the impression edge for the interstitial placement.
+  reportAdOpened()
   pauseGame()
 }
 const onPlatformResume = (): void => {
@@ -255,6 +279,78 @@ const onPlatformSoundOff = (): void => {
 const onPlatformSoundOn = (): void => {
   dlog('[gamepix] platform soundOn callback fired → unmuting audio')
   setPlatformAudioMuted(false)
+}
+
+// ─── Initial audio state ───────────────────────────────────────────────────
+//
+// `soundOn` / `soundOff` are CHANGE events: they fire on subsequent changes,
+// never for the state the portal is already in. So a player who arrives at an
+// already-muted portal — which is precisely what QA produces when it mutes the
+// chrome and reloads — is handled by this read and by nothing else.
+//
+// The v3 SDK is obfuscated and its state surface is not documented, so this
+// probes the plausible shapes the same defensive way every other call in this
+// file does, and reports what it found (or didn't) so a QA console shows
+// whether the portal answered at all.
+//
+// ⚠️ `soundOn` / `soundOff` are NOT probeable as state. We assigned our own
+// handlers to those slots a few lines above, so reading them back finds a
+// function and CALLING it would mute or unmute the game rather than report it.
+// They are excluded by construction — every name below is a getter name.
+const AUDIO_MUTED_NAMES = ['isMuted', 'getMuted', 'isSoundOff', 'muted'] as const
+const AUDIO_ENABLED_NAMES = [
+  'isSoundOn', 'isAudioOn', 'getSound', 'getAudio', 'getVolume',
+  'soundEnabled', 'audioEnabled', 'volume'
+] as const
+
+/** Normalise whatever the SDK answered into "is the portal asking for
+ *  silence?". `null` = it did not answer in a shape we understand. */
+const asMuted = (raw: unknown, polarity: 'muted' | 'enabled'): boolean | null => {
+  if (typeof raw === 'boolean') return polarity === 'muted' ? raw : !raw
+  // A volume-shaped answer. Zero is silence under either polarity name.
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return polarity === 'muted' ? raw > 0 : raw <= 0
+  }
+  return null
+}
+
+/** Read one name off one host, whether it is a getter function or a plain
+ *  property. Returns `undefined` when the name is simply absent. */
+const readAudioSlot = (host: any, name: string): unknown => {
+  if (!host) return undefined
+  const slot = host[name]
+  if (typeof slot === 'function') {
+    try { return slot.call(host) } catch { return undefined }
+  }
+  return slot
+}
+
+const probeInitialAudioState = (): void => {
+  if (!sdk) return
+  const hosts = [sdk, sdk.audio, sdk.sound, sdk.game].filter(
+    (h) => h && typeof h === 'object'
+  )
+  const groups: Array<readonly [ReadonlyArray<string>, 'muted' | 'enabled']> = [
+    [AUDIO_MUTED_NAMES, 'muted'],
+    [AUDIO_ENABLED_NAMES, 'enabled']
+  ]
+  for (const host of hosts) {
+    for (const [names, polarity] of groups) {
+      for (const name of names) {
+        const muted = asMuted(readAudioSlot(host, name), polarity)
+        if (muted === null) continue
+        console.info(
+          `[gamepix] initial audio state read: ${name} (${polarity}) → ${muted ? 'MUTED' : 'unmuted'}`
+        )
+        // Applied even when it reads "unmuted" so the flag matches the portal
+        // rather than merely defaulting to it — and so a later `soundOn` is a
+        // real edge instead of a no-op against a stale default.
+        setPlatformAudioMuted(muted)
+        return
+      }
+    }
+  }
+  dlog('[gamepix] no initial audio state on the SDK — assuming unmuted until a soundOff arrives')
 }
 
 const registerLifecycleHooks = (): void => {
@@ -518,12 +614,20 @@ const resolveAdMethod = (candidates: ReadonlyArray<string>): ResolvedAdMethod | 
   return null
 }
 
-const callAd = async (kind: 'reward' | 'interstitial'): Promise<boolean> => {
-  if (!sdk || !isGamepixSdkActive.value) return false
+const callAd = async (
+  kind: 'reward' | 'interstitial',
+  onImpression?: () => void
+): Promise<boolean> => {
+  adImpressionCb = onImpression ?? null
+  if (!sdk || !isGamepixSdkActive.value) {
+    adImpressionCb = null
+    return false
+  }
   const candidates = kind === 'reward' ? REWARD_METHODS : INTERSTITIAL_METHODS
   const resolved = resolveAdMethod(candidates)
   if (!resolved) {
     console.warn(`[gamepix] no ${kind} ad method found on SDK; available top-level keys:`, sdk && Object.keys(sdk))
+    adImpressionCb = null
     return false
   }
   // Unconditional (not debug-gated) — these are the per-ad audit logs that make
@@ -542,6 +646,15 @@ const callAd = async (kind: 'reward' | 'interstitial'): Promise<boolean> => {
     // must NOT await undefined or we'd misread it as `{success:false}`.
     const isPromise = raw && typeof (raw as any).then === 'function'
     console.info(`[gamepix] ${resolved.path} returned ${isPromise ? 'Promise' : typeof raw}`, raw)
+    // REWARDED has no other open edge on this SDK: GamePix opens its rewarded
+    // overlay synchronously with the call and never fires the platform pause
+    // callback for that placement (which is why `useAds` flips `isAdShowing`
+    // up front for rewarded). A dispatch that returned a Promise is therefore
+    // the best available "the ad layer is up" signal — and it is a far better
+    // one than nothing, which guillotines every real reward at 6 s. A rejected
+    // dispatch still resolves below, so a no-fill costs only the normal wait.
+    // Interstitials keep the honest signal: `onPlatformPause` reports those.
+    if (kind === 'reward' && isPromise) reportAdOpened()
     const result = isPromise ? await raw : raw
     // Print the result inline so we don't have to expand a collapsed
     // `Object` in the QA console. JSON.stringify guards against
@@ -557,19 +670,24 @@ const callAd = async (kind: 'reward' | 'interstitial'): Promise<boolean> => {
       `[gamepix] ${kind} ad call resolved: success=${successFlag} keys=[${Object.keys(result || {}).join(',')}] json=${resultJson}`
     )
     if (looksLikeBlockerResult(result)) isGamepixAdsBlocked.value = true
+    adImpressionCb = null
     return Boolean(result && result.success === true)
   } catch (e) {
     console.warn(`[gamepix] ${resolved.path} threw`, e)
+    adImpressionCb = null
     return false
   }
 }
 
-export const showRewardedAdGP = (): Promise<boolean> => callAd('reward')
+/** Show a rewarded ad. `onImpression` fires when the ad layer opens — see
+ *  `reportAdOpened` for why `useAds` cannot do without it. */
+export const showRewardedAdGP = (onImpression?: () => void): Promise<boolean> =>
+  callAd('reward', onImpression)
 
-export const showMidgameAdGP = async (): Promise<boolean> => {
+export const showMidgameAdGP = async (onImpression?: () => void): Promise<boolean> => {
   // Reset the per-ad pause marker so we only react to a pause from THIS ad.
   interstitialPauseObserved = false
-  const success = await callAd('interstitial')
+  const success = await callAd('interstitial', onImpression)
   // Safety net: if the SDK acknowledged an ad AND bracketed it with a pause
   // that hasn't been cleared by a resume yet, keep the unified pause gate held
   // (this call hasn't resolved, so `useAds` keeps `isAdShowing` true) until the
@@ -673,6 +791,11 @@ export const gamepixPlugin = (): Promise<void> => {
 
     isGamepixSdkActive.value = true
     registerLifecycleHooks()
+    // Immediately after registration and BEFORE the loading bracket, because
+    // the bracket is what releases the splash and the splash is what lets the
+    // first sound play. The change events only cover subsequent changes; this
+    // is the only thing that catches a portal that is already muted.
+    probeInitialAudioState()
     installParentMessageListener()
     installVisibilityBridge()
     probePortalStorage()

@@ -1019,3 +1019,70 @@ export const SUMMON_SPREAD = 3.2
  * a pocket ten units away.
  */
 export const SUMMON_AHEAD = 4.8
+
+// ─── When the wall has ended and the fight has not ──────────────────────────
+//
+// The budget above is a floor UNDER the fight: the wall stops, and a player who
+// is behind can still outlast it and win. What it cannot do is end a fight the
+// player has already lost in every way except the arithmetic.
+//
+// Reported from a live run: a summoner cut a squad down to ONE survivor, spent
+// its last wave, and then stood there. One unit's damage against a boss bar is
+// minutes of holding the trigger — and with nothing left on the road there was
+// nothing to lose to either. The player ground the fight out for TWELVE
+// MINUTES. That is the wave cap working exactly as designed and producing a
+// fight with no exit: not a win, not a wipe, just a bar moving too slowly to
+// watch. The cap is right; what was missing is that a decided fight has to be
+// allowed to END.
+//
+// So when the wall is spent AND the crowd is down to a handful, the summoner
+// starts calling single bodies up at its own FLANKS. Two things about that
+// placement are the whole point:
+//
+//   • they come up BESIDE THE BOSS, not ahead of the crowd like a wave, so they
+//     walk the length of the arena and a squad with anything left in it simply
+//     shoots them — this can never take a fight the player is still winning;
+//   • and they keep coming, faster each time, so a squad of one meets one and
+//     the run resolves. The player gets a death and a restart instead of a
+//     grind.
+//
+// It is deliberately NOT a rate on the boss's own budget: these bodies are
+// unpriced (`bossHpMulFor` knows nothing about them) because they only exist in
+// fights whose outcome is already settled, where pricing is meaningless.
+
+/**
+ * Squad size at or below which the fight is decided and only the clock is
+ * missing. Runs are hundreds strong by the stages that field a summoner, so a
+ * handful is not "a player in trouble", it is a player who has already lost —
+ * and the check is re-read every tick, so a crowd that recovers turns the
+ * whole mechanism back off.
+ */
+export const SUMMON_MERCY_SQUAD = 5
+
+/** Quiet beat between the crowd falling to that handful and the first flank
+ *  body, so a last survivor two seconds from a deserved kill still gets it. */
+export const SUMMON_MERCY_GRACE = 6
+
+/** Gap before the first flank body's successor... */
+export const SUMMON_MERCY_CD = 4
+
+/** ...multiplied by this after each one... */
+export const SUMMON_MERCY_RAMP = 0.8
+
+/** ...down to this floor. The ramp is what makes the fight's end GUARANTEED
+ *  rather than merely likely: a fixed trickle a stubborn squad can out-heal
+ *  would trade a twelve-minute grind for a longer one. */
+export const SUMMON_MERCY_CD_MIN = 1.2
+
+/** How far to the side of the boss they claw up — clear of its body, well
+ *  inside the rails. */
+export const SUMMON_MERCY_FLANK = 1.9
+
+// No cap on how many of these may be walking at once, and that is a measured
+// decision rather than an oversight. A body spends about 2.2 s crossing from
+// the boss's flank to the crowd and then trades itself against it, so at the
+// ramp's floor the road holds two of them — a ceiling was written here,
+// instrumented, and found never to bind in any fight, fought or kited, so it
+// was removed rather than shipped as a branch nothing could reach. The spec
+// beside the trickle pins the emergent number instead, which is what would
+// actually catch a future ramp that floods the road.

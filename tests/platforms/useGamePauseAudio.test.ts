@@ -14,14 +14,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { suspendSpy, resumeSpy } = vi.hoisted(() => ({
+const { suspendSpy, resumeSpy, killSpy } = vi.hoisted(() => ({
   suspendSpy: vi.fn(),
-  resumeSpy: vi.fn()
+  resumeSpy: vi.fn(),
+  killSpy: vi.fn()
 }))
 
 vi.mock('@/use/useAssets', () => ({
   suspendAllAudio: suspendSpy,
-  resumeAllAudio: resumeSpy
+  resumeAllAudio: resumeSpy,
+  killOneShotSfx: killSpy
 }))
 
 import {
@@ -57,6 +59,7 @@ beforeEach(() => {
   resetGate()
   suspendSpy.mockClear()
   resumeSpy.mockClear()
+  killSpy.mockClear()
   infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
   installGamePauseAudio()
 })
@@ -211,5 +214,40 @@ describe('setPlatformAudioMuted — portal sound-toggle (audio-only)', () => {
 
     setPlatformAudioMuted(false)    // drop the mute
     expect(resumeSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('hard-stops in-flight one-shots on mute, not just freezes them', () => {
+    // Suspending a Web Audio source FREEZES it; on unmute it thaws and tails,
+    // seconds after the sound that spawned it is gone. The mute edge has to end
+    // them outright.
+    setPlatformAudioMuted(true)
+    expect(killSpy).toHaveBeenCalledTimes(1)
+
+    // Unmuting must not kill anything — there is nothing in flight to end, and
+    // killing here would cut the first sound after the portal unmutes.
+    setPlatformAudioMuted(false)
+    expect(killSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes the mute as a REACTIVE ref the music start can read', async () => {
+    // The whole point of the type. A module boolean can only notify on an edge,
+    // and the flow that fails is the one with no edge to notify on: the portal
+    // is ALREADY muted at boot, the mute lands before the music element exists,
+    // `suspendAllAudio` suspends an empty audio layer, and the run's
+    // `startBattleMusic()` a second later sails through. `useSound.playWithFade`
+    // gates on this ref, so it has to be readable and it has to be watchable.
+    const { isPlatformAudioMuted } = await import('@/use/useGamePauseAudio')
+    const { watch } = await import('vue')
+    const seen: boolean[] = []
+    const stop = watch(isPlatformAudioMuted, (v) => seen.push(v), { flush: 'sync' })
+
+    expect(isPlatformAudioMuted.value).toBe(false)
+    setPlatformAudioMuted(true)
+    expect(isPlatformAudioMuted.value).toBe(true)
+    setPlatformAudioMuted(false)
+    // Both edges observable — the false edge is what re-fires the music start
+    // for a player who unmutes a portal mid-run.
+    expect(seen).toEqual([true, false])
+    stop()
   })
 })

@@ -10,9 +10,12 @@ import {
   GATE3_LEAF_X,
   GATE_LEAF_HALF,
   GATE_LEAF_X,
-  GATE_MAX_VALUE, GATE_SUB_MAX,
+  GATE_MAX_VALUE, GATE_MUL_MAX, GATE_SCALE_STEP, GATE_SUB_MAX,
+  MAX_SQUAD,
+  START_SQUAD,
   earlyCrateHpMul, earlyMinibossHpMul, earlyObstacleKeep, earlyPackCap, earlyPackMul,
   gateMulOpen,
+  gatePumpStep,
   LANE_HALF,
   stageLength,
   stageSpeed,
@@ -338,23 +341,20 @@ export const MINIBOSS_STAGE_THIRD = 20
 export const MINIBOSS_TUTORIAL = MINIBOSS_FIRST * 0.4
 
 /**
- * How much tougher stage 1's BOSS is than the elite the player just beat.
+ * Stage 1's boss used to be priced here, as `tutorialBossHp` — three times the
+ * tutorial elite, an absolute number chosen so a first-time player could not
+ * lose their first climax.
  *
- * The whole read is "that thing again, but bigger". It is the same creature
- * (`bossDesign`), at boss scale, and it has to fall over — a first-time player
- * arrives at it with a squad they only half understand, and the point of the
- * beat is to end the level on a win, not to find out whether they can be
- * stopped. Three times a tutorial elite is a handful of seconds of held fire:
- * long enough to be a fight with a shape, short enough that nobody loses it.
+ * It is gone because the guarantee it bought is now bought better: stages 1-5
+ * price their boss against the crowd that actually reaches the arena
+ * (`game/adaptive.ts`), so a first-timer with a small squad gets the gentle
+ * fight the constant was protecting, and the returning player who used to
+ * delete the same boss in half a second gets a real one. A fixed number could
+ * only ever be right for one of the two.
  *
- * Expressed against `MINIBOSS_TUTORIAL` rather than as an absolute so a balance
- * pass on the elites carries the boss with it.
+ * The stage-1 ELITE keeps its own price (`MINIBOSS_TUTORIAL`) — it is a beat on
+ * the road rather than the climax, and nothing adaptive reads it.
  */
-export const TUTORIAL_BOSS_MULT = 3
-
-/** Absolute HP for stage 1's boss, before difficulty and relief. */
-export const tutorialBossHp = (): number =>
-  Math.round(minibossHp(1, false, 'tutorial') * TUTORIAL_BOSS_MULT)
 
 /**
  * The longest a player may go without being asked to choose something.
@@ -4194,4 +4194,89 @@ export const buildTrack = (stage: number): Track => {
     })()
 
   return { stage, arenaY, bossY, length, events }
+}
+
+/**
+ * ─── What a perfect run could possibly arrive with ──────────────────────────
+ *
+ * The ceiling on the crowd, from the doors alone: walk the road, take the best
+ * leaf of every bank, pump whichever leaf is being taken for the whole approach,
+ * and lose nobody on the way. It is deliberately OPTIMISTIC — nothing here pays
+ * for a foe's bite or a pillar's graze — because it is a yardstick rather than a
+ * prediction. `adaptiveBossSeconds` divides the crowd the player ACTUALLY
+ * brought by this, and the ratio is what "how well did that go" means.
+ *
+ * A track is deterministic in its stage number (`buildTrack` seeds its RNG from
+ * it), so this is a pure function of the stage plus what the shop was worth when
+ * the stage opened — which is why the shop's two crowd tracks are arguments
+ * rather than reads. A player who bought Squad to level ten should not be told
+ * they played badly for arriving with the crowd their purchase guaranteed.
+ *
+ * ─── The pump model ─────────────────────────────────────────────────────────
+ *
+ * `GATE_PUMP_TICKS_IDEAL` is the one assumption in here, and it is measured
+ * rather than chosen: `gateAddBase`'s comment records the in-range approach as
+ * "~2.0 s (four ticks)" at the stages this covers, after the guns stopped
+ * outranging the camera. Four is therefore what a player who commits the moment
+ * a bank enters range actually banks — the `optimal` policy's whole edge over
+ * `good`, which commits late and pumps nothing.
+ *
+ * It is applied to the WINNING leaf only. That is the mechanic: the crowd has
+ * one stream of fire, so the door being invested in is the door being walked
+ * through, and a bank's other leaves stay where they were printed.
+ */
+export const GATE_PUMP_TICKS_IDEAL = 4
+
+/** What a leaf is worth after a full approach spent firing at it. */
+const pumpedValue = (leaf: GateLeaf, stage: number): number => {
+  // A hostile door is never pumped, because a perfect player never points the
+  // crowd at one — and pumping `-N` or `÷N` makes it WORSE, so assuming it
+  // happened would understate the ceiling rather than overstate it.
+  if (leaf.op === 'sub' || leaf.op === 'div') return leaf.value
+  if (leaf.op === 'mul') {
+    return Math.min(GATE_MUL_MAX, Math.round(
+      (leaf.value + GATE_SCALE_STEP * GATE_PUMP_TICKS_IDEAL) * 10
+    ) / 10)
+  }
+  return Math.min(GATE_MAX_VALUE, leaf.value + gatePumpStep(stage) * GATE_PUMP_TICKS_IDEAL)
+}
+
+/** The crowd after taking `leaf`, given the crowd that reached it. */
+const squadAfter = (squad: number, leaf: GateLeaf, stage: number, payoutBonus: number): number => {
+  const value = pumpedValue(leaf, stage)
+  switch (leaf.op) {
+    // Mirrors `claimBank`: an `add` leaf pays its face value scaled by the
+    // Squad track's payout bonus, a `mul` leaf pays a share of whoever came
+    // through, and the two hostile ops bill the crowd that walked in.
+    case 'add': return squad + Math.round(value * payoutBonus)
+    case 'mul': return squad + Math.round(squad * (value - 1))
+    case 'sub': return Math.max(0, squad - Math.max(1, Math.round(value)))
+    case 'div': return Math.max(0, Math.floor(squad / Math.max(2, value)))
+  }
+}
+
+/**
+ * The biggest crowd this stage's doors can possibly hand a player.
+ *
+ * @param startSquad what the run opens with — `startSquad.value` from the shop,
+ *                   NOT the bare `START_SQUAD`, so an upgraded save is measured
+ *                   against the ceiling its own purchases raised.
+ * @param payoutBonus `gatePayoutBonus.value`, for the same reason.
+ */
+export const perfectSquadFor = (
+  stage: number,
+  startSquad: number = START_SQUAD,
+  payoutBonus = 1
+): number => {
+  let squad = Math.max(1, Math.round(startSquad))
+  for (const e of buildTrack(stage).events) {
+    if (e.kind !== 'gates' || e.leaves.length === 0) continue
+    let best = 0
+    for (const leaf of e.leaves) best = Math.max(best, squadAfter(squad, leaf, stage, payoutBonus))
+    // The same ceiling the doors themselves are clipped by, applied in the same
+    // place — a reference that promised more than a gate can spawn would report
+    // every late run as a failure.
+    squad = Math.min(MAX_SQUAD, best)
+  }
+  return squad
 }
