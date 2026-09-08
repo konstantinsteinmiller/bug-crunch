@@ -360,18 +360,37 @@ describe('the roller owns half the road', () => {
     expect(hits, 'the ball rolled through the crowd without billing it').toBe(1)
     expect(squadAtHit, 'the crowd was gone before the ball got there').toBeGreaterThan(40)
 
-    // The share, exactly: `ROLLER_FRACTION` of whatever was standing there, with
-    // `BOSS_MIN_KILL` under it and the onboarding cut over both — stage 4 is
-    // inside `earlyBigHitMul`'s window, and every percentage hit in the game
-    // carries that cut. Computed from the constants rather than from a snapshot,
-    // so a tuning pass moves the test along with the game.
+    // TWO tolls, and the test can only pin one of them exactly.
+    //
+    // The band between the stone and `ROLLER_R + UNIT_R` is a share:
+    // `ROLLER_FRACTION` of whatever was standing there, with `BOSS_MIN_KILL`
+    // under it and the onboarding cut over both — stage 4 is inside
+    // `earlyBigHitMul`'s window, and every percentage hit in the game carries
+    // that cut. Computed from the constants rather than from a snapshot, so a
+    // tuning pass moves the test along with the game.
+    //
+    // Inside the stone there is no share at all: everyone whose centre is within
+    // `rollerCoreR()` dies, the boulder rule (`crushAgainst`) applied to the
+    // boulder that moves. How many bodies that is depends on where the crowd's
+    // own disc sat under the ball, which this test cannot know without
+    // reimplementing `slotPos` — so the share is asserted as a FLOOR and the
+    // crowd as a ceiling, with the gap between them being the core's work.
     const cut = earlyBigHitMul(ROLLER_STAGE)
     const share = ROLLER_FRACTION * endlessPressure(ROLLER_STAGE)
-    const want = Math.max(
+    const grazeOnly = Math.max(
       Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
       Math.ceil(squadAtHit * share * cut)
     )
-    expect(took, `a roll took ${took} from a crowd of ${squadAtHit}`).toBe(want)
+    expect(took, `a roll took ${took} from a crowd of ${squadAtHit}`)
+      .toBeGreaterThan(grazeOnly)
+    // Standing in front of it is supposed to be the expensive answer, so the
+    // core has to be worth substantially more than the graze it replaced —
+    // not a rounding difference that a future tweak could erase unnoticed.
+    expect(took).toBeGreaterThan(grazeOnly * 2)
+    // …but half the road is still a dodge and not a coin flip: a crowd that
+    // stood in the lane loses a lot and is not deleted. `ROLLER_CORE_FRACTION`
+    // is half the stone precisely because 1 walls the balance benchmark.
+    expect(took, 'the ball wiped a crowd it only rolled over').toBeLessThan(squadAtHit)
     // …and it does not get a second go at the same crowd on the way out. The
     // ball is not a body that bites, and it is not solid: one roll, one bill.
     expect(afterwards, 'the ball billed the same crowd twice for one roll').toBe(0)

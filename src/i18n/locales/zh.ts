@@ -95,6 +95,13 @@ export default {
     'of': '共 {n} 人'
   },
 
+  'chest': {
+    'label': '宝箱',
+    'ready': '打开宝箱获得 {n} 金币',
+    'filling': '宝箱填充中',
+    'spent': '宝箱已空，明天再来'
+  },
+
   'skills': {
 
     'grenade': '手雷',

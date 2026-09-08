@@ -196,8 +196,11 @@ describe('the id is the row, so it may never move', () => {
       return reply({ rank: 3, best: body.score, total: 250, board: BOARD })
     })
 
+    // `force` on the second, because mid-run clears are throttled to one write
+    // per `WRITE_MIN_GAP_MS` — this case is about the ID being stable across
+    // two writes, not about when the second one is allowed to happen.
     await lb.reportRun(5, 100)
-    await lb.reportRun(9, 200)
+    await lb.reportRun(9, 200, { force: true })
 
     expect(posts()).toHaveLength(2)
     expect(posts()[0]!.body!.id).toBe(posts()[1]!.body!.id)
@@ -276,8 +279,12 @@ describe('rank derivation from the cached table', () => {
 
     // The server counted every row, not just the published hundred.
     expect(lb.rankFor(42)).toBe(61)
-    expect(lb.rankFor(99)).toBe(61)
-    // …but it says nothing about a LOWER score, which falls back to the table.
+    // …and says nothing about ANY other score, higher or lower, both of which
+    // fall back to the table. It used to answer for everything at or above the
+    // submitted score, which froze a climbing player's rank at whatever it was
+    // when they last posted — invisible only while the client posted on every
+    // single stage clear.
+    expect(lb.rankFor(99)).not.toBe(61)
     expect(lb.rankFor(40)).toBe(2)
   })
 })

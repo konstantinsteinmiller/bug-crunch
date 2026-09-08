@@ -95,6 +95,13 @@ export default {
     'of': 'de {n} jugadores'
   },
 
+  'chest': {
+    'label': 'Cofre del tesoro',
+    'ready': 'Abrir el cofre por {n} monedas',
+    'filling': 'Cofre del tesoro: llenándose',
+    'spent': 'Cofre del tesoro: vacío hasta mañana'
+  },
+
   'skills': {
 
     'grenade': 'Granada',

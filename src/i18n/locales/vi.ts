@@ -95,6 +95,13 @@ export default {
     'of': 'trên {n} người chơi'
   },
 
+  'chest': {
+    'label': 'Rương báu',
+    'ready': 'Mở rương báu nhận {n} xu',
+    'filling': 'Rương báu đang đầy dần',
+    'spent': 'Rương báu trống đến ngày mai'
+  },
+
   'skills': {
 
     'grenade': 'Lựu đạn',

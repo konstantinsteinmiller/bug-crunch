@@ -1,5 +1,5 @@
 import {
-  blob, cel, ink, rough, densify, fillShape, tones, terminator, type Pt
+  blob, cel, ink, rough, densify, fillShape, tones, terminator, trace, type Pt
 } from '@/game/inkArt'
 import { INK, SHADOW_DIR } from '@/game/monsterKit'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
@@ -10,16 +10,17 @@ import { spriteFor } from '@/game/art'
  * ─── HUD art ────────────────────────────────────────────────────────────────
  *
  * The things the DOM side of the game shows that the art pipeline can repaint:
- * the result screen's banner, the shop chest and the two skill icons. They
- * live here rather than in the renderer because nothing on the field blits
- * them — Vue does — but the bench and the playground still need ONE painter
- * per drawable that the runtime provably shows, which is the pipeline's first
- * rule: a reference drawn from a lookalike proves nothing.
+ * the result screen's banner, the idle chest, the shop's forge and the two
+ * skill icons. They live here rather than in the renderer because nothing on
+ * the field blits them — Vue does — but the bench and the playground still
+ * need ONE painter per drawable that the runtime provably shows, which is the
+ * pipeline's first rule: a reference drawn from a lookalike proves nothing.
  *
- * The banner is drawn ON A CANVAS and handed to CSS as a data URL, so the
- * drawing on the result screen and the reference on the sheet are one
- * function. The icons are the shared SVG glyphs filled through `Path2D`, so
- * the reference is exactly the silhouette the button shows.
+ * Two of them are drawn ON A CANVAS and handed to the DOM as a data URL — the
+ * banner, for a `border-image`, and the forge, for an `<img>` — so the drawing
+ * the player sees and the reference on the sheet are one function. The rest
+ * are the shared SVG glyphs filled through `Path2D`, so their reference is
+ * exactly the silhouette the button shows.
  */
 
 /** Draw the procedural version even when a painting is available. */
@@ -161,11 +162,201 @@ export const blitBanner = (
   ctx.drawImage(src, sw - capS, 0, capS, sh, x + w - capD, y, capD, h)
 }
 
+// ─── The upgrade shop's mark ────────────────────────────────────────────────
+
+/**
+ * The shop button's forge: a blackened anvil with a chevron of hot gold rising
+ * off its face.
+ *
+ * It is DRAWN rather than filled from a glyph, which makes it the odd one out
+ * among the icons below, and the reason is the button it sits on. The shop
+ * chip is the one control on the HUD the game actively wants pressed — it
+ * carries an unspent-coins badge and a one-shot spotlight — and it used to
+ * wear the painted chest. That chest now belongs to the idle reward in the
+ * wallet column, because two buttons that do different things may not be the
+ * same drawing. What the shop needed back was not the glyph underneath it: a
+ * flat white silhouette beside a painted chest is not a mark, it is the
+ * absence of one.
+ *
+ * Centred on the origin, `size` px square — the same contract every icon here
+ * keeps, so `paintUiIcon` can dispatch to it and the reference sheet, the
+ * playground and the button all show one drawing. A painting at
+ * `images/ui/forge.webp` replaces it wholesale; `artSheet.ts` carries the
+ * prompt that would produce one.
+ */
+export const paintForge = (ctx: CanvasRenderingContext2D, size: number): void => {
+  const S = size
+  /** Authored in fractions of the box, centred on the origin. */
+  const P = (pts: readonly (readonly [number, number])[]): Pt[] =>
+    pts.map(([x, y]) => [x * S, y * S] as Pt)
+
+  const iron = tones('#525a6b', 1.3)
+
+  // ── The anvil ──
+  //
+  // Every point is DOUBLED, which is not decoration: `trace` makes each
+  // authored point the control point of a quadratic, so a lone vertex rounds
+  // off — and the first draft of this mark, authored with single points at the
+  // waist, smoothed its own pinch away and read as a mushroom on a plinth. An
+  // anvil is a hard object; doubling makes `trace` pass through each vertex
+  // with a corner and leaves the hand-drawn wobble to `rough`.
+  //
+  // The three masses, in the proportions that make the silhouette legible at
+  // 24 px: a face nearly the full width and a fifth of the height, a waist a
+  // QUARTER of that width, and a foot almost as wide as the face. The horn is
+  // a wedge off the left at face height, not a spur underneath it.
+  const anvil = rough(densify(P([
+    [-0.49, 0.055], [-0.49, 0.055],
+    [-0.33, -0.02], [-0.33, -0.02],
+    [-0.30, -0.055], [-0.30, -0.055],
+    [0.35, -0.055], [0.35, -0.055],
+    [0.42, -0.005], [0.42, -0.005],
+    [0.42, 0.115], [0.42, 0.115],
+    [0.35, 0.165], [0.35, 0.165],
+    [0.145, 0.165], [0.145, 0.165],
+    [0.10, 0.225], [0.10, 0.225],
+    [0.10, 0.30], [0.10, 0.30],
+    [0.30, 0.345], [0.30, 0.345],
+    [0.335, 0.385], [0.335, 0.385],
+    [0.335, 0.46], [0.335, 0.46],
+    [-0.335, 0.46], [-0.335, 0.46],
+    [-0.335, 0.385], [-0.335, 0.385],
+    [-0.30, 0.345], [-0.30, 0.345],
+    [-0.10, 0.30], [-0.10, 0.30],
+    [-0.10, 0.225], [-0.10, 0.225],
+    [-0.145, 0.165], [-0.145, 0.165],
+    [-0.30, 0.165], [-0.30, 0.165],
+    [-0.335, 0.13], [-0.335, 0.13]
+  ]), 3), S * 0.004, 71, 0.9)
+
+  cel(ctx, anvil, iron, {
+    shade: terminator(anvil, SHADOW_DIR, 0.18, 0.09, 311),
+    deep: terminator(anvil, SHADOW_DIR, 0.55, 0.07, 312),
+    lit: terminator(anvil, SHADOW_DIR + Math.PI, 0.70, 0.06, 313)
+  })
+
+  // The face, still hot from whatever was last struck on it — a hand's width
+  // of heat on the TOP SURFACE only. The first draft ran this gradient down
+  // the whole face and turned the iron brown; what says "forge" is the
+  // contrast between a hot edge and cold metal, not a warm wash over both.
+  ctx.save()
+  ctx.beginPath()
+  trace(ctx, anvil)
+  ctx.clip()
+  const ember = ctx.createLinearGradient(0, -0.06 * S, 0, 0.035 * S)
+  ember.addColorStop(0, 'rgba(255, 186, 86, 0.55)')
+  ember.addColorStop(1, 'rgba(255, 120, 24, 0)')
+  ctx.fillStyle = ember
+  ctx.fillRect(-0.5 * S, -0.06 * S, S, 0.095 * S)
+  ctx.restore()
+
+  ink(ctx, anvil, { width: S * 0.05, color: INK, seed: 314, breakUp: 0.2 })
+
+  // ── The chevron ──
+  //
+  // The half of the mark that says "upgrade", so its point has to be a point:
+  // tripled at the apex, at the inner notch and at each tip.
+  const chevron = rough(densify(P([
+    [0, -0.47], [0, -0.47], [0, -0.47],
+    [0.33, -0.21], [0.33, -0.21],
+    [0.33, -0.095], [0.33, -0.095],
+    [0, -0.335], [0, -0.335], [0, -0.335],
+    [-0.33, -0.095], [-0.33, -0.095],
+    [-0.33, -0.21], [-0.33, -0.21]
+  ]), 3), S * 0.003, 91, 1.1)
+
+  // Molten, so it is lit from ABOVE along its own length rather than cel-shaded
+  // from the scene's light: a terminator across a shape this thin cuts a hard
+  // diagonal through one arm and reads as a crease, not as a form.
+  ctx.save()
+  ctx.shadowColor = 'rgba(255, 168, 40, 0.95)'
+  ctx.shadowBlur = S * 0.12
+  fillShape(ctx, chevron, '#ffc340')
+  ctx.restore()
+  ctx.save()
+  ctx.beginPath()
+  trace(ctx, chevron)
+  ctx.clip()
+  const molten = ctx.createLinearGradient(0, -0.47 * S, 0, -0.09 * S)
+  molten.addColorStop(0, '#fff0b8')
+  molten.addColorStop(0.45, '#ffc63e')
+  molten.addColorStop(1, '#e8830f')
+  ctx.fillStyle = molten
+  ctx.fillRect(-0.5 * S, -0.5 * S, S, S)
+  ctx.restore()
+  ink(ctx, chevron, { width: S * 0.032, color: INK, seed: 323, breakUp: 0.3 })
+
+  // ── Sparks ──
+  // Struck off the chevron's tips and thrown outward, clear of both shapes, so
+  // they read as sparks rather than as dirt on the glyph.
+  for (const [sx, sy, sr, seed] of [
+    [-0.42, -0.26, 0.030, 41], [-0.33, -0.40, 0.019, 42], [0.41, -0.31, 0.024, 43]
+  ] as const) {
+    const spark = blob(sx * S, sy * S, sr * S, sr * S, seed, 0.22)
+    ctx.save()
+    ctx.shadowColor = 'rgba(255, 200, 90, 0.9)'
+    ctx.shadowBlur = S * 0.06
+    fillShape(ctx, spark, '#ffe6a8')
+    ctx.restore()
+  }
+}
+
+let drawnForge: HTMLCanvasElement | null = null
+let drawnForgeUrl: string | null = null
+
+/**
+ * The drawn forge as a data URL, for an `<img>` — see `ArtIcon`.
+ *
+ * Baked once at 256 so it stays crisp on a 3× phone (the chip tops out around
+ * 55 px), and kept for the page: the bake is a few hundred path operations and
+ * the mark is on screen for the whole run. Returns `null` where a canvas
+ * cannot be encoded at all (jsdom, a locked-down context), which is exactly
+ * when the glyph underneath has to take over.
+ */
+export const forgeDataUrl = (): string | null => {
+  if (drawnForgeUrl !== null) return drawnForgeUrl
+  try {
+    if (!drawnForge) {
+      const c = document.createElement('canvas')
+      c.width = 256
+      c.height = 256
+      const ctx = c.getContext('2d')
+      if (!ctx) return null
+      ctx.translate(128, 128)
+      paintForge(ctx, 256)
+      drawnForge = c
+    }
+    const url = drawnForge.toDataURL('image/png')
+    // jsdom returns a 1×1 stub rather than throwing; anything this short is
+    // not an image and must fall through to the glyph.
+    if (url.length < 128) return null
+    drawnForgeUrl = url
+    return url
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The DOM-side marks this module can DRAW when the pipeline has not painted
+ * them — keyed the way `spriteFor` keys the paintings, so `ArtIcon` can ask
+ * one question and get the best answer available.
+ */
+const UI_DRAWN_MARKS: Record<string, () => string | null> = {
+  forge: forgeDataUrl
+}
+
+/** A drawn stand-in for `images/ui/<id>.webp`, or `null` if there is none. */
+export const drawnUiMark = (id: string): string | null =>
+  UI_DRAWN_MARKS[id]?.() ?? null
+
 // ─── The icons ──────────────────────────────────────────────────────────────
 
 /** The HUD marks the pipeline paints, and the glyph each one stands in for. */
 export const UI_ICON_GLYPH = {
+  // The idle reward on the wallet column — NOT the shop, which is `forge`.
   chest: 'chest',
+  forge: 'anvil',
   'skill-grenade': 'bomb',
   'skill-shield': 'shield'
 } as const satisfies Record<string, GameIconName>
@@ -187,6 +378,11 @@ export const paintUiIcon = (
     ctx.drawImage(painted, -size / 2, -size / 2, size, size)
     return
   }
+  // The forge has a drawing of its own — every other mark here IS its glyph.
+  if (id === 'forge') {
+    paintForge(ctx, size)
+    return
+  }
   const path = new Path2D(ICON_PATHS[UI_ICON_GLYPH[id]].join(''))
   ctx.save()
   ctx.translate(-size / 2, -size / 2)
@@ -201,7 +397,3 @@ export const bannerOutline = (w: number, h: number): Pt[] => {
   const notch = BANNER.cap * w * 0.55
   return [[0, h * 0.07], [w, h * 0.07], [w - notch, h / 2], [w, h * 0.93], [0, h * 0.93], [notch, h / 2]]
 }
-
-// `fillShape` is part of the vocabulary the banner may grow into (a rune band,
-// a tear); keep the import honest until it does.
-void fillShape

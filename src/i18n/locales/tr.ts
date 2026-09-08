@@ -95,6 +95,13 @@ export default {
     'of': '{n} oyuncu içinde'
   },
 
+  'chest': {
+    'label': 'Hazine sandığı',
+    'ready': 'Sandığı {n} altın karşılığında aç',
+    'filling': 'Hazine sandığı doluyor',
+    'spent': 'Hazine sandığı yarına kadar boş'
+  },
+
   'skills': {
 
     'grenade': 'El Bombası',

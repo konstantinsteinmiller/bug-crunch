@@ -66,6 +66,7 @@ import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import FReward from '@/components/atoms/FReward.vue'
 import FButton from '@/components/atoms/FButton.vue'
 import CoinBadge from '@/components/organisms/CoinBadge.vue'
+import TreasureChest from '@/components/organisms/TreasureChest.vue'
 import OptionsModal from '@/components/organisms/OptionsModal.vue'
 import UpgradeModal from '@/components/organisms/UpgradeModal.vue'
 import LeaderboardModal from '@/components/organisms/LeaderboardModal.vue'
@@ -822,7 +823,11 @@ const presentResult = async (): Promise<void> => {
   // between the player and their coins for the full 6 s timeout. `reportRun`
   // swallows every failure and only writes when the player beat their own
   // posted best, so the usual cost of this line is nothing at all.
-  void reportRun(bestStage.value, summary.value.peakSquad)
+  //
+  // `force` because the run is OVER. Mid-run clears are throttled — a climb
+  // used to post once per stage — but the score a player finished on is the one
+  // the board must end up with, so this call skips the gap.
+  void reportRun(bestStage.value, summary.value.peakSquad, { force: true })
 
   // The first cleared stage is the end of onboarding: the player has seen every
   // primer that matters and a returning player must never be taught again.
@@ -1167,8 +1172,17 @@ onUnmounted(() => {
             :elite-hp="eliteHp01"
             :challenge="challenge"
           )
+        //- The wallet column: what the player has, and the one thing on the
+        //- HUD that hands them more of it for free. The chest sits UNDER the
+        //- badge because that is where its coins fly to — the payout is a
+        //- three-inch journey the eye can follow, not a number that changes.
+        //-
+        //- Hidden with the result screen, like every other run readout: the
+        //- overlay owns the screen, and a chest that becomes claimable behind
+        //- a modal is a tap the player cannot make.
         div.scene__wallet
           CoinBadge(ref="coinBadgeRef")
+          TreasureChest(v-if="!showResult" :target-el="coinBadgeEl")
 
       //- Control primer, centred under the top bar — except the guard primer,
       //- which drops to mid-screen so it doesn't sit on the boss's shield.
@@ -1235,14 +1249,17 @@ onUnmounted(() => {
 
         div.scene__shop
           span.scene__spotlight(v-if="showShopSpotlight") {{ t('upgrades.spotlight') }}
-          //- The chest — the same one the result screen's upgrade button
+          //- The forge — the same mark the result screen's upgrade button
           //- wears, because both open the same modal and the second must not
-          //- have to be learned all over again. The art pipeline can repaint
-          //- it (`art`); the glyph stands in until it does.
+          //- have to be learned all over again. It was the chest until the
+          //- chest became the idle reward above; two controls that do
+          //- different things may not be one drawing. `ArtIcon` shows the
+          //- painting if the pipeline has made one, the canvas drawing from
+          //- `uiArt.paintForge` otherwise, and the flat glyph under both.
           FHudButton(
             tone="green"
-            icon="chest"
-            art="chest"
+            icon="anvil"
+            art="forge"
             :attention="showShopSpotlight"
             :aria-label="t('upgrades.title')"
             @click="openUpgrades"
@@ -1361,8 +1378,8 @@ onUnmounted(() => {
               div.result__shop-tip(v-if="showUpgradeHint") {{ t('result.upgradeHint') }}
             FButton(
               icon-only
-              icon="chest"
-              art="chest"
+              icon="anvil"
+              art="forge"
               :size="resultCompact ? 'sm' : 'md'"
               type="secondary"
               :is-disabled="adInFlight"
@@ -1421,8 +1438,16 @@ onUnmounted(() => {
   flex: 1 1 auto
   min-width: 0
 
+// The chest hangs under the badge and is CENTRED on it rather than flushed to
+// the screen edge: its payout chip is wider than the chest itself and centred
+// on it, so a right-aligned chest would hang that chip over the safe-area
+// inset on a notched phone.
 .scene__wallet
   flex: 0 0 auto
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: clamp(0.35rem, 1.8vw, 0.6rem)
   pointer-events: auto
 
 .scene__hint

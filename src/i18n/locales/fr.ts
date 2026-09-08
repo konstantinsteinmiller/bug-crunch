@@ -95,6 +95,13 @@ export default {
     'of': 'sur {n} joueurs'
   },
 
+  'chest': {
+    'label': 'Coffre au trésor',
+    'ready': 'Ouvrir le coffre pour {n} pièces',
+    'filling': 'Coffre au trésor : en cours de remplissage',
+    'spent': 'Coffre au trésor : vide jusqu\'à demain'
+  },
+
   'skills': {
 
     'grenade': 'Grenade',

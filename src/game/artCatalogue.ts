@@ -37,7 +37,8 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero'>, readonl
   // procedural gravel stays. See `artSheet.ts`.
   bg: ['ridge-far', 'ridge-near'],
   // The crown is on the field; the rest are the DOM's — the result banner
-  // (nine-sliced by CSS), the shop chest and the two skill buttons' icons,
-  // shown through `ArtIcon` and `FReward`. See `uiArt.ts`.
-  ui: ['crown', 'ribbon', 'chest', 'skill-grenade', 'skill-shield']
+  // (nine-sliced by CSS), the idle chest on the wallet column, the shop's
+  // forge and the two skill buttons' icons, shown through `ArtIcon` and
+  // `FReward`. See `uiArt.ts`.
+  ui: ['crown', 'ribbon', 'chest', 'forge', 'skill-grenade', 'skill-shield']
 }

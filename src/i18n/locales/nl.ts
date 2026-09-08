@@ -95,6 +95,13 @@ export default {
     'of': 'van {n} spelers'
   },
 
+  'chest': {
+    'label': 'Schatkist',
+    'ready': 'Open de schatkist voor {n} munten',
+    'filling': 'Schatkist — wordt gevuld',
+    'spent': 'Schatkist — leeg tot morgen'
+  },
+
   'skills': {
 
     'grenade': 'Granaat',

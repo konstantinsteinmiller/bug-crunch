@@ -61,7 +61,8 @@ import {
   CRATE_R,
   DIVIDER_H,
   DIVIDER_HALF_W,
-  GATE_TICK_MS,
+  gatePumpStep,
+  gateTickMs,
   LANE_HALF,
   UNIT_R,
   BARRICADE_H,
@@ -479,10 +480,13 @@ const canPump = (leaf: Gate, view: View): boolean => {
 /**
  * What a leaf is worth, in survivors, to THIS run.
  *
- *   add — the printed number, plus one for every full `GATE_TICK_MS` of fire
- *         the crowd can still land on it. That second term is the entire skill
- *         of the game: the crowd cannot slow down, so "pumping" is really
- *         "commit to the leaf as early as you can see it".
+ *   add — the printed number, plus `gatePumpStep` for every full `gateTickMs`
+ *         of fire the crowd can still land on it. That second term is the
+ *         entire skill of the game: the crowd cannot slow down, so "pumping" is
+ *         really "commit to the leaf as early as you can see it". BOTH terms
+ *         are stage-scaled, so a policy that modelled a flat +1 per 500 ms
+ *         would undervalue every late-game door and stop committing early —
+ *         which is the behaviour the study is supposed to be measuring.
  *   mul — `count × (value − 1)`, which is worth nothing to a small crowd and
  *         everything to a large one.
  *   div — strictly negative, always.
@@ -494,7 +498,8 @@ export const leafValue = (leaf: Gate, view: View, withPump: boolean): number => 
   if (withPump && canPump(leaf, view)) {
     const dist = Math.max(0, leaf.y - view.anchorY)
     const window = dist / Math.max(0.01, view.speed) - dist / BULLET_SPEED - 0.15
-    value += Math.max(0, Math.floor((window * 1000) / GATE_TICK_MS))
+    const ticks = Math.floor((window * 1000) / gateTickMs(leaf.op, view.stage))
+    value += Math.max(0, ticks) * gatePumpStep(view.stage)
   }
   return value
 }

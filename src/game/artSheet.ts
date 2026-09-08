@@ -684,8 +684,15 @@ export const STILLS: StillSpec[] = [
       w: BANNER.w, h: BANNER.h, maxEdge: BANNER.h,
       live: 'The title is printed in white across the middle band, so the middle stays plain, flat and dark — no emblem, no rune, no glint, no lettering.'
     }),
-  still('ui', 'chest', 'The shop chest',
-    'The shop button\'s treasure chest: a squat iron-banded strongbox of dark oak seen straight on and a little from above, its domed lid raised a crack so a cold gold light leaks from the gap, a skull-faced iron hasp on the front, riveted black-iron bands and corners. A thing you would loot. Bold shape, no fine detail — it is read at 24 px on a button — and the same silhouette as the reference: a wide lid over a box, the lid overhanging.',
+  still('ui', 'chest', 'The idle treasure chest',
+    'The HUD\'s treasure chest: a squat iron-banded strongbox of dark oak seen straight on and a little from above, its domed lid raised a crack so a cold gold light leaks from the gap, a skull-faced iron hasp on the front, riveted black-iron bands and corners. A thing you would loot. Bold shape, no fine detail — it is read at 24 px beside the coin badge — and the same silhouette as the reference: a wide lid over a box, the lid overhanging.',
+    { maxEdge: 128 }),
+  // The shop's own mark, and NOT the chest: they sit on screen at the same
+  // time now — the chest fills with time on the wallet column, the forge opens
+  // the upgrade shop from the bottom bar — and two controls that do different
+  // things may not be the same drawing.
+  still('ui', 'forge', 'The upgrade forge',
+    'The upgrade shop button\'s mark: a squat blackened-iron anvil, its horn to the LEFT and its foot splayed, standing under a bold upward chevron of hot molten gold, with two or three sparks flying off it. The anvil\'s face glows orange where the chevron rises off it. Bold shape, no fine detail — it is read at 24 px on a button — and the same layout as the reference: the chevron in the top half, the anvil in the bottom half, both centred and filling the frame.',
     { maxEdge: 128 }),
   still('ui', 'skill-grenade', 'The grenade skill',
     'The grenade skill\'s button icon: a round black-iron bomb with a short fuse curling from its top and a spark on the fuse\'s end — the one the player throws. Bold and simple, read at 24 px on a round button; the same silhouette as the reference, a ball with the fuse to the upper right.',

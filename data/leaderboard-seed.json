@@ -1,0 +1,850 @@
+{
+  "source": "seeded:retention-curve",
+  "fetchedAt": 1788819321831,
+  "updatedAt": 1788819321831,
+  "total": 154331,
+  "entries": [
+    {
+      "rank": 1,
+      "name": "Sashila",
+      "score": 60,
+      "flair": 3348
+    },
+    {
+      "rank": 2,
+      "name": "FrostRocket",
+      "score": 59,
+      "flair": 3293
+    },
+    {
+      "rank": 3,
+      "name": "RustyFalcon.Jbql",
+      "score": 58,
+      "flair": 1092
+    },
+    {
+      "rank": 4,
+      "name": "Tarrossi",
+      "score": 57,
+      "flair": 2300
+    },
+    {
+      "rank": 5,
+      "name": "IronTurtle",
+      "score": 56,
+      "flair": 2102
+    },
+    {
+      "rank": 6,
+      "name": "GoldenMilkshake",
+      "score": 55,
+      "flair": 934
+    },
+    {
+      "rank": 7,
+      "name": "Strider408112",
+      "score": 55,
+      "flair": 1614
+    },
+    {
+      "rank": 8,
+      "name": "RapidGoblin.Jbql",
+      "score": 54,
+      "flair": 1344
+    },
+    {
+      "rank": 9,
+      "name": "Kakkonix",
+      "score": 54,
+      "flair": 1249
+    },
+    {
+      "rank": 10,
+      "name": "Scout381610",
+      "score": 53,
+      "flair": 3415
+    },
+    {
+      "rank": 11,
+      "name": "LuckyViper",
+      "score": 53,
+      "flair": 1697
+    },
+    {
+      "rank": 12,
+      "name": "JuicyComet.TV",
+      "score": 53,
+      "flair": 1638
+    },
+    {
+      "rank": 13,
+      "name": "Leliathas",
+      "score": 52,
+      "flair": 941
+    },
+    {
+      "rank": 14,
+      "name": "SilentBishop.Jbq",
+      "score": 52,
+      "flair": 2946
+    },
+    {
+      "rank": 15,
+      "name": "TurboYeti.kk",
+      "score": 52,
+      "flair": 1978
+    },
+    {
+      "rank": 16,
+      "name": "MOPPIMI",
+      "score": 52,
+      "flair": 1211
+    },
+    {
+      "rank": 17,
+      "name": "FeralCloud",
+      "score": 52,
+      "flair": 2925
+    },
+    {
+      "rank": 18,
+      "name": "BrilliantBishop",
+      "score": 51,
+      "flair": 1972
+    },
+    {
+      "rank": 19,
+      "name": "SaltyCloud.Q",
+      "score": 51,
+      "flair": 1488
+    },
+    {
+      "rank": 20,
+      "name": "RapidBadger.io",
+      "score": 51,
+      "flair": 2732
+    },
+    {
+      "rank": 21,
+      "name": "RapidTurtle",
+      "score": 51,
+      "flair": 1407
+    },
+    {
+      "rank": 22,
+      "name": "GoldenKoala",
+      "score": 51,
+      "flair": 3087
+    },
+    {
+      "rank": 23,
+      "name": "Kazela",
+      "score": 51,
+      "flair": 1825
+    },
+    {
+      "rank": 24,
+      "name": "Sazela",
+      "score": 51,
+      "flair": 2396
+    },
+    {
+      "rank": 25,
+      "name": "QuietGremlin",
+      "score": 50,
+      "flair": 1821
+    },
+    {
+      "rank": 26,
+      "name": "GoldenDemon.x",
+      "score": 50,
+      "flair": 2403
+    },
+    {
+      "rank": 27,
+      "name": "GoldenPhantom",
+      "score": 50,
+      "flair": 1293
+    },
+    {
+      "rank": 28,
+      "name": "Voppirashi",
+      "score": 50,
+      "flair": 1895
+    },
+    {
+      "rank": 29,
+      "name": "Dondara",
+      "score": 50,
+      "flair": 2498
+    },
+    {
+      "rank": 30,
+      "name": "BrilliantMuffin",
+      "score": 50,
+      "flair": 732
+    },
+    {
+      "rank": 31,
+      "name": "Scout168450",
+      "score": 50,
+      "flair": 1578
+    },
+    {
+      "rank": 32,
+      "name": "KARROSSI",
+      "score": 50,
+      "flair": 2029
+    },
+    {
+      "rank": 33,
+      "name": "CrimsonCloud",
+      "score": 50,
+      "flair": 2788
+    },
+    {
+      "rank": 34,
+      "name": "RapidRaven",
+      "score": 49,
+      "flair": 2131
+    },
+    {
+      "rank": 35,
+      "name": "Rappila",
+      "score": 49,
+      "flair": 2200
+    },
+    {
+      "rank": 36,
+      "name": "Kappiriot",
+      "score": 49,
+      "flair": 1064
+    },
+    {
+      "rank": 37,
+      "name": "LEKKORASHI",
+      "score": 49,
+      "flair": 988
+    },
+    {
+      "rank": 38,
+      "name": "TurboPanda.RX",
+      "score": 49,
+      "flair": 1335
+    },
+    {
+      "rank": 39,
+      "name": "LuckyBadger.io",
+      "score": 49,
+      "flair": 1041
+    },
+    {
+      "rank": 40,
+      "name": "NeonPanda",
+      "score": 49,
+      "flair": 1134
+    },
+    {
+      "rank": 41,
+      "name": "VelvetTurtle.Jbq",
+      "score": 49,
+      "flair": 1417
+    },
+    {
+      "rank": 42,
+      "name": "ShadowCloud",
+      "score": 49,
+      "flair": 2052
+    },
+    {
+      "rank": 43,
+      "name": "NeonPixel",
+      "score": 49,
+      "flair": 2041
+    },
+    {
+      "rank": 44,
+      "name": "PrimeBishop",
+      "score": 49,
+      "flair": 3134
+    },
+    {
+      "rank": 45,
+      "name": "Nivenko",
+      "score": 49,
+      "flair": 2114
+    },
+    {
+      "rank": 46,
+      "name": "RealOtter",
+      "score": 49,
+      "flair": 2664
+    },
+    {
+      "rank": 47,
+      "name": "ZULIAKO",
+      "score": 48,
+      "flair": 945
+    },
+    {
+      "rank": 48,
+      "name": "NeonMuffin",
+      "score": 48,
+      "flair": 2512
+    },
+    {
+      "rank": 49,
+      "name": "HyperComet",
+      "score": 48,
+      "flair": 3139
+    },
+    {
+      "rank": 50,
+      "name": "Strider257112",
+      "score": 48,
+      "flair": 787
+    },
+    {
+      "rank": 51,
+      "name": "RAPPIKO",
+      "score": 48,
+      "flair": 2328
+    },
+    {
+      "rank": 52,
+      "name": "Lezedor",
+      "score": 48,
+      "flair": 1652
+    },
+    {
+      "rank": 53,
+      "name": "Vozenix",
+      "score": 48,
+      "flair": 1972
+    },
+    {
+      "rank": 54,
+      "name": "Sandariot",
+      "score": 48,
+      "flair": 787
+    },
+    {
+      "rank": 55,
+      "name": "RealKoala",
+      "score": 48,
+      "flair": 1551
+    },
+    {
+      "rank": 56,
+      "name": "IronFalcon",
+      "score": 48,
+      "flair": 2195
+    },
+    {
+      "rank": 57,
+      "name": "Nirrossi",
+      "score": 48,
+      "flair": 2853
+    },
+    {
+      "rank": 58,
+      "name": "YUGANNIX",
+      "score": 48,
+      "flair": 1228
+    },
+    {
+      "rank": 59,
+      "name": "CrimsonKoala",
+      "score": 48,
+      "flair": 2422
+    },
+    {
+      "rank": 60,
+      "name": "Doliala",
+      "score": 48,
+      "flair": 948
+    },
+    {
+      "rank": 61,
+      "name": "LuckyTurtle.RX",
+      "score": 48,
+      "flair": 1574
+    },
+    {
+      "rank": 62,
+      "name": "VelvetOtter",
+      "score": 48,
+      "flair": 1838
+    },
+    {
+      "rank": 63,
+      "name": "PrimeDemon",
+      "score": 48,
+      "flair": 1685
+    },
+    {
+      "rank": 64,
+      "name": "GoldenComet",
+      "score": 48,
+      "flair": 1979
+    },
+    {
+      "rank": 65,
+      "name": "YUMBALA",
+      "score": 47,
+      "flair": 3066
+    },
+    {
+      "rank": 66,
+      "name": "MOSHISSI",
+      "score": 47,
+      "flair": 1554
+    },
+    {
+      "rank": 67,
+      "name": "Yukkodor",
+      "score": 47,
+      "flair": 1724
+    },
+    {
+      "rank": 68,
+      "name": "VelvetWolf",
+      "score": 47,
+      "flair": 1062
+    },
+    {
+      "rank": 69,
+      "name": "HyperNomad.x",
+      "score": 47,
+      "flair": 985
+    },
+    {
+      "rank": 70,
+      "name": "BrilliantRocket",
+      "score": 47,
+      "flair": 2753
+    },
+    {
+      "rank": 71,
+      "name": "Lezela",
+      "score": 47,
+      "flair": 1338
+    },
+    {
+      "rank": 72,
+      "name": "NINDASSI",
+      "score": 47,
+      "flair": 2022
+    },
+    {
+      "rank": 73,
+      "name": "BrilliantBandit",
+      "score": 47,
+      "flair": 2591
+    },
+    {
+      "rank": 74,
+      "name": "WildYeti.x",
+      "score": 47,
+      "flair": 2161
+    },
+    {
+      "rank": 75,
+      "name": "FeralComet",
+      "score": 47,
+      "flair": 787
+    },
+    {
+      "rank": 76,
+      "name": "CosmicKoala",
+      "score": 47,
+      "flair": 1907
+    },
+    {
+      "rank": 77,
+      "name": "MadHydra.zz",
+      "score": 47,
+      "flair": 2348
+    },
+    {
+      "rank": 78,
+      "name": "CrimsonPixel",
+      "score": 47,
+      "flair": 1259
+    },
+    {
+      "rank": 79,
+      "name": "Scout339648",
+      "score": 47,
+      "flair": 2927
+    },
+    {
+      "rank": 80,
+      "name": "RapidViper",
+      "score": 47,
+      "flair": 911
+    },
+    {
+      "rank": 81,
+      "name": "NeonCloud",
+      "score": 47,
+      "flair": 1530
+    },
+    {
+      "rank": 82,
+      "name": "CosmicOtter",
+      "score": 47,
+      "flair": 1736
+    },
+    {
+      "rank": 83,
+      "name": "LEVENRIOT",
+      "score": 47,
+      "flair": 1569
+    },
+    {
+      "rank": 84,
+      "name": "QuietViper",
+      "score": 47,
+      "flair": 2181
+    },
+    {
+      "rank": 85,
+      "name": "MadGoblin.Jbql",
+      "score": 47,
+      "flair": 1362
+    },
+    {
+      "rank": 86,
+      "name": "HISHILA",
+      "score": 47,
+      "flair": 932
+    },
+    {
+      "rank": 87,
+      "name": "Tazedor",
+      "score": 47,
+      "flair": 1220
+    },
+    {
+      "rank": 88,
+      "name": "SaltyNomad",
+      "score": 47,
+      "flair": 1152
+    },
+    {
+      "rank": 89,
+      "name": "Roamer683799",
+      "score": 47,
+      "flair": 2590
+    },
+    {
+      "rank": 90,
+      "name": "Higanko",
+      "score": 46,
+      "flair": 711
+    },
+    {
+      "rank": 91,
+      "name": "HyperPanda",
+      "score": 46,
+      "flair": 1811
+    },
+    {
+      "rank": 92,
+      "name": "VelvetPanda.Q",
+      "score": 46,
+      "flair": 1638
+    },
+    {
+      "rank": 93,
+      "name": "Dogannix",
+      "score": 46,
+      "flair": 783
+    },
+    {
+      "rank": 94,
+      "name": "MadTurtle.y",
+      "score": 46,
+      "flair": 2330
+    },
+    {
+      "rank": 95,
+      "name": "Nomad940203",
+      "score": 46,
+      "flair": 1194
+    },
+    {
+      "rank": 96,
+      "name": "NeonBishop",
+      "score": 46,
+      "flair": 1332
+    },
+    {
+      "rank": 97,
+      "name": "Trekker567578",
+      "score": 46,
+      "flair": 2773
+    },
+    {
+      "rank": 98,
+      "name": "HyperGremlin.GG",
+      "score": 46,
+      "flair": 2624
+    },
+    {
+      "rank": 99,
+      "name": "Kakkorashi",
+      "score": 46,
+      "flair": 2269
+    },
+    {
+      "rank": 100,
+      "name": "HyperTurtle",
+      "score": 46,
+      "flair": 1688
+    }
+  ],
+  "dist": [
+    [
+      60,
+      1
+    ],
+    [
+      59,
+      1
+    ],
+    [
+      58,
+      1
+    ],
+    [
+      57,
+      1
+    ],
+    [
+      56,
+      1
+    ],
+    [
+      55,
+      2
+    ],
+    [
+      54,
+      2
+    ],
+    [
+      53,
+      3
+    ],
+    [
+      52,
+      5
+    ],
+    [
+      51,
+      7
+    ],
+    [
+      50,
+      9
+    ],
+    [
+      49,
+      13
+    ],
+    [
+      48,
+      18
+    ],
+    [
+      47,
+      25
+    ],
+    [
+      46,
+      34
+    ],
+    [
+      45,
+      48
+    ],
+    [
+      44,
+      48
+    ],
+    [
+      43,
+      61
+    ],
+    [
+      42,
+      78
+    ],
+    [
+      41,
+      101
+    ],
+    [
+      40,
+      129
+    ],
+    [
+      39,
+      132
+    ],
+    [
+      38,
+      162
+    ],
+    [
+      37,
+      199
+    ],
+    [
+      36,
+      243
+    ],
+    [
+      35,
+      298
+    ],
+    [
+      34,
+      291
+    ],
+    [
+      33,
+      344
+    ],
+    [
+      32,
+      406
+    ],
+    [
+      31,
+      478
+    ],
+    [
+      30,
+      564
+    ],
+    [
+      29,
+      581
+    ],
+    [
+      28,
+      673
+    ],
+    [
+      27,
+      778
+    ],
+    [
+      26,
+      900
+    ],
+    [
+      25,
+      881
+    ],
+    [
+      24,
+      998
+    ],
+    [
+      23,
+      1130
+    ],
+    [
+      22,
+      1267
+    ],
+    [
+      21,
+      1434
+    ],
+    [
+      20,
+      1490
+    ],
+    [
+      19,
+      1670
+    ],
+    [
+      18,
+      1871
+    ],
+    [
+      17,
+      2097
+    ],
+    [
+      16,
+      2350
+    ],
+    [
+      15,
+      2634
+    ],
+    [
+      14,
+      2952
+    ],
+    [
+      13,
+      3308
+    ],
+    [
+      12,
+      3708
+    ],
+    [
+      11,
+      4155
+    ],
+    [
+      10,
+      6306
+    ],
+    [
+      9,
+      7336
+    ],
+    [
+      8,
+      8535
+    ],
+    [
+      7,
+      9930
+    ],
+    [
+      6,
+      11553
+    ],
+    [
+      5,
+      13441
+    ],
+    [
+      4,
+      21505
+    ],
+    [
+      3,
+      26339
+    ],
+    [
+      2,
+      5304
+    ],
+    [
+      1,
+      5500
+    ]
+  ]
+}

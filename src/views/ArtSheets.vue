@@ -415,9 +415,11 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       paintBanner(ctx, s.w, s.h, REF)
       break
     case 'ui/chest':
+    case 'ui/forge':
     case 'ui/skill-grenade':
     case 'ui/skill-shield':
-      // The button's own glyph, through the same paths `GameIcon` renders.
+      // The button's own mark — the glyph through the same paths `GameIcon`
+      // renders, or, for the forge, the drawing `paintForge` makes.
       ctx.translate(cx, cy)
       paintUiIcon(ctx, s.id as UiIconId, S, REF)
       break

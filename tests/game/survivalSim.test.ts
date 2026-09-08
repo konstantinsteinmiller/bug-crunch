@@ -147,30 +147,37 @@ describe('a +N gate is a decision about TIME, not about firepower', () => {
   // Stage 1's FIRST gate is a single lane-wide doorway (the teaching gate), so
   // the pumping timeline is measured on the first real bank — stage 2's — where
   // there is a left leaf to hold fire on.
-  const pumpTimeline = (game: Game, extraUnits: number): { value: number; gaps: number[] } => {
-    game.startStage(2)
+  const pumpTimeline = (
+    game: Game, extraUnits: number, stage = 2
+  ): { value: number; gaps: number[]; steps: number[] } => {
+    game.startStage(stage)
     if (extraUnits > 0) game.debugAddUnits(extraUnits)
     game.steerTo(-GATE_LEAF_X)
 
     const stamps: number[] = []
+    const values: number[] = []
     let last = -1
     // Pin to ONE leaf by id. Watching "any leaf left of centre" silently spans
     // two banks the moment a stage has a second one in view — the gap it then
     // reports is the crowd's travel time between banks, not a pump tick.
+    //
+    // …and to one OP. Late stages put multipliers and traps on the left too,
+    // and those climb in tenths, so a timeline that took whatever leaf was
+    // there would compare a `+N`'s step against a `x N`'s.
     let watched = -1
     for (let i = 0; i < 300; i++) {
       const gates = game.getGates()
-      if (watched < 0) watched = gates.find((g) => g.x < 0)?.id ?? -1
+      if (watched < 0) watched = gates.find((g) => g.x < 0 && g.op === 'add')?.id ?? -1
       const leaf = gates.find((g) => g.id === watched)
       if (leaf && leaf.value !== last) {
-        if (last >= 0) stamps.push(game.nowMs())
+        if (last >= 0) { stamps.push(game.nowMs()); values.push(leaf.value - last) }
         last = leaf.value
       }
       game.step(STEP_MS)
     }
     const gaps: number[] = []
     for (let i = 1; i < stamps.length; i++) gaps.push(stamps[i]! - stamps[i - 1]!)
-    return { value: last, gaps }
+    return { value: last, gaps, steps: values }
   }
 
   it('climbs by exactly one per GATE_TICK_MS of sustained fire', async () => {
@@ -186,6 +193,24 @@ describe('a +N gate is a decision about TIME, not about firepower', () => {
       // remainder is carried, so individual gaps straddle the half second.
       expect(Math.abs(gap - GATE_TICK_MS)).toBeLessThanOrEqual(STEP_MS + 4)
     }
+  })
+
+  it('steps bigger and ticks faster once the doors are big — against the real sim', async () => {
+    // The constants are pinned in `gatePump.test.ts`; this is the proof that
+    // `stepGates` actually spends them. A stage-46 door prints `+36`, so the
+    // old flat `+1 per 500 ms` was a ninth of it across a full approach and the
+    // bank had stopped being a decision.
+    const game = await importGame()
+    const { gatePumpStep, gateTickMs } = await import('@/game/survival')
+    const { steps, gaps } = pumpTimeline(game, 0, 46)
+
+    expect(steps.length, 'stage 46 never streamed an additive leaf to pump').toBeGreaterThan(0)
+    for (const step of steps) expect(step).toBe(gatePumpStep(46))
+    expect(gatePumpStep(46)).toBe(4)
+    for (const gap of gaps) {
+      expect(Math.abs(gap - gateTickMs('add', 46))).toBeLessThanOrEqual(STEP_MS + 4)
+    }
+    expect(gateTickMs('add', 46)).toBeLessThan(GATE_TICK_MS)
   })
 
   it('is a squad-size-independent rate: fifty survivors do not pump faster', async () => {

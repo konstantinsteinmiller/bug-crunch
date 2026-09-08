@@ -212,12 +212,29 @@ const SAMPLE_CUES: Partial<Record<FxSound, [string, number]>> = {
  * Pentatonic ladder for the gate tick.
  *
  * A chromatic run up 40 semitones is unbearable; a pentatonic one is a melody
- * no matter where the player stops pumping. It wraps every octave, so a gate
- * pushed to +30 keeps climbing in feel without leaving the audible band.
+ * no matter where the player stops pumping.
+ *
+ * ─── It has to WRAP, and it did not ─────────────────────────────────────────
+ *
+ * The docstring here has always claimed the ladder "wraps every octave, so a
+ * gate pushed to +30 keeps climbing without leaving the audible band". It did
+ * not wrap: the octave term was an unbounded `floor(n / 5) * 12`, so the note
+ * for a `+36` door is 55 kHz and the note for a `+50` is 400 kHz. The browser
+ * clamps both to 24 kHz and logs a warning per tick, and THE SOUND OF THE GAME
+ * is inaudible from roughly `+25` upward — which is every door past stage 30,
+ * and every door in the band where the pump was just made to matter again.
+ *
+ * `OCTAVE_WRAP` is what the comment always described: the ladder climbs three
+ * octaves and starts again from the bottom, so a long pump is a repeating
+ * rising phrase instead of a dog whistle.
  */
 const PENTATONIC = [0, 2, 4, 7, 9]
-const tickFreq = (step: number): number => {
-  const n = Math.max(0, Math.floor(step))
+/** Octaves the ladder climbs before it restarts at the bottom. */
+export const OCTAVE_WRAP = 3
+/** Ticks in one full phrase — five pentatonic steps per octave. */
+export const LADDER_STEPS = PENTATONIC.length * OCTAVE_WRAP
+export const tickFreq = (step: number): number => {
+  const n = Math.max(0, Math.floor(step)) % LADDER_STEPS
   const semis = PENTATONIC[n % 5]! + Math.floor(n / 5) * 12
   return 392 * Math.pow(2, semis / 12)
 }
@@ -269,7 +286,13 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       // ringing triangle, and there is no octave sparkle on top. The player has
       // to hear "that is the pump, and it is costing me" in one tick, without
       // looking away from the door they are about to commit to.
-      const f = tickFreq(Math.max(0, 26 - power)) * 0.5
+      // The same phrase read backwards, and wrapped on the same clock as the
+      // rising one. It was `26 - power` floored at zero, which meant every
+      // `-N` past 26 played the identical bottom note — so on the stages
+      // where a trap costs the most, the pump running the wrong way stopped
+      // sounding like anything at all.
+      const down = LADDER_STEPS - 1 - (Math.max(0, Math.floor(power)) % LADDER_STEPS)
+      const f = tickFreq(down) * 0.5
       tone(ctx, { freq: f, toFreq: f * 0.94, duration: 0.15, gain: vol(0.07), type: 'square', filter: 1400 })
       noiseBurst(ctx, { duration: 0.06, gain: vol(0.022), filterFrom: 1800, filterTo: 400, type: 'bandpass', q: 2 })
       break

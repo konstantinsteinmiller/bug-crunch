@@ -250,6 +250,41 @@ export const ROLLER_SPEED = 3.4
 export const ROLLER_FRACTION = 0.3
 
 /**
+ * The part of the footprint that is the STONE, as a fraction of `ROLLER_R`.
+ *
+ * Everything whose centre is inside it dies, with no budget and no share — the
+ * claw's core rule, and for the same reason the game's oldest solid already
+ * works that way. `crushAgainst` takes EVERYONE who touches a boulder, because
+ * a boulder stands still and the whole cost is therefore the line the player
+ * chose. The ball IS a boulder (`still('round', 'roller', 'The rolling
+ * boulder')`); the only difference is that this one comes to the line rather
+ * than waiting on it, and it announces itself from further off than anything
+ * else in the game.
+ *
+ * `stepPoolElite` has always said what this fight is — *"WHICH SIDE ARE YOU ON.
+ * Half the road, one straight line, no tracking. The dodge is total and so is
+ * the failure to dodge."* A bounded share was the one part that did not mean it:
+ * a crowd standing dead in the lane kept 59 % of itself, which reads as the
+ * stone rolling THROUGH the squad rather than over it.
+ *
+ * The band between the stone and `ROLLER_R + UNIT_R` stays a share — a survivor
+ * clipped at the edge was not rolled over — and this is the one dial that moves
+ * the fight without touching the geometry the dodge is built on.
+ *
+ * HALF THE STONE, AND THE VALUE IS MEASURED RATHER THAN CHOSEN. 1 — everyone
+ * inside the whole footprint — is what the fight's own description asks for and
+ * it is too much: the balance suite walls a competent player who declines the
+ * ×3 at stage 7 against a floor of 10, and a merely GLANCING clip starts costing
+ * 20 % where the ceiling for a graze is 15 %. Both hold at 0.5 and both break
+ * again by 0.65, so this sits with margin rather than on the edge. Re-run
+ * `balance.test.ts` and `glancingBlow.test.ts` before raising it.
+ */
+export const ROLLER_CORE_FRACTION = 0.5
+
+/** Radius of the lethal core: the stone itself, in world units. */
+export const rollerCoreR = (): number => ROLLER_R * ROLLER_CORE_FRACTION
+
+/**
  * How far ahead the ball raises the corner warning.
  *
  * Slightly beyond the visible road, so the badge is already up as the ball comes

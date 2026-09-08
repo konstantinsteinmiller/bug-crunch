@@ -390,6 +390,23 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
 }
 
 /**
+ * A run posts at most this often, however many records it sets.
+ *
+ * `reportRun` fires on every cleared stage, and a good run beats its own best
+ * on nearly all of them — a climb to stage 42 was up to forty-two POSTs, each
+ * one a write and a rate-limit check on a free tier. Since every post carries
+ * the CURRENT best rather than a delta, skipping one loses nothing: the next
+ * one carries the higher number, so the throttle coalesces rather than drops.
+ *
+ * The run's END bypasses it (`force`), so the score a player finished on is
+ * always the score the board gets.
+ */
+const WRITE_MIN_GAP_MS = 180_000
+/** When the last write was ATTEMPTED — success or not. A backend that is
+ *  refusing must not be asked again on the next stage clear. */
+let lastWriteAt = 0
+
+/**
  * THE ENTRY POINT. Called once per finished run, with `void`, never awaited.
  *
  * Read once per page load, write only on a personal record — that sentence is
@@ -407,7 +424,9 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
  * A player grinding stage 30 for an hour therefore costs the backend one GET,
  * served from the edge cache.
  */
-export const reportRun = async (bestStage: number, bestSquad: number): Promise<void> => {
+export const reportRun = async (
+  bestStage: number, bestSquad: number, o: { force?: boolean } = {}
+): Promise<void> => {
   // A baked build has nothing to report TO. The rank it shows comes from the
   // snapshot, which no run can change, so this is the one entry point that stays
   // switched off where `leaderboardEnabled` is true.
@@ -420,24 +439,48 @@ export const reportRun = async (bestStage: number, bestSquad: number): Promise<v
     const posted = Math.max(0, Math.trunc(Number(getState(SUBMITTED_STAGE_KEY, 0)) || 0))
     const { name } = await identity()
 
-    if (stage > posted) {
+    // The first record of a session goes straight out; the rest wait their turn
+    // unless this is the end of the run.
+    const due = o.force === true || lastWriteAt === 0 ||
+      Date.now() - lastWriteAt >= WRITE_MIN_GAP_MS
+
+    if (stage > posted && due) {
+      lastWriteAt = Date.now()
       if (await submitScore(stage, squad)) {
         setState(SUBMITTED_STAGE_KEY, stage)
         setState(POSTED_NAME_KEY, name)
       }
-      return
-    }
-
-    if (posted > 0 && getState<string>(POSTED_NAME_KEY, '') !== name) {
+    } else if (posted > 0 && due && getState<string>(POSTED_NAME_KEY, '') !== name) {
+      lastWriteAt = Date.now()
       if (await submitScore(posted, squad)) setState(POSTED_NAME_KEY, name)
-      return
     }
 
+    // HOWEVER the run was reported, end with a board to rank against.
+    //
+    // This used to `return` after a write, and that hid the rank in the one
+    // case the player cares about most. A personal record takes the write path,
+    // so a device with no cache yet — a fresh QA profile, a first session —
+    // reached the result screen having only ever tried a POST. When that POST
+    // failed (the board's own free tier ran out of D1 reads mid-afternoon and
+    // answered 500 to everything) nothing had ever loaded a board, `rankFor`
+    // returned 0, and the chip hid itself. The offline ladder existed and was
+    // simply never reached: only `ensureBoard` climbs it.
+    //
+    // It costs nothing on the happy path — a successful write brings the board
+    // back with it and sets `fetched`, so this no-ops. On a failed write it is
+    // one edge-cached GET, which can still succeed where the POST could not
+    // (`/top` is served from the edge; `/score` must reach D1), and if that
+    // fails too its own failure path drops to the baked snapshot.
     await ensureBoard()
   } catch {
     // Unreachable in practice — everything above already swallows — but this is
     // the function the game calls without awaiting, and an unhandled rejection
     // here would surface as a console error on a player's first finished run.
+    //
+    // `identity()` is the one call here that can throw before anything has
+    // loaded a board, so the last rung is taken here too. A run must never end
+    // with no rank because minting a player id went wrong.
+    fallBackToSnapshot()
   }
 }
 
@@ -460,7 +503,14 @@ export const reportRun = async (bestStage: number, bestSquad: number): Promise<v
  */
 export const rankFor = (score: number): number => {
   if (!leaderboardEnabled) return 0
-  if (serverRank.value > 0 && score >= submittedScore.value) return serverRank.value
+  // EXACT match, not `>=`. The server's answer belongs to the score it counted
+  // and to no other, and the difference only became visible once the client
+  // stopped posting every single stage: with `>=`, a player who posted at stage
+  // 10 and climbed to 42 kept being shown the rank they held at 10, because
+  // every later score still satisfied it. Anything else is derived below from
+  // the histogram — which is now the same arithmetic the Worker runs, so the
+  // two cannot disagree about anything but the age of the population.
+  if (serverRank.value > 0 && score === submittedScore.value) return serverRank.value
 
   // A player who has not finished a stage has no standing to report. Without
   // this the derivation below hands a fresh install `above + 1` = **#1** on an

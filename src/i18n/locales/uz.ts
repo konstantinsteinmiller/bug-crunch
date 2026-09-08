@@ -95,6 +95,13 @@ export default {
     'of': '{n} o‘yinchidan'
   },
 
+  'chest': {
+    'label': 'Xazina sandiqi',
+    'ready': 'Sandiqni {n} tanga uchun oching',
+    'filling': 'Xazina sandiqi to‘lmoqda',
+    'spent': 'Xazina sandiqi ertagacha bo‘sh'
+  },
+
   'skills': {
 
     'grenade': 'Granata',

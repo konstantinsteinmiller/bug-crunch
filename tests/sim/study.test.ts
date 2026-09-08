@@ -65,6 +65,10 @@ describe.skipIf(!RUN)('stages 1–5, five scripted players', () => {
       ['BASE_DAMAGE / BASE_FIRE_RATE', `${s.BASE_DAMAGE} / ${s.BASE_FIRE_RATE}`],
       ['CRATE_DAMAGE_GAIN / CRATE_RATE_GAIN', `${s.CRATE_DAMAGE_GAIN} / ${s.CRATE_RATE_GAIN}`],
       ['GATE_TICK_MS', String(s.GATE_TICK_MS)],
+      // The pump is stage-scaled at both ends now, so one number no longer
+      // describes it: `step @ tick ms` at the head of each 15-stage band.
+      ['pump (stage 1 / 15 / 30 / 45)', [1, 15, 30, 45]
+        .map((n) => `+${s.gatePumpStep(n)} @ ${s.gateTickMs('add', n)}ms`).join(', ')],
       ['GATE_LEAF_X / GATE_LEAF_HALF / DIVIDER_HALF_W', `${s.GATE_LEAF_X} / ${s.GATE_LEAF_HALF} / ${s.DIVIDER_HALF_W}`],
       ['BOSS_BASE_HP', String(s.BOSS_BASE_HP)],
       ['RETRY_HP_RELIEF', String(s.RETRY_HP_RELIEF)],

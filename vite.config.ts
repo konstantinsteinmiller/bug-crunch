@@ -205,6 +205,20 @@ const SNAPSHOT_RESOLVED = '\0' + SNAPSHOT_VIRTUAL_ID
 const SNAPSHOT_FILE = resolve(
   fileURLToPath(new URL('./data/leaderboard-snapshot.json', import.meta.url))
 )
+/**
+ * The SEEDED board, for builds that can never write to the real one.
+ *
+ * Poki forbids every external runtime request and Yandex rejects third-party
+ * storage URLs, so neither can post a score — their baked copy is not a stale
+ * view of a living board, it is the entire board for the life of the build.
+ * Seeding those from the live snapshot ranks their players against a 2 422-row
+ * sample of everyone who ever opened the game once, 56 % of whom never passed
+ * stage 2. `scripts/leaderboard-seed.mjs` builds a modelled retention curve
+ * instead; the file it writes is committed and deterministic.
+ */
+const SEED_FILE = resolve(
+  fileURLToPath(new URL('./data/leaderboard-seed.json', import.meta.url))
+)
 const SNAPSHOT_SCRIPT = resolve(
   fileURLToPath(new URL('./scripts/leaderboard-snapshot.mjs', import.meta.url))
 )
@@ -223,10 +237,10 @@ interface LeaderboardSnapshotFile {
  *  several portal builds back to back) costs the Worker ONE request. */
 const SNAPSHOT_FRESH_MS = 10 * 60_000
 
-const readSnapshotFile = (): LeaderboardSnapshotFile | null => {
-  if (!existsSync(SNAPSHOT_FILE)) return null
+const readSnapshotFile = (file: string): LeaderboardSnapshotFile | null => {
+  if (!existsSync(file)) return null
   try {
-    const parsed = JSON.parse(readFileSync(SNAPSHOT_FILE, 'utf-8')) as Partial<LeaderboardSnapshotFile>
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as Partial<LeaderboardSnapshotFile>
     if (!Array.isArray(parsed.entries) || !Array.isArray(parsed.dist)) return null
     if (!(Number(parsed.total) > 0)) return null
     return {
@@ -241,16 +255,40 @@ const readSnapshotFile = (): LeaderboardSnapshotFile | null => {
   }
 }
 
-const leaderboardSnapshotPlugin = (needed: boolean): Plugin => ({
+/**
+ * @param seeded whether this build can never gain a real player (Poki, Yandex —
+ *   no endpoint, so no writes). Those bake the modelled board; every other
+ *   target bakes the real snapshot as the bottom rung of its offline ladder.
+ */
+const leaderboardSnapshotPlugin = (seeded: boolean): Plugin => ({
   name: 'survivalist-leaderboard-snapshot',
   buildStart() {
-    if (!needed) return
-    // The `build:poki` / `build:yandex` scripts refresh it themselves, so the
-    // file is usually seconds old by the time this runs. Refetching would be a
-    // second round trip for the same bytes — and building five portal targets
-    // in a row would be five. This hook is the SAFETY NET for anyone invoking
-    // `vite build --mode poki` directly, which is why it stays.
-    const onDisk = readSnapshotFile()
+    if (seeded) {
+      // Nothing to fetch: the seed is generated from a curve, committed, and
+      // deterministic. Re-running `pnpm leaderboard:seed` reproduces it byte for
+      // byte, so a build never needs to and never should.
+      const seed = readSnapshotFile(SEED_FILE)
+      if (seed) {
+        console.log(
+          `[leaderboard] baking the SEEDED board — ${seed.total} players / `
+          + `${seed.entries.length} rows, top stage ${seed.dist[0]?.[0] ?? 0}. `
+          + 'This build cannot post scores, so the board is modelled.'
+        )
+      } else {
+        console.warn(
+          `[leaderboard] no seed at ${SEED_FILE} — run \`pnpm leaderboard:seed\`. `
+          + 'This build has no leaderboard.'
+        )
+      }
+      return
+    }
+
+    // The `build:*` scripts refresh it themselves, so the file is usually
+    // seconds old by the time this runs. Refetching would be a second round
+    // trip for the same bytes — and building five portal targets in a row would
+    // be five. This hook is the SAFETY NET for anyone invoking `vite build
+    // --mode <x>` directly, which is why it stays.
+    const onDisk = readSnapshotFile(SNAPSHOT_FILE)
     const fresh = onDisk !== null && Date.now() - onDisk.fetchedAt < SNAPSHOT_FRESH_MS
     if (!fresh) {
       try {
@@ -262,7 +300,7 @@ const leaderboardSnapshotPlugin = (needed: boolean): Plugin => ({
         )
       }
     }
-    const snap = readSnapshotFile()
+    const snap = readSnapshotFile(SNAPSHOT_FILE)
     if (snap) {
       console.log(
         `[leaderboard] baking ${snap.total} players / ${snap.entries.length} rows `
@@ -270,7 +308,7 @@ const leaderboardSnapshotPlugin = (needed: boolean): Plugin => ({
       )
     } else {
       // Not a build failure: `leaderboardEnabled` goes false and the game ships
-      // exactly as it does today, with no board and no rank cell.
+      // exactly as it did before, with no board and no rank cell.
       console.warn(
         `[leaderboard] no usable snapshot at ${SNAPSHOT_FILE} — this build has no leaderboard.`
       )
@@ -282,8 +320,7 @@ const leaderboardSnapshotPlugin = (needed: boolean): Plugin => ({
   },
   load(id) {
     if (id !== SNAPSHOT_RESOLVED) return null
-    if (!needed) return 'export default null'
-    return `export default ${JSON.stringify(readSnapshotFile())}`
+    return `export default ${JSON.stringify(readSnapshotFile(seeded ? SEED_FILE : SNAPSHOT_FILE))}`
   }
 })
 
@@ -349,18 +386,21 @@ export default defineConfig(({ mode, command }) => {
   // Art-sheet export endpoint. `apply: 'serve'`, so it is not in any build.
   plugins.push(artSheetsPlugin())
 
-  // The baked board. EVERY build carries it, for two different jobs.
+  // The baked board. EVERY build carries one — but not the same one, and the
+  // difference is whether the build can ever write to the real board.
   //
-  // On Poki and Yandex — the portals that forbid the request, which `loadEnv`
-  // surfaces here as an empty `VITE_LEADERBOARD_URL` — it IS the leaderboard.
+  // Poki and Yandex cannot: they forbid the request outright, which `loadEnv`
+  // surfaces here as an empty `VITE_LEADERBOARD_URL`. Their copy is the WHOLE
+  // board for the life of the build and no player of theirs will ever join it,
+  // so it is the modelled one — see `SEED_FILE`.
   //
-  // On the live builds it is the bottom rung of `useLeaderboard`'s offline
-  // ladder: the thing a player sees when the fetch fails and their device has
-  // no cache of its own yet. That is not hypothetical — the Worker's D1
+  // Every other build bakes the real snapshot as the bottom rung of
+  // `useLeaderboard`'s offline ladder: what a player sees when the fetch fails
+  // and their device has no cache yet. Not hypothetical — the Worker's D1
   // row-read allowance ran out mid-afternoon and `/top` threw for every live
   // build, which without this shows a first-time player "Couldn't reach the
-  // leaderboard". It costs ~1.7 kB gzipped per build.
-  plugins.push(leaderboardSnapshotPlugin(true))
+  // leaderboard". It costs ~2 kB gzipped per build.
+  plugins.push(leaderboardSnapshotPlugin((env.VITE_LEADERBOARD_URL ?? '').trim().length === 0))
 
   // Only push the obfuscator if both conditions are met
   if (isProduction && shouldObfuscate) {

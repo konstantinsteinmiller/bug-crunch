@@ -16,10 +16,13 @@ export const GAME_ICON_NAMES = [
   // Navigation
   'menu', 'home', 'back', 'forward', 'close', 'check',
   // Meta screens
-  // `chest` is the shop's own mark: a strongbox with the lid up a crack, on
+  // `anvil` is the upgrade shop's mark — a rising chevron over an anvil, on
   // the HUD button and the result screen's button alike, so the thing tapped
-  // during a run and the thing tapped after it are one object.
-  'settings', 'shop', 'chest', 'video', 'ads', 'book', 'info', 'help',
+  // during a run and the thing tapped after it are one object — and
+  // `chest` is now the IDLE chest on the HUD, which pays coins for waiting.
+  // They were one glyph until the chest became a thing of its own; two
+  // buttons that do different things may not wear the same drawing.
+  'settings', 'shop', 'chest', 'anvil', 'video', 'ads', 'book', 'info', 'help',
   // Audio
   'music', 'music-off', 'sound', 'sound-off',
   // Progression

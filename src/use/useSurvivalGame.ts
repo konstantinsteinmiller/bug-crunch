@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import {
   BARRICADE_COIN_MAX, BARRICADE_COIN_MIN,
   BARRICADE_H, BASE_FIRE_RATE, ROCK_H, BOSS_BASE_HP, bossGuardGates, dividerCrushFor,
-  GATE_SCALE_STEP, gatePumpCap, isScaleOp,
+  GATE_SCALE_STEP, gatePumpCap, gatePumpStep, gateTickMs, isScaleOp,
   earlyBigHitMul, earlyBossHpMul,
   BULLET_LIFE_MS, BULLET_R, BULLET_SPEED, effectiveBulletRange,
   CHALLENGE_MAX, CHALLENGE_STEP,
@@ -14,7 +14,7 @@ import {
   ELITE_SWEEP_FRACTION, ELITE_SWEEP_REACH, ELITE_TELEGRAPH, FOE_REACH, FUNNEL_LEAD,
   PASSAGE_FIT_MARGIN,
   BOSS_MIN_KILL, SLAM_FRACTION_MAX, SLAM_MAX_FRACTION, SWEEP_FRACTION_MAX, endlessPressure,
-  GATE_DEPTH, GATE_MAX_VALUE, GATE_SUB_MAX, GATE_TICK_MS, LANE_HALF, MAX_FIRE_RATE, MAX_SQUAD,
+  GATE_DEPTH, GATE_MAX_VALUE, GATE_SUB_MAX, LANE_HALF, MAX_FIRE_RATE, MAX_SQUAD,
   SLAM_CD_BASE, SLAM_CD_DECAY, SLAM_CD_MIN, SLAM_RADIUS,
   SLAM_RADIUS_GROWTH, SLAM_RADIUS_MAX, STEER_SPRING,
   TUTORIAL_SLAM_FRACTION, TUTORIAL_SLAM_MIN_KILL, UNIT_R,
@@ -63,6 +63,7 @@ import {
   HEAL_FRACTION,
   HEAL_MAX_CASTS,
   HEAL_MIN_GAP_S,
+  ROLLER_CORE_FRACTION,
   ROLLER_FRACTION,
   ROLLER_R,
   ROLLER_SPEED,
@@ -87,6 +88,7 @@ import {
   inClawFurrow,
   minibossDesignFor,
   minibossKindFor,
+  rollerCoreR,
   rollerLaneFor,
   rollerLaneX,
   summonWaveSize,
@@ -3242,7 +3244,8 @@ const damageFoe = (f: Foe, amount: number): void => {
  * Two independent things happen here and they are kept apart on purpose:
  *
  *   CHARGING  — a gate that took fire this frame accumulates time. Every
- *               `GATE_TICK_MS` of it, the number goes up by one and the world
+ *               `gateTickMs` of it, the number goes up by `gatePumpStep` and
+ *               the world
  *               gets a `gateTick` event (a sound, a burst, a punch on the
  *               number). Stop shooting for 400 ms and the part-charge is lost,
  *               so "sustained" means sustained. Only `add` leaves pump.
@@ -3256,6 +3259,12 @@ const damageFoe = (f: Foe, amount: number): void => {
  */
 const stepGates = (dt: number): void => {
   firingAtGate = false
+
+  // Hoisted: both are pure functions of the stage, which cannot change inside a
+  // frame, and the loop below runs over every live leaf every tick.
+  const addTickMs = gateTickMs('add', stage.value)
+  const scaleTickMs = gateTickMs('mul', stage.value)
+  const addStep = gatePumpStep(stage.value)
 
   for (let i = gates.length - 1; i >= 0; i--) {
     const g = gates[i]!
@@ -3289,13 +3298,19 @@ const stepGates = (dt: number): void => {
       // trap should not be told they are earning.
       if (g.op === 'add' || g.op === 'mul') firingAtGate = true
       g.charge += dt * 1000
-      while (g.charge >= GATE_TICK_MS && g.value < pumpCap) {
-        g.charge -= GATE_TICK_MS
+      // Both the interval and the additive step scale with the stage — see
+      // `gatePumpStep`. The scale ops keep their tenth and get the shorter
+      // clock instead.
+      const tickMs = scale ? scaleTickMs : addTickMs
+      while (g.charge >= tickMs && g.value < pumpCap) {
+        g.charge -= tickMs
         // Rounded to a tenth every step: floating point would otherwise print
-        // `x2.4000000000000004` on the door.
+        // `x2.4000000000000004` on the door. The additive step is clamped for
+        // the same reason the loop condition is not enough on its own: a step
+        // bigger than one can overshoot the cap from below it.
         g.value = scale
           ? Math.min(pumpCap, Math.round((g.value + GATE_SCALE_STEP) * 10) / 10)
-          : g.value + 1
+          : Math.min(pumpCap, g.value + addStep)
         g.pop = 1
         pushFx({
           kind: 'gateTick', x: g.x, y: g.y, value: g.value,
@@ -3607,11 +3622,34 @@ const stepRoller = (f: Foe, dt: number): void => {
   // costs a total nothing. The latch is set anyway — the ball has had its go.
   if (caught.length === 0) return
 
-  // A SHARE of the crowd, off the bodies the ball actually rolled over — see
-  // `ROLLER_FRACTION` for why this is not "everyone it touches". The ceiling is
-  // the elite one (`SWEEP_FRACTION_MAX`) rather than the boss's, because a
-  // miniboss's percentage attacks all answer to the same bound; the floor and
-  // the onboarding cut are the ones every big hit in the game carries.
+  // ── Under the stone: everyone, with no budget ──
+  //
+  // The boulder rule (`crushAgainst`), applied to the boulder that moves. A
+  // stationary one takes everyone it touches at every stage, onboarding relief
+  // included, because it stands still and the whole cost is the line the player
+  // chose — and this one is MORE avoidable than that, not less: one lane, one
+  // straight line, no tracking, announced from `ROLLER_WARN_AHEAD` off.
+  //
+  // Run before the share below so a graze can never spend the budget on bodies
+  // the core was taking anyway; `killUnit` sets `dying`, so the loop after this
+  // skips them and bills only what the edge of the ball actually cost.
+  const coreR = rollerCoreR()
+  const core2 = coreR * coreR
+  const dirOf = (u: Unit): number => Math.sign(u.x - f.x) || (f.lane < 0 ? -1 : 1)
+  for (const u of caught) {
+    if (u.dying > 0) continue
+    if ((u.x - f.x) ** 2 + (u.y - f.y) ** 2 > core2) continue
+    killUnit(u, dirOf(u), 'elite')
+  }
+
+  // ── Clipped by the edge: a share, as before ──
+  //
+  // The band between the stone and `ROLLER_R + UNIT_R` is a survivor whose own
+  // radius caught the ball, not one it rolled over, so it keeps the bounded
+  // pricing every other percentage hit uses. The ceiling is the elite one
+  // (`SWEEP_FRACTION_MAX`) rather than the boss's, because a miniboss's
+  // percentage attacks all answer to the same bound; the floor and the
+  // onboarding cut are the ones every big hit in the game carries.
   const cut = earlyBigHitMul(stage.value)
   const share = Math.min(SWEEP_FRACTION_MAX, ROLLER_FRACTION * endlessPressure(stage.value))
   let budget = Math.max(
@@ -3623,13 +3661,16 @@ const stepRoller = (f: Foe, dt: number): void => {
   // out at random reads as a bug.
   const d2 = (u: Unit): number => (u.x - f.x) ** 2 + (u.y - f.y) ** 2
   caught.sort((a, b) => d2(a) - d2(b))
-  const dir = f.lane < 0 ? -1 : 1
   for (const u of caught) {
     if (budget <= 0) break
-    killUnit(u, dir, 'elite')
+    // Already taken by the core above.
+    if (u.dying > 0) continue
+    killUnit(u, dirOf(u), 'elite')
     budget--
   }
-  pushFx({ kind: 'rollerHit', x: f.x, y: f.y, dir })
+  // The impact's direction is the ball's own lane — the side it came from — and
+  // not any one body's, which is what the per-unit `dirOf` above is for.
+  pushFx({ kind: 'rollerHit', x: f.x, y: f.y, dir: f.lane < 0 ? -1 : 1 })
 }
 
 /**

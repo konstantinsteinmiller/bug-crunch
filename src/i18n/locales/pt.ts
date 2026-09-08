@@ -95,6 +95,13 @@ export default {
     'of': 'de {n} jogadores'
   },
 
+  'chest': {
+    'label': 'Baú do tesouro',
+    'ready': 'Abrir o baú por {n} moedas',
+    'filling': 'Baú do tesouro: enchendo',
+    'spent': 'Baú do tesouro: vazio até amanhã'
+  },
+
   'skills': {
 
     'grenade': 'Granada',

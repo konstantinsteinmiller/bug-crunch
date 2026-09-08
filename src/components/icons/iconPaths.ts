@@ -110,6 +110,21 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M3.5 11.6h17v7.9a1.5 1.5 0 0 1-1.5 1.5h-14a1.5 1.5 0 0 1-1.5-1.5v-7.9Z',
     'M9.8 9.2h4.4v4.8H9.8Z'
   ],
+  // The upgrade shop's mark: a blackened anvil under a rising chevron. Three
+  // sub-paths wound the same way so they merge under nonzero — the chevron's
+  // lower tips stop just above the face, and the waist between face and base
+  // is the one place the outline narrows, which is what reads as an anvil at
+  // 24 px rather than as a lump. Only ever seen when the drawn mark in
+  // `uiArt.paintForge` cannot be baked; see `ArtIcon`.
+  'anvil': [
+    // The chevron: two arms of even thickness meeting at a point.
+    'M12 2.6 20.2 9.2 20.2 12.4 12 5.8 3.8 12.4 3.8 9.2Z',
+    // Face + horn: a slab drawn out to a blunt point on the left, waisted
+    // down to the base.
+    'M1.6 14.1 4.4 12.2 20.4 12.2A1.3 1.3 0 0 1 21.7 13.5L21.7 14.6A1.3 1.3 0 0 1 20.4 15.9L17 15.9C16.3 17.4 15 18.3 13.4 18.6L13.4 19.4 10.6 19.4 10.6 18.6C9 18.3 7.7 17.4 7 15.9L4.4 15.9Z',
+    // Base: the splayed foot, wider than the face so the waist reads.
+    'M9.6 18.9 14.4 18.9A1.2 1.2 0 0 1 15.6 20L15.6 20.6A0.8 0.8 0 0 1 14.8 21.4L9.2 21.4A0.8 0.8 0 0 1 8.4 20.6L8.4 20A1.2 1.2 0 0 1 9.6 18.9Z'
+  ],
   'video': [
     'M2.3 8.9A2.8 2.8 0 0 1 5.1 6.1L12.1 6.1A2.8 2.8 0 0 1 14.9 8.9L14.9 15.1A2.8 2.8 0 0 1 12.1 17.9L5.1 17.9A2.8 2.8 0 0 1 2.3 15.1L2.3 8.9Z',
     'M19.29 8.67A1.4 1.4 0 0 1 21.5 9.81L21.5 14.19A1.4 1.4 0 0 1 19.29 15.33L16.76 13.53A1.1 1.1 0 0 1 16.3 12.63L16.3 11.37A1.1 1.1 0 0 1 16.76 10.47L19.29 8.67Z'

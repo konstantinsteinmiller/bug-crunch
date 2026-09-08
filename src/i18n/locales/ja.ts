@@ -95,6 +95,13 @@ export default {
     'of': '{n} 人中'
   },
 
+  'chest': {
+    'label': '宝箱',
+    'ready': '宝箱を開けてコイン{n}枚を獲得',
+    'filling': '宝箱を補充中',
+    'spent': '宝箱は明日まで空です'
+  },
+
   'skills': {
 
     'grenade': '手榴弾',

@@ -63,12 +63,13 @@ const TRACK_ICONS: Partial<Record<UpgradeId, GameIconName>> = {
  * button is alone, and a painted bomb is simply a better bomb.
  *
  * In THIS list it is wrong, and it is wrong structurally rather than because a
- * file is missing. `ART_CATALOGUE.ui` has exactly three paintable ids — the
- * chest and the two skills — and there is no `ui/squad`, `ui/rate`, `ui/range`
- * or `ui/gatling`, nor any reason to paint one: they are stat glyphs, not
- * objects. So the shop can only ever show two painted rows above six drawn
- * ones, in a single column, at the same size, side by side. That does not read
- * as "these two are nicer", it reads as a half-finished screen.
+ * file is missing. `ART_CATALOGUE.ui` has four paintable ids — the idle chest,
+ * the shop's own forge and the two skills — and there is no `ui/squad`,
+ * `ui/rate`, `ui/range` or `ui/gatling`, nor any reason to paint one: they are
+ * stat glyphs, not objects. So the shop can only ever show two painted rows
+ * above six drawn ones, in a single column, at the same size, side by side.
+ * That does not read as "these two are nicer", it reads as a half-finished
+ * screen.
  *
  * One list, one hand. If the skills ever want their paintings back here, every
  * track needs one first.

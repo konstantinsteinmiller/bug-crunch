@@ -95,6 +95,13 @@ export default {
     'of': '{n}명 중'
   },
 
+  'chest': {
+    'label': '보물 상자',
+    'ready': '보물 상자를 열어 코인 {n}개 획득',
+    'filling': '보물 상자를 채우는 중',
+    'spent': '보물 상자는 내일까지 비어 있습니다'
+  },
+
   'skills': {
 
     'grenade': '수류탄',

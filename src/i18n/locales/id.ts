@@ -95,6 +95,13 @@ export default {
     'of': 'dari {n} pemain'
   },
 
+  'chest': {
+    'label': 'Peti harta',
+    'ready': 'Buka peti harta untuk {n} koin',
+    'filling': 'Peti harta sedang terisi',
+    'spent': 'Peti harta kosong sampai besok'
+  },
+
   'skills': {
 
     'grenade': 'Granat',

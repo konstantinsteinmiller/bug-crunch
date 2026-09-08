@@ -312,6 +312,64 @@ export const gatePumpCap = (op: GateOp): number =>
 export const isScaleOp = (op: GateOp): boolean => op === 'mul' || op === 'div'
 
 /**
+ * ─── The pump has to keep up with the doors ─────────────────────────────────
+ *
+ * A `+1` per half-second was the whole skill of the game for thirty stages and
+ * then quietly stopped being anything at all. The reason is arithmetic: a door
+ * prints `gateAddBase(stage)`, which is 12 at stage 10 and 36 at stage 46,
+ * while the pump keeps paying the same +1 a tick into a ~2 s in-range approach.
+ * That is a third of the door at stage 10 and a ninth of it at 46 — so the one
+ * mechanic that turns a bank into a decision fades out exactly as the banks get
+ * big enough to matter, and a late-game player is back to reading two numbers
+ * and walking at the larger one.
+ *
+ * Both halves of the fix are keyed to the same 15-stage band:
+ *
+ *   • the STEP grows by one per band, so `+/-` doors move by 1, 2, 3, 4 …
+ *     (stage 45 pumps `+4`, and a `-N` beside it pumps `-4` — the two are one
+ *     mechanic with a sign, and an asymmetric step would make the mirror a lie);
+ *   • the TICK shortens, so the same approach buys more ticks of it.
+ *
+ * At stage 46 that takes a full approach from `+4` on a printed `+36` to about
+ * `+19` — back to the third-of-a-door the mechanic was worth when it was still
+ * teaching people to commit early.
+ */
+export const GATE_PUMP_BAND = 15
+
+/** Whole survivors a `+N` / `-N` door moves per tick at this stage. */
+export const gatePumpStep = (stage: number): number =>
+  1 + Math.floor(Math.max(0, stage) / GATE_PUMP_BAND)
+
+/** How much of the tick a band shaves off an additive door… */
+export const GATE_TICK_DECAY = 0.05
+/**
+ * …and off a scale door, which gets a little more.
+ *
+ * `xN` and `/N` do NOT get the bigger step — a multiplier that climbed in
+ * whole numbers would be a `+N` in disguise, and `GATE_MUL_MAX` is 3 — so the
+ * only lever they have is the clock, and it is turned up to compensate.
+ */
+export const GATE_SCALE_TICK_DECAY = 0.06
+
+/**
+ * Floor under the tick.
+ *
+ * The decay is MULTIPLICATIVE rather than `1 - 0.05 × bands` for one reason
+ * that is not about feel: this game has no last stage. A linear cut reaches
+ * zero at stage 300, and a zero tick is an infinite loop in `stepGates`'
+ * `while`. Compounding can only approach the floor, and the floor is here
+ * anyway so that nothing downstream ever divides by a very small number.
+ */
+export const GATE_TICK_MIN_MS = 120
+
+/** The pump interval for a door of this op, at this stage. */
+export const gateTickMs = (op: GateOp, stage: number): number => {
+  const bands = Math.floor(Math.max(0, stage) / GATE_PUMP_BAND)
+  const decay = isScaleOp(op) ? GATE_SCALE_TICK_DECAY : GATE_TICK_DECAY
+  return Math.max(GATE_TICK_MIN_MS, Math.round(GATE_TICK_MS * (1 - decay) ** bands))
+}
+
+/**
  * A gate's number, printed.
  *
  * One decimal only while it is actually fractional: `x2` reads as `x2`, and

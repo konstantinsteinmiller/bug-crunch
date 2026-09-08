@@ -95,6 +95,13 @@ export default {
     'of': 'von {n} Spielern'
   },
 
+  'chest': {
+    'label': 'Schatztruhe',
+    'ready': 'Schatztruhe für {n} Münzen öffnen',
+    'filling': 'Schatztruhe — füllt sich',
+    'spent': 'Schatztruhe — leer bis morgen'
+  },
+
   'skills': {
 
     'grenade': 'Granate',

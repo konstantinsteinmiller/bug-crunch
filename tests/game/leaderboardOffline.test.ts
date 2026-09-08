@@ -200,6 +200,74 @@ describe('the baked snapshot is the bottom rung, reached only on failure', () =>
     expect(names(lb)).toEqual(['Nia', 'Obi'])
   })
 
+  it('still ranks a PERSONAL RECORD whose write failed', async () => {
+    // The case that shipped broken, and the one the player meets most: a new
+    // best takes the WRITE path in `reportRun`, which used to `return` straight
+    // after the POST. On a fresh device — a QA profile, a first session — that
+    // meant nothing had ever loaded a board, so a failed POST left the result
+    // screen with no rank at all and the chip hid itself.
+    const lb = await load({
+      snapshot: SNAPSHOT,
+      handler: async () => { throw new TypeError('Failed to fetch') }
+    })
+
+    // Nothing cached and nothing fetched yet: this is a brand-new install.
+    expect(lb.leaderboard.value).toBeNull()
+
+    await lb.reportRun(42, 900)
+
+    // It tried to post, then tried to read, and only then fell to the snapshot.
+    expect(sent.length, 'reportRun gave up without trying a read').toBeGreaterThan(1)
+    expect(lb.boardProvenance()).toBe('snapshot')
+    // The whole point: `resultRank` renders `#${rankFor(best)}` and hides the
+    // chip on 0, so this number is the difference between a rank and a blank.
+    expect(lb.rankFor(42)).toBeGreaterThan(0)
+    expect(lb.playerTotal.value).toBeGreaterThan(0)
+  })
+
+  it('does not spend a read when the write already brought a board back', async () => {
+    // The quota contract still holds on the happy path: a successful POST
+    // carries the board, so the added `ensureBoard` must no-op rather than
+    // turning every personal record into a write AND a read.
+    const lb = await load({
+      handler: async () => reply({ rank: 3, best: 42, total: 400, board: LIVE_BOARD })
+    })
+    await lb.reportRun(42, 900)
+    expect(sent.filter((u) => u.endsWith('/top')), 'a record cost a read as well as a write')
+      .toHaveLength(0)
+    expect(lb.boardProvenance()).toBe('live')
+  })
+
+  it('a climb costs ONE write, not one per stage', async () => {
+    // The quota fix, from the client's side. `reportRun` fires on every cleared
+    // stage and a good run beats its own best on nearly all of them, so a climb
+    // to stage 42 used to be forty-two POSTs. Each carries the CURRENT best, so
+    // skipping one loses nothing — the next carries the higher number.
+    const lb = await load({
+      handler: async () => reply({ rank: 9, best: 1, total: 400, board: LIVE_BOARD })
+    })
+
+    for (let stage = 1; stage <= 12; stage++) await lb.reportRun(stage, 100)
+
+    const writes = sent.filter((u) => u.endsWith('/score'))
+    expect(writes.length, `a 12-stage climb cost ${writes.length} writes`).toBe(1)
+  })
+
+  it('the end of a run always posts, however recently one went out', async () => {
+    // The exception that keeps the board correct: the score a player FINISHED
+    // on is the one that has to land, even if a mid-run write just happened.
+    const lb = await load({
+      handler: async () => reply({ rank: 9, best: 1, total: 400, board: LIVE_BOARD })
+    })
+
+    await lb.reportRun(3, 100)
+    await lb.reportRun(7, 100)                      // throttled away
+    await lb.reportRun(9, 100, { force: true })     // the run ended
+
+    const writes = sent.filter((u) => u.endsWith('/score'))
+    expect(writes).toHaveLength(2)
+  })
+
   it('prefers the cache over the snapshot — it is newer and ranks the same way', async () => {
     const lb = await load({
       cache: CACHED_BOARD,

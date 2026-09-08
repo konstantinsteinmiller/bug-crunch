@@ -134,6 +134,29 @@ export const GUARD_HINT_KEY = 'ts_guard_hint_seen'
  */
 export const LEVER_HINT_KEY = 'ts_lever_hint_seen'
 
+// ─── The idle treasure chest ────────────────────────────────────────────────
+//
+// The HUD chest fills on WALL-CLOCK time, not on play time, which is the whole
+// point of it: it is the reason to come back tomorrow. Both fields therefore
+// live inside the `ts_` blob and ride the cloud save with everything else —
+// a chest whose clock is per-device hands a player on two devices two
+// allowances a day, and one that resets on a cache clear pays out again
+// immediately. See `useTreasureChest.ts`.
+
+/** Epoch ms of the last claim. Absolute, so it survives a reload the way the
+ *  skill cooldowns do; 0/absent means "never claimed", which the composable
+ *  reads as a chest that is already waiting for a first-time player. */
+export const CHEST_KEY = 'ts_chest_at'
+/**
+ * The day's payout ledger, as `{ day: 'YYYY-MM-DD', coins: n }`.
+ *
+ * The DAY is stored with the total because the cap is per calendar day in the
+ * PLAYER's timezone: without the date a returning player's stale total would
+ * count against today, and with a UTC date the allowance would roll over at
+ * 02:00 in Berlin. A ledger whose `day` is not today reads as zero.
+ */
+export const CHEST_DAY_KEY = 'ts_chest_day'
+
 // ─── Leaderboard identity + posting bookkeeping ─────────────────────────────
 //
 // All six live inside the same `ts_` blob as everything else, so they ride the

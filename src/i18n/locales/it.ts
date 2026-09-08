@@ -95,6 +95,13 @@ export default {
     'of': 'su {n} giocatori'
   },
 
+  'chest': {
+    'label': 'Forziere',
+    'ready': 'Apri il forziere per {n} monete',
+    'filling': 'Forziere: si sta riempiendo',
+    'spent': 'Forziere: vuoto fino a domani'
+  },
+
   'skills': {
 
     'grenade': 'Granata',

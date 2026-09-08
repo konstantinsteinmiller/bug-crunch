@@ -181,6 +181,20 @@ export default {
   },
 
   // ─── Upgrades ─────────────────────────────────────────────────────────────
+  // ─── The idle treasure chest ──────────────────────────────────
+  //
+  // The chest is a drawing with a number under it and no words of its own, so
+  // these are what a screen reader has to work with. One line per STATE:
+  // announcing "treasure chest" for a chest that cannot be opened for another
+  // four minutes tells the player nothing they can act on. `label` is the
+  // floor under the glyph itself — see `iconLabels.ts`.
+  'chest': {
+    'label': 'Treasure chest',
+    'ready': 'Open the treasure chest for {n} coins',
+    'filling': 'Treasure chest — filling up',
+    'spent': 'Treasure chest — empty until tomorrow'
+  },
+
   'skills': {
     'grenade': 'Grenade',
     'shield': 'Shield'

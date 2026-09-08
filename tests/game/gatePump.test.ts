@@ -126,3 +126,124 @@ describe('the crowd pays for what it aims at', () => {
     expect(seen!.peak, 'the +N door stopped pumping').toBeGreaterThan(seen!.open)
   })
 })
+
+// ─── The pump has to keep up with the doors ─────────────────────────────────
+//
+// A flat `+1` per half-second is a third of a stage-10 door and a ninth of a
+// stage-46 one, so the one mechanic that turns a bank into a decision faded out
+// exactly as the banks got big enough to matter. Both halves of the pump are
+// keyed to a 15-stage band now — the step grows, the tick shortens — and these
+// pin the shape of both, because the curve is the feature.
+
+describe('the pump scales with the stage', () => {
+  it('adds one whole survivor per tick, per 15-stage band', async () => {
+    const { gatePumpStep, GATE_PUMP_BAND } = await import('@/game/survival')
+    expect(GATE_PUMP_BAND).toBe(15)
+    expect(gatePumpStep(1)).toBe(1)
+    expect(gatePumpStep(14)).toBe(1)
+    expect(gatePumpStep(15)).toBe(2)
+    expect(gatePumpStep(30)).toBe(3)
+    // The band the ask was written from: a stage-45 door pumps +4 a tick.
+    expect(gatePumpStep(45)).toBe(4)
+    expect(gatePumpStep(49)).toBe(4)
+  })
+
+  it('gives a `-N` the SAME step, because the two are one mechanic with a sign', async () => {
+    const { gatePumpStep, gateTickMs } = await import('@/game/survival')
+    // Nothing in the code branches on `sub`; this is the assertion that says so
+    // out loud, since an asymmetric step would make the mirror a lie and turn
+    // the bank back into arithmetic with one right answer.
+    for (const stage of [1, 20, 45, 90]) {
+      expect(gateTickMs('sub', stage)).toBe(gateTickMs('add', stage))
+      expect(gatePumpStep(stage)).toBe(gatePumpStep(stage))
+    }
+  })
+
+  it('shortens the tick 5% a band for `+/-` and 6% for `x//`', async () => {
+    const { gateTickMs, GATE_TICK_MS } = await import('@/game/survival')
+    expect(gateTickMs('add', 1)).toBe(GATE_TICK_MS)
+    expect(gateTickMs('mul', 1)).toBe(GATE_TICK_MS)
+    expect(gateTickMs('add', 15)).toBe(Math.round(GATE_TICK_MS * 0.95))
+    expect(gateTickMs('mul', 15)).toBe(Math.round(GATE_TICK_MS * 0.94))
+    expect(gateTickMs('add', 45)).toBe(Math.round(GATE_TICK_MS * 0.95 ** 3))
+    expect(gateTickMs('div', 45)).toBe(Math.round(GATE_TICK_MS * 0.94 ** 3))
+    // The scale doors keep their tenth — a multiplier climbing in whole
+    // numbers would be a `+N` in disguise — so the clock is their only lever,
+    // and it has to be the faster one.
+    expect(gateTickMs('mul', 45)).toBeLessThan(gateTickMs('add', 45))
+  })
+
+  it('never lets the tick reach zero, because this game has no last stage', async () => {
+    const { gateTickMs, GATE_TICK_MIN_MS } = await import('@/game/survival')
+    // A linear `1 - 0.05 × bands` hits zero at stage 300, and a zero tick is an
+    // infinite `while` in `stepGates`. Compounding can only approach the floor.
+    for (const stage of [300, 1000, 100_000]) {
+      expect(gateTickMs('add', stage)).toBeGreaterThanOrEqual(GATE_TICK_MIN_MS)
+      expect(gateTickMs('mul', stage)).toBeGreaterThanOrEqual(GATE_TICK_MIN_MS)
+    }
+  })
+
+  it('puts the mechanic back where it was worth committing for', async () => {
+    const { gatePumpStep, gateTickMs } = await import('@/game/survival')
+    const { gateAddBase } = await import('@/game/track')
+    /** What a ~2 s in-range approach adds, as a fraction of the printed door. */
+    const share = (stage: number): number => {
+      const ticks = Math.floor(2000 / gateTickMs('add', stage))
+      return (ticks * gatePumpStep(stage)) / gateAddBase(stage)
+    }
+    // It was a third of the door on the stages that teach it…
+    expect(share(10)).toBeGreaterThan(0.25)
+    // …and had decayed to a ninth by the stages that need it most. Both bands
+    // now sit in the same place, which is the whole point of the change.
+    expect(share(46)).toBeGreaterThan(0.4)
+    expect(share(90)).toBeGreaterThan(0.4)
+    // ── Where the curve goes, stated rather than assumed ──────────────────
+    //
+    // The step is LINEAR in the stage (one per 15) and `gateAddBase` past the
+    // campaign is LOGARITHMIC, so the ratio has no upper bound: the pump is
+    // half a door at stage 46, a whole one somewhere around 140, and more than
+    // the printed number after that. That is a deliberate consequence of the
+    // rule as specified — the printed number stays the floor and the approach
+    // is what earns the rest — and it is asserted here so that a later change
+    // to either curve has to come past it on purpose.
+    expect(share(140)).toBeGreaterThan(0.9)
+    expect(share(140)).toBeLessThan(1.4)
+    // Through the whole authored campaign and well past it, the door printed on
+    // the leaf is still the bigger half of what it pays. Stage 1 is exempt and
+    // always was: it prints `+3` against four ticks of pump, which is the one
+    // road in the game where committing early IS the whole payout — that is how
+    // the mechanic teaches itself, and it predates this change.
+    expect(share(1)).toBeGreaterThan(1)
+    for (const stage of [10, 30, 46, 90]) expect(share(stage)).toBeLessThan(1)
+  })
+})
+
+describe('the tick still SOUNDS like the pump at the stages it matters on', () => {
+  // The ladder is the game's loudest feedback: pitch climbs with the door's
+  // value, so holding fire plays a rising phrase and letting go stops it
+  // mid-bar. Its octave term was unbounded, so a `+36` door — every door past
+  // stage 30 — asked the browser for 55 kHz, got a clamp and a console warning,
+  // and played nothing a person can hear. Bigger pump steps only make a door
+  // reach that band sooner.
+  const AUDIBLE = { lo: 40, hi: 18_000 }
+
+  it('never leaves the audible band, however far a door is pumped', async () => {
+    const { tickFreq, LADDER_STEPS } = await import('@/use/useGameAudio')
+    for (let v = 0; v <= 999; v++) {
+      const f = tickFreq(v)
+      expect(f, `+${v}`).toBeGreaterThan(AUDIBLE.lo)
+      expect(f, `+${v}`).toBeLessThan(AUDIBLE.hi)
+    }
+    expect(LADDER_STEPS).toBe(15)
+  })
+
+  it('is a rising phrase that restarts, not a single note repeated', async () => {
+    const { tickFreq, LADDER_STEPS } = await import('@/use/useGameAudio')
+    const phrase = Array.from({ length: LADDER_STEPS }, (_, i) => tickFreq(i))
+    for (let i = 1; i < phrase.length; i++) expect(phrase[i]!).toBeGreaterThan(phrase[i - 1]!)
+    // …and the next tick starts the phrase again rather than climbing out of
+    // the band, which is the whole fix.
+    expect(tickFreq(LADDER_STEPS)).toBe(phrase[0])
+    expect(new Set(phrase).size).toBe(LADDER_STEPS)
+  })
+})

@@ -95,6 +95,13 @@ export default {
     'of': 'z {n} graczy'
   },
 
+  'chest': {
+    'label': 'Skrzynia skarbów',
+    'ready': 'Otwórz skrzynię za {n} monet',
+    'filling': 'Skrzynia skarbów — napełnia się',
+    'spent': 'Skrzynia skarbów — pusta do jutra'
+  },
+
   'skills': {
 
     'grenade': 'Granat',

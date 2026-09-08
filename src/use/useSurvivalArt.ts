@@ -1,7 +1,7 @@
 import {
   BARREL_R, BARRICADE_H, BASE_FIRE_RATE, ROCK_H, CRATE_R, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H,
   DIVIDER_HALF_W, ELITE_SWEEP_REACH, ELITE_TELEGRAPH,
-  GATE_TICK_MS, gatePumpCap, gateValueLabel,
+  gateTickMs, gatePumpCap, gateValueLabel, isScaleOp,
   LANE_HALF, MAX_FIRE_RATE, SLAM_RADIUS, SLAM_RADIUS_GROWTH, slamRadiusFor,
   SLAM_RADIUS_MAX, VIEW_HEIGHT, UNIT_R,
   type Divider, type GateOp
@@ -3953,12 +3953,30 @@ const drawRollers = (ctx: CanvasRenderingContext2D): void => {
     // the same channel.
     const tail = worldToScreenY(a.y - CROWD_MAX_R * 2)
 
-    // ── The lane ──
+    // ── The lane, and ONLY while the ball can still take anybody ──
+    //
+    // A ball bills once, at the frame it crosses the crowd's own line, and is
+    // inert for the rest of its roll (`kindTicks` is that latch — see
+    // `stepRoller`). The strip below is what tells the player the lane is
+    // lethal, so it has to go out with the threat.
+    //
+    // Without this the two states are indistinguishable: a player who dodges
+    // the crossing correctly, then steers back into the lane and follows the
+    // ball down, drives through a full-width hazard telegraph and takes nothing.
+    // Measured: 0 hits and 0 deaths with the crowd sitting dead on the ball.
+    // That reads as "the roller does no damage" — the strip promised a threat
+    // that had already been spent — and it is the same lie either way round,
+    // because a player who believes the strip will also refuse a lane that is
+    // now the safest place on the road.
+    //
+    // The BALL keeps drawing: it is a physical object and it is still rolling
+    // away. It is the claim on the lane that is withdrawn, not the object.
+    const spent = f.kindTicks > 0
     ctx.save()
-    ctx.globalAlpha = 0.14
+    ctx.globalAlpha = spent ? 0.04 : 0.14
     ctx.fillStyle = '#ff5a2a'
     ctx.fillRect(left, sy, right - left, tail - sy)
-    if (!cheapFx) {
+    if (!cheapFx && !spent) {
       // Hazard stripes, scrolling with the ball. Diagonals are the universal
       // "do not stand here" and they cost one clipped loop.
       ctx.save()
@@ -3978,8 +3996,10 @@ const drawRollers = (ctx: CanvasRenderingContext2D): void => {
       }
       ctx.restore()
     }
-    // The edges: the one line that says where safe begins.
-    ctx.globalAlpha = 0.5
+    // The edges: the one line that says where safe begins. Nearly out once the
+    // ball is spent — enough to keep the object legible against the road, not
+    // enough to read as a boundary worth respecting.
+    ctx.globalAlpha = spent ? 0.12 : 0.5
     ctx.strokeStyle = '#ff8a3c'
     ctx.lineWidth = Math.max(2, scale * 0.06)
     ctx.beginPath()
@@ -4987,6 +5007,11 @@ const measurePlate = (
 
 const drawGates = (ctx: CanvasRenderingContext2D): void => {
   const t = nowMs()
+  // The pump interval shortens with the stage, and the meter has to be
+  // measured against the SAME clock the sim charges on — a bar that fills at
+  // 500 ms while the door ticks at 400 reads as a gate that pumps early.
+  const addTickMs = gateTickMs('add', stage.value)
+  const scaleTickMs = gateTickMs('mul', stage.value)
   for (const g of getGates()) {
     if (g.used) continue
     // A dismissed leaf is still STANDING until the shockwave gets to it — that
@@ -5177,7 +5202,7 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
     // there, not a promise.
     if (g.value < gatePumpCap(g.op) && (hot || g.charge > 0)) {
       const barW = plateW * 1.02
-      const frac = Math.max(0, Math.min(1, g.charge / GATE_TICK_MS))
+      const frac = Math.max(0, Math.min(1, g.charge / (isScaleOp(g.op) ? scaleTickMs : addTickMs)))
       ctx.fillStyle = 'rgba(0,0,0,0.5)'
       ctx.fillRect(-barW / 2, plateH * 0.72, barW, scale * 0.1)
       ctx.fillStyle = tint.a

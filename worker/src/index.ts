@@ -39,6 +39,28 @@ interface Board { updatedAt: number; total: number; entries: BoardEntry[] }
 const TOP_N = 100
 /** Seconds the edge may serve a stale board. */
 const EDGE_TTL = 60
+
+/**
+ * How long the materialised top-N may serve before a READ rebuilds it.
+ *
+ * The clock that replaced "rebuild on every write". Five minutes bounds the
+ * rebuild cost at ~288 × `TOP_N` rows a day whatever the players do, where the
+ * old rule scaled with how many records were being set — worst exactly when the
+ * game was busiest.
+ */
+const BOARD_TTL_MS = 5 * 60_000
+
+/**
+ * How long a successful `/top` is kept as an emergency copy.
+ *
+ * A SECOND edge entry, written alongside the normal one but with a day's
+ * lifetime, and read only when D1 refuses. Every route here is backed by the
+ * same database, so when the free tier's read allowance runs out there is
+ * nothing left to answer with — including the cache table. This is the one
+ * store on the Worker that is not D1, so it is the only thing that can turn
+ * "the leaderboard is down" into "the leaderboard is a few hours old".
+ */
+const STALE_TTL = 86_400
 /** One id may not write more often than this. */
 const WRITE_COOLDOWN_MS = 3_000
 
@@ -103,6 +125,22 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}): 
     headers: { 'content-type': 'application/json; charset=utf-8', ...extra }
   })
 
+/**
+ * Re-clothe a cached response with this request's CORS headers.
+ *
+ * The cached copy carries whatever origin was allowed when it was stored, and
+ * every portal build serves the game from a different one — so the headers have
+ * to be rewritten per request or the second portal to ask gets a body it is not
+ * allowed to read.
+ */
+const withCors = (
+  res: Response, cors: Record<string, string>, extra: Record<string, string> = {}
+): Response => {
+  const out = new Response(res.body, res)
+  for (const [k, v] of Object.entries({ ...cors, ...extra })) out.headers.set(k, v)
+  return out
+}
+
 const hmac = async (secret: string, message: string): Promise<string> => {
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(secret),
@@ -122,26 +160,42 @@ const safeEqual = (a: string, b: string): boolean => {
 
 const readBoard = async (env: Env): Promise<Board> => {
   const row = await env.DB
-    .prepare("SELECT json FROM board_cache WHERE id = 'top'")
-    .first<{ json: string }>()
-  if (row?.json) {
+    .prepare("SELECT json, updated_at FROM board_cache WHERE id = 'top'")
+    .first<{ json: string; updated_at: number }>()
+  if (row?.json && Date.now() - row.updated_at < BOARD_TTL_MS) {
     try { return JSON.parse(row.json) as Board } catch { /* fall through */ }
   }
   return rebuildBoard(env)
 }
 
+/**
+ * Materialise the published rows.
+ *
+ * NOT called from the write path any more, and that is the whole of the quota
+ * fix. It used to run on every score that changed anything, and with the
+ * `COUNT(*)` that used to sit below it a single submission read the top hundred
+ * rows AND scanned the entire table — about 2 500 rows per personal record, on
+ * a free tier that allows 5 M a day. A busy afternoon exhausted it, `/top`
+ * started throwing, and the game lost its leaderboard.
+ *
+ * Now it is a LAZY READ-SIDE rebuild on a `BOARD_TTL_MS` clock, so its cost is
+ * bounded by the clock rather than by how well the players are doing. The board
+ * is a motivator, not an audit: a few minutes of staleness is invisible to the
+ * one person who could notice — the player who just posted — and they are shown
+ * their own new best from their own save regardless.
+ *
+ * `total` no longer comes from `COUNT(*)`; the histogram already knows it and
+ * costs one row (see `withDist`).
+ */
 const rebuildBoard = async (env: Env): Promise<Board> => {
   const { results } = await env.DB
     .prepare('SELECT name, score, squad FROM scores ORDER BY score DESC, updated_at ASC LIMIT ?')
     .bind(TOP_N)
     .all<{ name: string; score: number; squad: number }>()
-  const totalRow = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM scores')
-    .first<{ n: number }>()
 
   const board: Board = {
     updatedAt: Date.now(),
-    total: totalRow?.n ?? 0,
+    total: 0,
     entries: (results ?? []).map((r, i) => ({
       rank: i + 1, name: r.name, score: r.score, squad: r.squad
     }))
@@ -218,13 +272,23 @@ const withDist = async (env: Env, board: Board): Promise<Board & { dist: [number
   return { ...board, total: sumDist(dist) || board.total, dist }
 }
 
-/** Ties share a rank rather than being split — `COUNT(*) WHERE score > ?` + 1. */
-const rankOf = async (env: Env, score: number): Promise<number> => {
-  const row = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM scores WHERE score > ?')
-    .bind(score)
-    .first<{ n: number }>()
-  return (row?.n ?? 0) + 1
+/**
+ * Ties share a rank rather than being split — `COUNT(*) WHERE score > ?` + 1.
+ *
+ * Computed over the cached HISTOGRAM rather than by scanning the index, so it
+ * costs the one row the histogram already occupies instead of walking every
+ * score above the player. Same arithmetic, same answer, against a population
+ * that may be up to `DIST_TTL_MS` old — which cannot mislead the only person
+ * who reads it, because a rank is a motivator and an hour of new sign-ups moves
+ * it by a place or two.
+ */
+const rankOf = (dist: [number, number][], score: number): number => {
+  let above = 0
+  for (const [bucketScore, n] of dist) {
+    if (bucketScore <= score) break
+    above += n
+  }
+  return above + 1
 }
 
 export default {
@@ -239,21 +303,38 @@ export default {
     if (request.method === 'GET' && url.pathname === '/top') {
       const cache = caches.default
       const cacheKey = new Request(new URL('/top', url.origin).toString(), { method: 'GET' })
+      const staleKey = new Request(new URL('/top-stale', url.origin).toString(), { method: 'GET' })
+
       const hit = await cache.match(cacheKey)
-      if (hit) {
-        const out = new Response(hit.body, hit)
-        for (const [k, v] of Object.entries(cors)) out.headers.set(k, v)
-        return out
+      if (hit) return withCors(hit, cors)
+
+      try {
+        const board = await withDist(env, await readBoard(env))
+        const fresh = json(board, 200, { 'cache-control': `public, max-age=${EDGE_TTL}` })
+        await cache.put(cacheKey, fresh.clone())
+        // The emergency copy, refreshed on every successful read. Same body, a
+        // day's lifetime, and nothing reads it unless the database says no.
+        await cache.put(
+          staleKey,
+          json(board, 200, { 'cache-control': `public, max-age=${STALE_TTL}` })
+        )
+        return withCors(fresh, cors)
+      } catch {
+        // D1 is refusing — out of quota, or simply down. Serve the last board
+        // that worked rather than an error: a stale leaderboard is a
+        // leaderboard, and a 500 costs the game its rank cell.
+        const stale = await cache.match(staleKey)
+        if (stale) return withCors(stale, cors, { 'x-board-stale': '1' })
+        // Nothing cached either. Say so honestly with a status the client reads
+        // as a failure, so it drops to its own baked snapshot instead of
+        // adopting an empty board as if it were real.
+        return json({ error: 'unavailable' }, 503, cors)
       }
-      const board = await withDist(env, await readBoard(env))
-      const fresh = json(board, 200, { 'cache-control': `public, max-age=${EDGE_TTL}` })
-      await cache.put(cacheKey, fresh.clone())
-      for (const [k, v] of Object.entries(cors)) fresh.headers.set(k, v)
-      return fresh
     }
 
     // ── POST /score ──
     if (request.method === 'POST' && url.pathname === '/score') {
+     try {
       let body: Record<string, unknown>
       try {
         body = (await request.json()) as Record<string, unknown>
@@ -311,11 +392,30 @@ export default {
         changed = true
       }
 
-      const board = await withDist(env, changed ? await rebuildBoard(env) : await readBoard(env))
-      if (changed) {
-        await caches.default.delete(new Request(new URL('/top', url.origin).toString()))
-      }
-      return json({ rank: await rankOf(env, best), best, total: board.total, board }, 200, cors)
+      // NEITHER rebuilds the board NOR busts the edge cache any more.
+      //
+      // Both used to happen on every score that changed anything, and together
+      // they were the whole quota problem: the rebuild scanned the table, and
+      // the cache delete then guaranteed the next reader could not be served
+      // from the edge and had to scan it again. The board now rebuilds on a
+      // clock (`BOARD_TTL_MS`) and the edge entry expires on its own, so a
+      // record costs one indexed lookup, one write and two cached rows.
+      //
+      // The player who just posted is the only one who could notice, and they
+      // are shown their own new best from their own save either way.
+      const board = await withDist(env, await readBoard(env))
+      return json(
+        { rank: rankOf(board.dist, best), best, total: board.total, board },
+        200,
+        cors
+      )
+     } catch {
+      // The database refused. An unhandled throw here is error 1101 with an
+      // HTML body, which the client can only read as "something broke"; a 503
+      // is the same outcome stated in the vocabulary it already handles, so it
+      // keeps the run's score locally and retries on the next one.
+      return json({ error: 'unavailable' }, 503, cors)
+     }
     }
 
     return json({ error: 'not found' }, 404, cors)

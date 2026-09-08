@@ -180,10 +180,12 @@ export const criticalArtWants = (): ArtWant[] => {
     ...(stage >= 3 ? [['gate', 'frame-sub'] as ArtWant] : []),
     // What every second of play shows.
     ['round', 'tracer'], ['fx', 'muzzle'], ['fx', 'smoke'], ['fx', 'scorch'], ['fx', 'ring-shock'],
-    // The shop button and the grenade button are on screen from the first
-    // second of every run — and the grenade's own round is 5 kB, so the one
-    // thing a first-time player DOES reach for is painted when they reach.
-    ['ui', 'chest'], ['ui', 'skill-grenade'], ['round', 'grenade']
+    // The chest, the shop button and the grenade button are on screen from the
+    // first second of every run — and the grenade's own round is 5 kB, so the
+    // one thing a first-time player DOES reach for is painted when they reach.
+    // The chest leads: it is the first thing a new player is ever paid by, and
+    // it is claimable before the road has moved.
+    ['ui', 'chest'], ['ui', 'forge'], ['ui', 'skill-grenade'], ['round', 'grenade']
   ])
 }
 
