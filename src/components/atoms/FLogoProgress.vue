@@ -149,16 +149,45 @@ const progress = computed(() => loadingProgress.value)
 
 void preloadAssets()
 
-// First-load interstitial — kept ON for GamePix only. GameDistribution and
-// GameMonetize were intentionally removed: the post-splash ad placement on
-// those networks was producing borderline-incidental-click impressions (the
-// player taps "play" expecting the game and lands on an ad), so we keep the
-// midgame between-rounds interstitial as the sole placement on those builds.
-// GamePix portal QA still requires the post-load ad, so its arm stays.
+// First-load interstitial — ON for GamePix and GameMonetize.
+//
+// GameMonetize QA, 2026-09-09: "Ads should be shown the first time after the
+// game loads." That ad was served by `useFirstStartInterstitial`, awaited in
+// `GameScene.boot()`, and it SAMPLES `isInterstitialReady` exactly once — which
+// makes the placement a race it loses on a real portal:
+//
+//   * `boot()` runs from `onMounted` on the lazily-imported GameScene route
+//     chunk — a local, modulepreloaded file.
+//   * The ad SDK is only injected by `initAds()`, called AFTER `app.mount()`
+//     returns (`main.ts`), and does not report ready until
+//     api.gamemonetize.com has loaded and its ad stack has initialised.
+//
+// So the game's own chunk beats a cross-origin ad SDK, `isInterstitialReady` is
+// false at the one moment that module looks, and it deliberately does not burn
+// its one-shot when not ready — waiting for a retry that cannot come, because
+// `boot()` runs once per session. No ad, no error, nothing logged.
+//
+// It stayed hidden because BOTH proofs were run against an SDK with no network
+// in front of it: the unit suite hands the module a ready ref, and the portal-QA
+// stub answered SDK_READY in 30 ms, so locally the SDK won the race every time.
+// (`scripts/portal-qa.mjs` now delays that handshake for this reason.)
+//
+// This orchestrator has no such race: it WATCHES readiness and fires on the
+// first moment the splash is gone AND the SDK reports a fillable interstitial,
+// however long the SDK takes to come up.
+//
+// GameDistribution is deliberately NOT armed here. Its post-splash ad was
+// removed for producing borderline-incidental-click impressions (the player taps
+// "play" expecting the game and lands on an ad) and GD moderation has not asked
+// for it back — re-arming it is a product decision, not a bug fix.
+//
 // Every env read is a static literal so Rollup DCEs the entire branch (helper
 // module included) on other platform builds — same pattern as the Playgama /
 // GamePix loading signals further down.
-if (import.meta.env.VITE_APP_GAMEPIX === 'true') {
+if (
+  import.meta.env.VITE_APP_GAMEPIX === 'true'
+  || import.meta.env.VITE_APP_GAME_MONETIZE === 'true'
+) {
   armFirstLoadInterstitial()
 }
 
@@ -308,12 +337,12 @@ watch(done, (isDone) => {
       signalGameReadyToGamepix()
       signalGameReadyToYandex()
       signalGameReadyToPoki()
-      // Triggers the GamePix first-load interstitial (no-op on other builds
-      // — the orchestrator was never armed). GD / GameMonetize used to share
-      // this fire but were removed above; their first-load ad is gone, the
-      // midgame placement is the only ad on those builds now. Runs alongside
+      // Triggers the GamePix / GameMonetize first-load interstitial (no-op on
+      // other builds — the orchestrator was never armed there). Runs alongside
       // the platform `game_ready` / `gameLoaded` signals so the ad lands
-      // immediately once the splash is gone and the SDK is fillable.
+      // immediately once the splash is gone and the SDK is fillable; if the SDK
+      // is still initialising this only ARMS the fire, and the readiness watcher
+      // in the orchestrator lands it a moment later.
       notifySplashGone()
     }, 150)
   }

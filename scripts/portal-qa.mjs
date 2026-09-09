@@ -11,6 +11,8 @@
 //   --platform <id>   gamepix | gamemonetize | none          (default gamepix)
 //   --dist <dir>      built output to serve                 (default ./dist)
 //   --chrome <path>   Chrome executable
+//   --sdk-delay <ms>  how long the stubbed SDK takes to report ready
+//                                                            (default 1200)
 //   --keep            leave the browser open for inspection
 //
 // Exits non-zero on the first failed check, so CI can gate on it.
@@ -52,6 +54,16 @@
 // 4. HOSTNAME GATES. Platform builds refuse to render off their portal's
 //    domain. Satisfy the gate with `--host-resolver-rules` rather than
 //    weakening it: a build that skips its own gate is not the build QA runs.
+// 5. AN SDK THAT IS READY INSTANTLY. This one shipped a QA rejection. A stub
+//    that answers its handshake in 30 ms has no network in front of it, so it
+//    wins every race against the game's own boot — and an ad placement that
+//    SAMPLES readiness once, at boot, passes here and fires nothing on the
+//    portal, where the SDK is a cross-origin script with an ad stack to load.
+//    GameMonetize rejected survivalist for exactly that ("Ads should be shown
+//    the first time after the game loads") while this harness was green.
+//    `--sdk-delay` therefore defaults to a REALISTIC 1200 ms: slow enough that
+//    a sampled-once placement loses, which is the whole point. Set it to 0 only
+//    to demonstrate the difference.
 
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -72,6 +84,11 @@ const ROOT = resolve(arg('dist', 'dist'))
 const CHROME = arg('chrome', process.env.CHROME_PATH
   ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe')
 const KEEP = flag('keep')
+// How long the stubbed SDK waits before reporting ready. NOT a detail: see
+// note 5 above — an instantly-ready stub hides every readiness race, which is
+// the class of bug that got the GameMonetize build rejected. Keep it well past
+// the moment the game's own route chunk mounts.
+const SDK_DELAY_MS = Number(arg('sdk-delay', '1200'))
 const PORT = 8300 + Math.floor(Math.random() * 500)
 const CDP_PORT = 9500 + Math.floor(Math.random() * 400)
 const PROFILE = mkdtempSync(join(tmpdir(), 'portal-qa-'))
@@ -81,7 +98,7 @@ const PROFILE = mkdtempSync(join(tmpdir(), 'portal-qa-'))
 // Platform-independent. Installs the counters and the levers every check below
 // pulls; the per-platform SDK stub is appended to it.
 const PROBE = `
-var qa = window.__qa = { playCalls: [], sdkCalls: [], console: [], media: [], muted: true };
+var qa = window.__qa = { playCalls: [], sdkCalls: [], console: [], media: [], muted: true, sdkDelayMs: ${SDK_DELAY_MS} };
 
 // A harness-only shim, and the only one here. Serving on a mapped hostname over
 // plain http means the page is NOT a secure context, so \`crypto.randomUUID\` is
@@ -165,7 +182,12 @@ var sdk = {
   // Read by the plugin's initial-audio-state probe. MUTED at boot, which is
   // the flow QA runs: mute the portal chrome, then reload.
   isMuted: function () { return qa.muted; },
-  init: function () { log('init'); return Promise.resolve(); },
+  // Delayed like GameMonetize's handshake (--sdk-delay), so a placement that
+  // samples readiness once at boot cannot pass here and fire nothing live.
+  init: function () {
+    log('init');
+    return new Promise(function (r) { setTimeout(r, qa.sdkDelayMs); });
+  },
   customLoading: function (v) { log('customLoading:' + v); },
   gameLoading: function (p) { log('gameLoading:' + p); },
   gameLoaded: function (cb) { log('gameLoaded'); if (cb) setTimeout(cb, 0); },
@@ -224,7 +246,11 @@ Object.defineProperty(window, 'SDK_OPTIONS', {
   set: function (v) {
     opts = v;
     log('SDK_OPTIONS');
-    setTimeout(function () { qa.gmEmit('SDK_READY'); }, 30);
+    // Delayed on purpose (--sdk-delay). The real handshake is a cross-origin
+    // script load plus ad-stack init; a stub that answers immediately makes
+    // any placement that samples readiness at boot pass here and do nothing
+    // on the portal.
+    setTimeout(function () { qa.gmEmit('SDK_READY'); }, qa.sdkDelayMs);
   }
 });
 qa.gmEmit = function (name) {
@@ -256,13 +282,21 @@ var runAd = function (kind) {
       // observable, and the first-play interstitial must land before it moves.
       progressAtOpen: qa.progress(),
       musicAtOpen: qa.musicPlays(),
+      // The count above is CUMULATIVE play() calls, which cannot tell "the
+      // music started at boot and the ad hard-stopped it" from "the music is
+      // audible under the ad". With a post-splash placement the first is
+      // normal and the second is the graded failure, so sample the elements
+      // themselves as well.
+      audioAtOpen: qa.audioState(),
       musicPastCap: null,
+      audioPastCap: null,
       railPastCap: null
     };
     qa.gmEmit('SDK_GAME_PAUSE');
     // Sample PAST the 6 s cap but before the ad closes.
     setTimeout(function () {
       qa.adAudit.musicPastCap = qa.musicPlays();
+      qa.adAudit.audioPastCap = qa.audioState();
       qa.adAudit.railPastCap = qa.progress();
     }, 8000);
     setTimeout(function () {
@@ -516,13 +550,22 @@ try {
       check('the ad opened BEFORE the run started moving',
         audit.progressAtOpen === null || audit.progressAtOpen === '' || parseFloat(audit.progressAtOpen) === 0,
         `rail at open = ${audit.progressAtOpen}`)
-      check('no music underneath the ad', audit.musicAtOpen === 0,
-        `music play()=${audit.musicAtOpen}`)
+      // SILENT, not never-started. GameMonetize's ad is the post-splash
+      // first-load placement (`useFirstLoadInterstitial`), so stage 1 and its
+      // music are already running behind the splash when the ad opens — the
+      // guarantee is that `showMidgameAd` hard-stops them BEFORE the request,
+      // not that the track never played. A cumulative play() count cannot tell
+      // those apart; the elements themselves can. `count > 0` guards the
+      // empty-set trap (note 2 in the header).
+      check('no music underneath the ad',
+        audit.audioAtOpen.count > 0 && audit.audioAtOpen.allPaused,
+        `audio at open = ${JSON.stringify(audit.audioAtOpen)}`)
       // The one that regressed: with no impression reported, the wait was
       // released at 6 s, the ad gate dropped, and the game started playing
       // music under an ad that had four seconds left to run.
-      check('still silent PAST the 6 s cap (ad ran 12 s)', audit.musicPastCap === 0,
-        `music play() at 8 s = ${audit.musicPastCap}`)
+      check('still silent PAST the 6 s cap (ad ran 12 s)',
+        audit.audioPastCap.count > 0 && audit.audioPastCap.allPaused,
+        `audio at 8 s = ${JSON.stringify(audit.audioPastCap)}`)
     }
     // Polled, not sampled. The ad's resume event does not start the music —
     // it releases `boot()`, which then starts the stage, waits a tick, sizes
