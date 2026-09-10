@@ -49,13 +49,33 @@ export default {
     'fireRate': 'Rate',
     'incoming': 'Incoming attack!',
     'dodge': 'Dodge',
+    // ─── The round-number badge ─────────────────────────────────────────────
+    // A gold pill under the squad chip for 1.4 s when the crowd doubles past a
+    // rung of the milestone ladder (25 / 50 / 100 / 200 / 400 …). It sits in a
+    // HUD corner beside a number that is already on screen, so it must stay to
+    // roughly TWO SHORT WORDS in every language — a phrase that wraps here
+    // covers the progress rail. `{n}` is the milestone itself; it is the thing
+    // the player is meant to remember and say out loud, so keep it in the
+    // string rather than replacing it with a pronoun.
+    'milestone': '{n} strong!',
     // ─── The weapon tag ─────────────────────────────────────────────────────
-    // Both are `aria-label`s on a badge that is otherwise a glyph and two dots,
-    // so they are READ ALOUD and never seen. Translate for clarity, not for
-    // brevity — nothing on screen depends on their length.
+    // Three of these four are `aria-label`s on a badge that is otherwise a
+    // glyph and two dots, so they are READ ALOUD and never seen. Translate for
+    // clarity, not for brevity — nothing on screen depends on their length.
     // `{n}` / `{total}` are the levers pulled and the levers there are.
     'weaponActive': '{name} ready',
-    'weaponLocked': '{name} locked — {n} of {total} levers shot'
+    'weaponLocked': '{name} locked — {n} of {total} levers shot',
+    // Stage 2's free box, which has no levers to count. It replaces the locked
+    // wording there: a badge saying "locked — 0 of 0 levers shot" over the one
+    // box in the game with no lock was the HUD contradicting the road.
+    'weaponGift': '{name} ahead — free, no levers',
+    // …and the ONE piece of weapon-tag copy that is actually SEEN. It sits in
+    // the slot the active badge fills with "×2.5", roughly five characters
+    // wide before the pill starts pushing into the progress rail, so this has
+    // to be one SHORT word — the shoutiest available synonym for "no cost",
+    // not a sentence. If a language has no such word, prefer its shortest
+    // "gift"/"free" noun over a correct phrase that wraps.
+    'weaponFree': 'FREE'
   },
 
   // ─── The per-stage weapons ────────────────────────────────────────────────
@@ -123,12 +143,70 @@ export default {
     'guard': {
       'touch': 'Shield up — your fire does nothing. MOVE!',
       'desktop': 'Shield up — your fire does nothing. MOVE!'
+    },
+    // The rescue cage, shown once ever, while one is still ahead of the crowd.
+    // The word that has to survive translation is FREE/JOIN: at a glance a cage
+    // is another box on the shoulder, and the whole reason to cross the road for
+    // it is that it pays PEOPLE rather than a stat.
+    'cage': {
+      'touch': 'Shoot cages — the prisoners join your squad',
+      'desktop': 'Shoot cages — the prisoners join your squad'
+    },
+    // The auto-shield box, same terms. It must carry that the protection WAITS —
+    // a player who reads "shield" expects the three-second skill they already
+    // own and will spend the detour expecting a timer.
+    'shieldBox': {
+      'touch': 'Shield box — it waits, then blocks one big hit',
+      'desktop': 'Shield box — it waits, then blocks one big hit'
     }
   },
 
   // ─── Result / stage summary ───────────────────────────────────────────────
   'flow': {
-    'unlocked': 'Unlocked!'
+    'unlocked': 'Unlocked!',
+    // ─── The second wind ──────────────────────────────────────────────────
+    //
+    // Read under the boss rail for three seconds when a wiped crowd is handed
+    // back mid-run. It replaced a one-word "Rally!" on the mid-screen banner,
+    // which named the mechanic without explaining it — and an unexplained gift
+    // reads as a bug the player happened to profit from.
+    //
+    // Two lines, and they do different jobs: the first says somebody saved
+    // you, the second says what you got. Keep the first short enough to sit on
+    // one line on a phone; it wraps rather than overflowing, but a wrapped
+    // headline costs a beat of reading time in the middle of a fight.
+    'guardian': 'A guardian angel saved you!',
+    'guardianSub': '{n} survivors are back',
+    // The promise on the between-stages banner. `{label}` is the unlock's name
+    // (a weapon, the shield, "choose a weapon") and `{when}` is one of the
+    // `ladder.*` timing phrases below — two interpolations so the sentence
+    // order stays the locale's own.
+    'next': 'Next: {label} · {when}'
+  },
+  // ─── The gift ladder ──────────────────────────────────────────────────────
+  // The HUD chip and the banner name what is coming and when. Both render in a
+  // pill beside the stage number, so keep them to two or three short words.
+  'ladder': {
+    'weaponPick': 'Choose a weapon',
+    'nextStage': 'next stage',
+    'stagesAway': 'in {n} stages'
+  },
+  // ─── The weapon choice ────────────────────────────────────────────────────
+  // A two-card reveal on the handover into stage 3. The title rides the iron
+  // ribbon; the perks are one line each beside a glyph on a card ~45 % of a
+  // phone's width, so translate them as headlines rather than sentences.
+  'weaponPick': {
+    'title': 'Choose your weapon',
+    'subtitle': 'Yours for Stage {n}. More are waiting on the road.',
+    'take': 'Take it',
+    'rocket': {
+      'a': 'Homing salvo',
+      'b': 'Blast damage'
+    },
+    'gatling': {
+      'a': 'Twice the fire rate',
+      'b': 'Pumps gates faster'
+    }
   },
   'result': {
     'stageClear': 'Stage Clear!',
@@ -156,6 +234,28 @@ export default {
     'upgradeHint': 'Upgrade your squad!',
     'rankOf': 'of {n}',
     'upNext': 'Up next: Stage {n}'
+  },
+
+  // ─── The share card ───────────────────────────────────────────────────────
+  //
+  // Only TWO strings, and neither of them is on the picture. The card itself is
+  // set from keys this file already had — `gameName` for the mark,
+  // `result.newRecord` for the line that explains why the card exists,
+  // `leaderboard.stage` and `leaderboard.squad` for the two captions, and
+  // `result.rankOf` for the population beside the placing. A card is a poster
+  // of the result screen, so it says what the result screen says.
+  //
+  // `action` names an ICON-ONLY button and is never seen: it is the accessible
+  // name, and the only thing a screen reader has to work with.
+  //
+  // `text` is the message the OS share sheet carries beside the image, so it is
+  // read by whoever RECEIVES it rather than by the player — a boast, not an
+  // instruction. It has to survive arriving with no picture attached, which is
+  // what several targets do with a file they will not preview, so the stage
+  // number and the game's name both belong in the sentence.
+  'share': {
+    'action': 'Share your run',
+    'text': 'I reached stage {n} in {game}. Think you can go deeper?'
   },
 
   // ─── Leaderboard ──────────────────────────────────────────────────────────
@@ -193,6 +293,35 @@ export default {
     'ready': 'Open the treasure chest for {n} coins',
     'filling': 'Treasure chest — filling up',
     'spent': 'Treasure chest — empty until tomorrow'
+  },
+
+  // ─── The daily expedition ─────────────────────────────────────────────────
+  //
+  // One road a day, the same road for every player, worth triple coins. The
+  // whole feature is a chip with a glyph on it, so — as with the chest above —
+  // most of these strings exist for the screen reader, and each names the STATE
+  // rather than the object: "daily expedition" said to a player who already ran
+  // today's tells them nothing they can act on.
+  //
+  // `multiplier` is the badge on the chip and is deliberately SPLIT from any
+  // word, exactly like `result.tripleCoins`: the multiplier's order is
+  // locale-dependent (`3×` in most, `×3` in ru/uk/kk/ar) and `{n}` must stay a
+  // bare digit beside the sign. `spent` takes `{time}` = "H:MM" until the next
+  // road prints, which is a UTC boundary and therefore NOT midnight for most
+  // players — the countdown is what saves them having to know that.
+  //
+  // `hud` replaces "Stage 16" on the run readout and `title` headlines the
+  // banner and the result screen: keep `hud` to one short word, it shares a
+  // 320 px row with the squad, damage and fire-rate chips.
+  'expedition': {
+    'title': 'Daily Expedition',
+    'hud': 'Expedition',
+    'multiplier': '{n}×',
+    'available': "Daily expedition — today's road, triple coins",
+    'confirm': 'Start expedition',
+    'spent': 'Daily expedition — a new road in {time}',
+    'done': 'Back tomorrow',
+    'back': 'Back to the campaign'
   },
 
   'skills': {
@@ -245,6 +374,14 @@ export default {
       'cozy': 'Cozy Harmony',
       'trance': 'Trance Tunnel'
     },
+    // ─── Vibration ───────────────────────────────────────────────────────────
+    // Rendered ONLY on a device that actually has a motor (see
+    // `useHaptics.hapticsAvailable`), so most players will never see these.
+    // `on` / `off` are generic on purpose — they are the labels of a two-item
+    // dropdown and the row above them already says what is being switched.
+    'haptics': 'Vibration',
+    'on': 'On',
+    'off': 'Off',
     'close': 'Save & Close',
     'difficulties': {
       'easy': 'Easy',

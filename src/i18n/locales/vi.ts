@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tốc độ',
     'incoming': 'Sắp bị tấn công!',
     'dodge': 'Né',
+    'milestone': '{n} chiến binh!',
     'weaponActive': '{name} sẵn sàng',
-    'weaponLocked': '{name} đã khoá — đã bắn {n}/{total} cần gạt'
+    'weaponLocked': '{name} đã khoá — đã bắn {n}/{total} cần gạt',
+    'weaponGift': '{name} phía trước — miễn phí, không cần cần gạt',
+    'weaponFree': 'MIỄN PHÍ'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Thùng xanh dương: cả đội bắn nhanh hơn', 'desktop': 'Thùng xanh dương: cả đội bắn nhanh hơn' },
     'boss': { 'touch': 'Tránh xa vòng tròn đỏ!', 'desktop': 'Tránh xa vòng tròn đỏ!' },
     'lever': { 'touch': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí', 'desktop': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí' },
-    'guard': { 'touch': 'Khiên bật — bắn vô ích. TRÁNH RA!', 'desktop': 'Khiên bật — bắn vô ích. TRÁNH RA!' }
+    'guard': { 'touch': 'Khiên bật — bắn vô ích. TRÁNH RA!', 'desktop': 'Khiên bật — bắn vô ích. TRÁNH RA!' },
+    'cage': { 'touch': 'Bắn vào lồng — tù nhân sẽ gia nhập đội', 'desktop': 'Bắn vào lồng — tù nhân sẽ gia nhập đội' },
+    'shieldBox': { 'touch': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn', 'desktop': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn' }
   },
 
   'flow': {
 
-    'unlocked': 'Đã mở khóa!'
+    'unlocked': 'Đã mở khóa!',
+
+    'guardian': "Thiên thần hộ mệnh đã cứu bạn!",
+
+    'guardianSub': "{n} người sống sót đã trở lại",
+
+    'next': "Tiếp theo: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Chọn vũ khí",
+    'nextStage': "màn tiếp theo",
+    'stagesAway': "sau {n} màn"
+  },
+  'weaponPick': {
+    'title': "Chọn vũ khí của bạn",
+    'subtitle': "Của bạn ở Màn {n}. Còn nhiều hơn đang chờ trên đường.",
+    'take': "Lấy",
+    'rocket': {
+      'a': "Loạt đạn tự dẫn",
+      'b': "Sát thương nổ"
+    },
+    'gatling': {
+      'a': "Tốc độ bắn gấp đôi",
+      'b': "Bơm cổng nhanh hơn"
+    }
+  },
   'result': {
     'stageClear': 'Qua màn!',
     'wipedOut': 'Đội bị xóa sổ',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Nâng cấp đội của bạn!',
     'rankOf': 'trên {n}',
     'upNext': 'Tiếp theo: Màn {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Chia sẻ lượt chơi',
+    'text': 'Tôi đã đến màn {n} trong {game}. Bạn đi xa hơn được không?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Mở rương báu nhận {n} xu',
     'filling': 'Rương báu đang đầy dần',
     'spent': 'Rương báu trống đến ngày mai'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Chuyến đi hằng ngày',
+    'hud': 'Chuyến đi',
+    'multiplier': '{n}×',
+    'available': 'Chuyến đi hằng ngày — cung đường hôm nay, xu gấp ba',
+    'confirm': 'Bắt đầu chuyến đi',
+    'spent': 'Chuyến đi hằng ngày — cung đường mới sau {time}',
+    'done': 'Mai quay lại',
+    'back': 'Về chiến dịch'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Tùy chọn', 'general': 'Chung', 'audio': 'Âm thanh', 'language': 'Ngôn ngữ',
     'difficulty': 'Độ khó', 'soundEffects': 'Hiệu ứng âm thanh', 'music': 'Nhạc', 'musicTrack': 'Bản nhạc',
     'musicTracks': { 'cozy': 'Giai điệu ấm cúng', 'trance': 'Đường hầm Trance' },
+    'haptics': 'Rung', 'on': 'Bật', 'off': 'Tắt',
     'close': 'Lưu & Đóng',
     'difficulties': { 'easy': 'Dễ', 'medium': 'Trung bình', 'hard': 'Khó' },
     'difficultyHints': {

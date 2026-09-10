@@ -93,7 +93,13 @@ const dash = computed(() => `${Math.max(0, Math.min(1, props.progress)) * RING_L
   inset: 0
   // A hole rather than a sheet: the squad sits at ~72 % down the screen (see
   // `CROWD_SCREEN_Y`) and stays lit, everything else recedes.
-  background: radial-gradient(circle at 50% 72%, rgba(4, 8, 18, 0) 0%, rgba(4, 8, 18, 0.42) 26%, rgba(4, 8, 18, 0.82) 62%)
+  //
+  // The hole is an ELLIPSE reaching up the road, not a circle around the
+  // squad. Stage 1's opening doorway now stands inside the first screen and
+  // is being shot — and pumped — while this is up (`OPENING_GATE_Y`), and it
+  // is the one thing on the road worth a stranger's attention: the number
+  // racing under the crowd's fire has to stay readable through the scrim.
+  background: radial-gradient(ellipse 62% 58% at 50% 62%, rgba(4, 8, 18, 0) 0%, rgba(4, 8, 18, 0.22) 42%, rgba(4, 8, 18, 0.58) 74%, rgba(4, 8, 18, 0.82) 100%)
 
 .tut__stage
   position: relative

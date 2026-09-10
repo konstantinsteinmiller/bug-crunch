@@ -31,8 +31,11 @@ export default {
     'fireRate': 'معدل',
     'incoming': 'هجوم قادم!',
     'dodge': 'تفادَ',
+    'milestone': '{n} مقاتل!',
     'weaponActive': '{name} جاهز',
-    'weaponLocked': '{name} مقفل — تمت إصابة {n} من {total} رافعات'
+    'weaponLocked': '{name} مقفل — تمت إصابة {n} من {total} رافعات',
+    'weaponGift': '{name} في الأمام — مجاني، بلا روافع',
+    'weaponFree': 'مجاني'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'الصناديق الزرقاء: الجميع يطلق أسرع', 'desktop': 'الصناديق الزرقاء: الجميع يطلق أسرع' },
     'boss': { 'touch': 'ابتعد عن الدائرة الحمراء!', 'desktop': 'ابتعد عن الدائرة الحمراء!' },
     'lever': { 'touch': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح', 'desktop': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح' },
-    'guard': { 'touch': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!', 'desktop': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!' }
+    'guard': { 'touch': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!', 'desktop': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!' },
+    'cage': { 'touch': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك', 'desktop': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك' },
+    'shieldBox': { 'touch': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة', 'desktop': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة' }
   },
 
   'flow': {
 
-    'unlocked': 'تم الفتح!'
+    'unlocked': 'تم الفتح!',
+
+    'guardian': "أنقذك ملاك حارس!",
+
+    'guardianSub': "عاد {n} من الناجين",
+
+    'next': "التالي: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "اختر سلاحًا",
+    'nextStage': "المرحلة التالية",
+    'stagesAway': "بعد {n} مراحل"
+  },
+  'weaponPick': {
+    'title': "اختر سلاحك",
+    'subtitle': "لك في المرحلة {n}. المزيد بانتظارك على الطريق.",
+    'take': "خذه",
+    'rocket': {
+      'a': "وابل موجّه",
+      'b': "ضرر انفجاري"
+    },
+    'gatling': {
+      'a': "ضعف معدل الإطلاق",
+      'b': "يشحن البوابات أسرع"
+    }
+  },
   'result': {
     'stageClear': 'اجتزت المرحلة!',
     'wipedOut': 'أُبيد الفريق',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'طوّر فريقك!',
     'rankOf': 'من {n}',
     'upNext': 'التالي: المرحلة {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'شارك جولتك',
+    'text': 'وصلت إلى المرحلة {n} في {game}. هل تقدر تتجاوزني؟'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'افتح صندوق الكنز مقابل {n} عملة',
     'filling': 'صندوق الكنز قيد الامتلاء',
     'spent': 'صندوق الكنز فارغ حتى الغد'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'الرحلة اليومية',
+    'hud': 'رحلة',
+    'multiplier': '×{n}',
+    'available': 'الرحلة اليومية — طريق اليوم، عملات ثلاثية',
+    'confirm': 'ابدأ الرحلة',
+    'spent': 'الرحلة اليومية — طريق جديد بعد {time}',
+    'done': 'عد غدًا',
+    'back': 'العودة إلى الحملة'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'الخيارات', 'general': 'عام', 'audio': 'الصوت', 'language': 'اللغة',
     'difficulty': 'الصعوبة', 'soundEffects': 'المؤثرات الصوتية', 'music': 'الموسيقى', 'musicTrack': 'المقطوعة',
     'musicTracks': { 'cozy': 'انسجام هادئ', 'trance': 'نفق الترانس' },
+    'haptics': 'الاهتزاز', 'on': 'تشغيل', 'off': 'إيقاف',
     'close': 'حفظ وإغلاق',
     'difficulties': { 'easy': 'سهل', 'medium': 'متوسط', 'hard': 'صعب' },
     'difficultyHints': {

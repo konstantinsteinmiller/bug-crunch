@@ -4,7 +4,7 @@
     div.fixed.inset-0.flex.flex-col.items-center.justify-center.backdrop-blur-md.touch-none.cursor-pointer(
       v-if="modelValue"
       class="bg-black/60"
-      :class="[isAdShowing ? 'z-0' : 'z-[100]', isCompact ? 'p-2' : 'p-4']"
+      :class="[isAdShowing ? 'z-0' : 'z-[100]', isCompact ? 'p-2' : 'p-4', reveal ? 'is-reveal' : '']"
       :style="{\
         paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))',\
         paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',\
@@ -13,11 +13,23 @@
       }"
       @click="handleOverlayClick"
     )
+      //- ── The reveal ──────────────────────────────────────────────────────
+      //- Rays from the centre of the screen, light and dark alternating,
+      //- turning slowly, with a warm glow pooled behind whatever is being
+      //- presented — the way every mobile game that has ever handed over a
+      //- gift hands one over. Opt-in (`reveal`), so the ordinary result screen
+      //- stays a result screen and the burst is saved for a prize: a weapon,
+      //- a chest, a record. See `revealRays.ts` for the numbers.
+      div.reveal(v-if="reveal" aria-hidden="true")
+        div.reveal__rays(:style="rayStyle")
+        div.reveal__glow
+        div.reveal__sparks
+
       //- The banner: a plate of dark iron sized by its own caption, so the
       //- title is centred by flex and nothing else. The slot content (or a
       //- fallback "Rewards" label) is the whole of what is in it — see
       //- `.banner` for why it is a border-image rather than a picture.
-      div.banner.relative.shrink-0(
+      div.banner.relative.shrink-0.z-10(
         v-if="$slots.ribbon"
         :class="{ 'is-compact': isCompact }"
         :style="bannerStyle"
@@ -35,7 +47,7 @@
       //- put a scrollbar on the result screen and hid its first line behind the
       //- banner; it never showed up on a phone, because the compact branch was
       //- already doing the right thing.
-      div.reward-body
+      div.reward-body.relative
         slot
 
       //- Tap-to-continue hint. In landscape it sits INLINE in the flow (shrink-0)
@@ -58,6 +70,7 @@ import { useI18n } from 'vue-i18n'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
 import { BANNER, bannerDataUrl } from '@/game/uiArt'
 import { useArtImage } from '@/use/useArtImage'
+import { REVEAL_DARK, REVEAL_LIGHT, REVEAL_RAYS, rayGradient } from '@/components/atoms/revealRays'
 
 // "Compact" layout = the short-viewport treatment: mobile landscape OR any
 // short embed (≤500px tall, e.g. a CG iframe on a Chromebook). In both cases
@@ -75,7 +88,18 @@ import { isAdShowing } from '@/use/useGamePause'
 const props = defineProps<{
   modelValue: boolean
   showContinue: boolean
+  /**
+   * Present the content as a GIFT: a slowly turning burst of light and dark
+   * rays behind it and a warm glow pooled under it. Off for a summary, on for
+   * a prize — the weapon choice, a chest opening, a new record.
+   */
+  reveal?: boolean
 }>()
+
+/** The burst, built once: sixteen wedges that have to add up to 360°. */
+const rayStyle = {
+  backgroundImage: rayGradient(REVEAL_RAYS, REVEAL_LIGHT, REVEAL_DARK)
+}
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
@@ -143,6 +167,106 @@ onUnmounted(() => {
 
 .brawl-text
   text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+
+// ─── The reveal ──────────────────────────────────────────────────────────────
+//
+// Three layers, all `pointer-events: none`, all behind the banner and body:
+//
+//   rays   — one square, wider than any viewport's diagonal, carrying a single
+//            conic gradient, spun by one transform. One composited layer; the
+//            browser never repaints it, only re-composites it.
+//   glow   — a warm radial pool under the prize, breathing slowly.
+//   sparks — a handful of drifting motes from two radial-gradient "dots"
+//            tiled and scrolled, so the air reads as lit rather than flat.
+//
+// The rays are masked to fade out toward the edges: a burst that reaches the
+// corners at full strength stops being light and starts being wallpaper.
+
+.reveal
+  position: absolute
+  inset: 0
+  overflow: hidden
+  pointer-events: none
+  z-index: 0
+
+.reveal__rays
+  position: absolute
+  left: 50%
+  top: 50%
+  width: 260vmax
+  height: 260vmax
+  translate: -50% -50%
+  border-radius: 50%
+  animation: reveal-spin 42s linear infinite
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, rgba(0, 0, 0, 0.9) 12%, rgba(0, 0, 0, 0.45) 24%, transparent 40%)
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, rgba(0, 0, 0, 0.9) 12%, rgba(0, 0, 0, 0.45) 24%, transparent 40%)
+  will-change: transform
+
+.reveal__glow
+  position: absolute
+  left: 50%
+  top: 50%
+  width: min(120vmin, 60rem)
+  height: min(120vmin, 60rem)
+  translate: -50% -50%
+  border-radius: 50%
+  background: radial-gradient(circle, rgba(255, 224, 150, 0.34) 0%, rgba(255, 190, 90, 0.16) 28%, rgba(255, 170, 60, 0.05) 48%, transparent 66%)
+  animation: reveal-breathe 3.6s ease-in-out infinite
+  will-change: transform, opacity
+
+.reveal__sparks
+  position: absolute
+  inset: -20%
+  background-image: radial-gradient(circle, rgba(255, 236, 190, 0.9) 0 1px, transparent 2px), radial-gradient(circle, rgba(255, 214, 120, 0.7) 0 1.5px, transparent 3px)
+  background-size: 9rem 9rem, 13rem 13rem
+  background-position: 0 0, 4rem 6rem
+  opacity: 0.55
+  animation: reveal-drift 22s linear infinite
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%)
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%)
+
+// The prize itself arrives with a snap: scaled up out of the glow with a
+// little overshoot, the same curve the stage banner lands with.
+.is-reveal .reward-body,
+.is-reveal .banner
+  animation: reveal-pop 0.55s cubic-bezier(0.2, 1.5, 0.4, 1) both
+
+.is-reveal .reward-body
+  animation-delay: 0.08s
+
+@keyframes reveal-spin
+  from
+    rotate: 0deg
+  to
+    rotate: 360deg
+
+@keyframes reveal-breathe
+  0%, 100%
+    scale: 1
+    opacity: 0.85
+  50%
+    scale: 1.08
+    opacity: 1
+
+@keyframes reveal-drift
+  from
+    background-position: 0 0, 4rem 6rem
+  to
+    background-position: 0 -9rem, 4rem -7rem
+
+@keyframes reveal-pop
+  from
+    opacity: 0
+    scale: 0.72
+  to
+    opacity: 1
+    scale: 1
+
+@media (prefers-reduced-motion: reduce)
+  .reveal__rays, .reveal__glow, .reveal__sparks
+    animation: none
+  .is-reveal .reward-body, .is-reveal .banner
+    animation: none
 
 // ─── The body ────────────────────────────────────────────────────────────────
 

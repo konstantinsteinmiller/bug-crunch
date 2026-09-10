@@ -423,6 +423,16 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       ctx.translate(cx, cy)
       paintUiIcon(ctx, s.id as UiIconId, S, REF)
       break
+    case 'ui/weapon-card-rocket':
+    case 'ui/weapon-card-gatling':
+      // The weapon choice's cards: the weapon's own glyph, turned to point to
+      // the upper right and filling about nine tenths of the frame — the
+      // diagonal layout the prompt asks for, so the painter copies a pose and
+      // not an upright icon. The card's plate, halo and text are the DOM's.
+      ctx.translate(cx, cy)
+      ctx.rotate(-Math.PI * 0.2)
+      paintUiIcon(ctx, s.id as UiIconId, S * 0.82, REF)
+      break
     case 'ui/logo': {
       // There is no procedural logo — the one on disk is the previous
       // project's — so the reference is a layout: the word, its size and its

@@ -1,4 +1,4 @@
-// The GamePix / GameMonetize first-LOAD interstitial.
+// The GamePix / GameMonetize / GameDistribution first-LOAD interstitial.
 //
 // It is the only interstitial in the game that interrupts a run ALREADY IN
 // PROGRESS: it fires when the splash clears, with stage 1 already running
@@ -140,7 +140,8 @@ describe('first-load interstitial arm list (FLogoProgress.vue)', () => {
 
   it.each([
     ['VITE_APP_GAMEPIX', 'GamePix portal QA requires a post-load ad'],
-    ['VITE_APP_GAME_MONETIZE', 'GameMonetize QA rejected the build without one']
+    ['VITE_APP_GAME_MONETIZE', 'GameMonetize QA rejected the build without one'],
+    ['VITE_APP_GAME_DISTRIBUTION', 'same moderation rule, same dead placement']
   ])('includes %s (%s)', (flag) => {
     expect(gate).toContain(flag)
   })

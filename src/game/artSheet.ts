@@ -700,6 +700,17 @@ export const STILLS: StillSpec[] = [
   still('ui', 'skill-shield', 'The shield skill',
     'The shield skill\'s button icon: a heater shield of cold steel with a heavy near-black rim and a raised iron boss, a cold blue witch-light glowing in its centre band — the same cold blue as the dome it raises over the crowd. Bold and simple, read at 24 px on a round button; the same silhouette as the reference.',
     { maxEdge: 128 }),
+  // The weapon choice. Two cards, seen ONCE, at about a hundred pixels each:
+  // the one screen in the game that is allowed a little more detail than a
+  // button icon, because it is a prize being presented rather than a control
+  // being found. Both are the weapon alone — the plate, the halo and the
+  // ribbon are the DOM's — held at the same angle so the pair reads as a set.
+  still('ui', 'weapon-card-rocket', 'The launcher card',
+    'The stage-3 weapon choice\'s ROCKET LAUNCHER card: a shoulder-fired launcher of blackened iron and dark scorched wood seen three-quarters from the front-left, its muzzle pointing to the upper right, a fat finned rocket seated in the tube with its warhead just showing, a strap and two rivet bands along the barrel, and a hot ember-orange glow inside the mouth of the tube as if a shot is a heartbeat away. Weight and menace: this is the heavy option. Bold silhouette read at 100 px, the same layout as the reference — the weapon diagonal across the frame, filling about nine tenths of it.',
+    { maxEdge: 256 }),
+  still('ui', 'weapon-card-gatling', 'The gatling card',
+    'The stage-3 weapon choice\'s GATLING GUN card: a six-barrelled rotary gun of gunmetal and brass seen three-quarters from the front-left, barrels pointing to the upper right and mid-spin, a cold soul-blue glow between the barrels and a spray of brass casings falling from the breech. Speed and volume: this is the fast option, so everything about it should look like it is already moving. Bold silhouette read at 100 px, the same layout as the reference — the weapon diagonal across the frame, filling about nine tenths of it.',
+    { maxEdge: 256 }),
   still('ui', 'logo', 'Title logo',
     'The game\'s title logo: the single word SURVIVALIST in carved bone-and-black-iron dark-fantasy lettering, cracked and chipped, a faint ember glow at the edges. Spelled exactly S-U-R-V-I-V-A-L-I-S-T, in one line, readable at 192 px. Centred, filling about nine tenths of the width.',
     {

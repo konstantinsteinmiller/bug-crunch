@@ -31,8 +31,11 @@ export default {
     'fireRate': '연사',
     'incoming': '공격이 온다!',
     'dodge': '회피',
+    'milestone': '{n}명 돌파!',
     'weaponActive': '{name} 준비 완료',
-    'weaponLocked': '{name} 잠김 — 레버 {total}개 중 {n}개 파괴'
+    'weaponLocked': '{name} 잠김 — 레버 {total}개 중 {n}개 파괴',
+    'weaponGift': '{name} 전방 — 무료, 레버 없음',
+    'weaponFree': '무료'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': '파란 상자: 모두 더 빨리 사격', 'desktop': '파란 상자: 모두 더 빨리 사격' },
     'boss': { 'touch': '붉은 원에서 벗어나세요!', 'desktop': '붉은 원에서 벗어나세요!' },
     'lever': { 'touch': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다', 'desktop': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다' },
-    'guard': { 'touch': '실드 전개 — 공격이 통하지 않는다. 피해!', 'desktop': '실드 전개 — 공격이 통하지 않는다. 피해!' }
+    'guard': { 'touch': '실드 전개 — 공격이 통하지 않는다. 피해!', 'desktop': '실드 전개 — 공격이 통하지 않는다. 피해!' },
+    'cage': { 'touch': '우리를 쏴라 — 갇힌 이들이 부대에 합류한다', 'desktop': '우리를 쏴라 — 갇힌 이들이 부대에 합류한다' },
+    'shieldBox': { 'touch': '실드 상자 — 대기하다 큰 공격 한 번을 막아준다', 'desktop': '실드 상자 — 대기하다 큰 공격 한 번을 막아준다' }
   },
 
   'flow': {
 
-    'unlocked': '해금!'
+    'unlocked': '해금!',
+
+    'guardian': "수호천사가 당신을 구했습니다!",
+
+    'guardianSub': "생존자 {n}명이 돌아왔습니다",
+
+    'next': "다음: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "무기 선택",
+    'nextStage': "다음 스테이지",
+    'stagesAway': "{n}스테이지 후"
+  },
+  'weaponPick': {
+    'title': "무기를 선택하세요",
+    'subtitle': "스테이지 {n}에서 사용. 길 위에 더 기다리고 있습니다.",
+    'take': "받기",
+    'rocket': {
+      'a': "유도 일제 사격",
+      'b': "폭발 피해"
+    },
+    'gatling': {
+      'a': "연사 속도 2배",
+      'b': "게이트를 더 빨리 키움"
+    }
+  },
   'result': {
     'stageClear': '스테이지 클리어!',
     'wipedOut': '부대 전멸',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': '부대를 강화하세요!',
     'rankOf': '{n}명 중',
     'upNext': '다음: 스테이지 {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': '기록 공유',
+    'text': '{game}에서 스테이지 {n}까지 갔어요. 더 멀리 갈 수 있나요?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': '보물 상자를 열어 코인 {n}개 획득',
     'filling': '보물 상자를 채우는 중',
     'spent': '보물 상자는 내일까지 비어 있습니다'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': '데일리 원정',
+    'hud': '원정',
+    'multiplier': '{n}×',
+    'available': '데일리 원정 — 오늘의 길, 코인 3배',
+    'confirm': '원정 시작',
+    'spent': '데일리 원정 — 새 길까지 {time}',
+    'done': '내일 다시',
+    'back': '캐페인으로 돌아가기'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': '설정', 'general': '일반', 'audio': '오디오', 'language': '언어',
     'difficulty': '난이도', 'soundEffects': '효과음', 'music': '음악', 'musicTrack': '음악 트랙',
     'musicTracks': { 'cozy': '아늑한 하모니', 'trance': '트랜스 터널' },
+    'haptics': '진동', 'on': '켜기', 'off': '끄기',
     'close': '저장 후 닫기',
     'difficulties': { 'easy': '쉬움', 'medium': '보통', 'hard': '어려움' },
     'difficultyHints': {

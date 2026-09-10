@@ -31,8 +31,11 @@ export default {
     'fireRate': 'อัตรา',
     'incoming': 'การโจมตีกำลังมา!',
     'dodge': 'หลบ',
+    'milestone': 'ทีม {n} คน!',
     'weaponActive': '{name} พร้อม',
-    'weaponLocked': '{name} ถูกล็อก — ยิงคันโยกแล้ว {n} จาก {total}'
+    'weaponLocked': '{name} ถูกล็อก — ยิงคันโยกแล้ว {n} จาก {total}',
+    'weaponGift': '{name} อยู่ข้างหน้า — ฟรี ไม่มีคันโยก',
+    'weaponFree': 'ฟรี'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น', 'desktop': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น' },
     'boss': { 'touch': 'อย่าอยู่ในวงแดง!', 'desktop': 'อย่าอยู่ในวงแดง!' },
     'lever': { 'touch': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ', 'desktop': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ' },
-    'guard': { 'touch': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!', 'desktop': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!' }
+    'guard': { 'touch': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!', 'desktop': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!' },
+    'cage': { 'touch': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ', 'desktop': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ' },
+    'shieldBox': { 'touch': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง', 'desktop': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง' }
   },
 
   'flow': {
 
-    'unlocked': 'ปลดล็อกแล้ว!'
+    'unlocked': 'ปลดล็อกแล้ว!',
+
+    'guardian': "เทวดาผู้พิทักษ์ช่วยคุณไว้!",
+
+    'guardianSub': "ผู้รอดชีวิต {n} คนกลับมาแล้ว",
+
+    'next': "ต่อไป: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "เลือกอาวุธ",
+    'nextStage': "ด่านถัดไป",
+    'stagesAway': "อีก {n} ด่าน"
+  },
+  'weaponPick': {
+    'title': "เลือกอาวุธของคุณ",
+    'subtitle': "ของคุณในด่าน {n} ยังมีอีกรออยู่บนถนน",
+    'take': "รับเลย",
+    'rocket': {
+      'a': "ชุดยิงนำวิถี",
+      'b': "ความเสียหายระเบิด"
+    },
+    'gatling': {
+      'a': "อัตรายิงสองเท่า",
+      'b': "ปั๊มประตูเร็วขึ้น"
+    }
+  },
   'result': {
     'stageClear': 'ผ่านด่าน!',
     'wipedOut': 'หน่วยถูกกวาดล้าง',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'อัปเกรดหน่วยของคุณ!',
     'rankOf': 'จาก {n}',
     'upNext': 'ต่อไป: ด่าน {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'แชร์ผลการเล่น',
+    'text': 'ฉันไปถึงด่าน {n} ใน {game} แล้ว คุณไปได้ไกลกว่านี้ไหม?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'เปิดหีบสมบัติรับ {n} เหรียญ',
     'filling': 'หีบสมบัติกำลังเติม',
     'spent': 'หีบสมบัติว่างจนถึงพรุ่งนี้'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'การเดินทางประจำวัน',
+    'hud': 'เดินทาง',
+    'multiplier': '{n}×',
+    'available': 'การเดินทางประจำวัน — เส้นทางของวันนี้ เหรียญสามเท่า',
+    'confirm': 'เริ่มการเดินทาง',
+    'spent': 'การเดินทางประจำวัน — เส้นทางใหม่ในอีก {time}',
+    'done': 'พรุ่งนี้มาใหม่',
+    'back': 'กลับสู่แคมเปญ'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'ตัวเลือก', 'general': 'ทั่วไป', 'audio': 'เสียง', 'language': 'ภาษา',
     'difficulty': 'ความยาก', 'soundEffects': 'เอฟเฟกต์เสียง', 'music': 'เพลง', 'musicTrack': 'แทร็กเพลง',
     'musicTracks': { 'cozy': 'ท่วงทำนองอบอุ่น', 'trance': 'อุโมงค์ทรานซ์' },
+    'haptics': 'การสั่น', 'on': 'เปิด', 'off': 'ปิด',
     'close': 'บันทึกและปิด',
     'difficulties': { 'easy': 'ง่าย', 'medium': 'ปานกลาง', 'hard': 'ยาก' },
     'difficultyHints': {

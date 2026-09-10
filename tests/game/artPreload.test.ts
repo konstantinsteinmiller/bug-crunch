@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 let stage = 1
+/** The stage-3 weapon pick on the fake save, or none. */
+let pick: string | null = null
 vi.mock('@/use/useTowerState', () => ({
-  getState: (_key: string, fallback: unknown) => stage ?? fallback
+  getState: (key: string, fallback: unknown) =>
+    key === 'ts_weapon_pick' ? (pick ?? fallback) : (stage ?? fallback)
 }))
 
 const trackImages = (): string[] => {
@@ -71,6 +74,7 @@ beforeEach(() => {
   localStorage.removeItem('artOverrides')
   delete (navigator as { connection?: unknown }).connection
   stage = 1
+  pick = null
 })
 
 describe('tier 0 — behind the splash', () => {
@@ -192,38 +196,89 @@ describe('tiers 1 and 2', () => {
     // The shield's button and the banner the stage ends on follow the splash.
     expect(has(t1, 'ui', 'skill-shield')).toBe(true)
     expect(has(t1, 'ui', 'ribbon')).toBe(true)
-    // Stage 6's box holds the GATLING — it is the first puzzle stage, and the
-    // first prize is the weapon that does not also teach a new verb. Neither
-    // stage 6 nor stage 7 needs the rocket painted.
-    expect(has(t1, 'round', 'rocket')).toBe(false)
-    // The box itself is on stage 6's road, though, in both its states.
+    // Stage 6's box holds the ROCKET — the first puzzle stage (4) deals the
+    // gatling, the weapon that does not also teach a new verb, and the launcher
+    // is the one after. So stage 6 needs the rocket painted, and the box in
+    // both its states.
+    expect(has(t1, 'round', 'rocket')).toBe(true)
     expect(has(t1, 'prop', 'weapon-box')).toBe(true)
   })
 
   it('fetches the rocket only for the stages whose box holds it', async () => {
+    // Stage 1: no box, no pick yet, and the pick is two stages away.
     stage = 1
     let m = await load(true)
     expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(false)
-    // Stage 7 carries no puzzle at all, but stage 8 — the next — is the
-    // rocket's first box, and tier 1 covers the stage after this one.
-    stage = 7
+    // Stage 2: the weapon choice comes at the end of this road and stage 3
+    // starts the instant a card is tapped — so the rocket is fetched in case.
+    stage = 2
     m = await load(true)
     expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(true)
-    // Stage 9 and stage 10 are a blank road and a gatling box: nothing to fetch.
-    stage = 9
+    // Stage 5 carries no puzzle at all, but stage 6 — the next — is the
+    // rocket's first box, and tier 1 covers the stage after this one.
+    stage = 5
+    m = await load(true)
+    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(true)
+    // Stage 7 and stage 8 are a blank road and a gatling box: nothing to fetch.
+    stage = 7
     m = await load(true)
     expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(false)
+    // Stage 9 sees stage 10's box, which is a rocket again.
+    stage = 9
+    m = await load(true)
+    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(true)
   })
 
-  it('fetches no puzzle art at all for the stages between the boxes', async () => {
-    // Half the campaign's roads carry no weapon beat — see `WEAPON_EVERY`.
-    // Holding the splash for a box that is not on the road is a slower start
-    // bought for nothing.
+  it('fetches the weapon choice\'s cards only until the player has chosen', async () => {
+    stage = 1
+    let m = await load(true)
+    expect(has(m.earlyArtWants(), 'ui', 'weapon-card-rocket')).toBe(true)
+    expect(has(m.earlyArtWants(), 'ui', 'weapon-card-gatling')).toBe(true)
+    // …never on the splash: the reveal is a minute away.
+    expect(has(m.criticalArtWants(), 'ui', 'weapon-card-rocket')).toBe(false)
+    // A player who chose the gatling never sees the cards again, and needs no
+    // rocket for stage 3.
+    pick = 'gatling'
     stage = 3
+    m = await load(true)
+    expect(has(m.earlyArtWants(), 'ui', 'weapon-card-rocket')).toBe(false)
+    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(false)
+    // One who chose the launcher rides stage 3 with it.
+    pick = 'rocket'
+    m = await load(true)
+    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(true)
+    // A save that says something that is not a weapon is a save with no pick.
+    pick = 'crossbow'
+    stage = 2
+    m = await load(true)
+    expect(has(m.earlyArtWants(), 'ui', 'weapon-card-gatling')).toBe(true)
+  })
+
+  it('never holds the splash for a box, and fetches one the next road carries', async () => {
+    // The rule is about the TIER, not about the stage: a box is never tier 0,
+    // because nothing a minute down the road may cost a first paint. Tier 1 is
+    // the idle slot and is exactly where the next road's furniture belongs.
+    //
+    // Stage 1's tier 1 covers stage 2, which carries the weapon GIFT
+    // (`WEAPON_GIFT_STAGE`) — so the box IS wanted there, one road ahead, the
+    // same way stage 3's idle slot reaches for stage 4's puzzle.
+    stage = 1
     const m = await load(true)
     const t0 = new Set(m.criticalArtWants().map(([k, i]) => `${k}/${i}`))
-    expect(t0.has('prop/weapon-box')).toBe(false)
-    expect(has(m.earlyArtWants(), 'prop', 'weapon-box')).toBe(false)
+    expect(t0.has('prop/weapon-box'), 'the splash waited for a weapon box').toBe(false)
+    expect(has(m.earlyArtWants(), 'prop', 'weapon-box'),
+      'stage 2 carries the gift and stage 1 never fetched its art').toBe(true)
+    // …but ONLY the box. The gift has no levers, no cover and no armour, so
+    // queueing that furniture would be four files fetched for nothing.
+    expect(has(m.earlyArtWants(), 'prop', 'lever-post')).toBe(false)
+    expect(has(m.earlyArtWants(), 'prop', 'guard-plate')).toBe(false)
+    // Stage 3's idle slot DOES reach for stage 4's box: it is the next road,
+    // and the banner is about to promise it — with the levers this time.
+    stage = 3
+    const n = await load(true)
+    expect(new Set(n.criticalArtWants().map(([k, i]) => `${k}/${i}`)).has('prop/weapon-box')).toBe(false)
+    expect(has(n.earlyArtWants(), 'prop', 'weapon-box')).toBe(true)
+    expect(has(n.earlyArtWants(), 'prop', 'lever-post')).toBe(true)
   })
 
   it('reaches the puzzle before the boss, in the order the road does', async () => {

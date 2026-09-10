@@ -1,5 +1,6 @@
 import {
-  BARREL_R, BARRICADE_H, BASE_FIRE_RATE, ROCK_H, CRATE_R, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H,
+  BARREL_R, BARRICADE_H, BASE_FIRE_RATE, BULWARK_R, CAGE_R, ROCK_H, CRATE_R, CROWD_MAX_R,
+  CROWD_SQUASH, DIVIDER_H,
   DIVIDER_HALF_W, ELITE_SWEEP_REACH, ELITE_TELEGRAPH,
   gateTickMs, gatePumpCap, gateValueLabel, isScaleOp,
   LANE_HALF, MAX_FIRE_RATE, SLAM_RADIUS, SLAM_RADIUS_GROWTH, slamRadiusFor,
@@ -7,11 +8,16 @@ import {
   type Divider, type GateOp
 } from '@/game/survival'
 import { BOLT_R, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD } from '@/game/threats'
-import { GUARD_H, LEVER_R, STONE_H, WEAPON_BOX_R, type WeaponId } from '@/game/weapons'
+import {
+  GUARD_H, LEVER_R, STONE_H, WEAPON_BOX_R, WEAPON_REVEAL_S, type WeaponId
+} from '@/game/weapons'
 import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
+  bossIsCharging, bossIsEnraged,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
-  getBarrels, getBullets, getCrates, getDividers, getFoes, getGates, getGrenades, getPickups,
+  getBarrels, getBullets, getBulwarks, getCages, getCrates, getDividers, getFoes, getGates,
+  getGrenades, getPickups,
+  bulwarkReady,
   getBossBolts,
   getRocks,
   getUnits,
@@ -37,6 +43,7 @@ import {
 } from '@/use/useVfx'
 import { useScreenshake } from '@/use/useScreenshake'
 import { playFx } from '@/use/useGameAudio'
+import { haptic } from '@/use/useHaptics'
 import { getCachedImage } from '@/use/useAssets'
 import { clearRamps, getRamp, putRamp } from '@/use/useGradientRamps'
 import { clearLabelWidths, measureLabel } from '@/use/useTextMetrics'
@@ -2942,16 +2949,51 @@ export const drawScene = (
   // burst spawned this frame is already integrated once when it is first drawn
   // (otherwise every burst appears one frame late, which reads as input lag).
   consumeFx()
+
+  // ── Two clocks, and the telegraphs belong to the SIMULATION's ─────────────
+  //
+  // `dtMs` is wall time. The simulation's own clock is not: `step` scales it by
+  // `timeScale`, which drops to 0.35 for the boss's guard-gate hold and eases
+  // back over ~120 ms. So during every gate the world runs in slow motion while
+  // anything advanced by `dtMs` runs at full speed.
+  //
+  // For most of what is stepped below that is harmless, or wanted. For the
+  // three telegraph pools it is a broken promise: a cast is emitted with a
+  // `ttl` measured in GAME seconds — "the damage lands in 1.5 s" — and the
+  // whole travelling-telegraph design (see the casts in `useVfx`) rests on the
+  // animation arriving ON the beat rather than near it. Advanced on wall time,
+  // a telegraph thrown inside a 320 ms hold finishes its animation ~160 ms
+  // before the hit it is announcing. `CAST_AFTER_S` was hiding it — the mark
+  // lingers past its own life — but the moving part was landing early, and
+  // phase two put a cast inside that hold on every boss fight.
+  //
+  // So they are stepped by how much the SIMULATION actually advanced, taken
+  // from the clock the sim already publishes. It is a difference rather than a
+  // scaled `dtMs` on purpose: it reads zero while the game is paused under an
+  // ad (the scene skips `step`, so the clock does not move) and it cannot drift
+  // from the numbers the casts were priced in.
+  const simNow = nowMs()
+  // First frame of a session, and any frame where `resetWorld` has just put the
+  // clock back to zero: no world time passed that this pool should see.
+  const simDtMs = lastSimNow < 0 ? 0 : Math.max(0, Math.min(simNow - lastSimNow, 120))
+  lastSimNow = simNow
+
   stepDismissals(dtMs)
-  stepRakes(dtMs)
-  stepHealTells(dtMs)
+  stepRakes(simDtMs)
+  stepHealTells(simDtMs)
+  // Particles, floating text and decals deliberately stay on WALL time. They
+  // carry no deadline — nothing in the simulation is waiting for a spark to
+  // finish — and the debris of a hit continuing at speed while the world holds
+  // is the look this game already shipped. Moving them is a feel change, not a
+  // fix, and it should be made on purpose rather than as a side effect of this
+  // one.
   stepParticles(dtMs)
   // Stashed for the draw pass: the health-bar chip eases on real time, and the
   // draw functions are not handed a delta of their own.
   lastDtMs = dtMs
   stepTexts(dtMs)
   stepDecals(dtMs)
-  stepCasts(dtMs)
+  stepCasts(simDtMs)
 
   screenFlash = Math.max(0, screenFlash - dtMs / 320)
   hurtPulse = Math.max(0, hurtPulse - dtMs / 700)
@@ -2971,6 +3013,11 @@ export const drawScene = (
   if (!minFx) drawDecals(ctx)
   drawPickups(ctx)
   drawCrates(ctx)
+  // The two roadside prizes sit in the crates' layer because they ARE crates as
+  // far as the road is concerned — under the gates, over the coins, so a bank
+  // always paints over them and a pillar is never occluded by a pickup.
+  drawCages(ctx)
+  drawBulwarks(ctx)
   drawBarrels(ctx)
   // The prize goes under its own armour, and the armour is a barricade — so the
   // box is painted first and the plates land on top of it. The levers go LAST of
@@ -3316,6 +3363,11 @@ const hpChip = new Map<number, number>()
 /** Last frame's delta, for the draw pass — see the render entry. */
 let lastDtMs = 16
 
+/** The simulation clock as of the previous frame, so the telegraph pools can be
+ *  stepped by world time rather than wall time. `-1` means "no previous frame".
+ *  See the two-clocks note in `drawScene`. */
+let lastSimNow = -1
+
 /** How fast the chip catches up, as a fraction of the gap per second. */
 const HP_CHIP_CATCHUP = 2.6
 /** …after holding still for this long, so the streak is readable at all. */
@@ -3360,16 +3412,18 @@ interface Cast {
    * rolling down the road for a second and a half, and it is painted straight
    * from the world by `drawRollers` rather than from an event.
    */
-  kind: 'meteor' | 'slice' | 'bomb' | 'bolt'
+  kind: 'meteor' | 'slice' | 'bomb' | 'bolt' | 'charge'
   x: number
   y: number
-  /** Ground footprint for a meteor or a bomb; arc reach for a slice; unused by
-   *  a bolt, which is a line rather than an area. */
+  /** Ground footprint for a meteor or a bomb; arc reach for a slice; the lethal
+   *  half-width of the swathe for a charge; unused by a bolt, which is a line
+   *  rather than an area. */
   r: number
   dir: number
   charged: boolean
   /** Where a `bolt` is aimed. The aim is locked when the cast is emitted, so
-   *  this really is the line the round will take. */
+   *  this really is the line the round will take. A `charge` reuses `ty` the
+   *  same way — the far end of the swathe, which is where its body stops. */
   tx: number
   ty: number
   /** Seconds elapsed, and the total it was given. */
@@ -3528,6 +3582,61 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
           0, Math.PI * 2
         )
         ctx.fill()
+      }
+      ctx.restore()
+      continue
+    }
+
+    if (c.kind === 'charge') {
+      // ── The enraged boss's lane ──
+      //
+      // A band down the road, at the swathe's TRUE width, plus one bar sweeping
+      // down it. Two facts, the same two the bomber's ring carries: WHERE, drawn
+      // at the real half-width so a player standing just outside it is right to
+      // think they are clear, and WHEN, as a thing that travels rather than a
+      // number.
+      //
+      // The bar is the part that had to travel. The one telegraph rule this game
+      // has is that the player is looking at the boss or at their own thumb, so
+      // a mark on the floor is not seen — and this attack's mark is the biggest
+      // one in the game, which does not help at all, because a band that is
+      // simply THERE reads as scenery. A bar crossing it at a constant rate is
+      // the only element that says the road is being taken away on a clock.
+      // It is linear in `p` deliberately: the body accelerates over the last
+      // third of a second (see `stepBossCharge`), and if both eased the player
+      // would have two clocks disagreeing about the same beat. One of them is
+      // the promise, the other is the consequence catching up to it.
+      const halfW = c.r * scale
+      const ty = worldToScreenY(c.ty)
+      const top = Math.min(sy, ty)
+      const h = Math.abs(ty - sy)
+      ctx.save()
+      // Faint fill. The crowd is standing IN this for the first half of the
+      // wind-up and reading the crowd is exactly what they are about to do.
+      ctx.globalAlpha = c.done ? 1 - after : 0.55 + p * 0.35
+      ctx.fillStyle = 'rgba(255,80,40,0.16)'
+      ctx.fillRect(sx - halfW, top, halfW * 2, h)
+      // The rails, brightening as the lock runs out — the element that makes it
+      // read as a LANE and not as a wash of colour over the road.
+      ctx.strokeStyle = c.done ? '#ffffff' : '#ff7a3a'
+      ctx.lineWidth = Math.max(2.5, scale * (0.06 + p * 0.09))
+      ctx.beginPath()
+      ctx.moveTo(sx - halfW, sy)
+      ctx.lineTo(sx - halfW, ty)
+      ctx.moveTo(sx + halfW, sy)
+      ctx.lineTo(sx + halfW, ty)
+      ctx.stroke()
+      if (!c.done) {
+        // The bar, at the fraction of the way down the wind-up has gone.
+        const by = sy + (ty - sy) * p
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.globalAlpha = 0.5 + p * 0.5
+        ctx.fillStyle = '#ffd08a'
+        ctx.fillRect(sx - halfW, by - Math.max(2, scale * 0.07), halfW * 2, Math.max(4, scale * 0.14))
+        // …and a short wake behind it, so the direction of travel is legible
+        // in a still frame. Cheap: one gradient-free rectangle at half alpha.
+        ctx.globalAlpha = 0.18 + p * 0.22
+        ctx.fillRect(sx - halfW, Math.min(by, sy), halfW * 2, Math.abs(by - sy))
       }
       ctx.restore()
       continue
@@ -4110,8 +4219,113 @@ let shieldTotalMs = 0
 /** When the shield last ate a hit, so the bubble can flash on absorb. */
 let shieldHitAt = -1e9
 
+// ─── The rally halo ─────────────────────────────────────────────────────────
+//
+// The painted half of the second wind (the particles are in the `rally` case of
+// the VFX drain). It is drawn rather than emitted because it has to FOLLOW the
+// crowd: the road keeps moving under a rallied squad, so a burst anchored to
+// the spot they died on scrolls off them within half a second, and the one
+// thing this effect has to say is "these people, right here, were just saved".
+//
+// It doubles as the readout for `RALLY_GRACE_MS`. The player is untouchable for
+// exactly as long as the light is up — nothing on the HUD could teach that, and
+// a squad walking through a monster unharmed with no visible reason is the same
+// "is this broken?" the rally itself used to provoke.
+/** When the last rally landed, in `nowMs()` time. */
+let rallyAt = -1e9
+/** …and where, as a fallback for the frames before the new crowd has drawn. */
+let rallyX = 0
+let rallyY = 0
+/** Halo lifetime, ms. Deliberately just under `RALLY_GRACE_MS` (1500): the
+ *  light going out is the last frame of the immunity it stands for. */
+const RALLY_HALO_MS = 1400
+
+const drawRallyHalo = (ctx: CanvasRenderingContext2D, t: number): void => {
+  const age = t - rallyAt
+  if (age < 0 || age > RALLY_HALO_MS) return
+  const u = age / RALLY_HALO_MS
+  // Snaps to full in the first 120 ms and holds, then drops away over the last
+  // third — a slow fade-in would put the brightest frame a beat AFTER the
+  // moment it is explaining.
+  const fade = Math.min(1, age / 120) * (u < 0.66 ? 1 : 1 - (u - 0.66) / 0.34)
+
+  const measured = crowdBoxN > 0
+  const cx = measured ? (crowdBoxL + crowdBoxR) / 2 : worldToScreenX(rallyX)
+  const groundY = measured ? crowdBoxB : worldToScreenY(rallyY)
+  const topY = measured ? crowdBoxT : groundY - scale * 1.4
+  const rx = measured
+    ? Math.max(scale * 0.9, (crowdBoxR - crowdBoxL) / 2 + scale * 0.45)
+    : scale * 1.2
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+
+  // ── The column ──
+  // A shaft of light standing on the crowd, wider at the top so it reads as
+  // coming DOWN onto them rather than as an explosion going up.
+  const colH = scale * 8
+  const grad = ctx.createLinearGradient(0, groundY, 0, groundY - colH)
+  grad.addColorStop(0, `rgba(255,238,190,${0.34 * fade})`)
+  grad.addColorStop(0.55, `rgba(255,224,150,${0.16 * fade})`)
+  grad.addColorStop(1, 'rgba(255,224,150,0)')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.moveTo(cx - rx * 0.78, groundY)
+  ctx.lineTo(cx + rx * 0.78, groundY)
+  ctx.lineTo(cx + rx * 1.5, groundY - colH)
+  ctx.lineTo(cx - rx * 1.5, groundY - colH)
+  ctx.closePath()
+  ctx.fill()
+
+  // ── The ground rings ──
+  // Two, spaced a beat apart, so the first frame already has a second wave
+  // behind it: one ring reads as an outline, two read as a pulse.
+  if (!cheapFx) {
+    for (const delay of [0, 0.22]) {
+      const ru = (u - delay) / (1 - delay)
+      if (ru <= 0) continue
+      const r = rx * (0.5 + ru * 2.4)
+      ctx.globalAlpha = 0.5 * fade * (1 - ru)
+      ctx.strokeStyle = '#ffe6a6'
+      ctx.lineWidth = Math.max(1.5, scale * 0.06 * (1 - ru * 0.6))
+      ctx.beginPath()
+      ctx.ellipse(cx, groundY + scale * 0.08, r, r * 0.28, 0, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // ── The halo ──
+  // The thing the label names. A gold ring hanging over the squad, bobbing
+  // once across its life — the single most legible "an angel was here" shape
+  // there is, and it costs one ellipse.
+  const bob = Math.sin(u * Math.PI) * scale * 0.35
+  const hy = topY - scale * 0.9 - bob
+  const hr = Math.max(scale * 0.55, rx * 0.5)
+  ctx.globalAlpha = 0.35 * fade
+  ctx.strokeStyle = '#fff4cf'
+  ctx.lineWidth = Math.max(4, scale * 0.22)
+  ctx.beginPath()
+  ctx.ellipse(cx, hy, hr, hr * 0.34, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.globalAlpha = Math.min(1, 0.9 * fade)
+  ctx.strokeStyle = '#ffdf8a'
+  ctx.lineWidth = Math.max(2, scale * 0.075)
+  ctx.beginPath()
+  ctx.ellipse(cx, hy, hr, hr * 0.34, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.restore()
+  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = 'source-over'
+}
+
 const drawSkills = (ctx: CanvasRenderingContext2D): void => {
   const t = nowMs()
+
+  // Under everything else in this pass: a shield cast during the grace window
+  // has to stay readable through the light, not the other way round.
+  drawRallyHalo(ctx, t)
 
   // ── The shield bubble ──
   //
@@ -4228,6 +4442,55 @@ const drawSkills = (ctx: CanvasRenderingContext2D): void => {
     shieldTotalMs = 0
   }
 
+  // ── The bulwark, held ──
+  //
+  // A pickup with no timer is a pickup with nothing on screen to say it exists,
+  // and a player who cannot see their insurance cannot play around it: the whole
+  // point of the detour was to walk into the arena KNOWING the first slam is
+  // free. So the armed state is drawn, and everything about how it is drawn is
+  // chosen to say "waiting" rather than "running out".
+  //
+  //   • the crest and the colour are the skill's, verbatim (`paintCrest`), so
+  //     the player reads "shield" without being taught a second symbol;
+  //   • there is NO countdown ring — the one mark the timed shield never
+  //     appears without — because the absence of a clock IS the difference
+  //     between the two objects;
+  //   • it breathes slowly instead of strobing, and it sits ABOVE the crowd
+  //     rather than wrapping it, because it is not protecting them yet: it is
+  //     an object being carried, and it becomes a dome only when it is spent.
+  //
+  // Drawn whether or not the timed shield is up, deliberately. Both can be
+  // active at once (see `bulwarkAbsorb`), and hiding one behind the other is
+  // how a player concludes their pickup was eaten by casting a skill.
+  if (bulwarkReady()) {
+    const measured = crowdBoxN > 0
+    const cx = measured ? (crowdBoxL + crowdBoxR) / 2 : worldToScreenX(camX)
+    const topY = measured ? crowdBoxT : worldToScreenY(camY) - scale * 1.4
+    const bw = Math.max(scale * 0.22, scale * 0.3)
+    const bh = bw * 1.16
+    // A hitch in the breathing every couple of seconds, so a badge that has been
+    // sitting there for forty seconds still catches the eye occasionally.
+    const breathe = 0.62 + 0.24 * Math.sin(t / 620) + 0.14 * Math.max(0, Math.sin(t / 2100)) ** 6
+
+    ctx.save()
+    ctx.globalAlpha = breathe
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.fillStyle = 'rgba(110,205,255,0.28)'
+    ctx.beginPath()
+    ctx.arc(cx, topY - bh * 1.5, bh * 1.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = Math.min(1, breathe + 0.3)
+    paintCrest(ctx, 'shield', cx, topY - bh * 1.5, bw, bh, {
+      fill: '#6fd6ff',
+      rim: '#06263a',
+      rimW: Math.max(2, scale * 0.07),
+      rib: 'rgba(6,38,58,0.9)',
+      ribW: Math.max(1, scale * 0.035)
+    })
+    ctx.restore()
+  }
+
   // ── The grenade, mid-air ──
   //
   // Sized to be TRACKED, not to be accurate. This thing crosses the screen in
@@ -4331,9 +4594,29 @@ const drawBarrels = (ctx: CanvasRenderingContext2D): void => {
  * pointed shell against three stacked barrels.
  */
 const weaponGlyph = (
-  ctx: CanvasRenderingContext2D, id: WeaponId, r: number, colour: string
+  ctx: CanvasRenderingContext2D, id: WeaponId, r: number, colour: string,
+  /**
+   * Optional dark rim, stroked around the same paths.
+   *
+   * The gift box needs it and the earned box does not, which is the difference
+   * between an OBJECT and a DECAL. On an earned box the glyph is dark on a gold
+   * plate — printed on the lid, and contrast comes free. The gift's glyph sits
+   * lifted off the plate in pale steel so it reads as the gun IN the crate, and
+   * pale steel over that same gold plate is the one pairing on the road with no
+   * contrast at all: at 12 units the silhouette dissolved into the box. The rim
+   * is what puts the edge back, and it has to be a stroke rather than a scaled
+   * dark copy underneath — the gatling's three barrels are 0.34r apart, and a
+   * copy scaled far enough to show at the outline closes the gaps between them
+   * and turns the whole thing into a block.
+   */
+  rim?: { colour: string; width: number }
 ): void => {
   ctx.fillStyle = colour
+  if (rim) {
+    ctx.strokeStyle = rim.colour
+    ctx.lineWidth = rim.width
+    ctx.lineJoin = 'round'
+  }
   if (id === 'rocket') {
     ctx.beginPath()
     ctx.moveTo(0, -r)
@@ -4343,6 +4626,7 @@ const weaponGlyph = (
     ctx.lineTo(-r * 0.44, -r * 0.24)
     ctx.closePath()
     ctx.fill()
+    if (rim) ctx.stroke()
     // Fins, so the shell reads as a rocket rather than as a house.
     ctx.beginPath()
     ctx.moveTo(-r * 0.44, r * 0.16)
@@ -4354,15 +4638,18 @@ const weaponGlyph = (
     ctx.lineTo(r * 0.44, r * 0.72)
     ctx.closePath()
     ctx.fill()
+    if (rim) ctx.stroke()
     return
   }
   // Gatling: three barrels and a receiver.
   for (const bx of [-r * 0.5, 0, r * 0.5]) {
     roundRect(ctx, bx - r * 0.17, -r * 0.9, r * 0.34, r * 1.25, r * 0.12)
     ctx.fill()
+    if (rim) ctx.stroke()
   }
   roundRect(ctx, -r * 0.78, r * 0.34, r * 1.56, r * 0.5, r * 0.14)
   ctx.fill()
+  if (rim) ctx.stroke()
 }
 
 /**
@@ -4535,6 +4822,44 @@ const drawLevers = (ctx: CanvasRenderingContext2D): void => {
  * road. The two states share nothing except the silhouette, which is the point:
  * the player has to be able to tell across a whole screen whether the beat is
  * still a puzzle or already a pickup.
+ *
+ * ─── …and a THIRD read: the gift, which is an open box ──────────────────────
+ *
+ * Stage 2's free box (`WeaponBox.gift`) is not a puzzle that happens to have no
+ * levers — it is the one offer on the road whose whole question is "is this
+ * worth steering into", asked of a player who has never seen a weapon box
+ * before. A crate is a bad way to ask it: `paintWeaponBoxBody`'s open state is
+ * still a CASE, and the glyph on its plate reads as a stencil printed on a lid
+ * rather than as a thing inside. So the gift gets furniture the earned box
+ * never wears, all of it drawn HERE rather than inside the paint helpers, so it
+ * composes over the painted `weapon-box-open.webp` exactly as it does over the
+ * drawing (the same contract the cross-brace and the cracks are on):
+ *
+ *   • the LID, thrown back — a slab above the crate's far edge. It is the only
+ *     part that changes the SILHOUETTE, which is what survives being 66 px tall
+ *     at the top of the screen when nothing inside the outline can be resolved;
+ *   • the SHAFT — a warm vertical wedge out of the open case, world-vertical so
+ *     it is drawn before `wb.spin`. A 7° tilt on a beam of light reads as a bug;
+ *   • the PRIZE, lifted — the weapon glyph bobbing above a contact shadow on
+ *     the plate, in pale steel with a rim, so it is an object in a box and not
+ *     a mark on one.
+ *
+ * The distance this is sized for is a measured number, not a taste: the visible
+ * road is `CROWD_SCREEN_Y × VIEW_HEIGHT` = 13.68 units, and the box's far edge
+ * clears the top of the screen at 11.9 — 2.28 s at stage 2's 5.21 u/s. That is
+ * the whole budget, and it is the budget the old design spent 56 % of dressed
+ * as a shut steel crate. Everything above therefore works on the box's own
+ * half-extent (`WEAPON_GIFT_BOX_R` is 1.8 units, 40 % of the lane) rather than
+ * on a fixed pixel size, which is what makes it hold on a phone and on a
+ * desktop alike — at the vertical-fit zoom the crate is ~19 % of the usable
+ * height, so the LID and the outline survive even where the glyph inside does
+ * not, and that ordering is deliberate: silhouette first, contents second.
+ *
+ * The thing NOT to size against is the steer. Measured, a full-lane correction
+ * settles in about a quarter of a second, so reaction time was never the
+ * binding constraint here and a tell sized for it would be far too small. What
+ * the closed box cost was the category read and the firing window — see
+ * `WeaponBox.locked`.
  */
 const drawWeaponBoxes = (ctx: CanvasRenderingContext2D): void => {
   const t = nowMs()
@@ -4543,7 +4868,8 @@ const drawWeaponBoxes = (ctx: CanvasRenderingContext2D): void => {
     const sx = worldToScreenX(wb.x)
     const sy = worldToScreenY(wb.y)
     if (sy < -80 || sy > viewH + 80) continue
-    const r = WEAPON_BOX_R * scale
+    // The box's OWN half-extent: the stage-2 gift is twice an earned one.
+    const r = wb.r * scale
     const open = !wb.locked
     const pulse = 0.5 + 0.5 * Math.sin(t / 220)
     const hurt = 1 - Math.max(0, wb.hp) / wb.maxHp
@@ -4571,15 +4897,94 @@ const drawWeaponBoxes = (ctx: CanvasRenderingContext2D): void => {
       ctx.globalAlpha = 1
     }
 
+    // The shaft out of an open case. Before the crate so the crate occludes its
+    // foot, and before `wb.spin` so it stands up straight — see the header.
+    //
+    // Tall enough to clear the LID, which is the constraint that set the number:
+    // at 1.9r the lid (whose far edge is at -1.66r) ate all but the last quarter
+    // radius of it and the beam read as a smudge behind the crate. 2.8r leaves
+    // over a radius of shaft standing clear above everything else the beat draws.
+    if (wb.gift && !minFx) {
+      const beamH = r * 2.8
+      const key = `weaponBeam|${beamH}`
+      let beam = getRamp(key)
+      if (!beam) {
+        beam = putRamp(key, ctx.createLinearGradient(0, 0, 0, -beamH))
+        beam.addColorStop(0, 'rgba(255,226,140,0.55)')
+        beam.addColorStop(1, 'rgba(255,226,140,0)')
+      }
+      ctx.globalAlpha = 0.55 + pulse * 0.45
+      ctx.fillStyle = beam
+      ctx.beginPath()
+      ctx.moveTo(-r * 0.5, 0)
+      ctx.lineTo(r * 0.5, 0)
+      ctx.lineTo(r * 1.05, -beamH)
+      ctx.lineTo(-r * 1.05, -beamH)
+      ctx.closePath()
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.4)'
     ctx.beginPath()
     ctx.ellipse(0, r * 0.86, r * 0.9, r * 0.3, 0, 0, Math.PI * 2)
     ctx.fill()
 
     ctx.rotate(wb.spin)
+
+    // The lid, hinged away up the road, and the ONE part of this that changes
+    // the silhouette — which is why it is drawn at all. At the top of the
+    // screen, where the crate is ~19 % of the usable height and nothing inside
+    // its outline resolves, the outline is the entire message: a crate with a
+    // slab standing off its far edge is not the shape of any obstacle on this
+    // road, and that is legible before the gun in it is.
+    //
+    // Full width, and only 0.4 of the crate's own depth: it is lying almost
+    // flat, away from the camera. Drawn BEFORE the case so the case paints over
+    // its near 0.14r and the two read as one hinged object rather than as two
+    // stacked boxes.
+    if (wb.gift) {
+      ctx.fillStyle = '#4a3410'
+      roundRect(ctx, -r * 0.97, -r * 1.66, r * 1.94, r * 0.8, r * 0.16)
+      ctx.fill()
+      ctx.lineWidth = Math.max(1.6, scale * 0.05)
+      ctx.strokeStyle = '#241704'
+      ctx.stroke()
+      // A lit rim along the lid's FAR edge. Its face is turned away from the
+      // camera, so unlit the slab is a flat dark bar that reads as the crate's
+      // own shadow — the one thing it must not look like, since a shadow is
+      // exactly what a shut crate on this road already casts. It has to sit
+      // above -1.0r: anything below that is inside the case's box and is
+      // painted over two lines later.
+      ctx.fillStyle = 'rgba(255,214,130,0.5)'
+      roundRect(ctx, -r * 0.82, -r * 1.55, r * 1.64, r * 0.2, r * 0.09)
+      ctx.fill()
+    }
+
     paintWeaponBoxBody(ctx, r, scale, open, pulse)
 
-    weaponGlyph(ctx, wb.weapon, r * 0.62, open ? '#3a2405' : '#98a4b6')
+    if (wb.gift) {
+      // The prize, sitting in the case. The bob is on a slower clock than the
+      // plate's throb (420 vs 220 ms) on purpose: two things breathing in step
+      // read as one surface flickering, and the whole job of the lift is to say
+      // that the gun and the box are separate objects.
+      const bob = Math.sin(t / 420)
+      const lift = r * (0.36 + bob * 0.09)
+      ctx.globalAlpha = 0.32
+      ctx.fillStyle = '#2a1a03'
+      ctx.beginPath()
+      ctx.ellipse(0, r * 0.2, r * (0.5 - bob * 0.05), r * 0.15, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.globalAlpha = 1
+      ctx.save()
+      ctx.translate(0, -lift)
+      weaponGlyph(ctx, wb.weapon, r * 0.62, '#e8eef7', {
+        colour: 'rgba(26,16,4,0.92)', width: Math.max(1.4, r * 0.075)
+      })
+      ctx.restore()
+    } else {
+      weaponGlyph(ctx, wb.weapon, r * 0.62, open ? '#3a2405' : '#98a4b6')
+    }
 
     if (!open) {
       // The cross-brace. It says SHUT in one stroke, at any size, in every
@@ -4609,13 +5014,17 @@ const drawWeaponBoxes = (ctx: CanvasRenderingContext2D): void => {
       ctx.globalAlpha = 1
     }
 
-    // The reveal ring: one expanding circle over the first ~0.45 s of being
-    // open. It is what carries the causal link — levers went down, THIS
+    // The reveal ring: one expanding circle over the first `WEAPON_REVEAL_S` of
+    // being open. It is what carries the causal link — levers went down, THIS
     // happened — to a player whose eyes were on the levers, so like the lever's
     // own chevron it survives every quality tier. The HALO above is gated,
     // because that one really is decoration.
-    if (open && wb.openFor < 0.45) {
-      const k = wb.openFor / 0.45
+    //
+    // A GIFT never plays it, and not by a test here: it spawns with `openFor`
+    // already past the window, because there is no cause for the ring to point
+    // at. See `WeaponBox.locked`.
+    if (open && wb.openFor < WEAPON_REVEAL_S) {
+      const k = wb.openFor / WEAPON_REVEAL_S
       ctx.globalAlpha = (1 - k) * 0.8
       ctx.strokeStyle = '#ffe9a8'
       ctx.lineWidth = Math.max(2, scale * 0.06 * (1 - k))
@@ -4754,6 +5163,286 @@ const drawCrates = (ctx: CanvasRenderingContext2D): void => {
     ctx.strokeStyle = 'rgba(0,0,0,0.9)'
     ctx.strokeText(label, 0, r * 0.98)
     ctx.fillStyle = '#fff'
+    ctx.fillText(label, 0, r * 0.98)
+
+    ctx.restore()
+  }
+}
+
+/**
+ * ─── Rescue cages ───────────────────────────────────────────────────────────
+ *
+ * The read has to happen in about a quarter of a second, against a prop the
+ * player has been trained for weeks to recognise as a supply crate, so this
+ * picture is built by taking every channel `drawCrates` uses and INVERTING it.
+ * Any one of the three is enough on its own, which is the point — a colour-blind
+ * player has the silhouette, a player glancing at the shoulder of the road has
+ * the colour, and a player who is actually looking has the mark:
+ *
+ *   SILHOUETTE  a crate is a squat rounded square. A cage is TALL —
+ *               `CAGE_DRAW_TALL` times its own half-width — and its outline is
+ *               broken by four vertical bars with real gaps between them, so
+ *               even at 24 px the shape reads as slats rather than as a block.
+ *   COLOUR      a crate is a warm lit face inside a bright hue that throbs, and
+ *               the throb IS its identity. A cage is cold dead iron with no
+ *               coloured rim and no throb at all, lit from INSIDE by a warm
+ *               lamp — light coming out of a dark object, the exact opposite
+ *               arrangement, and the one thing on the road that glows amber.
+ *   MARK        a crate carries a stat glyph (chevron / bolt) and the number on
+ *               it is what it COSTS. A cage carries a huddled body and a `+N`
+ *               in the crowd's own white — the same `+` a gate prints, because
+ *               it is the same currency — and its cost number sits underneath
+ *               in the identical place a crate's does, so the two numbers can
+ *               never be confused for each other.
+ *
+ * The shake is the fourth channel and it only exists while the thing is being
+ * shot: a crate CRACKS under fire and a cage RINGS. `Cage.flash` is set by the
+ * round, decayed by the sim, and drives a fast lateral judder here.
+ */
+
+/** How much taller than wide a cage is drawn. The footprint stays `CAGE_R`
+ *  square — this is the drawn body only, exactly as a barricade stands taller
+ *  than the strip of road it occupies. */
+const CAGE_DRAW_TALL = 1.5
+
+const drawCages = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+  for (const c of getCages()) {
+    if (c.dead) continue
+    const sx = worldToScreenX(c.x)
+    const sy = worldToScreenY(c.y)
+    if (sy < -60 || sy > viewH + 60) continue
+    const r = CAGE_R * scale
+    const hh = r * CAGE_DRAW_TALL
+    const hurt = 1 - c.hp / c.maxHp
+
+    // ── The lamp inside ──
+    //
+    // Warm, and the ONLY warm glow on the roadside. It flickers rather than
+    // pulses: a pulse is the crates' language (a fixed rate, read as a stat),
+    // and a flicker reads as a fire, which is what a light inside a cage is.
+    const flick = 0.86 + Math.sin(t / 210) * 0.08 + Math.sin(t / 77) * 0.06
+    const glowR = r * 2.1
+    const glowKey = `cageGlow|${glowR}`
+    let glow = getRamp(glowKey)
+    if (!glow) {
+      glow = putRamp(glowKey, ctx.createRadialGradient(0, 0, 0, 0, 0, glowR))
+      glow.addColorStop(0, 'rgba(255,186,96,1)')
+      glow.addColorStop(1, 'rgba(255,186,96,0)')
+    }
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 0.2 * flick
+    ctx.translate(sx, sy - hh * 0.25)
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    ctx.save()
+    // Judder, not spin. A cage bolted to the roadside does not roll, and the
+    // shake has to be lateral or it reads as the prop sliding down the road.
+    ctx.translate(sx + (c.flash > 0 ? Math.sin(t / 24) * c.flash * r * 0.14 : 0), sy)
+
+    const top = -hh
+    const bot = r * 0.72
+
+    // The interior: a warm well, so the bars in front of it read as bars.
+    const wellKey = `cageWell|${r}|${hh}`
+    let well = getRamp(wellKey)
+    if (!well) {
+      well = putRamp(wellKey, ctx.createLinearGradient(0, bot, 0, top))
+      well.addColorStop(0, '#7a4418')
+      well.addColorStop(0.55, '#c87d2e')
+      well.addColorStop(1, '#3a2410')
+    }
+    ctx.fillStyle = well
+    roundRect(ctx, -r * 0.92, top + r * 0.16, r * 1.84, bot - top - r * 0.16, r * 0.16)
+    ctx.fill()
+
+    // The body inside. Two shapes and no more: a huddled mass and a head. It is
+    // 12 px tall on a phone, so anything else is mud — and this is the whole
+    // reason the prop is worth taking, so it may not be decoration.
+    ctx.fillStyle = 'rgba(28,16,8,0.92)'
+    ctx.beginPath()
+    ctx.ellipse(0, bot - r * 0.36, r * 0.48, r * 0.4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(0, bot - r * 0.86, r * 0.27, 0, Math.PI * 2)
+    ctx.fill()
+
+    // ── The frame and the bars ──
+    //
+    // Drawn as strokes over the well rather than as a filled box with holes cut
+    // in it: a stroked bar keeps its width at every zoom, and at the far end of
+    // the road a filled slat would vanish while the gaps stayed.
+    const iron = '#8b93a6'
+    const ironDark = '#454c5e'
+    ctx.lineCap = 'butt'
+    ctx.strokeStyle = iron
+    ctx.lineWidth = Math.max(1.4, r * 0.15)
+    ctx.beginPath()
+    for (let i = 0; i < 4; i++) {
+      const bx = -r * 0.66 + (r * 1.32 * i) / 3
+      // The bars BEND as the cage comes apart — the wear channel, and it is the
+      // one a crate cannot have. A crate cracks along its face; a cage gives at
+      // the middle of its slats, which is exactly where a crowd's fire lands.
+      const bend = hurt * r * 0.22 * (i % 2 === 0 ? 1 : -1)
+      ctx.moveTo(bx, top + r * 0.2)
+      ctx.quadraticCurveTo(bx + bend, (top + bot) / 2, bx, bot - r * 0.06)
+    }
+    ctx.stroke()
+
+    // Top rail, bottom rail, and the two posts — the cage's outline proper.
+    ctx.strokeStyle = ironDark
+    ctx.lineWidth = Math.max(2, r * 0.2)
+    roundRect(ctx, -r * 0.92, top + r * 0.16, r * 1.84, bot - top - r * 0.16, r * 0.16)
+    ctx.stroke()
+    ctx.strokeStyle = iron
+    ctx.lineWidth = Math.max(1.4, r * 0.12)
+    ctx.beginPath()
+    ctx.moveTo(-r * 0.92, top + r * 0.62)
+    ctx.lineTo(r * 0.92, top + r * 0.62)
+    ctx.stroke()
+
+    // The lid: a plain iron cap, so the top of the silhouette is a hard shelf
+    // and not a rounded box lid. It is the fastest half of the shape to read at
+    // distance because it is the first part to come over the top of the screen.
+    ctx.fillStyle = ironDark
+    roundRect(ctx, -r, top, r * 2, r * 0.34, r * 0.1)
+    ctx.fill()
+    ctx.fillStyle = iron
+    roundRect(ctx, -r * 0.92, top + r * 0.03, r * 1.84, r * 0.13, r * 0.05)
+    ctx.fill()
+
+    // ── The two numbers ──
+    //
+    // `+N` on the lid, in the crowd's white: what it PAYS, in the same notation
+    // the gates use. The HP underneath in the crate's exact position and style:
+    // what it COSTS. Two numbers on one prop is only legible because they never
+    // move and never swap places.
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineJoin = 'round'
+
+    const pay = `+${c.hold}`
+    const pf = Math.max(9, r * 0.66)
+    ctx.font = `900 ${pf}px Angry, sans-serif`
+    ctx.lineWidth = Math.max(2, r * 0.16)
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)'
+    ctx.strokeText(pay, 0, top - r * 0.18)
+    ctx.fillStyle = '#fff'
+    ctx.fillText(pay, 0, top - r * 0.18)
+
+    const label = formatCount(Math.ceil(c.hp))
+    const fs = Math.max(9, r * 0.62)
+    ctx.font = `900 ${fs}px Angry, sans-serif`
+    ctx.lineWidth = Math.max(2, r * 0.16)
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)'
+    ctx.strokeText(label, 0, bot + r * 0.42)
+    ctx.fillStyle = '#ffd7a1'
+    ctx.fillText(label, 0, bot + r * 0.42)
+
+    ctx.restore()
+  }
+}
+
+/**
+ * ─── The auto-shield pickup ─────────────────────────────────────────────────
+ *
+ * The opposite problem to the cage: this one has to look LIKE something the
+ * player already knows. The timed shield skill owns a very specific vocabulary
+ * — cool blue, a honeycombed dome, and the heater-shield crest that the boss's
+ * own guard phase also uses — and a pickup that arms a shield while looking
+ * like anything else would be a second thing to learn for no reason.
+ *
+ * So it borrows the crest and the blue outright, and separates itself from the
+ * skill on the one axis that matters: the skill is a CLOCK and is drawn with a
+ * countdown arc, and this has no arc anywhere, ever, because it has no clock.
+ * What it has instead is a slow, steady turn — a thing sitting there, ready,
+ * for as long as you leave it.
+ */
+const drawBulwarks = (ctx: CanvasRenderingContext2D): void => {
+  const t = nowMs()
+  for (const w of getBulwarks()) {
+    if (w.dead) continue
+    const sx = worldToScreenX(w.x)
+    const sy = worldToScreenY(w.y)
+    if (sy < -60 || sy > viewH + 60) continue
+    const r = BULWARK_R * scale
+    const pulse = 0.5 + 0.5 * Math.sin(t / 420)
+
+    // A cool halo on the crates' own terms — same cached-ramp trick, same
+    // `globalAlpha` throb — so it belongs to the family of "things on the
+    // shoulder worth shooting". Slow, because it is not urgent; a fast throb is
+    // the rate crate's signature and this must not borrow it.
+    const glowR = r * 2.4
+    const glowKey = `bulwarkGlow|${glowR}`
+    let glow = getRamp(glowKey)
+    if (!glow) {
+      glow = putRamp(glowKey, ctx.createRadialGradient(0, 0, 0, 0, 0, glowR))
+      glow.addColorStop(0, 'rgba(120,215,255,1)')
+      glow.addColorStop(1, 'rgba(120,215,255,0)')
+    }
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 0.14 + pulse * 0.16
+    ctx.translate(sx, sy)
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    ctx.save()
+    ctx.translate(sx, sy)
+
+    // The housing: a dark steel box, deliberately plainer than a supply crate.
+    // It is a container for the thing on its face, and anything decorative on
+    // the box competes with the crest that carries the whole meaning.
+    const bodyKey = `bulwarkBody|${r}`
+    let body = getRamp(bodyKey)
+    if (!body) {
+      body = putRamp(bodyKey, ctx.createLinearGradient(-r, -r, r * 0.4, r))
+      body.addColorStop(0, '#2c3f52')
+      body.addColorStop(1, '#101b26')
+    }
+    ctx.fillStyle = body
+    roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.22)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(127,216,255,0.9)'
+    ctx.lineWidth = Math.max(1.6, r * 0.13)
+    roundRect(ctx, -r, -r, r * 2, r * 2, r * 0.22)
+    ctx.stroke()
+
+    // The crest, turning. `paintCrest` is the same call the dome over the crowd
+    // makes, so the pickup and the thing it gives are provably the same emblem
+    // and not two shields that happen to look alike.
+    ctx.save()
+    ctx.rotate(Math.sin(w.spin) * 0.16)
+    paintCrest(ctx, 'shield', 0, -r * 0.06, r * 0.52, r * 0.6, {
+      fill: '#6fd6ff',
+      rim: '#06263a',
+      rimW: Math.max(1.6, r * 0.12),
+      rib: 'rgba(6,38,58,0.9)',
+      ribW: Math.max(1, r * 0.06)
+    })
+    ctx.restore()
+
+    // The HP, in the crate's place and the crate's style — this is a box you
+    // shoot, and the number that says how long that takes belongs where the
+    // player already looks for it.
+    const label = formatCount(Math.ceil(w.hp))
+    const fs = Math.max(9, r * 0.62)
+    ctx.font = `900 ${fs}px Angry, sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = Math.max(2, r * 0.16)
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)'
+    ctx.strokeText(label, 0, r * 0.98)
+    ctx.fillStyle = '#cfefff'
     ctx.fillText(label, 0, r * 0.98)
 
     ctx.restore()
@@ -6138,6 +6827,41 @@ const guardHexPath = (
   ctx.closePath()
 }
 
+/**
+ * An ember-coloured copy of one baked frame, for phase two's colour shift.
+ *
+ * A `WeakMap` on the source canvas rather than a keyed cache, because the thing
+ * being keyed IS a canvas the baker owns: a boss cycles through eight of them
+ * and a painted strip swaps them out from under the renderer mid-fight (see
+ * `monsterFrame`). Keyed by identity, a re-bake or an art override simply stops
+ * hitting and gets tinted once more; keyed by a string, it would either collide
+ * across designs or hold the old bitmaps alive for the session.
+ *
+ * `source-in` over the drawn frame keeps the silhouette exactly — the same
+ * one-line trick `tintSilhouette` uses on the ridge bands, and the reason this
+ * can be composited with `lighter` without haloing: every pixel outside the
+ * body is transparent black, which adds nothing.
+ */
+const emberFrames = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>()
+const EMBER_TINT = '#ff5a20'
+
+const emberFrame = (src: HTMLCanvasElement): HTMLCanvasElement | null => {
+  const hit = emberFrames.get(src)
+  if (hit) return hit
+  if (src.width === 0 || src.height === 0) return null
+  const c = document.createElement('canvas')
+  c.width = src.width
+  c.height = src.height
+  const t = c.getContext('2d')
+  if (!t) return null
+  t.drawImage(src, 0, 0)
+  t.globalCompositeOperation = 'source-in'
+  t.fillStyle = EMBER_TINT
+  t.fillRect(0, 0, c.width, c.height)
+  emberFrames.set(src, c)
+  return c
+}
+
 const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   const b = getBoss()
   if (!b) return
@@ -6166,8 +6890,14 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   // that are the whole answer to the attack. A telegraph that is wrong is worse
   // than none. The claw, the healer and the summoner each paint their own tell
   // (`drawClawFurrows`, `drawHealTell`, `drawBossBolts`).
+  //
+  // A CHARGE is held back for exactly the reason the claw is, and it is the same
+  // bug: `slamX` is the centre of the swathe, so the ring would draw a "not
+  // here" mark down the middle of the column while the answer is to leave the
+  // column entirely — a telegraph pointing at the one axis it is wrong about.
+  // The band `drawCasts` paints is the charge's tell and it is the whole tell.
   const windowS = b.charging ? 1.1 : 0.6
-  if (b.kind === 'meteor' && !b.dead && b.slamCd < windowS) {
+  if (b.kind === 'meteor' && !b.dead && !bossIsCharging() && b.slamCd < windowS) {
     const k = 1 - b.slamCd / windowS
     const rx = worldToScreenX(b.slamX)
     const ry = worldToScreenY(b.slamY)
@@ -6232,6 +6962,28 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   ctx.ellipse(0, 0, size * 0.42, size * 0.12, 0, 0, Math.PI * 2)
   ctx.fill()
 
+  // Phase two's second half, and the half that survives being looked at from the
+  // corner of an eye: heat on the ground the boss is standing on. The ember pass
+  // over the sprite is the colour shift proper, and on a small phone against a
+  // dark-fantasy body it is a subtle one — this is what makes the state readable
+  // at a glance while the player is busy reading a band instead.
+  //
+  // Deliberately NOT a ring like the telegraphs use: those all mean "damage will
+  // arrive on this ground", and a permanent one under the boss would be a fourth
+  // ring in a fight that already has three, promising something that never
+  // comes. A soft pool has no such vocabulary attached to it.
+  if (bossIsEnraged() && !b.dead) {
+    const heat = 0.5 + Math.sin(t / 190) * 0.5
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 0.16 + heat * 0.14
+    ctx.fillStyle = '#ff4a18'
+    ctx.beginPath()
+    ctx.ellipse(0, 0, size * (0.52 + heat * 0.07), size * (0.16 + heat * 0.02), 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+
   // The guard phase: a hexagonal barrier that pulses hard and fast. The player
   // is going to keep shooting into it — the sim spends their rounds on it
   // deliberately — so it has to be unmistakably a shield and not a hitbox that
@@ -6257,6 +7009,7 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     ctx.translate(0, dying * size * 0.3)
   }
   const frame = monsterFrame(b.design, (t / 900) % 1)
+  const enraged = bossIsEnraged()
   if (frame) {
     const k = (size * 1.6) / (frame.height * SPRITE_HEIGHT_R)
     const dw = frame.width * k
@@ -6266,6 +7019,29 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     ctx.save()
     ctx.scale(mirror, 1)
     ctx.drawImage(frame, -dw / 2, top, dw, dh)
+    // ── Phase two's colour shift ──
+    //
+    // An EMBER COPY of the frame, added over the frame itself, so the shift
+    // lands on the boss's own pixels and nothing else. The obvious cheaper
+    // versions are both wrong on this canvas: `source-atop` composites against
+    // everything already drawn, so a rectangle over the sprite tints the road
+    // under it, and re-drawing the plain frame with `lighter` only walks the
+    // body toward white, which reads as the hit flash the line above already
+    // owns.
+    //
+    // It pulses rather than sitting flat. A constant tint is a palette swap and
+    // the eye stops seeing it inside a second; a slow breath keeps the boss
+    // reading as lit from inside for the rest of the fight, which is the whole
+    // job — the player has to be able to glance back mid-dodge and still know
+    // which half of the fight they are in.
+    const ember = enraged ? emberFrame(frame) : null
+    if (ember) {
+      ctx.globalAlpha = 0.34 + Math.sin(t / 190) * 0.12
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.drawImage(ember, -dw / 2, top, dw, dh)
+      ctx.globalAlpha = 1
+      ctx.globalCompositeOperation = 'source-over'
+    }
     if (b.flash > 0.02) {
       ctx.globalAlpha = Math.min(1, b.flash) * 0.8
       ctx.globalCompositeOperation = 'lighter'
@@ -6273,7 +7049,11 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     }
     ctx.restore()
   } else {
-    ctx.fillStyle = '#63348d'
+    // The drawn fallback gets the shift too, and it has to: the bake is async,
+    // so this is what a boss looks like for the first frames of a fight on a
+    // slow device — exactly the device where an unexplained difficulty change
+    // is least forgivable.
+    ctx.fillStyle = enraged ? '#8f2f3a' : '#63348d'
     ctx.beginPath()
     ctx.ellipse(0, -size * 0.5, size * 0.4, size * 0.6, 0, 0, Math.PI * 2)
     ctx.fill()
@@ -6885,6 +7665,12 @@ const applyFx = (e: FxEvent): void => {
       // at the wrong door is an action with a price.
       const hostile = e.hostile === true
       playFx(hostile ? 'gateSubTick' : 'gateTick', e.value)
+      // …and the fourth channel, on a phone. Both signs get it, for the same
+      // reason both get a tick and a number: the hostile leaf is the identical
+      // mechanic running against the player, and a pump the hand cannot feel
+      // going the wrong way is the one the player keeps standing in front of.
+      // See `useHaptics` for why this is not one buzz per event.
+      haptic('tick')
       emitText({
         x: e.x, y: e.y + 0.9, vy: hostile ? 1.8 : 2.6, life: 620,
         text: hostile ? '−1' : '+1',
@@ -6914,6 +7700,11 @@ const applyFx = (e: FxEvent): void => {
         // A descending minor cluster with a sub drop under it — deliberately
         // unpleasant, because this cue is a mistake being reported back.
         playFx('gateTrap')
+        // The one door that is graded as a HIT rather than as a pickup — shake,
+        // hurt pulse, implosion — so the hand gets the hit pattern too, not the
+        // payout tap. Same argument the mixer makes by giving it `gateTrap`
+        // instead of `gatePass`.
+        haptic('impact')
         triggerShake('big')
         screenFlash = Math.min(0.62, 0.28 + lost * 0.008)
         flashColour = '255,52,40'
@@ -6942,6 +7733,7 @@ const applyFx = (e: FxEvent): void => {
 
       const mul = e.op === 'mul'
       playFx(mul ? 'gateMul' : 'gatePass', Math.min(1, e.gain / 25))
+      haptic('reward')
       triggerShake(e.gain >= 20 ? 'strong' : 'small')
       screenFlash = Math.min(0.5, 0.18 + e.gain * 0.006)
       flashColour = mul ? '255,190,240' : '190,235,255'
@@ -7381,6 +8173,92 @@ const applyFx = (e: FxEvent): void => {
         })
       }
       break
+    case 'chargeCast':
+      // The lane charge's wind-up, and the only boss tell with a cue of its own
+      // that LASTS: `bossCharge` is a rasp that runs for about a second, because
+      // the second and a bit after this event is when the player has to actually
+      // move, and a one-frame clack would put their attention on the frame it is
+      // already too late to use.
+      playFx('bossCharge')
+      casts.push({
+        kind: 'charge', x: e.x, y: e.y, r: e.halfW, dir: 1,
+        charged: false, tx: e.x, ty: e.toY, t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'bossCharge': {
+      // It went through. Read as a slam — it is the same promise ("a hit you did
+      // not dodge costs about a third of your crowd") arriving in a different
+      // shape, and the player has already been taught what that costs.
+      playFx('bossSlam')
+      triggerShake('big')
+      // Scars down the whole swathe rather than a crater at the end of it, so
+      // what is left on the road afterwards is the LANE the boss came down —
+      // which is the thing to have learned before the next one.
+      const runY = e.fromY - e.y
+      const marks = minFx ? 2 : cheapFx ? 3 : 5
+      for (let i = 0; i < marks; i++) {
+        emitDecal(e.x, e.y + (runY * i) / marks, e.halfW * 0.9, 0.42)
+      }
+      const n = minFx ? 8 : cheapFx ? 16 : 34
+      for (let i = 0; i < n; i++) {
+        // Everything leaves SIDEWAYS out of the lane, for the same reason the
+        // roller's debris travels along the roll: a radial burst would read as
+        // an explosion at a point and teach the player to look for a safe
+        // distance from something that has no middle.
+        const side = i % 2 === 0 ? 1 : -1
+        const along = Math.random()
+        emit({
+          x: e.x + side * e.halfW * (0.5 + Math.random() * 0.6),
+          y: e.y + runY * along,
+          vx: side * (4 + Math.random() * 8), vy: -1 + Math.random() * 4,
+          life: 420 + Math.random() * 340, size: 0.13 + Math.random() * 0.09,
+          color: Math.random() < 0.5 ? [150, 130, 110] : [255, 140, 60],
+          additive: Math.random() < 0.35, shape: 1, gravity: 11, drag: 1.5,
+          rot: Math.random() * 6, vrot: side * 9
+        })
+      }
+      break
+    }
+
+    case 'bossEnrage': {
+      // ── The turn ──
+      //
+      // Arrives in the same frame as `bossRage` and deliberately overwrites its
+      // flash rather than adding a second one: two full-screen washes in one
+      // frame is one wash the player cannot read. Hotter and longer than the
+      // gate's, because the gate has happened before and this has not.
+      //
+      // The slow-motion hold is the simulation's (`slowHoldMs`), so the moment
+      // is already stretched by the time this runs — everything here is spent on
+      // making the stretched frame say WHY.
+      playFx('bossEnrage')
+      triggerShake('big')
+      screenFlash = 0.62
+      flashColour = '255,90,40'
+      emitDecal(e.x, e.y, 2.2, 0.5)
+      const ring = minFx ? 12 : cheapFx ? 24 : 46
+      for (let i = 0; i < ring; i++) {
+        const a = (i / ring) * Math.PI * 2
+        // Two speeds off one angle: a fast flat ring that reads as a shockwave
+        // leaving the body, and slower embers climbing off it that are still
+        // there a second later, when the player looks back at the boss.
+        emit({
+          x: e.x, y: e.y - 0.5, vx: Math.cos(a) * 13, vy: Math.sin(a) * 6.5 - 1,
+          life: 520, size: 0.15, color: [255, 110, 40], additive: true, shape: 2, drag: 2
+        })
+        if (i % 2 === 0) {
+          emit({
+            x: e.x + Math.cos(a) * 0.7, y: e.y - 0.3,
+            vx: Math.cos(a) * 1.6, vy: 2.4 + Math.random() * 3.2,
+            life: 900 + Math.random() * 600, size: 0.1 + Math.random() * 0.07,
+            color: [255, 190, 90], additive: true, shape: 2, drag: 0.9, gravity: -1.6
+          })
+        }
+      }
+      break
+    }
+
     case 'rakeCast':
       // The claw's wind-up. No sound of its own: it borrows the elite's swing,
       // because it IS a swing, and a fifth combat cue in the same second of the
@@ -7587,6 +8465,114 @@ const applyFx = (e: FxEvent): void => {
       }
       break
 
+    case 'cageBreak': {
+      // The cage's payoff, and it has one job the crate's does not: the reward
+      // is BODIES, and bodies are already appearing on the road from
+      // `spawnUnit`. So this is deliberately quieter than a crate break in
+      // everything except the number — the survivors themselves are the
+      // spectacle, and a fat particle bloom over the top of them would hide it.
+      playFx('cage')
+      triggerShake('small')
+      screenFlash = 0.16
+      flashColour = '255,205,140'
+      haptic('reward')
+      emitText({
+        x: e.x, y: e.y + 0.6, vy: 3.2, life: 1200,
+        text: `+${e.count}`, color: '#ffd7a1', size: 0.86, crit: true
+      })
+      // Iron, not wood: heavy dark shards that fall fast, against the crate's
+      // pale splinters. Same debris channel, opposite material — which is the
+      // silhouette read continuing for the half second after the prop is gone.
+      for (let i = 0; i < (cheapFx ? 8 : 16); i++) {
+        const a = Math.random() * Math.PI * 2
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * (2 + Math.random() * 6), vy: Math.sin(a) * 3.4 + 4,
+          life: 520 + Math.random() * 320, size: 0.11, color: [125, 134, 152],
+          shape: 1, gravity: 15, rot: Math.random() * 6, vrot: (Math.random() - 0.5) * 14
+        })
+      }
+      // …and the lamp going out over the top of them: a warm upward puff, the
+      // one moment the road is allowed to look hopeful.
+      for (let i = 0; i < (cheapFx ? 5 : 12); i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.9
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * 2.4, vy: Math.sin(a) * 3.6 - 1.2,
+          life: 620 + Math.random() * 380, size: 0.1 + Math.random() * 0.08,
+          color: [255, 200, 120], additive: true, shape: 2, drag: 1.9, gravity: -1.6
+        })
+      }
+      break
+    }
+
+    case 'bulwarkTake':
+      // Arming. Reads as the shield skill coming up (`shieldUp`), one notch
+      // heavier, because it is: same colour, same family of cue, a real shake
+      // where the skill has none. `fresh` is false when one was already armed —
+      // the pickup does not stack — so a second box is acknowledged with the
+      // sound alone and none of the promise.
+      playFx(e.fresh ? 'bulwarkArm' : 'crate', e.fresh ? 1 : 0.6)
+      if (e.fresh) {
+        triggerShake('small')
+        screenFlash = 0.2
+        flashColour = '140,220,255'
+        haptic('tick')
+        for (let i = 0; i < (cheapFx ? 10 : 22); i++) {
+          const a = Math.random() * Math.PI * 2
+          const rr = 0.5 + Math.random() * 0.5
+          emit({
+            x: e.x + Math.cos(a) * rr, y: e.y + Math.sin(a) * rr * 0.6,
+            vx: Math.cos(a) * 1.6, vy: Math.sin(a) * 1.1 + 2.2,
+            life: 480 + Math.random() * 280, size: 0.09 + Math.random() * 0.07,
+            color: [130, 220, 255], additive: true, shape: 2, drag: 2.2, gravity: -1.1
+          })
+        }
+      }
+      break
+
+    case 'bulwarkSave': {
+      // ── The whole pickup, spent, in one frame ──
+      //
+      // This is the moment the detour has to justify itself. `shieldSave` is
+      // deliberately tiny because it fires every second loss for three seconds;
+      // this fires ONCE per pickup, against a blow that was about to take a
+      // fifth of the crowd, and if the player misses it the box taught them
+      // nothing at all. So it takes every channel the game has at once —
+      // sound, shake, flash, haptic, a ring, and the number it just saved —
+      // where the skill's version takes two of them at a whisper.
+      //
+      // It borrows `shieldHitAt`, which is what brightens the crowd's own dome:
+      // when the timed shield happens to be up as well, the bubble flares on the
+      // same frame and the two protections visibly act as one thing.
+      playFx('bulwark')
+      shieldHitAt = nowMs()
+      triggerShake('big')
+      screenFlash = 0.42
+      flashColour = '170,235,255'
+      haptic('impact')
+      emitText({
+        x: e.x, y: e.y + 0.9, vy: 2.6, life: 1400,
+        text: `−${e.count}`, color: '#9ee8ff', size: 1.05, crit: true
+      })
+      // A hard shock ring at the point of impact — the blow arriving — and then
+      // the same energy thrown straight back out of it. The ring is what says
+      // "this happened HERE" on a road where the crowd may be nowhere near the
+      // thing that swung.
+      emitDecal(e.x, e.y, 2.4, 0.4)
+      for (let i = 0; i < (cheapFx ? 16 : 46); i++) {
+        const a = Math.random() * Math.PI * 2
+        const ring = i % 3 === 0
+        const sp = ring ? 11 + Math.random() * 6 : 3 + Math.random() * 7
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 + 1.1,
+          life: ring ? 260 + Math.random() * 160 : 520 + Math.random() * 380,
+          size: ring ? 0.09 + Math.random() * 0.06 : 0.12 + Math.random() * 0.12,
+          color: ring ? [235, 250, 255] : [120, 210, 255],
+          additive: true, shape: 2, drag: ring ? 2.4 : 1.3, gravity: ring ? 0 : -0.8
+        })
+      }
+      break
+    }
+
     case 'barrelLit':
       // Quiet on purpose: a spark and a puff. The barrel's own strobe is the
       // real tell, and a bang here would be a lie about what just happened.
@@ -7735,6 +8721,7 @@ const applyFx = (e: FxEvent): void => {
 
     case 'bossSlam': {
       playFx('bossSlam')
+      haptic('impact')
       triggerShake(e.charged ? 'big' : 'strong')
       // The debris ring is the slam's actual reach, so a raging boss visibly
       // throws a bigger hit rather than the same hit with a different number
@@ -7783,6 +8770,72 @@ const applyFx = (e: FxEvent): void => {
       hurtPulse = 1
       triggerShake('strong')
       break
+
+    case 'rally': {
+      // ── The second wind ──
+      //
+      // The loudest GOOD thing in the game, and it has to be: the frame before
+      // this one, the player watched their last survivor die. Without a burst
+      // big enough to overwrite that, bodies simply reappear and the game reads
+      // as broken — which is exactly what the first version did.
+      //
+      // Warm gold throughout, and deliberately nothing like the cool blue of
+      // the shield: the shield is protection the player BOUGHT, this is a gift
+      // they did not. Column of light, a halo ring spreading out along the
+      // road, and feathers coming down through it — see `drawRallyHalo` for the
+      // painted half, which is anchored to the crowd rather than to the road.
+      rallyAt = nowMs()
+      rallyX = e.x
+      rallyY = e.y
+      playFx('rally')
+      // A shimmer stacked under the sample, so the moment has a chord and not
+      // just a jingle.
+      playFx('gateMul', 0.9)
+      screenFlash = 0.4
+      flashColour = '255,238,190'
+      emitText({
+        x: e.x, y: e.y + 0.6, vy: 2.6, life: 1500,
+        text: `+${Math.round(e.count)}`, color: '#ffe9a8', size: 0.95, crit: true
+      })
+      // The column: sparks climbing out of the ground where they fell.
+      for (let i = 0; i < (cheapFx ? 14 : 34); i++) {
+        const a = Math.random() * Math.PI * 2
+        const r = Math.random() * 1.3
+        emit({
+          x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r * 0.6,
+          vx: Math.cos(a) * 0.6, vy: 5 + Math.random() * 6,
+          life: 700 + Math.random() * 520, size: 0.09 + Math.random() * 0.08,
+          color: Math.random() < 0.5 ? [255, 226, 150] : [255, 248, 225],
+          additive: true, shape: 2, drag: 1.1, gravity: -2.4
+        })
+      }
+      // The ring: the halo spreading out at ground level.
+      for (let i = 0; i < (cheapFx ? 10 : 24); i++) {
+        const a = (i / (cheapFx ? 10 : 24)) * Math.PI * 2
+        emit({
+          x: e.x, y: e.y, vx: Math.cos(a) * 9, vy: Math.sin(a) * 5,
+          life: 380 + Math.random() * 200, size: 0.08 + Math.random() * 0.05,
+          color: [255, 236, 176], additive: true, shape: 2, drag: 3.2, gravity: 0
+        })
+      }
+      // The feathers: soft, slow, falling THROUGH the rising sparks. The
+      // opposite direction is the whole trick — it is what stops the burst
+      // reading as one more explosion.
+      if (!cheapFx) {
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2
+          const r = 0.4 + Math.random() * 2.2
+          emit({
+            x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r * 0.6 + 2.6,
+            vx: (Math.random() - 0.5) * 1.6, vy: -1.2 - Math.random() * 1.2,
+            life: 1100 + Math.random() * 700, size: 0.14 + Math.random() * 0.1,
+            color: [255, 250, 236], alpha: 0.85, shape: 1, drag: 0.5, gravity: 0.7,
+            rot: Math.random() * 6, vrot: (Math.random() - 0.5) * 3
+          })
+        }
+      }
+      break
+    }
   }
 }
 
@@ -7842,6 +8895,11 @@ export const invalidateArt = (): void => {
   casts.length = 0
   rakes.length = 0
   healTells.length = 0
+  // …and with them the clock they were being stepped against. `resetWorld` puts
+  // the simulation clock back to zero, so a delta taken across a stage change is
+  // negative; it is clamped rather than trusted, but saying so here is cheaper
+  // than making the next reader work that out from the clamp.
+  lastSimNow = -1
   hpChip.clear()
   crowdSqueeze = 0
   batchBleak = false

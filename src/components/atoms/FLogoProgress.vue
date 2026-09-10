@@ -176,10 +176,11 @@ void preloadAssets()
 // first moment the splash is gone AND the SDK reports a fillable interstitial,
 // however long the SDK takes to come up.
 //
-// GameDistribution is deliberately NOT armed here. Its post-splash ad was
-// removed for producing borderline-incidental-click impressions (the player taps
-// "play" expecting the game and lands on an ad) and GD moderation has not asked
-// for it back — re-arming it is a product decision, not a bug fix.
+// GameDistribution is armed for the same reason: its moderation carries the same
+// first-load requirement, and its ad sat on the same sampled-once placement, so
+// it was equally dead. The post-splash fire was once removed on GD for producing
+// borderline-incidental-click impressions — that trade is being taken again
+// knowingly, because the alternative shipped no first ad at all.
 //
 // Every env read is a static literal so Rollup DCEs the entire branch (helper
 // module included) on other platform builds — same pattern as the Playgama /
@@ -187,6 +188,7 @@ void preloadAssets()
 if (
   import.meta.env.VITE_APP_GAMEPIX === 'true'
   || import.meta.env.VITE_APP_GAME_MONETIZE === 'true'
+  || import.meta.env.VITE_APP_GAME_DISTRIBUTION === 'true'
 ) {
   armFirstLoadInterstitial()
 }
@@ -337,7 +339,7 @@ watch(done, (isDone) => {
       signalGameReadyToGamepix()
       signalGameReadyToYandex()
       signalGameReadyToPoki()
-      // Triggers the GamePix / GameMonetize first-load interstitial (no-op on
+      // Triggers the GamePix / GameMonetize / GameDistribution first-load ad (no-op on
       // other builds — the orchestrator was never armed there). Runs alongside
       // the platform `game_ready` / `gameLoaded` signals so the ad lands
       // immediately once the splash is gone and the SDK is fillable; if the SDK

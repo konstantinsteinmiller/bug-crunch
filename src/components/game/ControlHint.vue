@@ -29,10 +29,21 @@ import { mobileCheck } from '@/utils/function'
  *             otherwise cost the player survivors, and this one costs them
  *             nothing at all. It is here because a beat with no consequence for
  *             missing it is a beat the road can never teach on its own.
+ *   cage    — the rescue cage, on exactly the lever's terms and for exactly the
+ *             lever's reason. It also carries a second job the lever's does
+ *             not: a cage looks enough like a supply crate from a distance that
+ *             "another box" is the default reading, so the hint has to say what
+ *             is DIFFERENT about it rather than what it is.
+ *   shieldBox
+ *           — the auto-shield pickup, same again. Its specific misreading is
+ *             the opposite one: the player already owns a shield with a three
+ *             second timer, so the word "shield" alone would promise them the
+ *             wrong object. The hint's load-bearing word is *waits*.
  */
 
 export type HintId =
   | 'move' | 'gate' | 'crate' | 'rate' | 'trap' | 'divider' | 'boss' | 'guard' | 'lever'
+  | 'cage' | 'shieldBox'
 
 interface Props {
   hint: HintId | null

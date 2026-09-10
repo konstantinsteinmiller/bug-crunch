@@ -8,21 +8,32 @@ import {
   startStage, advanceStage, retryStage, step, steerTo, steerBy, steerOnly, runSummary,
   attackIncoming,
   isChargingGate, getCrates, getGates, getDividers, getBoss, getLevers, anchor, crowdRadius,
+  getCages, getBulwarks,
   throwGrenade, raiseShield, shieldActive as isShieldUp,
-  activeWeapon, puzzlePulled, puzzleTotal, puzzleWeapon
+  activeWeapon, puzzleGift, puzzlePulled, puzzleTotal, puzzleWeapon,
+  rallies, readWeaponPick, setRallyPolicy, stageBeats, worldVersion,
+  isExpedition, startExpedition
 } from '@/use/useSurvivalGame'
+import { EXPEDITION_STAGE } from '@/use/useDailyExpedition'
+import { WEAPON_PICK_STAGE, type WeaponId } from '@/game/weapons'
+import { SHIELD_GIFT_STAGE, nextUnlock, stagesAway, type Unlock } from '@/game/ladder'
+import WeaponChoice from '@/components/organisms/WeaponChoice.vue'
+import { roundedOutlineFromTop } from '@/components/atoms/outlinePath'
 import {
   drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX, getScale
 } from '@/use/useSurvivalArt'
 import { renderScaleTier, resetVfx } from '@/use/useVfx'
 import { warmAudio, playFx } from '@/use/useGameAudio'
-import { CROWD_MAX_R, CROWD_SCREEN_Y, DECLINE_MAX, LANE_HALF, UNIT_R } from '@/game/survival'
+import {
+  CROWD_MAX_R, CROWD_SCREEN_Y, DECLINE_FREE_THROUGH_STAGE, DECLINE_MAX, LANE_HALF, UNIT_R
+} from '@/game/survival'
 
 import { getState, setState } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
+  BULWARK_HINT_KEY, CAGE_HINT_KEY,
   GUARD_HINT_KEY, LEVER_HINT_KEY, ONBOARDED_KEY, RESULTS_SEEN_KEY, REWARD_DECLINE_KEY,
-  SHOP_SPOTLIGHT_KEY, TUTORIAL_KEY
+  SHOP_SPOTLIGHT_KEY, TUTORIAL_KEY, WEAPON_PICK_KEY
 } from '@/keys'
 import useTowerEconomy from '@/use/useTowerEconomy'
 import { affordableCount, grantUpgrade } from '@/use/useUpgrades'
@@ -45,12 +56,13 @@ import { syncGameplayLifecycle, isGameplayLive } from '@/use/useGameplayLifecycl
 import { isAnyModalOpen } from '@/use/useModalState'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
 import { mobileCheck } from '@/utils/function'
-import { playFirstStartInterstitial } from '@/use/useFirstStartInterstitial'
 import {
   OUTSIDE_BOARD, boardSize, leaderboardEnabled, leaderboardFailed, playerTotal, rankFor, reportRun
 } from '@/use/useLeaderboard'
+import { shareCardBusy, shareCardOffered, shareRunCard } from '@/use/useShareCard'
 
 import RunHud from '@/components/game/RunHud.vue'
+import GuardianBanner from '@/components/game/GuardianBanner.vue'
 import ControlHint, { type HintId } from '@/components/game/ControlHint.vue'
 import TutorialOverlay from '@/components/game/TutorialOverlay.vue'
 import SteerHint from '@/components/game/SteerHint.vue'
@@ -66,6 +78,7 @@ import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import FReward from '@/components/atoms/FReward.vue'
 import FButton from '@/components/atoms/FButton.vue'
 import CoinBadge from '@/components/organisms/CoinBadge.vue'
+import DailyExpedition from '@/components/organisms/DailyExpedition.vue'
 import TreasureChest from '@/components/organisms/TreasureChest.vue'
 import OptionsModal from '@/components/organisms/OptionsModal.vue'
 import UpgradeModal from '@/components/organisms/UpgradeModal.vue'
@@ -193,7 +206,7 @@ const loop = (t: number): void => {
   // The pause gate covers ads, hidden tabs, platform SDK pauses and open
   // modals. The RENDER loop keeps running (so the frame under an ad isn't a
   // frozen artefact) but the simulation clock does not advance.
-  if (!isGamePaused.value && !showResult.value) {
+  if (!isGamePaused.value && !overlayUp.value) {
     phaseStart('step')
     step(dt)
     driveKeyboardSteering(dt)
@@ -230,7 +243,7 @@ const shieldLive = ref(false)
 
 const onUseSkill = (id: SkillId): void => {
   if (!skillReady(id)) return
-  if (isGamePaused.value || showResult.value) return
+  if (isGamePaused.value || overlayUp.value) return
 
   if (id === 'grenade') {
     if (!throwGrenade(grenadeMultiplier.value)) return
@@ -564,6 +577,12 @@ const activeHint = computed<HintId | null>(() => {
   // Only while there is still something to shoot — a hint pointing at a puzzle
   // the crowd has already run past teaches the wrong thing.
   if (leverHintDue.value) return 'lever'
+  // The two roadside prizes, on the lever's footing exactly. Ordered shield-box
+  // first because it is the rarer prop and the one whose misreading is
+  // expensive: a player who mistakes it for the timed skill spends their absorb
+  // waiting for a countdown that never comes.
+  if (bulwarkHintDue.value) return 'shieldBox'
+  if (cageHintDue.value) return 'cage'
   if (onboarded.value) return null
   if (!hintsDone.value.has('move')) return 'move'
   if (phase.value === 'boss') return hintsDone.value.has('boss') ? null : 'boss'
@@ -592,8 +611,12 @@ watch(laneWarning, (warn, before) => {
 })
 
 // The gate hint retires itself the moment the player actually holds fire on a
-// gate — which is the behaviour it was asking for.
-watch(isChargingGate, (charging) => { if (charging) markHintDone('gate') })
+// gate — which is the behaviour it was asking for. Not during the lightbox,
+// though: the opening doorway pumps under the crowd's fire while the road is
+// held, and a lesson the player watched happen is not one they have had.
+watch(isChargingGate, (charging) => {
+  if (charging && !tutorialActive.value) markHintDone('gate')
+})
 watch(damage, (now, before) => { if (now > before) markHintDone('crate') })
 watch(runFireRate, (now, before) => { if (now > before) markHintDone('rate') })
 watch(phase, (p) => { if (p === 'boss') markHintDone('boss') })
@@ -623,6 +646,47 @@ watch(puzzlePulled, (n) => {
   leverHintSeen.value = true
   markHintDone('lever')
   setState(LEVER_HINT_KEY, true)
+})
+
+/**
+ * The two roadside prizes, primed once each in a player's life.
+ *
+ * Same shape as the lever primer above, and the same 13-unit window — the prop
+ * has to be ON SCREEN and still ahead of the crowd while the words are up, or
+ * the player reads an instruction about an object they cannot see.
+ *
+ * Retired on the far side rather than on a payout, unlike the lever's. A lever
+ * has a moment that proves the lesson landed (it goes over); these two do not —
+ * a player can read the pill, decide the detour is not worth it this time, and
+ * be entirely correct. Passing the prop is therefore the whole event, and
+ * persisting on it is what stops a bonus turning into a nag.
+ */
+const cageHintSeen = ref(getState<boolean>(CAGE_HINT_KEY, false) === true)
+const cageHintDue = computed(() => {
+  void hintTick.value
+  if (cageHintSeen.value) return false
+  const a = anchor()
+  return getCages().some((c) => !c.dead && c.y - a.y > 0 && c.y - a.y < 13)
+})
+watch(cageHintDue, (now, before) => {
+  if (!before || now || cageHintSeen.value) return
+  cageHintSeen.value = true
+  markHintDone('cage')
+  setState(CAGE_HINT_KEY, true)
+})
+
+const bulwarkHintSeen = ref(getState<boolean>(BULWARK_HINT_KEY, false) === true)
+const bulwarkHintDue = computed(() => {
+  void hintTick.value
+  if (bulwarkHintSeen.value) return false
+  const a = anchor()
+  return getBulwarks().some((w) => !w.dead && w.y - a.y > 0 && w.y - a.y < 13)
+})
+watch(bulwarkHintDue, (now, before) => {
+  if (!before || now || bulwarkHintSeen.value) return
+  bulwarkHintSeen.value = true
+  markHintDone('shieldBox')
+  setState(BULWARK_HINT_KEY, true)
 })
 
 /** True while the boss is planted behind its phase shield. Polled at the same
@@ -680,6 +744,15 @@ const showUpgrades = ref(false)
 const showLeaderboard = ref(false)
 const summary = ref(runSummary())
 
+/** The weapon choice is up — see `flowToNextStage`. */
+const showWeaponPick = ref(false)
+/**
+ * Something full-screen owns the road: the result screen or the weapon
+ * choice. Both stop the clock, both hide the run's own controls, and both
+ * are "not gameplay" to every portal listening.
+ */
+const overlayUp = computed(() => showResult.value || showWeaponPick.value)
+
 /**
  * The player's global rank, for the result screen.
  *
@@ -701,6 +774,60 @@ const resultRank = computed<string>(() => {
   // rather than showing a permanent "loading" to a player with no connection.
   return leaderboardFailed.value ? '' : '…'
 })
+
+// ─── The share card ─────────────────────────────────────────────────────────
+//
+// A 1080×1080 picture of a record run, built on the tap and handed to whatever
+// the device calls "share". Two conditions, and both are somebody else's
+// numbers rather than a second opinion of this screen's:
+//
+//   • THE RUN IS A RECORD — `summary.isRecord`, the same flag that puts "New
+//     record!" on this screen a few lines up. If the screen does not already
+//     say the run was a record, there is nothing to share.
+//   • THE BOARD PLACED IT — `resultRank` is a real placing rather than empty
+//     (no board on this build, or the endpoint failed) or the `…` that means
+//     the read has not landed. That is the roadmap's "compared to peers from
+//     the leaderboard on the same stage", read through the machinery that
+//     already answers it: `rankFor` ranks the run's stage against the whole
+//     population the board knows about, live, cached or baked. Nothing here
+//     asks the network for anything — the read the rank chip already did is
+//     the entire budget, and on a build with no endpoint at all the button
+//     simply never appears.
+//
+// Plus `shareCardOffered`, which is the device's and the frame's answer rather
+// than the run's: no Web Share for files, no permissions policy for it in this
+// iframe, or a refusal already seen this session, and the button does not
+// exist. See `useShareCard` for why that is three separate questions.
+const showShareCard = computed(() =>
+  summary.value.isRecord &&
+  resultRank.value !== '' &&
+  resultRank.value !== '…' &&
+  shareCardOffered.value
+)
+
+/**
+ * Everything the card prints, resolved HERE.
+ *
+ * The renderer takes finished strings and never sees `t`, so the card can be
+ * drawn and tested without an i18n instance — and so the word order inside a
+ * caption stays a translator's decision. The rank arrives as two runs, the
+ * placing and the population, exactly as the chip above shows them, because
+ * gluing them into one string would translate "of" into English word order for
+ * twenty locales.
+ */
+const onShareCard = (): void => {
+  void shareRunCard({
+    stage: summary.value.stage,
+    peakSquad: summary.value.peakSquad,
+    title: t('gameName'),
+    recordLabel: t('result.newRecord'),
+    stageWord: t('leaderboard.stage'),
+    squadWord: t('leaderboard.squad'),
+    rankValue: resultRank.value,
+    rankOf: playerTotal.value > 0 ? t('result.rankOf', { n: playerTotal.value }) : '',
+    text: t('share.text', { n: summary.value.stage, game: t('gameName') })
+  })
+}
 
 const rewardCoinRef = ref<HTMLElement | null>(null)
 const coinBadgeRef = ref<InstanceType<typeof CoinBadge> | null>(null)
@@ -746,28 +873,108 @@ const maybeShowInterstitial = async (): Promise<void> => {
  *
  * The shop is not skipped, only deferred: it is on the HUD throughout, and every
  * stage from `CONTINUOUS_THROUGH_STAGE` on presents normally.
+ *
+ * THREE, not two, since the second fit-test pass. Measured on the sim, a clean
+ * run finishes stage 3 at about 1:35 — inside the two-minute cliff the first
+ * test reported — so stage 3's clear was the first full stop a stranger met and
+ * it landed exactly where they were leaving. The first result screen now
+ * arrives after stage 4, around 2:20, with a weapon already in hand, a shield
+ * already announced and coins worth spending. The one stop the opening stages
+ * DO make on purpose is the weapon choice on the way into stage 3, and that is
+ * a gift with a decision in it rather than a summary.
  */
-const CONTINUOUS_THROUGH_STAGE = 2
+const CONTINUOUS_THROUGH_STAGE = 3
 
 /** How long the handover banner sits over the new stage's opening. */
 const BANNER_MS = 1700
 
 const bannerStage = ref(0)
 const bannerUnlock = ref<{ icon: GameIconName; label: string } | null>(null)
+const bannerNext = ref<{ icon: GameIconName; text: string } | null>(null)
+const bannerTitle = ref<string | null>(null)
 const bannerShown = ref(false)
+let bannerTimer: number | null = null
+
+const showBanner = (
+  o: {
+    stage: number
+    unlock?: { icon: GameIconName; label: string } | null
+    next?: { icon: GameIconName; text: string } | null
+    title?: string | null
+  }
+): void => {
+  bannerStage.value = o.stage
+  bannerUnlock.value = o.unlock ?? null
+  bannerNext.value = o.next ?? null
+  bannerTitle.value = o.title ?? null
+  bannerShown.value = true
+  if (bannerTimer !== null) clearTimeout(bannerTimer)
+  bannerTimer = window.setTimeout(() => { bannerShown.value = false }, BANNER_MS)
+}
+
+// ─── The ladder, in words ───────────────────────────────────────────────────
+//
+// `game/ladder.ts` says WHAT is next and WHEN; these say it in the player's
+// language, for the banner and for the chip beside the stage number.
+
+const unlockLabel = (u: Unlock): string =>
+  u.kind === 'weaponPick'
+    ? t('ladder.weaponPick')
+    : u.kind === 'shield'
+      ? t('skills.shield')
+      : t(`weapons.${u.weapon ?? 'gatling'}`)
+
+const unlockWhen = (n: number): string =>
+  n <= 1 ? t('ladder.nextStage') : t('ladder.stagesAway', { n })
+
+/** The chip: a glyph and "Shield · next stage". */
+const ladderChip = (forStage: number): { icon: GameIconName; text: string } | null => {
+  const u = nextUnlock(forStage)
+  if (!u) return null
+  return { icon: u.icon, text: `${unlockLabel(u)} · ${unlockWhen(stagesAway(forStage, u))}` }
+}
+
+/** The banner's line: "Next: Shield · next stage". */
+const ladderLine = (forStage: number): { icon: GameIconName; text: string } | null => {
+  const u = nextUnlock(forStage)
+  if (!u) return null
+  return {
+    icon: u.icon,
+    text: t('flow.next', { label: unlockLabel(u), when: unlockWhen(stagesAway(forStage, u)) })
+  }
+}
+
+/** What the HUD promises during this stage. */
+const hudNext = computed(() => ladderChip(stage.value))
 
 /**
- * The stage-1 gift.
+ * The beats marked on the rail — read off the track whenever the world is
+ * rebuilt, so the marks are there from the stage's first frame.
+ */
+const hudBeats = computed(() => {
+  void worldVersion.value
+  return stageBeats().map((b) => ({
+    at: b.at,
+    kind: b.kind,
+    icon: (b.kind === 'weapon' ? (b.weapon ?? 'gatling') : 'skull') as GameIconName
+  }))
+})
+
+/**
+ * The stage-3 gift, now that the weapon has stage 3.
  *
- * A player who has just beaten the tutorial boss has earned something they can
- * SEE, and "here is a button you did not have" is a far better reason to start
- * stage 2 than a coin total. The shield is the natural pick: it is the game's
- * other active skill, it is otherwise hidden behind a shop the player has not
- * opened yet, and handing over level 1 leaves the remaining nine for the shop to
- * sell. Returns what to announce, or `null` if they already had it.
+ * A player who has just cleared stage 3 has earned something they can SEE, and
+ * "here is a button you did not have" is a far better reason to start stage 4
+ * than a coin total. The shield is the natural pick: it is the game's other
+ * active skill, it is otherwise hidden behind a shop the player has not opened
+ * yet, and handing over level 1 leaves the remaining nine for the shop to sell.
+ * It used to land on the stage-1 banner; it moved so the ladder reads gift,
+ * gift, gift — weapon on 3, shield on 4, a weapon on the road at 4 — rather
+ * than one gift and a long silence. Returns what to announce, or `null` if they
+ * already had it.
  */
 const grantStageGift = (clearedStage: number): { icon: GameIconName; label: string } | null => {
-  if (clearedStage !== 1) return null
+  if (clearedStage !== SHIELD_GIFT_STAGE - 1) return null
   if (!grantUpgrade('shield', 1)) return null
   return { icon: 'shield', label: t('skills.shield') }
 }
@@ -789,15 +996,116 @@ const flowToNextStage = async (): Promise<void> => {
 
   const gift = grantStageGift(summary.value.stage)
 
+  // The one stop the handover makes: the weapon choice, on the way into
+  // `WEAPON_PICK_STAGE`, for a player who has not chosen yet. The road waits
+  // (`overlayUp` gates the clock), the reveal goes up, and `onWeaponPicked`
+  // finishes what this function started. A player who already chose — a
+  // retry, a reload, a second career — goes straight through with the weapon
+  // `startStage` re-arms from the save.
+  if (summary.value.stage === WEAPON_PICK_STAGE - 1 && readWeaponPick() === null) {
+    showWeaponPick.value = true
+    return
+  }
+  completeHandover(gift)
+}
+
+/** The back half of a continuous handover: the next road, and the banner. */
+const completeHandover = (gift: { icon: GameIconName; label: string } | null): void => {
   resetVfx()
   invalidateArt()
   advanceStage()
-
-  bannerStage.value = stage.value
-  bannerUnlock.value = gift
-  bannerShown.value = true
-  window.setTimeout(() => { bannerShown.value = false }, BANNER_MS)
+  showBanner({
+    stage: stage.value,
+    unlock: gift,
+    // The promise rides every banner that has no gift on it.
+    next: gift ? null : ladderLine(stage.value)
+  })
 }
+
+/**
+ * The player tapped a card.
+ *
+ * Persisted and flushed before the road moves: the loaner is re-armed by
+ * `startStage` from this key on every attempt at the stage, so a reload
+ * between the tap and the first frame must not lose it. Announced on the
+ * banner as the unlock it is.
+ */
+const onWeaponPicked = (id: WeaponId): void => {
+  setState(WEAPON_PICK_KEY, id)
+  void flushSaveNow()
+  showWeaponPick.value = false
+  completeHandover({ icon: id, label: t(`weapons.${id}`) })
+}
+
+// ─── The rally ──────────────────────────────────────────────────────────────
+//
+// The sim asks (`setRallyPolicy`); this is the answer. A second wind, once per
+// stage, on stages 2 and 3 only, past three quarters of the road, and only
+// while the player has never cleared stage 3 — i.e. their first session with
+// the game, for any practical purpose. Stage 4 keeps the real floor.
+//
+// It exists because the earliest exit in the funnel was measured: a run that
+// never steers clears stage 1 and wipes at 64 % of stage 2, a "Squad Wiped
+// Out" screen forty-five seconds into a stranger's first look. The retry
+// relief was already there; what was missing was the retry.
+
+const RALLY_STAGES: readonly number[] = [2, 3]
+const RALLY_FROM_PROGRESS = 0.75
+/**
+ * Share of the run's biggest squad handed back.
+ *
+ * 0.7, not the 0.4 it shipped as. Two fifths of a peak is arithmetically a
+ * rescue and experientially a stay of execution: the crowd that just died to
+ * this stretch of road comes back too thin to survive it, dies again inside a
+ * few seconds, and the player's takeaway is that the game teased them. Seven
+ * tenths hands back a squad that can actually finish the stage — which is the
+ * only version of this that pays for itself, because the whole point is a
+ * FIRST stage-2 clear rather than a longer stage-2 death.
+ */
+const RALLY_SHARE = 0.7
+const RALLY_MIN_SQUAD = 3
+/** No rallies once the player has cleared this stage or any beyond it. */
+const RALLY_UNTIL_BEST = 3
+
+const ralliedStages = new Set<number>()
+/** What the last rally handed back — the number the announcement reads out. */
+const rallyCount = ref(0)
+
+const rallyPolicy = (ask: { stage: number; progress01: number; peakSquad: number }): number => {
+  if (bestStage.value > RALLY_UNTIL_BEST) return 0
+  if (!RALLY_STAGES.includes(ask.stage)) return 0
+  if (ask.progress01 < RALLY_FROM_PROGRESS) return 0
+  if (ralliedStages.has(ask.stage)) return 0
+  ralliedStages.add(ask.stage)
+  const back = Math.max(RALLY_MIN_SQUAD, Math.ceil(ask.peakSquad * RALLY_SHARE))
+  rallyCount.value = back
+  return back
+}
+
+// ─── Announcing it ──────────────────────────────────────────────────────────
+//
+// The rally used to be one word on the mid-screen banner, and one word is not
+// an explanation: survivors reappeared a frame after the last one died, and
+// what a stranger took from that was that the game had glitched in their
+// favour. A gift nobody can account for is worth less than nothing — it makes
+// the rules look soft.
+//
+// So it is named, under the boss rail, for three seconds: WHO saved them, and
+// how many came back. The in-world half (`drawRallyHalo` and the `rally` VFX
+// case, both fired by the sim) carries the sound and the light on the road.
+//
+// Only on the way UP — `startStage` resets the counter, and a reset is not a
+// rally.
+const GUARDIAN_MS = 3000
+const guardianShown = ref(false)
+let guardianTimer: number | null = null
+
+watch(rallies, (now, before) => {
+  if (now <= (before ?? 0)) return
+  guardianShown.value = true
+  if (guardianTimer !== null) clearTimeout(guardianTimer)
+  guardianTimer = window.setTimeout(() => { guardianShown.value = false }, GUARDIAN_MS)
+})
 
 /** Stage cleared or squad wiped — the end of a run, either way. */
 const presentResult = async (): Promise<void> => {
@@ -827,7 +1135,15 @@ const presentResult = async (): Promise<void> => {
   // `force` because the run is OVER. Mid-run clears are throttled — a climb
   // used to post once per stage — but the score a player finished on is the one
   // the board must end up with, so this call skips the gap.
-  void reportRun(bestStage.value, summary.value.peakSquad, { force: true })
+  //
+  // Never after an expedition. `bestStage` cannot have moved (see `finishRun`),
+  // so the score is unchanged either way — but the SQUAD travels with the post,
+  // and a squad assembled on a stage-16 road by a player halfway up the campaign
+  // would relabel their board row with a number their career never produced.
+  // The side door does not write to the career board at all.
+  if (!summary.value.expedition) {
+    void reportRun(bestStage.value, summary.value.peakSquad, { force: true })
+  }
 
   // The first cleared stage is the end of onboarding: the player has seen every
   // primer that matters and a returning player must never be taught again.
@@ -858,8 +1174,16 @@ const rewardClaimed = ref(false)
  *  walking away count as a decline. */
 const rewardWasOffered = ref(false)
 
-/** Extra coins the ×3 would pay on top of what was already banked. */
-const rewardBonus = computed(() => summary.value.coins * (REWARD_MULTIPLIER - 1))
+/**
+ * Extra coins the ×3 would pay on top of what was already banked.
+ *
+ * Off `baseCoins`, which is the run's CAMPAIGN payout — identical to `coins` on
+ * every ordinary run, and a third of it on the daily expedition. The expedition
+ * already pays triple; compounding the two would make one screen a day worth
+ * nine times a normal run, and the upgrade curve is priced against this button
+ * being the ×3 it says it is. See `RunSummary.baseCoins`.
+ */
+const rewardBonus = computed(() => summary.value.baseCoins * (REWARD_MULTIPLIER - 1))
 
 const showRewardButton = computed(() =>
   showResult.value && !rewardClaimed.value && summary.value.coins > 0 && canOfferReward.value
@@ -881,6 +1205,13 @@ const recordDecline = (): void => {
   // stacking a difficulty increase on top of a defeat is how a losing streak
   // becomes a quit.
   if (!summary.value.cleared) return
+  // And never while the game is still teaching — see the constant.
+  if (summary.value.stage <= DECLINE_FREE_THROUGH_STAGE) return
+  // Nor out of an expedition. The lean is the CAMPAIGN's difficulty knob, and
+  // the expedition deliberately ignores it on the way in (`startStage` pins
+  // `hpRelief` at 1) — so writing to it on the way out would be a side door
+  // paying a cost it never charged.
+  if (summary.value.expedition) return
   const next = Math.min(DECLINE_MAX, declines.value + 1)
   declines.value = next
   setState(REWARD_DECLINE_KEY, next)
@@ -969,6 +1300,154 @@ const onRetry = (): void => {
 }
 
 /**
+ * ─── Out through the side door ──────────────────────────────────────────────
+ *
+ * The chip has already been armed and confirmed (see `DailyExpedition.vue`), so
+ * this is the go. It abandons whatever stage was in flight, which is the honest
+ * cost of the feature and is why the confirm exists: the campaign's resume
+ * point is untouched by an expedition, so the run being thrown away is the only
+ * thing lost, and `startStage()` will hand it straight back afterwards.
+ *
+ * NO interstitial in front of it. The player has just made a deliberate,
+ * two-tap choice to start something, and an ad between the tap and the thing
+ * they asked for is the placement portals reject builds over — the run's own
+ * result screen is where this road's ad belongs, exactly as on every other run.
+ *
+ * The banner rides the expedition's empty opening the same way a stage handover
+ * does, and it is the only announcement the feature makes: it is what tells the
+ * player the road under them changed.
+ */
+const onStartExpedition = (): void => {
+  if (adInFlight.value) return
+  showResult.value = false
+  resetVfx()
+  invalidateArt()
+  startExpedition()
+  showBanner({ stage: EXPEDITION_STAGE, title: t('expedition.title') })
+  startBattleMusic()
+}
+
+// ─── Auto-advance ───────────────────────────────────────────────────────────
+//
+// The result screen used to be a full stop: read it, decide, press a button.
+// A runner's whole retention model is that the next attempt starts before the
+// decision to stop is made, so the primary action now fires itself — a thin
+// ring filling around the button, and when it closes the road goes on. Any
+// touch anywhere cancels it (the player has taken over), and so does opening
+// the shop, an ad in flight, or the offer changing under them.
+//
+// Six seconds rather than the roadmap's two and a half: the `×3` is the
+// game's income and sits one row above this button, and a player needs a real
+// beat to read it — and to reach for the shop — before the screen decides for
+// them. Four was measured as too quick to do either.
+//
+// And only through stage 5. The countdown exists for the stranger who has not
+// decided to stay yet and would otherwise leave at a full stop; a player on
+// stage 6 has decided, is spending coins between runs, and a screen that
+// closes itself under them is a screen that takes a decision away.
+
+const RESULT_AUTO_ADVANCE_MS = 6000
+/** The last stage whose result screen counts itself down. */
+const AUTO_ADVANCE_THROUGH_STAGE = 5
+/** 0..1 across the countdown. */
+const autoProgress = ref(0)
+/** The outline is up: the countdown is running and nobody has touched anything. */
+const autoArmed = ref(false)
+let autoTimer: number | null = null
+let autoStartedAt = 0
+
+// ─── The outline that traces the button ─────────────────────────────────────
+//
+// The countdown is drawn IN FRONT of the button it will press, as a stroke
+// running clockwise from the top along the button's own rounded edge. The
+// button is a fluid-sized rounded square, so nothing about the shape is known
+// in CSS: the wrapper is measured, the face's own corner radius is read back
+// from the element that paints it, and the path is rebuilt from those numbers.
+// `pathLength="100"` on the path makes the dash offset a percentage whatever
+// the geometry is — see `outlinePath.ts`.
+
+/** Stroke width, CSS px. Thick enough to read on a 44 px button. */
+const AUTO_STROKE = 3
+const goRef = ref<HTMLElement | null>(null)
+const goBox = ref({ w: 0, h: 0, r: 12 })
+let goObserver: ResizeObserver | null = null
+
+const measureGo = (): void => {
+  const el = goRef.value
+  if (!el) return
+  const body = el.querySelector<HTMLElement>('.f-button__body')
+  const r = body ? parseFloat(getComputedStyle(body).borderTopLeftRadius) : Number.NaN
+  goBox.value = {
+    w: el.offsetWidth, h: el.offsetHeight,
+    r: Number.isFinite(r) ? r : 12
+  }
+}
+
+const autoPath = computed(() => roundedOutlineFromTop(
+  { x: 0, y: 0, w: goBox.value.w, h: goBox.value.h, r: goBox.value.r },
+  AUTO_STROKE / 2 + 0.5
+))
+
+const cancelAutoAdvance = (): void => {
+  if (autoTimer !== null) {
+    clearInterval(autoTimer)
+    autoTimer = null
+  }
+  goObserver?.disconnect()
+  goObserver = null
+  autoArmed.value = false
+  autoProgress.value = 0
+  window.removeEventListener('pointerdown', cancelAutoAdvance, true)
+  window.removeEventListener('keydown', cancelAutoAdvance, true)
+}
+
+const startAutoAdvance = (): void => {
+  cancelAutoAdvance()
+  autoArmed.value = true
+  autoStartedAt = performance.now()
+  // The button mounts with the screen, one tick from now; measure it then and
+  // keep measuring it, because its size follows the viewport.
+  void nextTick().then(() => {
+    if (!autoArmed.value) return
+    measureGo()
+    if (typeof ResizeObserver !== 'undefined' && goRef.value) {
+      goObserver = new ResizeObserver(measureGo)
+      goObserver.observe(goRef.value)
+    }
+  })
+  // Capture phase, so a tap on any control cancels BEFORE the control acts —
+  // and a tap on the primary button itself simply becomes the action.
+  window.addEventListener('pointerdown', cancelAutoAdvance, true)
+  window.addEventListener('keydown', cancelAutoAdvance, true)
+  autoTimer = window.setInterval(() => {
+    // Hold rather than cancel while something else has the screen: a paused
+    // countdown that resumes reads as patience, a cancelled one as a bug.
+    if (adInFlight.value || isAnyModalOpen.value || isGamePaused.value) {
+      autoStartedAt = performance.now() - autoProgress.value * RESULT_AUTO_ADVANCE_MS
+      return
+    }
+    autoProgress.value = Math.min(1, (performance.now() - autoStartedAt) / RESULT_AUTO_ADVANCE_MS)
+    if (autoProgress.value < 1) return
+    const cleared = summary.value.cleared
+    cancelAutoAdvance()
+    if (cleared) onNext()
+    else onRetry()
+  }, 50)
+}
+
+watch(showResult, (up) => {
+  // `summary` is written before the screen goes up (`presentResult`), so the
+  // stage it names is the one this screen is about.
+  if (up && summary.value.stage <= AUTO_ADVANCE_THROUGH_STAGE) startAutoAdvance()
+  else cancelAutoAdvance()
+})
+// The shop, the options and the board all own the screen while they are up;
+// the ring waits, and a player who came back from the shop gets a fresh look.
+watch([showUpgrades, showOptions, showLeaderboard], (open) => {
+  if (open.some(Boolean)) cancelAutoAdvance()
+})
+
+/**
  * "Upgrade" from the result screen.
  *
  * Deliberately NOT behind an ad, and deliberately not a dead end: closing the
@@ -1030,7 +1509,7 @@ const openUpgrades = (): void => {
 // without mounting a canvas.
 const isLiveGameplay = computed(() => isGameplayLive({
   phase: phase.value,
-  showResult: showResult.value,
+  showResult: overlayUp.value,
   anyModalOpen: isAnyModalOpen.value,
   adShowing: isAdShowing.value,
   visibilityHidden: isVisibilityHidden.value,
@@ -1066,9 +1545,11 @@ const boot = async (): Promise<void> => {
   if (booting) return
   booting = true
   try {
-    // Moderation-mandated first-play interstitial on the networks that require
-    // it; a no-op fast path everywhere else. Before the music starts, by design.
-    await playFirstStartInterstitial()
+    // No ad is awaited here. The moderation-mandated first ad on GamePix /
+    // GameMonetize / GameDistribution is the POST-SPLASH placement
+    // (`useFirstLoadInterstitial`), which watches SDK readiness instead of
+    // sampling it once at boot — a check made here loses the race to the ad
+    // SDK's own load and fires nothing. See that module's header.
     startStage()
     // The lightbox goes up BEFORE the first frame of the first stage a new
     // player ever sees, and holds the road until they have steered. Ordered
@@ -1110,6 +1591,7 @@ const onOrientationChange = (): void => { setTimeout(resize, 250) }
 let insetTimer = 0
 
 onMounted(() => {
+  setRallyPolicy(rallyPolicy)
   void boot()
   window.addEventListener('resize', resize)
   window.addEventListener('orientationchange', onOrientationChange)
@@ -1133,6 +1615,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  setRallyPolicy(null)
+  cancelAutoAdvance()
+  if (bannerTimer !== null) clearTimeout(bannerTimer)
+  if (guardianTimer !== null) clearTimeout(guardianTimer)
   cancelAnimationFrame(rafId)
   window.removeEventListener('resize', resize)
   window.removeEventListener('orientationchange', onOrientationChange)
@@ -1161,8 +1647,16 @@ onUnmounted(() => {
     div.scene__hud
       div.scene__top(ref="topBarRef")
         div.scene__top-main
+          //- Three readouts are suppressed on an expedition, and all three for
+          //- the same reason: they are statements about the CAMPAIGN that would
+          //- be false on this road. `label` replaces "Stage 16" — a number that
+          //- is a rung on the difficulty curve, not a place the player has
+          //- reached; the streak chip would advertise a handicap the expedition
+          //- pins at 1; and the ladder chip would promise the unlock that comes
+          //- after a stage this run is not on.
           RunHud(
             :stage="stage"
+            :label="isExpedition ? t('expedition.hud') : null"
             :best="bestStage"
             :progress="progress01"
             :squad="squadCount"
@@ -1172,8 +1666,15 @@ onUnmounted(() => {
             :boss-hp="bossHp01"
             :elite="eliteAlive"
             :elite-hp="eliteHp01"
-            :challenge="challenge"
+            :challenge="isExpedition ? 0 : challenge"
+            :next-unlock="isExpedition ? null : hudNext"
+            :beats="hudBeats"
           )
+          //- Hung off the HUD's own box (`position: absolute; top: 100%`), so
+          //- three seconds of "a guardian angel saved you" never move the rail
+          //- above it or the hint below it. Hidden behind an overlay like every
+          //- other run readout.
+          GuardianBanner(v-if="!overlayUp" :show="guardianShown" :count="rallyCount")
         //- The wallet column: what the player has, and the one thing on the
         //- HUD that hands them more of it for free. The chest sits UNDER the
         //- badge because that is where its coins fly to — the payout is a
@@ -1184,7 +1685,7 @@ onUnmounted(() => {
         //- a modal is a tap the player cannot make.
         div.scene__wallet
           CoinBadge(ref="coinBadgeRef")
-          TreasureChest(v-if="!showResult" :target-el="coinBadgeEl")
+          TreasureChest(v-if="!overlayUp" :target-el="coinBadgeEl")
 
       //- Control primer, centred under the top bar — except the guard primer,
       //- which drops to mid-screen so it doesn't sit on the boss's shield.
@@ -1203,10 +1704,11 @@ onUnmounted(() => {
       //- result screen for the same reason every other run readout is: the
       //- stage is over and the overlay owns the screen.
       WeaponTag(
-        v-if="!showResult"
+        v-if="!overlayUp"
         :puzzle="puzzleWeapon"
         :pulled="puzzlePulled"
         :total="puzzleTotal"
+        :gift="puzzleGift"
         :active="activeWeapon"
       )
 
@@ -1214,6 +1716,8 @@ onUnmounted(() => {
         :show="bannerShown"
         :stage="bannerStage"
         :unlock="bannerUnlock"
+        :next="bannerNext"
+        :title="bannerTitle"
       )
       SteerHint(:lane-half-px="laneHalfPx" :show="showSteerHint")
 
@@ -1221,7 +1725,7 @@ onUnmounted(() => {
       //- bar — and back out at the right edge when a viewport has no such strip.
       //- See `SkillBar.vue` for the whole argument.
       SkillBar(
-        v-if="!showResult"
+        v-if="!overlayUp"
         :shield-live="shieldLive"
         :lane-half-px="laneHalfPx"
         :squad-floor-px="squadFloorPx"
@@ -1248,6 +1752,21 @@ onUnmounted(() => {
             :aria-label="t('options.title')"
             @click="showOptions = true"
           )
+          //- ── The daily expedition ──────────────────────────────────────
+          //-
+          //- On the HUD rather than in a menu, because this game HAS no menu:
+          //- it boots straight into a stage and there is always a run in
+          //- flight, so the bottom meta cluster is the only home a
+          //- between-runs control could ever have had. It closes that cluster
+          //- rather than opening it — the three buttons to its left are
+          //- established positions and a feature that arrives later does not
+          //- get to move them — and it is the only gold thing in a row of grey
+          //- glyphs on the days it has something to offer.
+          //-
+          //- It hides itself entirely below the unlock and states its own
+          //- cooldown when it is spent, so it never needs a popup to explain
+          //- itself. See `DailyExpedition.vue`.
+          DailyExpedition(@start="onStartExpedition")
 
         div.scene__shop
           span.scene__spotlight(v-if="showShopSpotlight") {{ t('upgrades.spotlight') }}
@@ -1286,8 +1805,15 @@ onUnmounted(() => {
           //- left at this screen having just WON, so the win path now names the
           //- thing that has not happened yet. The stage they cleared is already
           //- on the ribbon above; repeating it bought nothing.
-          span.result__stage(v-if="summary.cleared") {{ t('result.upNext', { n: summary.stage + 1 }) }}
+          //- The expedition takes neither line: "up next: stage 17" would be a
+          //- promise about a campaign this run is not part of, and "stage 16" a
+          //- number the player has no relationship with. It names itself and
+          //- says when the next one is, which is the only forward-looking thing
+          //- there is to say about a road that comes once a day.
+          span.result__stage(v-if="summary.expedition") {{ t('expedition.title') }}
+          span.result__stage(v-else-if="summary.cleared") {{ t('result.upNext', { n: summary.stage + 1 }) }}
           span.result__stage(v-else) {{ t('result.reachedStage', { n: summary.stage }) }}
+          span.result__relief(v-if="summary.expedition") {{ t('expedition.done') }}
           span.result__record(v-if="summary.isRecord") {{ t('result.newRecord') }}
           //- Only ever shown AFTER the run. Telling a player mid-stage that the
           //- game went easy on them takes the win away from them.
@@ -1372,6 +1898,29 @@ onUnmounted(() => {
         //- needs another way to be found. `emphasis` grows the real layout box,
         //- so the row still gutters correctly around it.
         div.result__actions(:class="{ 'result__actions--hinted': showUpgradeHint }")
+          //- ── The share card ────────────────────────────────────────────
+          //-
+          //- FIRST in the row, and only on a record the board placed. It is the
+          //- one action here that does not belong to the loop — it does not
+          //- spend coins and it does not start the next run — so it sits at the
+          //- far edge, away from the button that ends the screen. Anywhere
+          //- closer and a thumb reaching for "next" on a phone finds a share
+          //- sheet instead.
+          //-
+          //- It is a glyph for the same reason the other two are: a caption
+          //- ("Ergebnis teilen") would be the widest thing on the row in half
+          //- the locales, and a share arrow is as conventional a mark as this
+          //- game has. The `aria-label` is what carries the name.
+          FButton.result__share(
+            v-if="showShareCard"
+            icon-only
+            icon="share"
+            :size="resultCompact ? 'sm' : 'md'"
+            type="secondary"
+            :is-disabled="adInFlight || shareCardBusy"
+            :aria-label="t('share.action')"
+            @click="onShareCard"
+          )
           //- The upgrade button wears a pointer on the first three result
           //- screens only. It is a glyph in a row of glyphs, and it is the one
           //- that makes the next run different from the last.
@@ -1388,16 +1937,47 @@ onUnmounted(() => {
               :aria-label="t('result.upgrade')"
               @click="onUpgradeFromResult"
             )
-          FButton(
-            icon-only
-            :icon="summary.cleared ? 'skip-forward' : 'replay'"
-            :size="resultCompact ? 'sm' : 'md'"
-            type="success"
-            :emphasis="1.25"
-            :is-disabled="adInFlight"
-            :aria-label="summary.cleared ? t('result.nextStage') : t('result.tryAgain')"
-            @click="summary.cleared ? onNext() : onRetry()"
-          )
+          //- The forward action, with the auto-advance ring closing around
+          //- it. The ring is decoration on a control that already has a name;
+          //- it never eats a tap.
+          div.result__go(ref="goRef")
+            //- Out of an expedition the button is never a REPLAY, whichever way
+            //- the run ended: the road is one attempt a day and there is
+            //- nothing here to try again. Both outcomes lead the same way —
+            //- back to the campaign, at exactly the stage it was left on —
+            //- which is why the glyph is the forward arrow on a wipe too, and
+            //- why `advanceStage`/`retryStage` both resolve to the same thing
+            //- when `isExpedition` is set.
+            FButton(
+              icon-only
+              :icon="summary.expedition || summary.cleared ? 'skip-forward' : 'replay'"
+              :size="resultCompact ? 'sm' : 'md'"
+              type="success"
+              :emphasis="1.25"
+              :is-disabled="adInFlight"
+              :aria-label="summary.expedition ? t('expedition.back') : (summary.cleared ? t('result.nextStage') : t('result.tryAgain'))"
+              @click="summary.cleared ? onNext() : onRetry()"
+            )
+            //- The countdown, IN FRONT of the button and tracing its own
+            //- rounded edge clockwise from the top. After the button in the
+            //- DOM so it paints over it; `pointer-events: none` so the tap
+            //- still lands on the control underneath.
+            svg.result__auto(
+              v-if="autoArmed && goBox.w > 0"
+              :viewBox="`0 0 ${goBox.w} ${goBox.h}`"
+              aria-hidden="true"
+            )
+              path.result__auto-track(:d="autoPath" pathLength="100")
+              path.result__auto-fill(
+                :d="autoPath"
+                pathLength="100"
+                stroke-dasharray="100"
+                :stroke-dashoffset="100 * (1 - autoProgress)"
+              )
+
+    //- ── The weapon choice ─────────────────────────────────────────────────
+    //- The one stop the opening stages make on purpose. See `flowToNextStage`.
+    WeaponChoice(:open="showWeaponPick" :stage="WEAPON_PICK_STAGE" @pick="onWeaponPicked")
 
     OptionsModal(:is-open="showOptions" @close="showOptions = false")
     UpgradeModal(v-model="showUpgrades")
@@ -1439,6 +2019,9 @@ onUnmounted(() => {
 .scene__top-main
   flex: 1 1 auto
   min-width: 0
+  // The rally announcement hangs off this box's bottom edge rather than
+  // extending it — see `GuardianBanner`.
+  position: relative
 
 // The chest hangs under the badge and is CENTRED on it rather than flushed to
 // the screen edge: its payout chip is wider than the chest itself and centred
@@ -1792,13 +2375,67 @@ onUnmounted(() => {
 
 .result__actions
   display: flex
-  // No `flex-wrap`. Two square glyph buttons cannot outgrow a 320px phone, so
-  // wrapping can only ever be a symptom now — and a wrapped action row is the
-  // exact failure this pass exists to remove.
+  // No `flex-wrap`. The row is square glyph buttons only, and its worst case is
+  // the three it carries on a record screen: 36 + 36 + 45 px at `sm` plus two
+  // 9.6 px gutters is 145 px on a 320 px phone, less than half the width. A
+  // wrapped action row can therefore only ever be a symptom — it is the exact
+  // failure the icon pass exists to remove — so it is left unable to wrap.
   align-items: center
   justify-content: center
   gap: clamp(0.5rem, 3vmin, 1rem)
   width: 100%
+
+// The share button is present on a handful of result screens and absent on the
+// rest, so the row's width changes with it. Nothing is pinned to compensate:
+// the row is centre-justified, the button sits at the far end from the forward
+// action, and a record screen simply has one more glyph on it. Pinning the
+// forward action instead would leave a permanent gap on every ordinary screen
+// to protect the muscle memory of a screen most players never see.
+.result__share
+  flex: 0 0 auto
+
+// ─── The auto-advance outline ───────────────────────────────────────────────
+//
+// Drawn ON the button, in front of it: an SVG the exact size of the wrapper
+// (whose box IS the button's box — the depth plate is absolute and overhangs
+// it), with a path that traces the face's rounded edge, built from the
+// measured size and the face's own corner radius. It used to be a circle
+// behind the button, which could never match a rounded square and read as a
+// ring somebody had left there.
+.result__go
+  position: relative
+  display: inline-flex
+
+// Sized EXPLICITLY. An inline SVG is a replaced element, and a replaced
+// element that is absolutely positioned with `width: auto` does not stretch to
+// its box the way a `div` does — it falls back to its intrinsic size, which a
+// viewBox-only SVG does not have. Measured: the ring existed, counted down,
+// and painted nothing.
+.result__go .result__auto
+  position: absolute
+  left: 0
+  top: 0
+  width: 100%
+  height: 100%
+  z-index: 2
+  pointer-events: none
+  overflow: visible
+
+.result__auto-track
+  fill: none
+  // A dark groove along the edge, so the timer reads as a track from its
+  // first frame rather than appearing out of nothing as the fill grows.
+  stroke: rgba(0, 0, 0, 0.45)
+  stroke-width: 3
+
+.result__auto-fill
+  fill: none
+  stroke: #ffd93c
+  stroke-width: 3
+  stroke-linecap: round
+  stroke-linejoin: round
+  filter: drop-shadow(0 0 3px rgba(255, 217, 60, 0.8))
+  transition: stroke-dashoffset 60ms linear
 
 // ─── Landscape phone ────────────────────────────────────────────────────────
 //

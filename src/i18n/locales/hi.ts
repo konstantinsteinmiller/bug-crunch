@@ -31,8 +31,11 @@ export default {
     'fireRate': 'दर',
     'incoming': 'हमला आ रहा है!',
     'dodge': 'बचें',
+    'milestone': '{n} की सेना!',
     'weaponActive': '{name} तैयार',
-    'weaponLocked': '{name} लॉक — {total} में से {n} लीवर दागे गए'
+    'weaponLocked': '{name} लॉक — {total} में से {n} लीवर दागे गए',
+    'weaponGift': '{name} आगे — मुफ़्त, कोई लीवर नहीं',
+    'weaponFree': 'मुफ़्त'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'नीले बक्से: सब तेज़ी से गोली चलाएँगे', 'desktop': 'नीले बक्से: सब तेज़ी से गोली चलाएँगे' },
     'boss': { 'touch': 'लाल घेरे से दूर रहें!', 'desktop': 'लाल घेरे से दूर रहें!' },
     'lever': { 'touch': 'सड़क के किनारों पर दोनों लीवर पर गोली मारो — वे हथियार बॉक्स खोलते हैं', 'desktop': 'सड़क के किनारों पर दोनों लीवर पर गोली मारो — वे हथियार बॉक्स खोलते हैं' },
-    'guard': { 'touch': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!', 'desktop': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!' }
+    'guard': { 'touch': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!', 'desktop': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!' },
+    'cage': { 'touch': 'पिंजरों पर गोली चलाओ — कैदी आपकी टोली में शामिल होंगे', 'desktop': 'पिंजरों पर गोली चलाओ — कैदी आपकी टोली में शामिल होंगे' },
+    'shieldBox': { 'touch': 'ढाल बॉक्स — यह इंतज़ार करता है, फिर एक बड़ा वार रोकता है', 'desktop': 'ढाल बॉक्स — यह इंतज़ार करता है, फिर एक बड़ा वार रोकता है' }
   },
 
   'flow': {
 
-    'unlocked': 'अनलॉक!'
+    'unlocked': 'अनलॉक!',
+
+    'guardian': "एक अभिभावक देवदूत ने आपको बचाया!",
+
+    'guardianSub': "{n} बचे हुए लौट आए",
+
+    'next': "आगे: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "हथियार चुनें",
+    'nextStage': "अगला स्टेज",
+    'stagesAway': "{n} स्टेज बाद"
+  },
+  'weaponPick': {
+    'title': "अपना हथियार चुनें",
+    'subtitle': "स्टेज {n} के लिए आपका। रास्ते में और भी हैं।",
+    'take': "ले लो",
+    'rocket': {
+      'a': "लक्ष्य-साधक सैल्वो",
+      'b': "विस्फोट क्षति"
+    },
+    'gatling': {
+      'a': "दोगुनी फायर दर",
+      'b': "गेट तेज़ी से बढ़ाता है"
+    }
+  },
   'result': {
     'stageClear': 'चरण पूरा!',
     'wipedOut': 'दस्ता खत्म',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'अपनी टुकड़ी को अपग्रेड करें!',
     'rankOf': '{n} में से',
     'upNext': 'आगे: स्टेज {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'अपना रन शेयर करें',
+    'text': 'मैं {game} में स्टेज {n} तक पहुँचा। क्या तुम इससे आगे जा सकते हो?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': '{n} सिक्कों के लिए संदूक खोलें',
     'filling': 'खज़ाने का संदूक भर रहा है',
     'spent': 'खज़ाने का संदूक कल तक खाली है'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'दैनिक अभियान',
+    'hud': 'अभियान',
+    'multiplier': '{n}×',
+    'available': 'दैनिक अभियान — आज का रास्ता, तिगुने सिक्के',
+    'confirm': 'अभियान शुरू करें',
+    'spent': 'दैनिक अभियान — नया रास्ता {time} में',
+    'done': 'कल फिर आएं',
+    'back': 'मुख्य खेल पर लौटें'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'विकल्प', 'general': 'सामान्य', 'audio': 'ऑडियो', 'language': 'भाषा',
     'difficulty': 'कठिनाई', 'soundEffects': 'ध्वनि प्रभाव', 'music': 'संगीत', 'musicTrack': 'संगीत ट्रैक',
     'musicTracks': { 'cozy': 'सुकून भरी धुन', 'trance': 'ट्रांस टनल' },
+    'haptics': 'कंपन', 'on': 'चालू', 'off': 'बंद',
     'close': 'सहेजें और बंद करें',
     'difficulties': { 'easy': 'आसान', 'medium': 'मध्यम', 'hard': 'कठिन' },
     'difficultyHints': {

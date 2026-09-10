@@ -1,7 +1,10 @@
 import { stageDesigns, rosterDesigns, bossDesign, arenaKit } from '@/game/foes'
 import { THREAT_POOL_FROM_STAGE, minibossKindFor, bossKindFor, SUMMON_DESIGN } from '@/game/threats'
 import { OUTFITS } from '@/game/heroSprites'
-import { stageHasWeapon, weaponForStage } from '@/game/weapons'
+import {
+  WEAPON_PICK_STAGE, isWeaponId, stageHasWeapon, stageHasWeaponGift, weaponForStage
+} from '@/game/weapons'
+import { WEAPON_PICK_KEY } from '@/keys'
 import { allMonsterIds } from '@/game/monsterSprites'
 import { ART_CATALOGUE } from '@/game/artCatalogue'
 import { artSettled, artOverridesEnabled, type ArtWant } from '@/game/art'
@@ -126,6 +129,12 @@ const threatWants = (stage: number): ArtWant[] => {
  * player to notice.
  */
 const weaponPuzzleWants = (stage: number): ArtWant[] => {
+  // The stage-2 gift is a box and nothing else — no posts, no arms, no plates.
+  // Asking for the puzzle's furniture there would queue four files for a beat
+  // that has none of them, on the stage where the first screen is tightest.
+  if (stageHasWeaponGift(stage)) {
+    return [['prop', 'weapon-box'], ['prop', 'weapon-box-open']]
+  }
   if (!stageHasWeapon(stage)) return []
   const wants: ArtWant[] = [
     // The levers, then their cover, then the prize behind it: the order the
@@ -136,6 +145,34 @@ const weaponPuzzleWants = (stage: number): ArtWant[] => {
   // The launcher's rocket, on the stages whose box holds it — which is every
   // other puzzle stage, not every other stage. See `weaponForStage`.
   if (weaponForStage(stage) === 'rocket') wants.push(['round', 'rocket'])
+  return wants
+}
+
+/**
+ * The weapon the player chose for `WEAPON_PICK_STAGE`, off the save, without
+ * dragging the simulation onto the boot path. `null` until they have chosen.
+ */
+const weaponPick = (): 'rocket' | 'gatling' | null => {
+  try {
+    const v = getState<unknown>(WEAPON_PICK_KEY, null)
+    return isWeaponId(v) ? v : null
+  } catch { return null }
+}
+
+/**
+ * The weapon choice's own art: the two cards, for a player who is about to be
+ * asked, and the rocket, for one who chose the launcher. Empty for everyone
+ * past the pick — the puzzle's wants cover the rounds from there.
+ */
+const weaponPickWants = (stage: number): ArtWant[] => {
+  const pick = weaponPick()
+  const wants: ArtWant[] = []
+  if (stage < WEAPON_PICK_STAGE && pick === null) {
+    wants.push(['ui', 'weapon-card-rocket'], ['ui', 'weapon-card-gatling'])
+  }
+  const rocketNext = stage === WEAPON_PICK_STAGE - 1 && pick !== 'gatling'
+  const rocketNow = stage === WEAPON_PICK_STAGE && pick === 'rocket'
+  if (rocketNext || rocketNow) wants.push(['round', 'rocket'])
   return wants
 }
 
@@ -203,6 +240,11 @@ export const earlyArtWants = (): ArtWant[] => {
   return uniq([
     // Bought and thrown inside the first minute.
     ['fx', 'shield'], ['fx', 'crest-shield'], ['ui', 'skill-shield'],
+    // The weapon choice on the handover into stage 3, and the loaner it hands
+    // over. The two cards for anyone who has not chosen yet; the launcher's
+    // rocket for the stage the pick rides — and for the stage before it, since
+    // stage 3 starts the instant the card is tapped.
+    ...weaponPickWants(stage),
     // The midpoint fight: an elite is a scaled-up roster design that is already
     // here, so all it needs is the crown it wears.
     ...(stage >= 2 ? [['ui', 'crown'] as ArtWant] : []),

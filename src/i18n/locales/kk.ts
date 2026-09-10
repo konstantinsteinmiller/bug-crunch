@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Қарқын',
     'incoming': 'Шабуыл келеді!',
     'dodge': 'Жалтар',
+    'milestone': '{n} жауынгер!',
     'weaponActive': '{name} дайын',
-    'weaponLocked': '{name} құлыпталған — {total} тұтқаның {n} атылды'
+    'weaponLocked': '{name} құлыпталған — {total} тұтқаның {n} атылды',
+    'weaponGift': '{name} алда — тегін, иінтіректерсіз',
+    'weaponFree': 'ТЕГІН'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Көк жәшік: бәрі жылдамырақ атады', 'desktop': 'Көк жәшік: бәрі жылдамырақ атады' },
     'boss': { 'touch': 'Қызыл шеңберден аулақ болыңыз!', 'desktop': 'Қызыл шеңберден аулақ болыңыз!' },
     'lever': { 'touch': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады', 'desktop': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады' },
-    'guard': { 'touch': 'Қалқан қосулы — оғың өтпейді. Қозғал!', 'desktop': 'Қалқан қосулы — оғың өтпейді. Қозғал!' }
+    'guard': { 'touch': 'Қалқан қосулы — оғың өтпейді. Қозғал!', 'desktop': 'Қалқан қосулы — оғың өтпейді. Қозғал!' },
+    'cage': { 'touch': 'Торларды ат — тұтқындар отрядыңа қосылады', 'desktop': 'Торларды ат — тұтқындар отрядыңа қосылады' },
+    'shieldBox': { 'touch': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады', 'desktop': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады' }
   },
 
   'flow': {
 
-    'unlocked': 'Ашылды!'
+    'unlocked': 'Ашылды!',
+
+    'guardian': "Күзетші періште сені құтқарды!",
+
+    'guardianSub': "{n} тірі қалған оралды",
+
+    'next': "Келесі: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Қару таңдаңыз",
+    'nextStage': "келесі деңгей",
+    'stagesAway': "{n} деңгейден кейін"
+  },
+  'weaponPick': {
+    'title': "Қаруыңызды таңдаңыз",
+    'subtitle': "{n}-деңгейге сіздікі. Жолда тағы бар.",
+    'take': "Алу",
+    'rocket': {
+      'a': "Бағыттаушы залп",
+      'b': "Жарылыс зақымы"
+    },
+    'gatling': {
+      'a': "Екі есе жылдам ату",
+      'b': "Қақпаларды тезірек толтырады"
+    }
+  },
   'result': {
     'stageClear': 'Кезең өтті!',
     'wipedOut': 'Жасақ жойылды',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Жасағыңды жақсарт!',
     'rankOf': '{n} ішінде',
     'upNext': 'Келесі: {n}-деңгей'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Ойынды бөлісу',
+    'text': '{game} ойынында {n}-деңгейге жеттім. Одан әрі бара аласың ба?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Сандықты {n} монетаға ашу',
     'filling': 'Қазына сандығы толып жатыр',
     'spent': 'Қазына сандығы ертеңге дейін бос'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Күнделікті экспедиция',
+    'hud': 'Экспедиция',
+    'multiplier': '×{n}',
+    'available': 'Күнделікті экспедиция — бүгінгі жол, үш есе тиын',
+    'confirm': 'Экспедицияны бастау',
+    'spent': 'Күнделікті экспедиция — жаңа жол {time} ішінде',
+    'done': 'Ертең келіңіз',
+    'back': 'Науқанға оралу'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Параметрлер', 'general': 'Жалпы', 'audio': 'Дыбыс', 'language': 'Тіл',
     'difficulty': 'Қиындық', 'soundEffects': 'Дыбыс әсерлері', 'music': 'Музыка', 'musicTrack': 'Музыка тректі',
     'musicTracks': { 'cozy': 'Жайлы үндестік', 'trance': 'Транс туннелі' },
+    'haptics': 'Діріл', 'on': 'Қосулы', 'off': 'Өшірулі',
     'close': 'Сақтап жабу',
     'difficulties': { 'easy': 'Оңай', 'medium': 'Орташа', 'hard': 'Қиын' },
     'difficultyHints': {

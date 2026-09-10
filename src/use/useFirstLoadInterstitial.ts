@@ -12,6 +12,42 @@
 //
 // Fires once per session. Other platform builds never call `arm()` so the
 // module is inert (and the watcher is never installed).
+//
+// ─── Why a WATCHER, and not an await in the game's boot ─────────────────────
+//
+// GM and GD used to run this ad from `useFirstStartInterstitial`, awaited at the
+// top of `GameScene.boot()` — an intentional Play gesture rather than a
+// post-splash auto-fire. That module sampled `isInterstitialReady` exactly once,
+// which is a race it loses on a real portal: `boot()` runs from `onMounted` on
+// the lazily imported route chunk (local, modulepreloaded), while the ad SDK is
+// only injected by `initAds()` after `app.mount()` returns and reports ready
+// only once a cross-origin script and its ad stack have loaded. The chunk wins,
+// readiness is false at the one moment it is read, and the (correct) "don't burn
+// the one-shot when not ready, retry on the next start" guard has no next start,
+// because `boot()` runs once per session. No ad, no error, nothing logged, and
+// GameMonetize rejected the build for it on 2026-09-09.
+//
+// Both local proofs missed it by removing the network the race is against: unit
+// tests hand the module a ready ref, and `scripts/portal-qa.mjs` answered
+// SDK_READY in 30 ms (it now delays that handshake on purpose).
+//
+// ─── Who is NOT here ────────────────────────────────────────────────────────
+//
+// POKI, deliberately. It has no `showPreroll()`: the core reports a
+// `commercialBreak()` as a PREROLL until the first `gameplayStart()` and a
+// midroll after, so an ad fired before the bracket opens IS Poki's preroll —
+// tidy accounting, and it used to be wired that way. What it bought was a video
+// ad between a stranger and the first thing they came to do. Measured against
+// the same build on CrazyGames, which goes straight into gameplay, Poki lost
+// roughly half its players by the end of a 25-second tutorial while CG averaged
+// seven-minute sessions. It is unpaced (first ad of the session, so it bypasses
+// `canShowInterstitial`) and it sits exactly where Poki grades
+// conversion-to-play. GM and GD keep the placement because their moderation
+// REQUIRES it — there, shipping depends on it. Poki requires no preroll at all,
+// and one shown to somebody who then leaves is worth approximately nothing.
+//
+// CRAZYGAMES, for the same reason and with no moderation rule pulling the other
+// way.
 import { watch } from 'vue'
 import { isInterstitialReady, showMidgameAd } from '@/use/useAds'
 import { markInterstitialShown } from '@/use/useAdGate'

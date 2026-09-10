@@ -1,12 +1,18 @@
 <template lang="pug">
   Transition(name="stage-banner")
     div.stage-banner(v-if="show" aria-live="polite")
-      div.stage-banner__stage {{ t('hud.stage', { n: stage }) }}
+      div.stage-banner__stage {{ title ?? t('hud.stage', { n: stage }) }}
       div.stage-banner__unlock(v-if="unlock")
         GameIcon.stage-banner__icon(:name="unlock.icon")
         div.stage-banner__unlock-text
           span.stage-banner__unlock-name {{ unlock.label }}
           span.stage-banner__unlock-tag {{ t('flow.unlocked') }}
+      //- What is coming. Only when nothing has just been handed over — the
+      //- gift and the promise on one banner would be two things to read in
+      //- 1.7 seconds, and the gift is the one that matters.
+      div.stage-banner__next(v-else-if="next")
+        GameIcon.stage-banner__next-icon(:name="next.icon")
+        span.stage-banner__next-text {{ next.text }}
 </template>
 
 <script setup lang="ts">
@@ -30,6 +36,14 @@ import type { GameIconName } from '@/components/icons/iconNames'
  * opening — which is already fifteen units of nothing by design, so it costs no
  * gameplay at all. It is deliberately not dismissable and deliberately has no
  * button: there is nothing to decide here, which is the entire point.
+ *
+ * It carries one of two things under the stage number: what the player has
+ * JUST been handed (`unlock`), or what is coming NEXT (`next`) — the ladder in
+ * `game/ladder.ts`. A stranger who reads "next: choose a weapon" on the stage-2
+ * banner has a reason to reach stage 3 that a coin total never gave them.
+ *
+ * `title` overrides the stage line for the one other announcement that rides
+ * this banner: the rally.
  */
 const { t } = useI18n()
 
@@ -38,8 +52,12 @@ interface Props {
   stage: number
   /** Something the player just earned, announced on the same beat. */
   unlock: { icon: GameIconName; label: string } | null
+  /** The next rung of the ladder, when nothing was just unlocked. */
+  next?: { icon: GameIconName; text: string } | null
+  /** A headline other than "Stage N". */
+  title?: string | null
 }
-defineProps<Props>()
+withDefaults(defineProps<Props>(), { next: null, title: null })
 </script>
 
 <style scoped lang="sass">
@@ -96,6 +114,28 @@ defineProps<Props>()
   letter-spacing: 0.06em
   text-transform: uppercase
   color: #7fe3ff
+
+// The promise: quieter than the gift, gold rather than cyan, so the two never
+// read as the same kind of pill.
+.stage-banner__next
+  display: flex
+  align-items: center
+  gap: clamp(0.3rem, 1.6vw, 0.5rem)
+  padding: clamp(0.28rem, 1.4vw, 0.45rem) clamp(0.6rem, 3vw, 0.95rem)
+  border-radius: 999px
+  background-color: rgba(10, 20, 38, 0.8)
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 0 0.12rem rgba(255, 217, 60, 0.28)
+
+.stage-banner__next-icon
+  width: clamp(1rem, 4.6vw, 1.3rem)
+  height: clamp(1rem, 4.6vw, 1.3rem)
+  color: #ffd93c
+
+.stage-banner__next-text
+  font-weight: 900
+  font-size: clamp(0.72rem, 3.4vw, 0.95rem)
+  color: #fff
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.85)
 
 // Arrives fast and hard — it is a reward, not a notification — and leaves slowly
 // enough that it never looks like a flicker.

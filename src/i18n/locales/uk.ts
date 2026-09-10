@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Ухилися',
+    'milestone': '{n} у строю!',
     'weaponActive': '{name} готовий',
-    'weaponLocked': '{name} заблоковано — збито важелів: {n} з {total}'
+    'weaponLocked': '{name} заблоковано — збито важелів: {n} з {total}',
+    'weaponGift': '{name} попереду — безкоштовно, без важелів',
+    'weaponFree': 'ДАРМА'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Сині ящики: усі стріляють швидше', 'desktop': 'Сині ящики: усі стріляють швидше' },
     'boss': { 'touch': 'Не стійте в червоному колі!', 'desktop': 'Не стійте в червоному колі!' },
     'lever': { 'touch': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю', 'desktop': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю' },
-    'guard': { 'touch': 'Щит піднято — постріли марні. ТІКАЙ!', 'desktop': 'Щит піднято — постріли марні. ТІКАЙ!' }
+    'guard': { 'touch': 'Щит піднято — постріли марні. ТІКАЙ!', 'desktop': 'Щит піднято — постріли марні. ТІКАЙ!' },
+    'cage': { 'touch': 'Стріляй по клітках — полонені приєднаються до загону', 'desktop': 'Стріляй по клітках — полонені приєднаються до загону' },
+    'shieldBox': { 'touch': 'Ящик щита — чекає й блокує один сильний удар', 'desktop': 'Ящик щита — чекає й блокує один сильний удар' }
   },
 
   'flow': {
 
-    'unlocked': 'Відкрито!'
+    'unlocked': 'Відкрито!',
+
+    'guardian': "Ангел-охоронець врятував тебе!",
+
+    'guardianSub': "Повернулися {n} вцілілих",
+
+    'next': "Далі: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Обери зброю",
+    'nextStage': "наступний рівень",
+    'stagesAway': "через {n} рівні"
+  },
+  'weaponPick': {
+    'title': "Обери свою зброю",
+    'subtitle': "Твоя на рівень {n}. На дорозі чекає ще.",
+    'take': "Взяти",
+    'rocket': {
+      'a': "Самонавідний залп",
+      'b': "Шкода від вибуху"
+    },
+    'gatling': {
+      'a': "Удвічі вища скорострільність",
+      'b': "Швидше качає ворота"
+    }
+  },
   'result': {
     'stageClear': 'Етап пройдено!',
     'wipedOut': 'Загін знищено',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Покращ загін!',
     'rankOf': 'із {n}',
     'upNext': 'Далі: рівень {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Поділитися забігом',
+    'text': 'Я дійшов до рівня {n} у {game}. Зайдеш далі?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Відкрити скриню за {n} монет',
     'filling': 'Скриня наповнюється',
     'spent': 'Скриня порожня до завтра'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Щоденна вилазка',
+    'hud': 'Вилазка',
+    'multiplier': '×{n}',
+    'available': 'Щоденна вилазка — сьогоднішня дорога, потрійні монети',
+    'confirm': 'Почати вилазку',
+    'spent': 'Щоденна вилазка — нова дорога через {time}',
+    'done': 'Повертайтеся завтра',
+    'back': 'Повернутися до кампанії'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Налаштування', 'general': 'Загальні', 'audio': 'Звук', 'language': 'Мова',
     'difficulty': 'Складність', 'soundEffects': 'Звукові ефекти', 'music': 'Музика', 'musicTrack': 'Музичний трек',
     'musicTracks': { 'cozy': 'Затишна гармонія', 'trance': 'Транс-тунель' },
+    'haptics': 'Вібрація', 'on': 'Увімк.', 'off': 'Вимк.',
     'close': 'Зберегти й закрити',
     'difficulties': { 'easy': 'Легка', 'medium': 'Середня', 'hard': 'Складна' },
     'difficultyHints': {

@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Rate',
     'incoming': 'Angriff!',
     'dodge': 'Ausweichen',
+    'milestone': '{n} Mann stark!',
     'weaponActive': '{name} bereit',
-    'weaponLocked': '{name} gesperrt — {n} von {total} Hebeln getroffen'
+    'weaponLocked': '{name} gesperrt — {n} von {total} Hebeln getroffen',
+    'weaponGift': '{name} voraus — gratis, keine Hebel',
+    'weaponFree': 'GRATIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Blaue Kisten: alle schießen schneller', 'desktop': 'Blaue Kisten: alle schießen schneller' },
     'boss': { 'touch': 'Bleib aus dem roten Ring!', 'desktop': 'Bleib aus dem roten Ring!' },
     'lever': { 'touch': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste', 'desktop': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste' },
-    'guard': { 'touch': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!', 'desktop': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!' }
+    'guard': { 'touch': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!', 'desktop': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!' },
+    'cage': { 'touch': 'Schieß auf Käfige — die Gefangenen schließen sich an', 'desktop': 'Schieß auf Käfige — die Gefangenen schließen sich an' },
+    'shieldBox': { 'touch': 'Schildkiste — sie wartet und blockt einen großen Treffer', 'desktop': 'Schildkiste — sie wartet und blockt einen großen Treffer' }
   },
 
   'flow': {
 
-    'unlocked': 'Freigeschaltet!'
+    'unlocked': 'Freigeschaltet!',
+
+    'guardian': "Ein Schutzengel hat dich gerettet!",
+
+    'guardianSub': "{n} Überlebende sind zurück",
+
+    'next': "Als Nächstes: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Waffe wählen",
+    'nextStage': "nächstes Level",
+    'stagesAway': "in {n} Leveln"
+  },
+  'weaponPick': {
+    'title': "Wähle deine Waffe",
+    'subtitle': "Deine für Level {n}. Weitere warten auf der Straße.",
+    'take': "Nehmen",
+    'rocket': {
+      'a': "Zielsuchende Salve",
+      'b': "Explosionsschaden"
+    },
+    'gatling': {
+      'a': "Doppelte Feuerrate",
+      'b': "Pumpt Tore schneller"
+    }
+  },
   'result': {
     'stageClear': 'Level geschafft!',
     'wipedOut': 'Trupp ausgelöscht',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Rüste deine Truppe auf!',
     'rankOf': 'von {n}',
     'upNext': 'Als Nächstes: Level {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Lauf teilen',
+    'text': 'Ich habe Level {n} in {game} erreicht. Kommst du weiter?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Schatztruhe für {n} Münzen öffnen',
     'filling': 'Schatztruhe — füllt sich',
     'spent': 'Schatztruhe — leer bis morgen'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Tages-Expedition',
+    'hud': 'Expedition',
+    'multiplier': '{n}×',
+    'available': 'Tages-Expedition — die heutige Strecke, dreifache Münzen',
+    'confirm': 'Expedition starten',
+    'spent': 'Tages-Expedition — neue Strecke in {time}',
+    'done': 'Morgen wieder',
+    'back': 'Zurück zur Kampagne'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Optionen', 'general': 'Allgemein', 'audio': 'Audio', 'language': 'Sprache',
     'difficulty': 'Schwierigkeit', 'soundEffects': 'Soundeffekte', 'music': 'Musik', 'musicTrack': 'Musiktitel',
     'musicTracks': { 'cozy': 'Gemütliche Harmonie', 'trance': 'Trance-Tunnel' },
+    'haptics': 'Vibration', 'on': 'An', 'off': 'Aus',
     'close': 'Speichern & Schließen',
     'difficulties': { 'easy': 'Leicht', 'medium': 'Mittel', 'hard': 'Schwer' },
     'difficultyHints': {

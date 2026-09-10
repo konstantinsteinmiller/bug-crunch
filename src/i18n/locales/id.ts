@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Laju',
     'incoming': 'Serangan datang!',
     'dodge': 'Hindari',
+    'milestone': '{n} pasukan!',
     'weaponActive': '{name} siap',
-    'weaponLocked': '{name} terkunci — {n} dari {total} tuas ditembak'
+    'weaponLocked': '{name} terkunci — {n} dari {total} tuas ditembak',
+    'weaponGift': '{name} di depan — gratis, tanpa tuas',
+    'weaponFree': 'GRATIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Peti biru: semua menembak lebih cepat', 'desktop': 'Peti biru: semua menembak lebih cepat' },
     'boss': { 'touch': 'Jauhi lingkaran merah!', 'desktop': 'Jauhi lingkaran merah!' },
     'lever': { 'touch': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata', 'desktop': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata' },
-    'guard': { 'touch': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!', 'desktop': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!' }
+    'guard': { 'touch': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!', 'desktop': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!' },
+    'cage': { 'touch': 'Tembak kandang — tawanannya bergabung ke pasukanmu', 'desktop': 'Tembak kandang — tawanannya bergabung ke pasukanmu' },
+    'shieldBox': { 'touch': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar', 'desktop': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar' }
   },
 
   'flow': {
 
-    'unlocked': 'Terbuka!'
+    'unlocked': 'Terbuka!',
+
+    'guardian': "Malaikat pelindung menyelamatkanmu!",
+
+    'guardianSub': "{n} penyintas kembali",
+
+    'next': "Berikutnya: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Pilih senjata",
+    'nextStage': "level berikutnya",
+    'stagesAway': "{n} level lagi"
+  },
+  'weaponPick': {
+    'title': "Pilih senjatamu",
+    'subtitle': "Milikmu untuk Level {n}. Masih ada lagi di jalan.",
+    'take': "Ambil",
+    'rocket': {
+      'a': "Salvo pelacak",
+      'b': "Kerusakan ledakan"
+    },
+    'gatling': {
+      'a': "Laju tembak dua kali lipat",
+      'b': "Memompa gerbang lebih cepat"
+    }
+  },
   'result': {
     'stageClear': 'Tahap selesai!',
     'wipedOut': 'Regu habis',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Tingkatkan pasukanmu!',
     'rankOf': 'dari {n}',
     'upNext': 'Berikutnya: Level {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Bagikan permainan',
+    'text': 'Aku mencapai level {n} di {game}. Bisa lebih jauh dari itu?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Buka peti harta untuk {n} koin',
     'filling': 'Peti harta sedang terisi',
     'spent': 'Peti harta kosong sampai besok'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Ekspedisi Harian',
+    'hud': 'Ekspedisi',
+    'multiplier': '{n}×',
+    'available': 'Ekspedisi harian — jalur hari ini, koin tiga kali lipat',
+    'confirm': 'Mulai ekspedisi',
+    'spent': 'Ekspedisi harian — jalur baru dalam {time}',
+    'done': 'Kembali besok',
+    'back': 'Kembali ke kampanye'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Opsi', 'general': 'Umum', 'audio': 'Audio', 'language': 'Bahasa',
     'difficulty': 'Kesulitan', 'soundEffects': 'Efek Suara', 'music': 'Musik', 'musicTrack': 'Trek Musik',
     'musicTracks': { 'cozy': 'Harmoni Nyaman', 'trance': 'Terowongan Trance' },
+    'haptics': 'Getaran', 'on': 'Aktif', 'off': 'Nonaktif',
     'close': 'Simpan & Tutup',
     'difficulties': { 'easy': 'Mudah', 'medium': 'Sedang', 'hard': 'Sulit' },
     'difficultyHints': {

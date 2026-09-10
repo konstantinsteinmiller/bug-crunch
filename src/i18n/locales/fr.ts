@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Rythme',
     'incoming': 'Attaque imminente !',
     'dodge': 'Esquive',
+    'milestone': '{n} au combat !',
     'weaponActive': '{name} prêt',
-    'weaponLocked': '{name} verrouillé — {n} leviers sur {total} touchés'
+    'weaponLocked': '{name} verrouillé — {n} leviers sur {total} touchés',
+    'weaponGift': '{name} devant — gratuit, sans leviers',
+    'weaponFree': 'GRATUIT'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Caisses bleues : tous tirent plus vite', 'desktop': 'Caisses bleues : tous tirent plus vite' },
     'boss': { 'touch': 'Reste hors du cercle rouge !', 'desktop': 'Reste hors du cercle rouge !' },
     'lever': { 'touch': 'Tire sur les DEUX leviers au bord de la route — ils ouvrent la caisse', 'desktop': 'Tire sur les DEUX leviers au bord de la route — ils ouvrent la caisse' },
-    'guard': { 'touch': 'Bouclier levé — tes tirs ne font rien. BOUGE !', 'desktop': 'Bouclier levé — tes tirs ne font rien. BOUGE !' }
+    'guard': { 'touch': 'Bouclier levé — tes tirs ne font rien. BOUGE !', 'desktop': 'Bouclier levé — tes tirs ne font rien. BOUGE !' },
+    'cage': { 'touch': 'Tire sur les cages — les prisonniers rejoignent ta troupe', 'desktop': 'Tire sur les cages — les prisonniers rejoignent ta troupe' },
+    'shieldBox': { 'touch': 'Caisse bouclier — elle attend, puis bloque un gros coup', 'desktop': 'Caisse bouclier — elle attend, puis bloque un gros coup' }
   },
 
   'flow': {
 
-    'unlocked': 'Débloqué !'
+    'unlocked': 'Débloqué !',
+
+    'guardian': "Un ange gardien t'a sauvé !",
+
+    'guardianSub': "{n} survivants sont de retour",
+
+    'next': "Ensuite : {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Choisir une arme",
+    'nextStage': "niveau suivant",
+    'stagesAway': "dans {n} niveaux"
+  },
+  'weaponPick': {
+    'title': "Choisis ton arme",
+    'subtitle': "À toi pour le niveau {n}. D'autres t'attendent sur la route.",
+    'take': "Prendre",
+    'rocket': {
+      'a': "Salve à tête chercheuse",
+      'b': "Dégâts de zone"
+    },
+    'gatling': {
+      'a': "Cadence de tir doublée",
+      'b': "Charge les portes plus vite"
+    }
+  },
   'result': {
     'stageClear': 'Niveau terminé !',
     'wipedOut': 'Escouade anéantie',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Améliore ton escouade !',
     'rankOf': 'sur {n}',
     'upNext': 'Ensuite : Niveau {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Partager la partie',
+    'text': "J'ai atteint le niveau {n} dans {game}. Tu peux faire mieux ?"
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Ouvrir le coffre pour {n} pièces',
     'filling': 'Coffre au trésor : en cours de remplissage',
     'spent': 'Coffre au trésor : vide jusqu\'à demain'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Expédition du jour',
+    'hud': 'Expédition',
+    'multiplier': '{n}×',
+    'available': 'Expédition du jour : la route du jour, pièces triplées',
+    'confirm': "Lancer l'expédition",
+    'spent': 'Expédition du jour : nouvelle route dans {time}',
+    'done': 'Revenez demain',
+    'back': 'Retour à la campagne'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Options', 'general': 'Général', 'audio': 'Audio', 'language': 'Langue',
     'difficulty': 'Difficulté', 'soundEffects': 'Effets sonores', 'music': 'Musique', 'musicTrack': 'Piste musicale',
     'musicTracks': { 'cozy': 'Harmonie douce', 'trance': 'Tunnel trance' },
+    'haptics': 'Vibration', 'on': 'Activé', 'off': 'Désactivé',
     'close': 'Enregistrer et fermer',
     'difficulties': { 'easy': 'Facile', 'medium': 'Moyen', 'hard': 'Difficile' },
     'difficultyHints': {

@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tempo',
     'incoming': 'Aanval!',
     'dodge': 'Ontwijk',
+    'milestone': '{n} man sterk!',
     'weaponActive': '{name} gereed',
-    'weaponLocked': '{name} vergrendeld — {n} van {total} hendels geraakt'
+    'weaponLocked': '{name} vergrendeld — {n} van {total} hendels geraakt',
+    'weaponGift': '{name} verderop — gratis, geen hendels',
+    'weaponFree': 'GRATIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Blauwe kisten: iedereen schiet sneller', 'desktop': 'Blauwe kisten: iedereen schiet sneller' },
     'boss': { 'touch': 'Blijf uit de rode ring!', 'desktop': 'Blijf uit de rode ring!' },
     'lever': { 'touch': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist', 'desktop': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist' },
-    'guard': { 'touch': 'Schild op — je schoten doen niets. WEGWEZEN!', 'desktop': 'Schild op — je schoten doen niets. WEGWEZEN!' }
+    'guard': { 'touch': 'Schild op — je schoten doen niets. WEGWEZEN!', 'desktop': 'Schild op — je schoten doen niets. WEGWEZEN!' },
+    'cage': { 'touch': 'Schiet op kooien — de gevangenen sluiten zich aan', 'desktop': 'Schiet op kooien — de gevangenen sluiten zich aan' },
+    'shieldBox': { 'touch': 'Schildkist — wacht en blokkeert één grote klap', 'desktop': 'Schildkist — wacht en blokkeert één grote klap' }
   },
 
   'flow': {
 
-    'unlocked': 'Vrijgespeeld!'
+    'unlocked': 'Vrijgespeeld!',
+
+    'guardian': "Een beschermengel heeft je gered!",
+
+    'guardianSub': "{n} overlevenden zijn terug",
+
+    'next': "Hierna: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Kies een wapen",
+    'nextStage': "volgend level",
+    'stagesAway': "over {n} levels"
+  },
+  'weaponPick': {
+    'title': "Kies je wapen",
+    'subtitle': "Van jou in level {n}. Er wachten er meer langs de weg.",
+    'take': "Pakken",
+    'rocket': {
+      'a': "Geleide salvo",
+      'b': "Explosieschade"
+    },
+    'gatling': {
+      'a': "Dubbele vuursnelheid",
+      'b': "Pompt poorten sneller op"
+    }
+  },
   'result': {
     'stageClear': 'Level gehaald!',
     'wipedOut': 'Team weggevaagd',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Upgrade je team!',
     'rankOf': 'van {n}',
     'upNext': 'Hierna: Level {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Deel je run',
+    'text': 'Ik haalde level {n} in {game}. Kom jij verder?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Open de schatkist voor {n} munten',
     'filling': 'Schatkist — wordt gevuld',
     'spent': 'Schatkist — leeg tot morgen'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Dagelijkse expeditie',
+    'hud': 'Expeditie',
+    'multiplier': '{n}×',
+    'available': 'Dagelijkse expeditie — de route van vandaag, drie keer zo veel munten',
+    'confirm': 'Expeditie starten',
+    'spent': 'Dagelijkse expeditie — nieuwe route over {time}',
+    'done': 'Kom morgen terug',
+    'back': 'Terug naar de campagne'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Opties', 'general': 'Algemeen', 'audio': 'Audio', 'language': 'Taal',
     'difficulty': 'Moeilijkheid', 'soundEffects': 'Geluidseffecten', 'music': 'Muziek', 'musicTrack': 'Muzieknummer',
     'musicTracks': { 'cozy': 'Behaaglijke harmonie', 'trance': 'Trance-tunnel' },
+    'haptics': 'Trillen', 'on': 'Aan', 'off': 'Uit',
     'close': 'Opslaan en sluiten',
     'difficulties': { 'easy': 'Makkelijk', 'medium': 'Gemiddeld', 'hard': 'Moeilijk' },
     'difficultyHints': {

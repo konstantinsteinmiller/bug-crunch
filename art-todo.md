@@ -78,7 +78,30 @@ resource, so the flag stays off in every `.env.<platform>` until the art is in.
 | `public/images/ui/chest.webp` | the shop button's chest (HUD and result screen) | — |
 | `public/images/ui/skill-grenade.webp` | the grenade skill's button icon (skill bar and shop row) | the cooldown ring and count |
 | `public/images/ui/skill-shield.webp` | the shield skill's button icon (skill bar and shop row) | the cooldown ring and count |
+| `public/images/ui/weapon-card-rocket.webp` | the **weapon choice**'s launcher card — the launcher alone, three-quarter front-left, muzzle to the upper right, ember glow in the tube; ~100 px on screen, seen once | the plate, the halo, the ribbon, the perk lines, the ray burst (all DOM) |
+| `public/images/ui/weapon-card-gatling.webp` | the weapon choice's gatling card — six barrels mid-spin, soul-blue glow between them, brass casings falling; same angle as the launcher so the pair reads as a set | the plate, the halo, the ribbon, the perk lines, the ray burst (all DOM) |
 | `public/images/logo/logo_512x512.png` (+192 png, +256 webp) | the title logo | — |
+
+## Owed by the three new roadside props (drawn procedurally today)
+
+Added with the rescue cages, the auto-shield pickup and the open-box weapon
+gift. All three are drawn from code right now and look finished; these are the
+optional paintings. **Each needs its manifest wiring to land in the same pass**
+— a `still(...)` in `src/game/artSheet.ts`, the id in `ART_CATALOGUE`, and a
+`case` in `ArtSheets.vue` — because `artSheet.test.ts` pins the three in
+agreement and a half-wired entry fails it.
+
+| Path | Subject | Stays live over it |
+| --- | --- | --- |
+| `public/images/props/cage.webp` | a shut, tall barred iron cage lit from INSIDE, a huddled figure visible through the bars. Reference cell **1.5× taller than wide** (`CAGE_DRAW_TALL`), footprint `CAGE_R` = 0.68 square. The grey-iron/warm-lamp contrast is the entire read — **no coloured rim** | the `+N` on the lid, the HP number under the base (leave both areas clear) |
+| `public/images/props/cage-open.webp` *(optional)* | the burst frame, if the two-state treatment `weapon-box` / `weapon-box-open` already has is wanted here too | — |
+| `public/images/props/bulwark-box.webp` | squat dark-steel housing, `BULWARK_R` = 0.62 square, blue rim. Paint it **without** the crest on its face | the shield crest (drawn over the bitmap and rotates), the rim |
+| `public/images/props/weapon-box-lid.webp` | the weapon case's own lid, hinged away up the road and lying almost flat — dark scorched wood banded with blackened iron, seen from behind and above so the camera reads its underside, its far rim catching the warm light spilling out of the open case. Aspect **2.425 : 1** (panel 512×211, `maxEdge` 256) | nothing — if the lit far rim is painted in, the renderer's procedural rim comes out in the same pass |
+| `public/images/props/weapon-prize-gatling.webp` / `-rocket.webp` *(optional)* | the loose gun sitting in the open crate, so the lifted prize is a painting rather than the `weaponGlyph`. The existing `ui/weapon-card-*` stills are close in spirit but are three-quarter presentation cards at ~100 px; this wants the crate's own top-down-ish angle | the bob, the contact shadow |
+
+Nothing is owed for the armed-bulwark badge over the crowd or the box's crest:
+both draw through `paintCrest` on the existing `fx/crest-shield`. No sound is
+owed either — all three props' cues are synthesised.
 
 ## Shipping today (the asset library's own bitmaps, always on)
 

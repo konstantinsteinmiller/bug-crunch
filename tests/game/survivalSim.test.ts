@@ -577,8 +577,14 @@ describe('minibosses are the midpoint win, not the climax', () => {
     // its health — `minibossHpScale` quantises to a tenth, so an onboarding
     // tuning pass moves it by a point or two — flipped this red at random.
     // At 30 the banner is sampled seven times and the margin is real.
+    //
+    // The `debugAddDamage(1)` that used to sit here is gone, and stage 2 is why:
+    // its road now carries the weapon GIFT (`WEAPON_GIFT_STAGE`), a box on the
+    // centre line wide enough that a crowd committed to a gate lane cannot help
+    // running into it — that is the whole point of the beat. So this crowd
+    // reaches the elite holding a gatling, at twice the fire rate, and the extra
+    // damage on top killed it in two sampled frames. The gatling replaces it.
     game.debugAddUnits(30)
-    game.debugAddDamage(1)
     game.steerTo(-GATE_LEAF_X)
     drainFx()
 
@@ -862,6 +868,11 @@ describe('the onboarding hold', () => {
    * and leaves the crowd answering the thumb, and both halves of that matter:
    * a hold that also froze steering would teach nothing, and a hold that let
    * the road run would start the stage behind the tutorial.
+   *
+   * The guns run during the hold, and so does the opening doorway's pump:
+   * the road is streamed so the door stands inside the first screen, and it
+   * races under the crowd's fire while the player learns to move. That is the
+   * one deliberate exception to "nothing happens behind the scrim".
    */
   it('freezes the road while the crowd still follows the player', async () => {
     const game = await importGame()
@@ -878,11 +889,21 @@ describe('the onboarding hold', () => {
       .toBeGreaterThan(2)
     // …and the road did not move under it.
     expect(game.anchor().y, 'the stage advanced behind the tutorial').toBeCloseTo(y0, 5)
-    // Nothing of the stage streamed in either: the player meets the road when
-    // the road starts, not through a scrim.
-    expect(game.getGates().length, 'gates streamed in behind the lightbox').toBe(0)
+
+    // The opening doorway IS on the road behind the lightbox — inside the first
+    // screen, and being shot: the one thing this game does that nothing else
+    // does is the first thing a stranger sees, racing under the crowd's fire
+    // while they learn the one control. Nothing that could hurt them is.
+    const { OPENING_GATE_Y, OPENING_PUMP_CAP } = await import('@/game/track')
+    const opener = game.getGates().find((g) => g.y === OPENING_GATE_Y)
+    expect(opener, 'the opening doorway is not on the road behind the lightbox').toBeDefined()
+    expect(opener!.value, 'the doorway did not pump during the hold').toBeGreaterThan(3)
+    expect(opener!.value).toBeLessThanOrEqual(OPENING_PUMP_CAP)
     expect(game.getFoes().length, 'foes streamed in behind the lightbox').toBe(0)
-    expect(game.getCrates().length, 'crates streamed in behind the lightbox').toBe(0)
+    // …and it stops at the cap rather than running away from the player.
+    for (let i = 0; i < 240; i++) game.step(STEP_MS)
+    expect(opener!.value).toBe(OPENING_PUMP_CAP)
+    expect(game.anchor().y, 'the stage advanced behind the tutorial').toBeCloseTo(y0, 5)
 
     // Releasing it hands the stage straight back.
     game.steerOnly.value = false

@@ -562,6 +562,246 @@ export const bossHpMulFor = (kind: BossKind): number => {
 export const bossGuardPayoff = (kind: BossKind): 'swing' | 'wave' =>
   kind === 'summoner' ? 'wave' : 'swing'
 
+/**
+ * ─── Phase two ──────────────────────────────────────────────────────────────
+ *
+ * The fight had one idea and spent it in the first four seconds. Whatever the
+ * kind, everything the boss was ever going to show the player was on screen
+ * before the first cooldown had finished draining, and the remaining twenty
+ * seconds were the same beat at a slightly different tempo.
+ *
+ * ── Why it hangs off a GUARD GATE and not off a health check ──
+ *
+ * The obvious shape is `hp / maxHp < 0.5`, and it is wrong here for two
+ * measured reasons, both of which the gates already solved:
+ *
+ *   • A bare threshold is not a beat. A squad of a thousand puts more than a
+ *     third of the bar into a single frame (which is the entire reason
+ *     `damageBoss` clamps at a gate at all), so "crossed a half" and "crossed a
+ *     third" land on the SAME TICK for exactly the players who melt bosses —
+ *     two full-screen flashes in one frame, and a phase two the run never
+ *     actually plays. Hung off a gate, the turn is a moment the simulation
+ *     already guarantees can never be skipped or doubled.
+ *   • A threshold un-crosses. There is a healing archetype in the pool, its
+ *     whole point is putting the bar back up, and a predicate over live health
+ *     therefore flickers. `guarded` only ever counts up, so a latch driven by it
+ *     is monotonic by construction rather than by a flag somebody remembered to
+ *     write.
+ *
+ * So `BOSS_ENRAGE_AT` is a BOUND, not a trigger: the fight turns at the first
+ * guard gate at or below half health. For the two gates every real stage fields
+ * (`BOSS_GUARD_GATES`) that is the one at a third — which is also the one the
+ * `bossRage` cue has always described as "the last third is not the same fight
+ * as the first". Phase two is that sentence made true; the gate was already
+ * there, and it was already the loudest beat in the fight.
+ */
+export const BOSS_ENRAGE_AT = 0.5
+
+/**
+ * …and the stage the turn is allowed to happen on at all.
+ *
+ * Stage 1's single gate sits at exactly a half (`TUTORIAL_GUARD_GATES`), so the
+ * bound above would enrage the tutorial boss — the one fight in the game that is
+ * deliberately priced as a fright rather than as a threat (see
+ * `TUTORIAL_SLAM_FRACTION`). A first-timer meeting a lane charge is not learning
+ * what a telegraph means, they are losing a run to a move they have not been
+ * taught the vocabulary for yet.
+ */
+export const BOSS_ENRAGE_FROM_STAGE = 2
+
+/** Does crossing the guard gate at `gate` turn this stage's fight over? */
+export const bossEnragesAt = (stage: number, gate: number): boolean =>
+  stage >= BOSS_ENRAGE_FROM_STAGE && gate <= BOSS_ENRAGE_AT
+
+/**
+ * ─── Faster, but never off the end of the envelope ──────────────────────────
+ *
+ * The tempting version is "halve `slamCd`". It is a bug at both ends of the
+ * ladder and the arithmetic says so out loud.
+ *
+ * The cadence already falls with every swing thrown (`SLAM_CD_DECAY`) onto a
+ * floor (`SLAM_CD_MIN`, 0.95 s) that was NOT picked by feel: below it the
+ * cooldown is shorter than the wind-up, so the mark the player is dodging is
+ * re-locked before the previous one has landed and the whole warning the player
+ * gets is the cadence itself. `SLAM_TELEGRAPH`'s note has the measurement — at
+ * 0.62 s of warning a median 250 ms human cleared stage 2 zero times out of
+ * however many they were given. Halving the floor puts the fight at 0.48 s,
+ * which is on the wrong side of that number for everybody.
+ *
+ * So phase two does not move the floor. It moves the boss DOWN THE CURVE it was
+ * already on: the same rage, arrived at immediately instead of over nine swings,
+ * clamped by the same floor. Most fights are over well before swing nine, so
+ * this bites exactly where the fight was flat and cannot reach anywhere the
+ * design has not already validated.
+ *
+ * ── …and why the multiplier is divided by the endless pressure ──
+ *
+ * What one swing COSTS is already a function of the stage:
+ * `SLAM_MAX_FRACTION * endlessPressure(stage)`. The crowd-loss rate a boss
+ * applies is share ÷ cadence, so tightening the cadence by a flat factor
+ * multiplies a number that has ALREADY been multiplied — the same "phase two" is
+ * worth 0.43 crowd-shares per span at stage 4 and 0.94 at stage 120, which is
+ * the "fine at stage 4, unfair at stage 40" failure written as a product.
+ *
+ * Dividing the tightening by the pressure the stage already carries holds the
+ * ADDED rate roughly constant instead (0.43 → 0.35 across the whole ladder):
+ * deep stages already press harder per swing, so they get less extra tempo, and
+ * phase two is the same escalation wherever the player meets it.
+ */
+export const ENRAGED_CD_MUL = 0.7
+
+/**
+ * The enraged cycle length, given the cycle that would otherwise have run, the
+ * pressure the stage already carries and the floor the clock may never go under.
+ *
+ * ── It has exactly ONE caller, and that is the finding, not an accident ──
+ *
+ * It shipped with three — the slam curve, the healer's cast loop, the summoner's
+ * wave clock — on the reading that "faster" is a property any cycle can have.
+ * Both of the other two were withdrawn after measurement, and the rule they
+ * arrived at from opposite directions is the one to apply before adding a
+ * fourth:
+ *
+ *   **A cycle may be tightened only where its COST is not derived from its own
+ *   length, and only inside an envelope somebody has already measured.**
+ *
+ * A slam qualifies twice over: `bossHitShare` is a share per HIT rather than a
+ * price per second, and `SLAM_CD_DECAY` already varies this clock across every
+ * fight inside the explicit envelope `SLAM_CD_MIN` bounds — so phase two moves
+ * the boss along a curve the design has walked before.
+ *
+ * A bolt does not: `BOLT_SHARE_MUL` is 0.6 *because* the loop is 1.7 s, with the
+ * arithmetic written into its docstring, so tightening the loop re-prices the
+ * attack by 43 % without anybody editing the price. A wave does not either: its
+ * only safety is a total, and compressing the delivery of a fixed total is how
+ * spawn pressure outruns the crowd's damage. Both are recorded where they were
+ * measured — `throwHealerCast` and `summonSpan` in `useSurvivalGame.ts`.
+ *
+ * `floor` therefore stays a parameter rather than hard-coding `SLAM_CD_MIN`: it
+ * is the question a fourth caller would have to answer out loud, and answering
+ * it is most of the work of deciding whether there should be one.
+ */
+export const enragedSpan = (span: number, pressure: number, floor: number): number =>
+  Math.max(floor, span * (1 - (1 - ENRAGED_CD_MUL) / Math.max(1, pressure)))
+
+/**
+ * ─── The lane charge ────────────────────────────────────────────────────────
+ *
+ * Phase two's new verb, and it is given to exactly the two kinds whose entire
+ * fight is one swing.
+ *
+ * The healer and the summoner already have a second idea — a bar that goes back
+ * up, a wall that walks at you — and both of them own a cycle that is a DECISION
+ * rather than a swing: the healer's every-third is armed a cycle in advance
+ * against a measured minimum gap (`HEAL_MIN_GAP_S`), and the summoner has no
+ * attack clock at all, only a budget. Hijacking either to insert a charge means
+ * a third thing reaching into scratch that two carefully-bounded invariants
+ * already own, for a kind that did not have the problem.
+ *
+ * Their phase two is the COLOUR and the SOUND, and nothing mechanical. That was
+ * "the tempo and the colour" for one revision and the tempo did not survive
+ * measurement — see `enragedSpan`. It is not the smaller feature it looks like:
+ * both archetypes are rates with hand-measured safeties bolted on, and the
+ * roadmap's complaint ("the fight has one idea and reveals it in the first four
+ * seconds") was never about them. It was about the two fights that are one
+ * swing, and those are the two that get a verb.
+ */
+export const bossCharges = (kind: BossKind): boolean => kind === 'meteor' || kind === 'claw'
+
+/**
+ * One charge every third cycle, and deliberately OUT OF PHASE with
+ * `CHARGED_EVERY`.
+ *
+ * Both are "every third", so run in phase they would want the same cycle every
+ * time and — since a charged swing is committed a cycle before it is thrown, and
+ * therefore always wins the tie — an enraged meteor would never charge at all.
+ * Offset, the last third of a meteor fight reads charge / ordinary / charged,
+ * which is three distinct beats rather than a metronome with two settings.
+ */
+export const CHARGE_EVERY = 3
+
+/**
+ * Half-width of the swathe a charge ploughs.
+ *
+ * Sized from the ROAD and the CROWD, the same way `CLAW_SPACING` is, because it
+ * is the same failure waiting to happen: a lane attack the crowd cannot fit
+ * beside is not a hard attack, it is a tax with a telegraph in front of it.
+ *
+ * The inequality. The crowd's centre reaches ±4.1 (`steerTo` clamps at
+ * `LANE_HALF - 0.4`) and its bodies sit within `CROWD_MAX_R` of it, so to stand
+ * entirely clear of a swathe centred on `bx` the player needs a reachable centre
+ * `c` with `|c - bx| >= halfW + 1.65`. The worst case is a charge straight down
+ * the middle, where that costs `halfW + 1.65 <= 4.1`, i.e. a ceiling of 2.45.
+ * At the cap below the crowd still has 0.55 units of rail to spare, and the
+ * dodge is a 3.55-unit lateral move against the slam's 3.4 — the same size of
+ * decision, asked about an axis instead of a point.
+ *
+ * Unlike the ring, it does NOT scale with the stage, and that is the same answer
+ * `CLAW_SPACING` gives: what a charge costs is `bossHitShare`, which already
+ * carries the stage, the endless pressure and every relief. Widening the swathe
+ * with depth would price the same attack twice and eat the pocket the dodge
+ * lives in — the one thing the claw's history says never to do.
+ */
+export const CHARGE_HALF_W = 1.5
+/** …and it fattens with the fight, exactly as the ring and the gouges do. */
+export const CHARGE_HALF_W_GROWTH = 0.08
+export const CHARGE_HALF_W_MAX = 1.9
+/** The ONE definition of how wide a charge is — read by the kill and by the
+ *  band the telegraph paints. Mirrors `slamRadiusFor` / `clawFurrowHalfW`. */
+export const chargeHalfW = (slams: number): number =>
+  Math.min(CHARGE_HALF_W_MAX, CHARGE_HALF_W + Math.max(0, slams) * CHARGE_HALF_W_GROWTH)
+
+/**
+ * The wind-up, as a multiple of the cycle it interrupts and a floor under that.
+ *
+ * The multiple is `CHARGED_WINDUP_MUL`'s, for its reason: an attack that covers
+ * more ground has to be readable for long enough that leaving it was a decision
+ * the player got to make. The FLOOR is the part that matters, because phase two
+ * is where the cycle is shortest — at the rage floor a bare multiple would give
+ * 1.6 s, and the charge is the one attack in the game whose dodge is a full
+ * lateral commitment rather than a step.
+ *
+ * 1.5 s is the number, and it is `SLAM_TELEGRAPH`'s measurement carried across:
+ * that one is 1.0 s because a median 250 ms human then has 0.75 s to make a
+ * 3.4-unit move, and it was tuned up from 0.62 s where the same player cleared
+ * nothing. A charge asks for 3.55 units, so it is given 1.5 s — 1.25 s of
+ * steering after the same reaction latency, which is the slam's margin plus
+ * two thirds of it again for the extra distance and for the fact that phase two
+ * arrives while the player already has both hands full.
+ */
+export const CHARGE_WINDUP_MUL = 1.7
+export const CHARGE_TELEGRAPH_MIN = 1.5
+export const chargeWindup = (span: number): number =>
+  Math.max(CHARGE_TELEGRAPH_MIN, span * CHARGE_WINDUP_MUL)
+
+/**
+ * How long the body is actually travelling, inside that wind-up.
+ *
+ * The charge is telegraphed the way this game telegraphs — one event at the
+ * start of the wind-up carrying the exact seconds to impact — and the BODY is
+ * the second half of that telegraph, which is the roller's trick applied to the
+ * boss: the last third of a second before it lands, the warning is a monster
+ * running at you rather than a mark on the floor. It is deliberately short. The
+ * decision is made during the first second and a bit; the dash is the
+ * consequence arriving, and a slow one would read as an animation rather than as
+ * a charge.
+ */
+export const CHARGE_DASH_S = 0.38
+
+/**
+ * How far past the crowd's centre the charge carries the boss.
+ *
+ * It has to clear the crowd's own DEPTH (`CROWD_MAX_R * CROWD_SQUASH` is 1.19)
+ * or the boss stops inside the formation and the attack reads as a bump. It also
+ * has to not clear it by much: below the crowd the boss is behind every muzzle
+ * in the game (`nearestTarget` only takes what is ahead of the shooter), so
+ * every extra unit of overrun is a stretch of fight where the player's fire
+ * silently does nothing — which is the sort of cost this game refuses to charge
+ * invisibly. 1.2 buys ~0.4 s of recovery walk-back, which is short enough to
+ * read as the crowd shoving it off and long enough to be worth watching.
+ */
+export const CHARGE_OVERRUN = 1.2
+
 // ─── The claw ───────────────────────────────────────────────────────────────
 //
 // Three parallel gouges down the road with clear pockets between them. Not a

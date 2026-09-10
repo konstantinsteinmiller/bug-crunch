@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': 'Ataque a caminho!',
     'dodge': 'Desvie',
+    'milestone': '{n} em campo!',
     'weaponActive': '{name} pronto',
-    'weaponLocked': '{name} bloqueado — {n} de {total} alavancas atingidas'
+    'weaponLocked': '{name} bloqueado — {n} de {total} alavancas atingidas',
+    'weaponGift': '{name} à frente — grátis, sem alavancas',
+    'weaponFree': 'GRÁTIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Caixas azuis: todos atiram mais rápido', 'desktop': 'Caixas azuis: todos atiram mais rápido' },
     'boss': { 'touch': 'Fique fora do círculo vermelho!', 'desktop': 'Fique fora do círculo vermelho!' },
     'lever': { 'touch': 'Atire nas DUAS alavancas nas bordas: elas abrem a caixa de arma', 'desktop': 'Atire nas DUAS alavancas nas bordas: elas abrem a caixa de arma' },
-    'guard': { 'touch': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!', 'desktop': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!' }
+    'guard': { 'touch': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!', 'desktop': 'Escudo ativo: seus tiros não fazem nada. SAIA DAÍ!' },
+    'cage': { 'touch': 'Atire nas jaulas: os prisioneiros entram no seu esquadrão', 'desktop': 'Atire nas jaulas: os prisioneiros entram no seu esquadrão' },
+    'shieldBox': { 'touch': 'Caixa escudo: espera e bloqueia um golpe grande', 'desktop': 'Caixa escudo: espera e bloqueia um golpe grande' }
   },
 
   'flow': {
 
-    'unlocked': 'Desbloqueado!'
+    'unlocked': 'Desbloqueado!',
+
+    'guardian': "Um anjo da guarda salvou você!",
+
+    'guardianSub': "{n} sobreviventes voltaram",
+
+    'next': "A seguir: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Escolher uma arma",
+    'nextStage': "próximo nível",
+    'stagesAway': "em {n} níveis"
+  },
+  'weaponPick': {
+    'title': "Escolha a sua arma",
+    'subtitle': "Sua no nível {n}. Há mais esperando na estrada.",
+    'take': "Pegar",
+    'rocket': {
+      'a': "Salva teleguiada",
+      'b': "Dano explosivo"
+    },
+    'gatling': {
+      'a': "Cadência de tiro dobrada",
+      'b': "Carrega portões mais rápido"
+    }
+  },
   'result': {
     'stageClear': 'Fase concluída!',
     'wipedOut': 'Esquadrão dizimado',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Melhore seu esquadrão!',
     'rankOf': 'de {n}',
     'upNext': 'A seguir: Nível {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Compartilhar partida',
+    'text': 'Cheguei à fase {n} em {game}. Consegue ir mais longe?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Abrir o baú por {n} moedas',
     'filling': 'Baú do tesouro: enchendo',
     'spent': 'Baú do tesouro: vazio até amanhã'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Expedição diária',
+    'hud': 'Expedição',
+    'multiplier': '{n}×',
+    'available': 'Expedição diária — a estrada de hoje, moedas triplicadas',
+    'confirm': 'Iniciar expedição',
+    'spent': 'Expedição diária — nova estrada em {time}',
+    'done': 'Volte amanhã',
+    'back': 'Voltar à campanha'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Opções', 'general': 'Geral', 'audio': 'Áudio', 'language': 'Idioma',
     'difficulty': 'Dificuldade', 'soundEffects': 'Efeitos sonoros', 'music': 'Música', 'musicTrack': 'Faixa musical',
     'musicTracks': { 'cozy': 'Harmonia aconchegante', 'trance': 'Túnel trance' },
+    'haptics': 'Vibração', 'on': 'Ligado', 'off': 'Desligado',
     'close': 'Salvar e fechar',
     'difficulties': { 'easy': 'Fácil', 'medium': 'Médio', 'hard': 'Difícil' },
     'difficultyHints': {

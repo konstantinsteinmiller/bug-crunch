@@ -149,6 +149,33 @@ export interface WeaponDef {
    * See `aimTarget` for what it picks and what it refuses to shoot at.
    */
   homing: boolean
+  /**
+   * How much faster a door pumps while this weapon is in the player's hands.
+   *
+   * The pump is a clock, not a hit count: `+1` per `gateTickMs` of sustained
+   * fire, whatever is doing the firing. So a gun that fires twice as often
+   * pumped exactly as fast as the squad's own — which made the gatling's one
+   * honest advantage over the launcher (it never stops hosing the door)
+   * invisible on the door itself. This is that advantage, made visible: the
+   * hose winds the number up faster, and the whole read of the gatling —
+   * "everything just got louder" — finally includes the gate.
+   */
+  pumpMul: number
+  /**
+   * Seconds a door stays HOT after one of this weapon's rounds hits it, on top
+   * of the ordinary hot window.
+   *
+   * The launcher fires in salvos, one trigger pull every `1 / (fireRate ×
+   * rateMul)` seconds — 0.88 s at the base fire rate — and a door forgets it
+   * was being shot after 0.4 s of silence (`stepGates`). Measured, that meant a
+   * crowd holding a launcher could not pump a door AT ALL until its fire rate
+   * reached ~4.2 shots/s, which is most of a run away: picking up the prize
+   * quietly deleted the game's headline skill for the rest of the stage. A
+   * rocket hit now keeps the door warm long enough to bridge the reload, so the
+   * pump reads as continuous fire again — one heavy thud per tick instead of a
+   * stream of tracers, which is exactly the launcher's whole character.
+   */
+  gateHoldS: number
 }
 
 /**
@@ -188,7 +215,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Straight up the road, like the gun it replaces. The gatling's whole read
     // is VOLUME — where you point it is still the entire skill.
     homing: false,
-    volley: false
+    volley: false,
+    // The hose winds a door up faster than the squad's own gun: 1.6× is a tick
+    // every ~310 ms at stage 1 instead of every 500 — visibly quicker on the
+    // plate and audibly quicker on the ladder, without turning a full approach
+    // into a number the curve was never priced against.
+    pumpMul: 1.6,
+    gateHoldS: 0
   },
   rocket: {
     id: 'rocket',
@@ -203,7 +236,13 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     damageMul: 5.5,
     splashR: ROCKET_SPLASH_R,
     homing: true,
-    volley: true
+    volley: true,
+    pumpMul: 1,
+    // Bridges the salvo's own reload — see `gateHoldS`. 0.75 s plus the 0.4 s
+    // window is 1.15 s, comfortably past the 0.88 s between salvos at the base
+    // fire rate, and still short enough that a door the crowd has stopped
+    // shooting goes cold within a second and a half.
+    gateHoldS: 0.75
   }
 }
 
@@ -249,11 +288,41 @@ export const weaponStreams = (id: WeaponId | null, alive: number): number => {
  * bonus nobody asked for, or ship the box with no armour at all, which is the
  * puzzle with the puzzle taken out.
  *
- * It is 6 rather than 4 because of `WEAPON_EVERY` below: the beat stopped being
- * every-stage furniture, so the one that opens the run has to land on a road
- * the player can already drive.
+ * It was 6 rather than 4 for a while — `WEAPON_EVERY` had turned the beat from
+ * every-stage furniture into a prize, and the first prize was meant to land on
+ * a road the player could already drive. It is back at the floor because of
+ * where the prize sat in the funnel: with the first box on stage 6 and the
+ * launcher's on stage 8, neither weapon was ever seen inside the three minutes
+ * a portal fit test grades. Stage 3 now hands the player a weapon of their own
+ * choosing (`WEAPON_PICK_STAGE`), and this is the road where they first have to
+ * go and FIND one — one stage later, exactly where the banner told them to look.
  */
-export const WEAPON_STAGE = 6
+export const WEAPON_STAGE = 4
+
+/**
+ * The stage a player runs with a weapon they CHOSE — the loaner.
+ *
+ * Offered once, on the handover into this stage, as a two-card reveal: the
+ * launcher or the gatling, for this stage only. It exists for the same reason
+ * the weapon puzzle moved earlier: the most distinctive thing the game owns has
+ * to be seen before a stranger decides whether to stay, and a choice is a
+ * better first meeting than a pickup — a player who picked the rockets is
+ * invested in the rockets. The weapon is cleared by `startStage` like every
+ * other, so the choice is a taste rather than a permanent power spike; the
+ * puzzle from `WEAPON_STAGE` is where they earn one again.
+ *
+ * Deliberately not 2. Stage 1 teaches the gun, the gate and the crate; stage 2
+ * teaches the trap and the elite. A rocket in the player's hands on either of
+ * those roads would answer the lesson before it was asked. Stage 3 is the first
+ * road the player has already seen every idea on.
+ */
+export const WEAPON_PICK_STAGE = 3
+
+/** The two cards on the reveal, in the order they are laid out. */
+export const WEAPON_PICK_CHOICES: readonly WeaponId[] = ['rocket', 'gatling']
+
+/** A pick read back off a save blob is only a pick if it names a weapon. */
+export const isWeaponId = (v: unknown): v is WeaponId => v === 'rocket' || v === 'gatling'
 
 /**
  * …and one every this many stages after it.
@@ -284,8 +353,10 @@ export const stageHasWeapon = (stage: number): boolean =>
  *
  * The gatling goes first. It is the weapon that changes nothing about how the
  * player aims, so the first prize teaches "the box pays out" without also
- * teaching a new verb; the launcher lands on stage 8, by which point there is a
- * crowd big enough for a salvo to look like one.
+ * teaching a new verb; the launcher lands on stage 6. And because the stage-3
+ * loaner is the player's own pick, the first box on the road is — for the
+ * player who chose the rockets — the OTHER weapon: a second toy to discover,
+ * and the rockets are two stages away again, where the banner says they are.
  *
  * A pure function of the stage number for the same reason everything else in
  * `track.ts` is: a stage has to be LEARNABLE. A player who lost stage 12 to a
@@ -358,6 +429,111 @@ export const WEAPON_BOX_AHEAD = 14
 /** Half-extent of the prize box. Bigger than a supply crate: it is the one
  *  pickup on the road that is worth a detour on its own. */
 export const WEAPON_BOX_R = CRATE_R * 1.45
+
+/**
+ * How long the box's "it just opened" ring runs, seconds.
+ *
+ * Owned here rather than inlined in the renderer because it is now load-bearing
+ * in the SIM as well: a gift box is born open (`WeaponBox.locked`), and the ring
+ * is a CAUSAL cue — "the levers went down, THAT happened" — which a box that was
+ * never shut has no cause for. Spawning a gift with `openFor` already past this
+ * is what suppresses it, so the two files have to agree on the number.
+ */
+export const WEAPON_REVEAL_S = 0.45
+
+/**
+ * ─── The gift box, stage 2 ─────────────────────────────────────────
+ *
+ * One weapon box, on the centre line, with NO levers, NO cover and NO armour —
+ * the mechanic with the puzzle taken off it, so the first time a player meets a
+ * weapon box they meet it as a gift rather than as a lock.
+ *
+ * It is what makes stage 2 reachable at all. `WEAPON_STAGE` is floored at 4
+ * because stages below `HARD_OBSTACLE_FROM_STAGE` carry no scenery that can
+ * kill, and the puzzle's ARMOUR and lever stones are both walls — so the puzzle
+ * cannot go earlier. A bare box is not a wall: nothing here can kill anybody,
+ * which is exactly why the rule that blocks the puzzle does not block this.
+ *
+ * For the same reason it sits in the MIDDLE of the road rather than on a
+ * shoulder. `WEAPON_BOX_X`'s "never in the middle" is a safety rule about the
+ * lethal armour standing in front of the box; with no armour there is nothing
+ * on the centre line to be punished by, and the middle is where a beat goes
+ * when the point is that nobody walks past it.
+ *
+ * The weapon is cleared by `startStage` like every other, so this is a taste
+ * that lasts one road — it does not pre-empt the stage-3 choice
+ * (`WEAPON_PICK_STAGE`), which still arrives fresh.
+ */
+export const WEAPON_GIFT_STAGE = 2
+
+/** Does this stage carry the free box? */
+export const stageHasWeaponGift = (stage: number): boolean => stage === WEAPON_GIFT_STAGE
+
+/**
+ * …and how much of the road it takes, as a share of the FULL lane width.
+ *
+ * "Almost not missable" is the whole brief, and it is a width rather than a
+ * position: at 40 % of a 9-unit road the box is 3.6 wide and leaves 2.7 units
+ * of open road at each rail — more than the 1.95 a full-size crowd needs to
+ * squeeze past, so a player who deliberately hugs a rail still can, and
+ * everybody else walks straight into it.
+ *
+ * That is 2x the half-extent of an ordinary prize box in each direction, which
+ * is also why `WeaponBox` carries its own `r` now: one global constant cannot
+ * describe both.
+ */
+export const WEAPON_GIFT_LANE_SHARE = 0.4
+export const WEAPON_GIFT_BOX_R = (LANE_HALF * 2 * WEAPON_GIFT_LANE_SHARE) / 2
+
+/**
+ * Which weapon the gift hands over.
+ *
+ * The gatling rather than the launcher: stage 2 is the road that teaches the
+ * trap and the elite, and "twice the fire rate" reads off the HUD without
+ * needing a single thought about splash radius or travel time. The launcher is
+ * the more distinctive toy and it gets its moment one stage later, as one of
+ * the two cards a player actually chooses between.
+ */
+export const WEAPON_GIFT_ID: WeaponId = 'gatling'
+
+/**
+ * …and how much health it has, against an earned box's.
+ *
+ * Well under, and the reason is that a gift has no second chance. The earned
+ * box is a detour the player chose and can stand on until it breaks; this one
+ * is passed at a run, and with no grind (see `WeaponBox.gift`) the only thing
+ * opening it is the ~2 s of gunfire between coming into range
+ * (`BULLET_RANGE` 10.8, at ~5.2 u/s) and walking over it. A stage-2 crowd is
+ * eight or ten survivors doing about 12 damage a second, so the full 30 of
+ * `weaponBoxHp(2)` is a coin flip: measured, a 17-strong squad opened it with
+ * nothing to spare, and a weaker one walks straight through the "unmissable"
+ * gift without collecting it.
+ *
+ * At 40 % it is 12 health — about a second of a beginner's fire, so the box
+ * pops open in front of them and the beat reads as the gift it is.
+ *
+ * ⚠ The "~2 s of gunfire" above was WRONG when it was written, and the open-box
+ * pass is what made it true rather than what changed it. A locked box refuses
+ * damage outright, and the gift did not unlock until `anchorY + 6` — so the
+ * window a beginner actually had was 6 / 5.21 = 1.15 s, not the 10.83 / 5.21 =
+ * 2.08 s the number is derived from. Everything measured under 1.0 and under
+ * 0.4 was measured against that shorter window; the mul is left at 0.4 because
+ * the design intent was always the sentence in the paragraph above, and the
+ * intent and the arithmetic now agree. What the wider window buys is the WEAK
+ * squad — the one this constant was cut for — which now opens the box in front
+ * of itself instead of on the last frame before contact. Measured across four
+ * squad sizes on stage 2, the break distance was 5.93 / 5.99 / 6.00 / 6.00
+ * units shut — clamped flat by the unlock rather than by anybody's damage — and
+ * 11.2 to 13.0 open. `balance.test.ts` re-run either side: 24/24 both times,
+ * and at eight seeds the stage-2 careless clear rate is 0.375 both ways.
+ */
+export const WEAPON_GIFT_HP_MUL = 0.4
+
+/** Does this stage's road carry a weapon box of ANY kind — the earned puzzle or
+ *  the stage-2 gift? What the art preloader and the road audits want; the two
+ *  beats keep separate predicates because only one of them is a puzzle. */
+export const stageHasWeaponBox = (stage: number): boolean =>
+  stageHasWeapon(stage) || stageHasWeaponGift(stage)
 
 /** How far in front of the box the armour stands. */
 export const WEAPON_GUARD_LEAD = 1.4
@@ -622,11 +798,84 @@ export interface WeaponBox {
   weapon: WeaponId
   x: number
   y: number
+  /** Half-extent, in world units. Per box rather than the `WEAPON_BOX_R`
+   *  constant because the stage-2 gift is twice the size of an earned one
+   *  — see `WEAPON_GIFT_BOX_R`. */
+  r: number
+  /**
+   * A gift box costs the crowd NOTHING to open — no grind, gunfire only.
+   *
+   * An earned box is deliberately something you stand on and shoot: the grind
+   * is what makes the prize feel taken. That pricing assumes a late-stage crowd
+   * against a box of `WEAPON_BOX_R`. The stage-2 gift is twice as wide, so twice
+   * as much of the crowd is in contact for twice as long, and it meets a squad
+   * of ten — measured in a browser, a crowd that walked into it went 10 -> 5 -> 0
+   * and WIPED with the box still at a third health. A teaching beat that kills
+   * the class is not a gift.
+   */
+  gift: boolean
   hp: number
   maxHp: number
-  /** Armour still on. A locked box refuses damage outright rather than merely
-   *  being hidden behind the wall — a round that squeaked past the armour's
-   *  edge should not quietly solve the puzzle. */
+  /**
+   * Armour still on. A locked box refuses damage outright rather than merely
+   * being hidden behind the wall — a round that squeaked past the armour's edge
+   * should not quietly solve the puzzle.
+   *
+   * ─── A GIFT IS BORN OPEN, AN EARNED BOX IS NOT ────────────────────────────
+   *
+   * `locked` used to start true for EVERY box, gift included, and the gift has
+   * no armour to be locked by — so what actually opened it was the proximity
+   * test at the top of `stepWeaponBoxes` ("nothing is covering this any more"),
+   * which does not run until the box is inside `anchorY + 6`. Measured on
+   * stage 2 (speed 5.21 u/s, `CROWD_SCREEN_Y × VIEW_HEIGHT` = 13.68 units of
+   * visible road):
+   *
+   *   • the box slides on screen 13.68 units out — 2.63 s before contact;
+   *   • it read as a SHUT grey crate under a cross-brace for the first 7.68 of
+   *     those units, 1.48 s, 56 % of the entire approach;
+   *   • the prize only lit up at 6 units, 1.15 s out.
+   *
+   * The first theory of the bug was that 1.15 s is not enough road to react in,
+   * and the measurement KILLED it: a full-lane correction settles in about a
+   * quarter of a second (`weaponPuzzle.test.ts` times it), so six units is four
+   * or five crossings' worth of slack. Steering was never the binding
+   * constraint — which is precisely why a closed box survived this long, since
+   * nobody could point at a moment where the prize was unreachable.
+   *
+   * What it actually cost is two other things:
+   *
+   *   1. THE OBJECT SIGNALLED THE WRONG CATEGORY for the majority of its
+   *      approach. Braced grey steel is what an obstacle looks like on this
+   *      road; the one beat on stage 2 whose whole job is to be walked into
+   *      spent 56 % of its visible life dressed as a thing to walk around.
+   *   2. IT WAS NOT SHOOTABLE. This box is opened by gunfire, not by contact,
+   *      and a locked box refuses damage outright — so the guns got 6 units of
+   *      window where `BULLET_RANGE` offers 10.83, and the shortfall lands on
+   *      exactly the weak squad the beat exists to rescue.
+   *
+   * (2) also silently halved the window the box is PRICED against:
+   * `WEAPON_GIFT_HP_MUL` is sized on "the ~2 s of gunfire between coming into
+   * range and walking over it" — so the real spendable window was
+   * 6 / 5.21 = 1.15 s, not `BULLET_RANGE` / 5.21 = 2.08 s.
+   *
+   * So a gift spawns with `locked: false`. It is not a new state; it is the
+   * absence of a state it never had a cause for.
+   *
+   * THE EARNED BOX STAYS SHUT, and that is a decision rather than an oversight.
+   * The argument for opening it too is consistency; the argument against is that
+   * the two boxes are not the same offer. The gift asks ONE question — "is this
+   * worth steering into" — and the answer has to be on the object, because the
+   * object is all there is. The earned box asks "is this worth going to find two
+   * levers for", and the player already has that answer for free: `WeaponTag`
+   * names the weapon on the HUD from the moment the beat streams in, twelve
+   * units before the box is even on screen. Opening the case as well would buy
+   * no information and spend the one thing the puzzle has — `unlockPuzzle`'s
+   * reveal is the only moment in the game that says "the thing you shot did
+   * THIS", and a lid that was already off cannot say it. Consistency of
+   * INFORMATION (both beats tell you the weapon before you commit) is the
+   * promise worth keeping; consistency of APPEARANCE would cost the mechanic
+   * its one teacher.
+   */
   locked: boolean
   /**
    * How many levers this puzzle has, and how many are down.

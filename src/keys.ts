@@ -134,6 +134,35 @@ export const GUARD_HINT_KEY = 'ts_guard_hint_seen'
  */
 export const LEVER_HINT_KEY = 'ts_lever_hint_seen'
 
+/**
+ * The rescue-cage primer has been shown, and the auto-shield one.
+ *
+ * Same footing as `LEVER_HINT_KEY` and for the same reason, doubled: both props
+ * arrive well past the onboarding ladder (stage 6 and stage 8), both are pure
+ * BONUS — nothing happens to a player who drives past one — and both look
+ * enough like a supply crate at a glance that "another box" is the default
+ * reading. A beat with no consequence for missing it is a beat the road cannot
+ * teach on its own.
+ *
+ * Two keys rather than one because they are two different lessons arriving two
+ * stages apart, and a single flag would let whichever appeared first silence
+ * the other forever.
+ */
+export const CAGE_HINT_KEY = 'ts_cage_hint_seen'
+export const BULWARK_HINT_KEY = 'ts_bulwark_hint_seen'
+
+/**
+ * The weapon the player chose on the handover into `WEAPON_PICK_STAGE`, as a
+ * `WeaponId` — or absent, which is what makes the reveal appear.
+ *
+ * Persisted rather than held in the scene for two reasons. The loaner has to
+ * survive a reload and a wipe: `startStage` re-arms it on every attempt at
+ * that stage, and a player who dies with the rockets and retries WITHOUT them
+ * would read the retry as a punishment. And the reveal is a one-time gift —
+ * shown again to a player who already chose, it is a menu.
+ */
+export const WEAPON_PICK_KEY = 'ts_weapon_pick'
+
 // ─── The idle treasure chest ────────────────────────────────────────────────
 //
 // The HUD chest fills on WALL-CLOCK time, not on play time, which is the whole
@@ -156,6 +185,38 @@ export const CHEST_KEY = 'ts_chest_at'
  * 02:00 in Berlin. A ledger whose `day` is not today reads as zero.
  */
 export const CHEST_DAY_KEY = 'ts_chest_day'
+
+// ─── The daily expedition ───────────────────────────────────────────────────
+
+/**
+ * The `YYYYMMDD` of the last expedition the player STARTED, as an integer.
+ *
+ * One field, and it holds a day rather than a boolean, because "have you done
+ * today's" is a comparison against today and not a flag somebody has to
+ * remember to clear at midnight. Absent — or any number that is not today's —
+ * reads as "not yet", which is also what a brand-new save and a corrupt value
+ * read as; the failure mode is a free expedition, never a locked one.
+ *
+ * It is the day the run STARTED, not the day it was finished, and that is the
+ * whole anti-farm design: the road is identical all day, so a flag written on
+ * completion would let a player who is about to wipe reload the tab and take
+ * the same road again with everything they learned from the first attempt. One
+ * attempt is what makes it an event. See `useDailyExpedition.ts`.
+ *
+ * UTC, unlike `CHEST_DAY_KEY` two fields up, and the disagreement is
+ * deliberate: the chest is a per-player ALLOWANCE and an allowance is measured
+ * in the player's own day, while the expedition is a road every player alive at
+ * the same moment is supposed to be running. See `expeditionDay`.
+ *
+ * Rides the same `ts_` blob as everything else, so a player who runs today's
+ * expedition on the phone does not get a second one on the desktop — provided
+ * the cloud blob is the side that wins the merge. See `SaveMergePolicy`: the
+ * merge is whole-blob, so this field always travels with the save that won,
+ * and it is deliberately NOT part of the score formula — a spent expedition is
+ * not progress, and letting it break a tie would hand the win to whichever
+ * device happened to open the game today.
+ */
+export const EXPEDITION_KEY = 'ts_expedition_day'
 
 // ─── Leaderboard identity + posting bookkeeping ─────────────────────────────
 //
@@ -217,3 +278,18 @@ export const MUSIC_TRACK_KEY = 'ts_user_music_track'
  *  the device level and the Web Audio gain has no effect, so the on-screen mute
  *  is a silence toggle instead: suspend all audio + block new music/SFX. */
 export const MOBILE_MUTE_KEY = 'ts_mobile_mute'
+/**
+ * Vibration on / off (boolean). Absent means ON — see `useHaptics.ts`.
+ *
+ * Stored as the OPT-OUT rather than the opt-in, and that is the whole reason
+ * the default is expressed as "absent means on": haptics only exist on a
+ * device that has both `navigator.vibrate` and a touch screen, and on that
+ * device the buzz is the point. Persisting an explicit `true` for everyone
+ * would put a field in every phone player's save blob to record a value they
+ * never chose, and would strand the default: flipping the shipped default
+ * later could no longer reach anyone who had already booted the game once.
+ *
+ * Rides the same `ts_` blob as every other setting, so a player who turns it
+ * off on their phone finds it off on their tablet.
+ */
+export const HAPTICS_KEY = 'ts_user_haptics'

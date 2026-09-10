@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Уклонись',
+    'milestone': '{n} в строю!',
     'weaponActive': '{name} готов',
-    'weaponLocked': '{name} заблокирован — сбито рычагов: {n} из {total}'
+    'weaponLocked': '{name} заблокирован — сбито рычагов: {n} из {total}',
+    'weaponGift': '{name} впереди — бесплатно, без рычагов',
+    'weaponFree': 'ДАРОМ'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Синие ящики: все стреляют быстрее', 'desktop': 'Синие ящики: все стреляют быстрее' },
     'boss': { 'touch': 'Не стойте в красном круге!', 'desktop': 'Не стойте в красном круге!' },
     'lever': { 'touch': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием', 'desktop': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием' },
-    'guard': { 'touch': 'Щит поднят — выстрелы бесполезны. УХОДИ!', 'desktop': 'Щит поднят — выстрелы бесполезны. УХОДИ!' }
+    'guard': { 'touch': 'Щит поднят — выстрелы бесполезны. УХОДИ!', 'desktop': 'Щит поднят — выстрелы бесполезны. УХОДИ!' },
+    'cage': { 'touch': 'Стреляй по клеткам — пленные вступят в отряд', 'desktop': 'Стреляй по клеткам — пленные вступят в отряд' },
+    'shieldBox': { 'touch': 'Ящик щита — ждёт и блокирует один сильный удар', 'desktop': 'Ящик щита — ждёт и блокирует один сильный удар' }
   },
 
   'flow': {
 
-    'unlocked': 'Открыто!'
+    'unlocked': 'Открыто!',
+
+    'guardian': "Ангел-хранитель спас тебя!",
+
+    'guardianSub': "Вернулись {n} выживших",
+
+    'next': "Далее: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Выбери оружие",
+    'nextStage': "следующий уровень",
+    'stagesAway': "через {n} уровня"
+  },
+  'weaponPick': {
+    'title': "Выбери своё оружие",
+    'subtitle': "Твоё на уровень {n}. На дороге ждёт ещё.",
+    'take': "Взять",
+    'rocket': {
+      'a': "Самонаводящийся залп",
+      'b': "Урон от взрыва"
+    },
+    'gatling': {
+      'a': "Вдвое выше скорострельность",
+      'b': "Быстрее качает ворота"
+    }
+  },
   'result': {
     'stageClear': 'Этап пройден!',
     'wipedOut': 'Отряд уничтожен',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Улучши отряд!',
     'rankOf': 'из {n}',
     'upNext': 'Далее: уровень {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Поделиться забегом',
+    'text': 'Я дошёл до уровня {n} в {game}. Сможешь дальше?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Открыть сундук за {n} монет',
     'filling': 'Сундук наполняется',
     'spent': 'Сундук пуст до завтра'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Ежедневная вылазка',
+    'hud': 'Вылазка',
+    'multiplier': '×{n}',
+    'available': 'Ежедневная вылазка — сегодняшняя дорога, тройные монеты',
+    'confirm': 'Начать вылазку',
+    'spent': 'Ежедневная вылазка — новая дорога через {time}',
+    'done': 'Возвращайтесь завтра',
+    'back': 'Вернуться к кампании'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Настройки', 'general': 'Общие', 'audio': 'Звук', 'language': 'Язык',
     'difficulty': 'Сложность', 'soundEffects': 'Звуковые эффекты', 'music': 'Музыка', 'musicTrack': 'Музыкальный трек',
     'musicTracks': { 'cozy': 'Уютная гармония', 'trance': 'Транс-туннель' },
+    'haptics': 'Вибрация', 'on': 'Вкл.', 'off': 'Выкл.',
     'close': 'Сохранить и закрыть',
     'difficulties': { 'easy': 'Лёгкая', 'medium': 'Средняя', 'hard': 'Сложная' },
     'difficultyHints': {

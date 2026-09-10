@@ -31,9 +31,14 @@ import useSounds from '@/use/useSound'
 export type FxSound =
   | 'shoot' | 'hitSoft' | 'hitHard' | 'gateTick' | 'gateSubTick' | 'gatePass' | 'gateMul'
   | 'gateTrap' | 'gateDismiss' | 'crate' | 'damageUp' | 'rateUp' | 'barricade' | 'divider'
+  // The two roadside prizes: iron bars coming apart, the auto-shield arming,
+  // and the auto-shield spending itself on one blow.
+  | 'cage' | 'bulwarkArm' | 'bulwark'
   | 'foeDie' | 'unitLost' | 'coin' | 'eliteSpawn' | 'eliteSweep' | 'eliteDie'
   | 'bossHit' | 'bossGuard' | 'bossRage' | 'bossSlam' | 'bossHeal' | 'bossDie'
-  | 'stageClear' | 'wipe'
+  | 'bossEnrage' | 'bossCharge'
+  | 'stageClear' | 'wipe' | 'rally'
+  | 'squadMilestone'
   | 'countUp'
   | 'lever' | 'weaponOpen' | 'weaponTake' | 'rocketLaunch' | 'rocketBlast'
 
@@ -78,7 +83,15 @@ const THROTTLES: Partial<Record<FxSound, Throttle>> = {
   // time (~90–200 ms). The budget has to let the whole cascade through — the
   // cascade IS the cue — while still refusing a second bank's worth on top of
   // it, which is what a player weaving through back-to-back banks would trigger.
-  gateDismiss: { minGapMs: 40, maxPerWindow: 3, windowMs: 600 }
+  gateDismiss: { minGapMs: 40, maxPerWindow: 3, windowMs: 600 },
+  // The odd one out: this cue is not dense, it is RARE — the crowd-milestone
+  // ladder doubles, so a four-figure run fires it six or seven times in three
+  // minutes. It is in the table anyway because its failure mode is unique. Every
+  // other row here protects the mix from an event stream that is genuinely fast;
+  // this row protects the player from a caller that has lost track of which
+  // rungs it has already announced, which would turn a half-second chime into
+  // the sound of the rest of the run. One row is cheaper than trusting the HUD.
+  squadMilestone: { minGapMs: 700, maxPerWindow: 2, windowMs: 3000 }
 }
 
 const lastAt: Partial<Record<FxSound, number>> = {}
@@ -205,7 +218,13 @@ const SAMPLE_CUES: Partial<Record<FxSound, [string, number]>> = {
   stageClear: ['celebration-1', 0.09],
   bossDie: ['celebration-3', 0.1],
   wipe: ['lose', 0.11],
-  damageUp: ['level-up', 0.06]
+  damageUp: ['level-up', 0.06],
+  // The second wind. `reward-continue` is the sample the chest payout and the
+  // weapon reveal already use, and that is exactly the point: the player has
+  // heard this cue mean "something good was just handed to you" before, so a
+  // rally sounds like a gift rather than like another pickup. Louder than
+  // either, because it arrives one frame after a death.
+  rally: ['reward-continue', 0.12]
 }
 
 /**
@@ -334,6 +353,58 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       tone(ctx, { freq: 430 + r * 190, toFreq: 130, duration: 0.13, gain: vol(0.055), type: 'triangle' })
       tone(ctx, { freq: 300 + r * 150, toFreq: 100, duration: 0.16, gain: vol(0.045), type: 'triangle', delay: 0.035 })
       break
+
+    case 'cage': {
+      // A cage is IRON, and the whole point of the cue is that it is not the
+      // crate's wood. Same three-part shape as `crate` — a crack, then pitched
+      // debris — with every part moved: the burst is a low, ringing metal
+      // clang rather than a bright splinter, and the two clacks are replaced by
+      // a rising major third, which is the shortest phrase that reads as
+      // "somebody got out" rather than "something broke".
+      noiseBurst(ctx, { duration: 0.34, gain: vol(0.085), filterFrom: 2400, filterTo: 220, type: 'bandpass', q: 2.2 })
+      tone(ctx, { freq: 196, toFreq: 92, duration: 0.26, gain: vol(0.06), type: 'square', filter: 1500 })
+      for (const [i, f] of [392, 494, 587].entries()) {
+        tone(ctx, {
+          freq: f, duration: 0.16, gain: vol(0.05), type: 'triangle', delay: 0.06 + i * 0.055
+        })
+      }
+      break
+    }
+
+    case 'bulwarkArm':
+      // The pickup arming. Deliberately the SAME family as the shield skill's
+      // `shieldUp` (which borrows `gateMul`) — the player must not have to learn
+      // "shield" twice — and deliberately lower and slower than it, because this
+      // one is not a three-second window opening, it is something being set down
+      // and left there. A rise that settles rather than a rise that races.
+      tone(ctx, { freq: 165, toFreq: 330, duration: 0.42, gain: vol(0.075), type: 'triangle', filter: 2200 })
+      tone(ctx, { freq: 247, toFreq: 494, duration: 0.42, gain: vol(0.05), type: 'sine', delay: 0.04 })
+      noiseBurst(ctx, { duration: 0.5, gain: vol(0.035), filterFrom: 700, filterTo: 5200, type: 'bandpass', q: 1.1 })
+      break
+
+    case 'bulwark': {
+      // The absorb. The loudest defensive cue in the game, and it has to be:
+      // a save is invisible by definition — nothing happens — so the sound is
+      // doing most of the work of telling the player that the thing they
+      // detoured for just paid for itself.
+      //
+      // Built as an IMPACT that fails to land: a heavy low thud (the blow),
+      // immediately stopped by a bright metallic ring (the dome), then a
+      // descending tail (the blow being shed). The middle voice is the same
+      // ricochet timbre `bossGuard` uses for rounds bouncing off a phase
+      // shield, which is the language this game already has for "that hit
+      // something it cannot get through".
+      tone(ctx, { freq: 110, toFreq: 44, duration: 0.3, gain: vol(0.13), type: 'sine' })
+      noiseBurst(ctx, { duration: 0.14, gain: vol(0.1), filterFrom: 9000, filterTo: 2600, type: 'bandpass', q: 3.2 })
+      for (const [i, f] of [1319, 1047, 784].entries()) {
+        tone(ctx, {
+          freq: f, toFreq: f * 0.75, duration: 0.3 + i * 0.08,
+          gain: vol(0.055), type: 'triangle', delay: 0.03 + i * 0.05
+        })
+      }
+      noiseBurst(ctx, { duration: 0.7, gain: vol(0.045), filterFrom: 4200, filterTo: 260, type: 'lowpass', delay: 0.08 })
+      break
+    }
 
     case 'rateUp': {
       // A fast ratcheting climb — the sound of a mechanism speeding up. It has
@@ -494,6 +565,40 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       noiseBurst(ctx, { duration: 0.5, gain: vol(0.1), filterFrom: 5000, filterTo: 400 })
       break
 
+    case 'bossEnrage':
+      // Phase two, landing in the same frame as `bossRage` and deliberately
+      // UNDER it rather than beside it. The gate cue is already the loudest
+      // thing in the fight and doubling it just makes both quieter; what this
+      // adds is the octave below and a long tail, so the beat the player has
+      // heard twice before arrives with a floor under it and keeps ringing after
+      // the gate's own hit has stopped. That difference is the whole message:
+      // same event, bigger fight.
+      //
+      // The horn FALLS where `bossRage`'s rises. Everything in this mix that
+      // rises is something arriving (a bomb's fuse, a heal); a drop from 150 to
+      // 44 is the fight settling into something heavier, and it reads as such
+      // without competing with the cue stacked on top of it.
+      tone(ctx, { freq: 150, toFreq: 44, duration: 1.5, gain: vol(0.22), type: 'sawtooth', filter: 620 })
+      tone(ctx, { freq: 74, toFreq: 37, duration: 1.8, gain: vol(0.16), type: 'sine' })
+      noiseBurst(ctx, { duration: 1.2, gain: vol(0.09), filterFrom: 1800, filterTo: 120 })
+      break
+
+    case 'bossCharge':
+      // The wind-up on the lane charge, and the one boss cue that is a TEXTURE
+      // rather than a hit: a rising filtered rasp that keeps going for as long
+      // as the band is on the road. A percussive tell would put the player's
+      // attention on the moment it fired, and the moment that matters here is
+      // the second and a half AFTER it — the whole point of the attack is that
+      // there is time to get out of the way, so the sound has to still be there
+      // while they are doing it.
+      //
+      // Pitched between `bossGuard`'s ricochets and `bossSlam`'s sub so it has
+      // somewhere to sit when the shield is up and forty rounds a second are
+      // landing on it, which is exactly the frame it arrives in at the gate.
+      noiseBurst(ctx, { duration: 0.9, gain: vol(0.11), filterFrom: 260, filterTo: 1700, type: 'bandpass', q: 1.1 })
+      tone(ctx, { freq: 62, toFreq: 128, duration: 1.1, gain: vol(0.13), type: 'sawtooth', filter: 700 })
+      break
+
     case 'bossSlam':
       // Sub thump + wide body + a long dark tail. Pairs with the screen shake.
       tone(ctx, { freq: 110, toFreq: 30, duration: 0.45, gain: vol(0.22), type: 'sine' })
@@ -587,6 +692,62 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       noiseBurst(ctx, { duration: 0.26, gain: vol(0.07), filterFrom: 2600, filterTo: 400 })
       break
 
+    case 'squadMilestone': {
+      /**
+       * ─── The crowd crossed a round number ─────────────────────────────────
+       *
+       * SYNTHESISED, and the choice is forced rather than preferred.
+       *
+       * `public/audio/sfx/` ships four usable fanfares and every one of them is
+       * disqualified by something the player has already been taught. Three are
+       * already spoken for and MEAN something: `celebration-1` is a cleared
+       * stage, `celebration-3` is a dead boss, `reward-continue` is a gift being
+       * handed over (the chest, the weapon reveal, the rally). A chime that
+       * sounded like a cleared stage in the middle of a stage would tell the
+       * player the run had ended, which is the one thing a juice cue must never
+       * say. The fourth (`win`) is a full mix with its own key and a ~1.5 s
+       * reverb tail — and this cue lands on the SAME FRAME as a gate pass,
+       * because passing a door is the only way a squad ever crosses a round
+       * number, so it has to sit ON TOP of the `gatePass` / `gateMul` chord
+       * rather than argue with it.
+       *
+       * So: three notes of the game's OWN pentatonic ladder (`tickFreq`, the
+       * gate-pump scale), an octave above the reward chord's register where
+       * nothing else in the mix lives, with a quiet third partial for a bell
+       * edge and a short upward shimmer under it. It is recognisably the same
+       * instrument the player just pumped the door with, which is the point —
+       * the milestone reads as that pump paying off, not as a second event.
+       *
+       * `power` is the RUNG (0 = 25, 1 = 50, 2 = 100 …), not a 0..1 intensity:
+       * the phrase starts that far up the ladder, so 800 arrives brighter and
+       * higher than 25 did instead of the game chiming the same three notes at
+       * a player whose crowd has grown thirty-fold.
+       */
+      const rung = Math.max(0, Math.floor(power))
+      for (const [i, step] of [0, 2, 4].entries()) {
+        const f = tickFreq(rung + step) * 2
+        tone(ctx, {
+          freq: f, duration: 0.46 - i * 0.06, gain: vol(0.055),
+          type: 'triangle', filter: 6200, delay: i * 0.075
+        })
+        // The bell. A twelfth above the note (×3) rather than an octave, so it
+        // colours the attack instead of thickening the pitch — an octave here
+        // read as a second, louder chime rather than as a shine on the first.
+        tone(ctx, {
+          freq: f * 3, duration: 0.16, gain: vol(0.014),
+          type: 'sine', delay: i * 0.075
+        })
+      }
+      // Rising, like the phrase over it. Every other noise sweep in this mixer
+      // collapses toward the floor; this one opens, which is what stops the cue
+      // reading as an impact.
+      noiseBurst(ctx, {
+        duration: 0.5, gain: vol(0.03), filterFrom: 2200, filterTo: 9000,
+        type: 'bandpass', q: 0.8
+      })
+      break
+    }
+
     case 'countUp':
       // The result screen's coin tally. Tiny, dry, and pitched up as it runs.
       tone(ctx, { freq: 880 * (1 + power * 0.5), duration: 0.05, gain: vol(0.03), type: 'square', filter: 4000 })
@@ -601,7 +762,9 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
  * Play one gameplay cue. Safe to call from the render loop at any density —
  * throttling, mute gating and ad suspension are all handled here.
  *
- * @param power 0..1 (or a step index for `gateTick`) intensity hint.
+ * @param power 0..1 intensity hint — or a ladder index for the two cues that
+ *              are pitched rather than sized: a step for `gateTick` /
+ *              `gateSubTick`, a rung for `squadMilestone`.
  */
 export const playFx = (id: FxSound, power = 0): void => {
   if (!canPlay()) return

@@ -31,8 +31,11 @@ export default {
     'fireRate': '射速',
     'incoming': '攻击来袭！',
     'dodge': '闪避',
+    'milestone': '{n} 人集结！',
     'weaponActive': '{name} 就绪',
-    'weaponLocked': '{name} 未解锁 — 已击中 {n}/{total} 个拉杆'
+    'weaponLocked': '{name} 未解锁 — 已击中 {n}/{total} 个拉杆',
+    'weaponGift': '{name} 就在前方 — 免费，无需拉杆',
+    'weaponFree': '免费'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': '蓝色箱子：全队射速提升', 'desktop': '蓝色箱子：全队射速提升' },
     'boss': { 'touch': '远离红圈！', 'desktop': '远离红圈！' },
     'lever': { 'touch': '击中路两侧的两个拉杆 —— 它们会打开武器箱', 'desktop': '击中路两侧的两个拉杆 —— 它们会打开武器箱' },
-    'guard': { 'touch': '护盾开启——射击无效，快躲开！', 'desktop': '护盾开启——射击无效，快躲开！' }
+    'guard': { 'touch': '护盾开启——射击无效，快躲开！', 'desktop': '护盾开启——射击无效，快躲开！' },
+    'cage': { 'touch': '射击囚笼——被救的人会加入队伍', 'desktop': '射击囚笼——被救的人会加入队伍' },
+    'shieldBox': { 'touch': '护盾箱——待命并挡下一次重击', 'desktop': '护盾箱——待命并挡下一次重击' }
   },
 
   'flow': {
 
-    'unlocked': '已解锁！'
+    'unlocked': '已解锁！',
+
+    'guardian': "守护天使救了你！",
+
+    'guardianSub': "{n} 名幸存者归队",
+
+    'next': "下一个：{label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "选择武器",
+    'nextStage': "下一关",
+    'stagesAway': "{n} 关后"
+  },
+  'weaponPick': {
+    'title': "选择你的武器",
+    'subtitle': "第 {n} 关归你使用。路上还有更多在等着。",
+    'take': "拿走",
+    'rocket': {
+      'a': "追踪齐射",
+      'b': "爆炸伤害"
+    },
+    'gatling': {
+      'a': "两倍射速",
+      'b': "更快充能闸门"
+    }
+  },
   'result': {
     'stageClear': '通关！',
     'wipedOut': '小队全灭',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': '升级你的队伍！',
     'rankOf': '共 {n} 人',
     'upNext': '下一关：第 {n} 关'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': '分享战绩',
+    'text': '我在 {game} 中打到了第 {n} 关。你能走得更远吗？'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': '打开宝箱获得 {n} 金币',
     'filling': '宝箱填充中',
     'spent': '宝箱已空，明天再来'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': '每日远征',
+    'hud': '远征',
+    'multiplier': '{n}×',
+    'available': '每日远征 — 今天的路线，三倍金币',
+    'confirm': '开始远征',
+    'spent': '每日远征 — 新路线还有 {time}',
+    'done': '明天再来',
+    'back': '返回战役'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': '选项', 'general': '通用', 'audio': '音频', 'language': '语言',
     'difficulty': '难度', 'soundEffects': '音效', 'music': '音乐', 'musicTrack': '音乐曲目',
     'musicTracks': { 'cozy': '惬意和声', 'trance': '迷幻隧道' },
+    'haptics': '震动', 'on': '开', 'off': '关',
     'close': '保存并关闭',
     'difficulties': { 'easy': '简单', 'medium': '普通', 'hard': '困难' },
     'difficultyHints': {

@@ -35,6 +35,9 @@ import {
   GATE_LEAF_HALF,
   GATE_LEAF_X,
   GATE_SUB_MAX,
+  DIVIDER_HALF_W,
+  UNIT_R,
+  funnelRadius,
   LANE_HALF,
   ROCK_H
 } from '@/game/survival'
@@ -713,5 +716,118 @@ describe('the curve ramps for all thirty stages', () => {
     // …and it is STILL moving deep into the endless road.
     expect(beatGap(120, 0), 'the beat gap stopped moving past the campaign')
       .toBeLessThan(beatGap(60, 0))
+  })
+})
+
+// ─── Where the doors actually are ───────────────────────────────────────────
+//
+// The shape test above compares the generator's output against the same
+// constants the generator reads, so it is true by construction and cannot see a
+// wrong constant. This block checks the constants against the LANE — the thing
+// they are supposed to describe — which is the only level at which this was
+// visible.
+//
+// It was not visible for a long time. `GATE3_LEAF_X` held 2.66, the door's
+// WIDTH, in the slot that holds its CENTRE (the correct value is 3.16). Three
+// symptoms, none of which points here:
+//   • the three painted frames butted together with doubled, offset posts;
+//   • the hazard pillar stood inside the outer doorway instead of between two;
+//   • and the outer door's safe aiming band was ZERO units wide with its
+//     painted centre 0.4 outside it, so aiming at an outer door exactly where
+//     it is drawn always clipped the pillar and shed survivors.
+describe('gate bank geometry, against the lane rather than against itself', () => {
+  /** Doors and pillars for a bank, left to right, as [lo, hi] spans. */
+  const layout = (leafXs: readonly number[], halfW: number, dividerXs: readonly number[]) => ({
+    doors: leafXs.map((x) => [x - halfW, x + halfW] as const),
+    pillars: dividerXs.map((x) => [x - DIVIDER_HALF_W, x + DIVIDER_HALF_W] as const)
+  })
+
+  const BANKS = {
+    'two-leaf': layout([-GATE_LEAF_X, GATE_LEAF_X], GATE_LEAF_HALF, [0]),
+    'three-leaf': layout(
+      [-GATE3_LEAF_X, 0, GATE3_LEAF_X], GATE3_LEAF_HALF, [-GATE3_DIVIDER_X, GATE3_DIVIDER_X]
+    )
+  } as const
+
+  // 0.02 rather than an exact match: the constants are authored to two
+  // decimals, so a three-leaf bank's 8/6 door half-width is 1.33 and the row
+  // lands 0.01 short of each rail. That is rounding. Half a door is not.
+  const TOL = 0.02
+
+  it.each(Object.entries(BANKS))(
+    '%s: doors and pillars sit edge to edge, with no gap and no overlap', (_name, bank) => {
+      // Walk the bank left to right — door, pillar, door, … — and require each
+      // part to start exactly where the previous one ended. A door centre
+      // holding a door WIDTH breaks this twice over: the doors run together
+      // with no pillar gap between them, and each pillar then lands half a
+      // unit inside the door beside it.
+      const parts = [...bank.doors, ...bank.pillars].sort((a, b) => a[0] - b[0])
+      for (let i = 1; i < parts.length; i++) {
+        expect(Math.abs(parts[i]![0] - parts[i - 1]![1]), `part ${i} starts where part ${i - 1} ends`)
+          .toBeLessThan(TOL)
+      }
+      // …and the whole bank stays on the road. (It need not REACH the rails:
+      // a two-leaf bank deliberately keeps a 0.15 margin at each one.)
+      expect(parts[0]![0]).toBeGreaterThanOrEqual(-LANE_HALF - TOL)
+      expect(parts[parts.length - 1]![1]).toBeLessThanOrEqual(LANE_HALF + TOL)
+    }
+  )
+
+  it('a three-leaf bank fills the lane, which is where its door width comes from', () => {
+    // Its arithmetic is "9 units of lane, minus two 0.5-wide pillars, over
+    // three doors". If the row no longer reaches the rails, that division has
+    // stopped describing the thing it divides.
+    const bank = BANKS['three-leaf']
+    expect(Math.abs(bank.doors[0]![0] - -LANE_HALF)).toBeLessThan(TOL)
+    expect(Math.abs(bank.doors[bank.doors.length - 1]![1] - LANE_HALF)).toBeLessThan(TOL)
+  })
+
+  /**
+   * The widest strip of a door a crowd's CENTRE may occupy without touching a
+   * pillar, in world units.
+   *
+   * Modelled by subtraction rather than by inspecting the door's edges: take
+   * the door, delete every pillar (grown by `UNIT_R`, because pillars kill on
+   * contact), keep the widest piece left, then shrink it by the funnelled
+   * crowd's own half-width. Doing it edge-wise instead assumes the pillar sits
+   * OUTSIDE the door — which is exactly the assumption the bug violated, so the
+   * check would have inherited the bug and reported a healthy 0.50.
+   */
+  const safeBand = (
+    door: readonly [number, number], pillars: readonly (readonly [number, number])[]
+  ): number => {
+    const halfW = (door[1] - door[0]) / 2
+    let pieces: Array<[number, number]> = [[door[0], door[1]]]
+    for (const [plo, phi] of pillars) {
+      const lo = plo - UNIT_R
+      const hi = phi + UNIT_R
+      pieces = pieces.flatMap(([a, b]): Array<[number, number]> => {
+        if (hi <= a || lo >= b) return [[a, b]]           // no overlap
+        const left: Array<[number, number]> = lo > a ? [[a, lo]] : []
+        const right: Array<[number, number]> = hi < b ? [[hi, b]] : []
+        return [...left, ...right]
+      })
+    }
+    const widest = pieces.reduce((m, [a, b]) => Math.max(m, b - a), 0)
+    return widest - 2 * funnelRadius(halfW)
+  }
+
+  it.each(Object.entries(BANKS))(
+    '%s: every door can be entered by aiming at where it is drawn', (_name, bank) => {
+      for (const door of bank.doors) {
+        const centre = (door[0] + door[1]) / 2
+        expect(safeBand(door, bank.pillars), `door at ${centre.toFixed(2)} has no room to aim into`)
+          .toBeGreaterThan(0.1)
+      }
+    }
+  )
+
+  it('a three-leaf outer door is no meaner to aim at than a two-leaf one', () => {
+    // The regression would have read as "narrower, but still passable". It was
+    // not passable — the band was zero — and a ratio like this says so out loud.
+    const three = BANKS['three-leaf']
+    const two = BANKS['two-leaf']
+    expect(safeBand(three.doors[2]!, three.pillars))
+      .toBeGreaterThanOrEqual(safeBand(two.doors[1]!, two.pillars) - 1e-9)
   })
 })

@@ -189,6 +189,38 @@ export type FxEvent =
       halfW: number
       depth: number
     }
+  /**
+   * The enraged boss is winding up a charge straight down the lane.
+   *
+   * Same contract as every cast above and it matters more here than anywhere
+   * else, because this is the one attack whose answer is a full lateral
+   * commitment rather than a step: `ttl` is the exact seconds until the swathe
+   * is billed, so the band the player is reading and the beat they have to be
+   * out of it by are the same clock.
+   *
+   * `x` is the locked column centre and `halfW` its lethal half-width — the kill
+   * reads both from the same two numbers. `y` is where the boss starts and `toY`
+   * where its body ends up, so the band is painted over exactly the ground the
+   * charge crosses.
+   */
+  | {
+      kind: 'chargeCast'; x: number; y: number
+      halfW: number
+      toY: number
+      ttl: number
+    }
+  /** …and it went through. Same geometry, so the scars sit on the warning. */
+  | { kind: 'bossCharge'; x: number; y: number; halfW: number; fromY: number }
+  /**
+   * The fight turned over: the boss is in phase two from this frame on.
+   *
+   * Pushed alongside `bossRage` rather than instead of it, because they are two
+   * facts about one beat — the gate says "it has planted and your fire has
+   * stopped working", this says "and it is not the same boss any more". One
+   * frame, one moment: the colour shift, the roar and the shake all hang off
+   * this and nothing about phase two fades in.
+   */
+  | { kind: 'bossEnrage'; x: number; y: number }
   /** The healer is winding up its every-third. `ttl` to the moment the bar
    *  jumps — the one moment in the game a health bar goes UP. */
   | { kind: 'healCast'; x: number; y: number; ttl: number }
@@ -227,6 +259,32 @@ export type FxEvent =
   | { kind: 'shieldUp'; x: number; y: number }
   /** …and ate a hit that would have taken a survivor. */
   | { kind: 'shieldSave'; x: number; y: number }
+  /**
+   * A rescue cage came apart. `count` is what actually got out — capped by
+   * `MAX_SQUAD`, so the number the renderer prints is the number the crowd
+   * gained and never the number that was painted on the bars.
+   */
+  | { kind: 'cageBreak'; x: number; y: number; count: number }
+  /**
+   * The auto-shield box opened and the absorb is armed.
+   *
+   * `fresh` is false when one was already armed — the pickup is a latch, not a
+   * stack (see `takeBulwark`) — so the renderer can play the arming beat once
+   * and a quieter acknowledgement the second time rather than promising the
+   * player a second charge they do not have.
+   */
+  | { kind: 'bulwarkTake'; x: number; y: number; fresh: boolean }
+  /**
+   * …and it ate a whole blow.
+   *
+   * `count` is how many survivors the blow was about to take, which is the ONE
+   * number that makes the moment legible: the pickup's promise is "the next big
+   * hit does not land", and a save that looks identical whether it stopped four
+   * bodies or four hundred has not shown the player what they bought. The
+   * renderer scales the burst, the shake and the number off it — see the
+   * `bulwarkSave` case in `useSurvivalArt`.
+   */
+  | { kind: 'bulwarkSave'; x: number; y: number; count: number }
   /** A TNT barrel took its last round and lit its fuse. */
   /**
    * ─── The weapon puzzle ────────────────────────────────────────────────────
@@ -265,6 +323,16 @@ export type FxEvent =
   | { kind: 'bossDie'; x: number; y: number }
   | { kind: 'stageClear'; x: number; y: number }
   | { kind: 'wipe'; x: number; y: number }
+  /**
+   * The rally: a wiped crowd handed back mid-run (see `tryRally`).
+   *
+   * It gets its own event because it is the ONE moment in the game where the
+   * player is given something they did not earn, and the first version shipped
+   * without one — survivors simply reappeared, and playtesters read it as the
+   * game glitching rather than as a reprieve. `count` is how many came back, so
+   * the burst can say the number out loud on the road where they landed.
+   */
+  | { kind: 'rally'; x: number; y: number; count: number }
 
 // Events are produced during a tick and consumed the same frame; a generous cap
 // means a catastrophic wipe can't drop the events that matter while still

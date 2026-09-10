@@ -27,7 +27,7 @@ import {
   HEAL_MIN_GAP_S,
   SUMMON_BUDGET, SUMMON_OPENING_CD, SUMMON_PER_WAVE, SUMMON_WAVES_MAX, SUMMON_WAVE_RAMP,
   THREAT_POOL_FROM_STAGE, summonWaveSize,
-  bossKindFor, clawFurrowHalfW, clawLaneXs, type BossKind
+  bossKindFor, chargeHalfW, clawFurrowHalfW, clawLaneXs, type BossKind
 } from '@/game/threats'
 import { drainFx, type FxEvent } from '@/use/useVfx'
 
@@ -174,10 +174,21 @@ describe('the claw lays down gaps a crowd can actually stand in', () => {
       const b = game.getBoss()
       const here = game.anchor().x
       if (!b || !b.aimed) return here
-      const opts = [b.slamX - CLAW_SPACING / 2, b.slamX + CLAW_SPACING / 2]
-        .filter((x) => Math.abs(x) <= 3.9)
-      if (opts.length === 0) return here
-      return opts.sort((p, q) => Math.abs(p - here) - Math.abs(q - here))[0]!
+      // The claw's last third is not a rake any more (see `BOSS_ENRAGE_AT`), and
+      // a policy that answers only the rake is not the perfect reader this test
+      // claims to measure — it is a player who learned one of the two attacks.
+      // A charge is a column, so the answer is the far side of it rather than a
+      // pocket inside it; `chargeHalfW` is the simulation's own definition of how
+      // wide, exactly as `CLAW_SPACING` is above.
+      const opts = game.bossIsCharging()
+        ? [
+          b.slamX - (chargeHalfW(b.slams) + CROWD_MAX_R + 0.3),
+          b.slamX + (chargeHalfW(b.slams) + CROWD_MAX_R + 0.3)
+        ]
+        : [b.slamX - CLAW_SPACING / 2, b.slamX + CLAW_SPACING / 2]
+      const room = opts.filter((x) => Math.abs(x) <= 3.9)
+      if (room.length === 0) return here
+      return room.sort((p, q) => Math.abs(p - here) - Math.abs(q - here))[0]!
     }
 
     const dodged = await fight({ stage: CLAW_STAGE, squad: 200, steer: intoAPocket })
@@ -368,8 +379,38 @@ describe('the healer actually heals, on its own clock', () => {
     const stood = await fight({ stage: HEALER_STAGE, squad: 200, steer: () => 0, maxTicks: 6000 })
     expect(stood.lost, 'the bossBolts never landed on the stationary crowd either')
       .toBeGreaterThan(10)
+
+    // ── The measurement is HITS PER CAST, not the loss share ──
+    //
+    // The loss share was the assertion first, and it is CENSORED: a stationary
+    // crowd at this build is wiped, so the control reads 100 % and cannot read
+    // higher. Everything the dodge is worth has to fit in the gap below a
+    // ceiling the control is already sitting on, so the moment anything makes
+    // the fight more lethal — a boss phase, a scaling pass — the moving run
+    // reaches the same ceiling and the spec flips a coin. It did: five runs gave
+    // 82–100 % moving against 38–100 % standing, failing about half the time,
+    // while the thing it was supposed to be measuring had not moved at all.
+    //
+    // How often a launched bolt finds anybody is uncensored, is the geometric
+    // fact "the bolt is answerable" actually means, and does not care how long
+    // either fight lasted. Measured at 0.64 against 0.94.
+    const rate = (f: typeof moved): number =>
+      f.fx.filter((e) => e.kind === 'bossBoltHit').length /
+      Math.max(1, f.fx.filter((e) => e.kind === 'bossBoltCast').length)
+    const movedRate = rate(moved)
+    const stoodRate = rate(stood)
+    expect(stood.fx.filter((e) => e.kind === 'bossBoltCast').length,
+      'the healer never launched a bolt at the stationary crowd')
+      .toBeGreaterThan(2)
+    expect(movedRate,
+      `moving was hit by ${(movedRate * 100).toFixed(0)}% of bolts against ${(stoodRate * 100).toFixed(0)}%`)
+      .toBeLessThan(stoodRate * 0.85)
+    // …and it still has to show up in the outcome. Kept as `<=` rather than `<`
+    // precisely because of the ceiling above: two wiped runs are a tie, and a tie
+    // is not evidence that dodging failed, it is evidence that this build loses
+    // either way. The rate above is what carries the invariant.
     expect(moved.lostShare, `moving lost ${(moved.lostShare * 100).toFixed(0)}% against ${(stood.lostShare * 100).toFixed(0)}%`)
-      .toBeLessThan(stood.lostShare)
+      .toBeLessThanOrEqual(stood.lostShare)
   })
 })
 

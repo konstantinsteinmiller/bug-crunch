@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DECLINE_MAX, DECLINE_STEP, challengeFactor, rewardDeclineFactor
+  DECLINE_FREE_THROUGH_STAGE, DECLINE_MAX, DECLINE_STEP, challengeFactor, rewardDeclineFactor
 } from '@/game/survival'
+import { earlyFoeHpMul, earlyPackMul } from '@/game/survival'
+
+describe('the lean waits until the game has stopped teaching', () => {
+  it('starts counting where the onboarding relief lets go', () => {
+    // A tester who skips the ×3 on the first three result screens must not
+    // arrive at the steepest step in the game carrying a hidden 21 %.
+    expect(DECLINE_FREE_THROUGH_STAGE).toBe(6)
+    // Same boundary as the relief curves: the last stage either of them
+    // touches is the last stage the lean stays out of.
+    expect(earlyPackMul(DECLINE_FREE_THROUGH_STAGE)).toBeLessThan(1)
+    expect(earlyPackMul(DECLINE_FREE_THROUGH_STAGE + 1)).toBe(1)
+    expect(earlyFoeHpMul(DECLINE_FREE_THROUGH_STAGE + 1)).toBe(1)
+  })
+})
 
 /**
  * ─── The lean ───────────────────────────────────────────────────────────────

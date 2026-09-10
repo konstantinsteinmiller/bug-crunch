@@ -310,8 +310,25 @@ describe('the autobalancer', () => {
     // 0.055 when this was written and is 0.13 now, and a literal here would
     // have to be chased every time the curve is tuned.
     const { challengeFactor } = await import('@/game/survival')
-    expect(median(hot.map((r) => r.bossHp)) / median(fresh.map((r) => r.bossHp)))
-      .toBeCloseTo(challengeFactor(6), 1)
+    // …and adjusted for the FIREPOWER each probe brought to the arena, which is
+    // new. This build is maxed for stage 10, so the melt floor
+    // (`game/adaptive.ts`) is what prices this boss, and the floor is a function
+    // of the run rather than of the stage: the streak probe arrives with the
+    // same squad but 13 % less DPS (harder enemies cost it crates), so its bar
+    // is 13 % smaller before the handicap is applied at all.
+    //
+    // The handicap itself is untouched, and the arithmetic says so exactly —
+    // measured 1.554 against `1.78 * (8442 / 9671)` = 1.554. Asserting the raw
+    // ratio against `challengeFactor` alone would now be asserting that the bar
+    // ignores the run, which is the property the floor deliberately removes.
+    const dpsRatio = median(hot.map((r) => r.dpsAtBoss)) / median(fresh.map((r) => r.dpsAtBoss))
+    const ratio = median(hot.map((r) => r.bossHp)) / median(fresh.map((r) => r.bossHp))
+    expect(ratio, `streak ratio ${ratio.toFixed(3)}, dps ratio ${dpsRatio.toFixed(3)}`)
+      .toBeGreaterThan(challengeFactor(6) * Math.min(1, dpsRatio) * 0.95)
+    // The upper bound is what stops the floor inventing difficulty of its own:
+    // whichever term binds, the streak may never buy MORE than the handicap.
+    expect(ratio, `streak ratio ${ratio.toFixed(3)}`)
+      .toBeLessThanOrEqual(challengeFactor(6) * 1.05)
     expect(
       median(hot.map((r) => r.lost)),
       'a twelve-clear streak cost the player no more survivors than a cold start'

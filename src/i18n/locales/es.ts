@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': '¡Ataque entrante!',
     'dodge': 'Esquiva',
+    'milestone': '¡{n} en pie!',
     'weaponActive': '{name} listo',
-    'weaponLocked': '{name} bloqueado: {n} de {total} palancas disparadas'
+    'weaponLocked': '{name} bloqueado: {n} de {total} palancas disparadas',
+    'weaponGift': '{name} más adelante: gratis, sin palancas',
+    'weaponFree': 'GRATIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Cajas azules: todos disparan más rápido', 'desktop': 'Cajas azules: todos disparan más rápido' },
     'boss': { 'touch': '¡Mantente fuera del círculo rojo!', 'desktop': '¡Mantente fuera del círculo rojo!' },
     'lever': { 'touch': 'Dispara a las DOS palancas de los bordes: abren la caja de armas', 'desktop': 'Dispara a las DOS palancas de los bordes: abren la caja de armas' },
-    'guard': { 'touch': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!', 'desktop': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!' }
+    'guard': { 'touch': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!', 'desktop': 'Escudo activo: tus disparos no hacen nada. ¡MUÉVETE!' },
+    'cage': { 'touch': 'Dispara a las jaulas: los prisioneros se unen a tu escuadra', 'desktop': 'Dispara a las jaulas: los prisioneros se unen a tu escuadra' },
+    'shieldBox': { 'touch': 'Caja escudo: espera y bloquea un gran golpe', 'desktop': 'Caja escudo: espera y bloquea un gran golpe' }
   },
 
   'flow': {
 
-    'unlocked': '¡Desbloqueado!'
+    'unlocked': '¡Desbloqueado!',
+
+    'guardian': "¡Un ángel de la guarda te ha salvado!",
+
+    'guardianSub': "{n} supervivientes han vuelto",
+
+    'next': "A continuación: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Elige un arma",
+    'nextStage': "siguiente nivel",
+    'stagesAway': "en {n} niveles"
+  },
+  'weaponPick': {
+    'title': "Elige tu arma",
+    'subtitle': "Tuya en el nivel {n}. Hay más esperando en el camino.",
+    'take': "Elegir",
+    'rocket': {
+      'a': "Salva teledirigida",
+      'b': "Daño explosivo"
+    },
+    'gatling': {
+      'a': "Doble cadencia de fuego",
+      'b': "Carga las puertas más rápido"
+    }
+  },
   'result': {
     'stageClear': '¡Nivel superado!',
     'wipedOut': 'Escuadrón aniquilado',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': '¡Mejora tu escuadrón!',
     'rankOf': 'de {n}',
     'upNext': 'A continuación: Nivel {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Compartir partida',
+    'text': 'He llegado al nivel {n} en {game}. ¿Puedes llegar más lejos?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Abrir el cofre por {n} monedas',
     'filling': 'Cofre del tesoro: llenándose',
     'spent': 'Cofre del tesoro: vacío hasta mañana'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Expedición diaria',
+    'hud': 'Expedición',
+    'multiplier': '{n}×',
+    'available': 'Expedición diaria: la ruta de hoy, monedas triples',
+    'confirm': 'Iniciar expedición',
+    'spent': 'Expedición diaria: nueva ruta en {time}',
+    'done': 'Vuelve mañana',
+    'back': 'Volver a la campaña'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Opciones', 'general': 'General', 'audio': 'Audio', 'language': 'Idioma',
     'difficulty': 'Dificultad', 'soundEffects': 'Efectos de sonido', 'music': 'Música', 'musicTrack': 'Pista de música',
     'musicTracks': { 'cozy': 'Armonía acogedora', 'trance': 'Túnel trance' },
+    'haptics': 'Vibración', 'on': 'Activado', 'off': 'Desactivado',
     'close': 'Guardar y cerrar',
     'difficulties': { 'easy': 'Fácil', 'medium': 'Media', 'hard': 'Difícil' },
     'difficultyHints': {

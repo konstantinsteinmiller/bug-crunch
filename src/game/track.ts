@@ -3,6 +3,8 @@ import {
   ROCK_H,
   ROCK_W,
   BOSS_BASE_HP,
+  CAGE_R,
+  CAGE_RESCUE_BASE,
   CRATE_R,
   CROWD_MAX_R,
   GATE3_DIVIDER_X,
@@ -28,7 +30,8 @@ import {
   LEVER_R, LEVER_STAGGER, LEVER_STONE_HP_MUL, LEVER_STONE_LEAD, LEVER_STONE_W,
   LEVER_X, WEAPON_BOX_AHEAD, WEAPON_BOX_R, WEAPON_BOX_X, WEAPON_EVERY,
   WEAPON_GUARD_HALF_W, WEAPON_GUARD_HP_MUL, WEAPON_GUARD_LEAD, WEAPON_STAGE,
-  leverHp, stageHasWeapon, weaponBoxHp, weaponForStage, type WeaponId
+  leverHp, stageHasWeapon, weaponBoxHp, weaponForStage, WEAPON_GIFT_BOX_R,
+  WEAPON_GIFT_ID, WEAPON_GIFT_HP_MUL, type WeaponId
 } from '@/game/weapons'
 
 /**
@@ -94,6 +97,17 @@ export interface GateLeaf {
   halfW: number
   op: GateOp
   value: number
+  /**
+   * How much faster than the stage's `gateTickMs` this door pumps. Absent on
+   * every rolled door. Stage 1's opening doorway sets it so the very first
+   * number a stranger sees visibly races under the crowd's fire — the pump is
+   * the mechanic no comp has, and the old `+2` opener demonstrated it as a
+   * shrug. See `soloGate`.
+   */
+  pumpMul?: number
+  /** A ceiling for this door alone, below `gatePumpCap`. The opener stops at a
+   *  number that reads as a reward, not a glitch. */
+  pumpCap?: number
 }
 
 export type TrackEvent =
@@ -108,6 +122,16 @@ export type TrackEvent =
       /** `gain` overrides the per-kind payout; see `Crate.gain`. */
       crates: Array<{ x: number; kind: CrateKind; hp: number; gain?: number }>
     }
+  /**
+   * Rescue cages. One per event, because a cage is never a ROW — a row of them
+   * would be a wall of free crowd, and the whole beat is one prop on one
+   * shoulder against the door on the other. `hold` is the head count it pays;
+   * see `cageSurvivors`.
+   */
+  | { kind: 'cages'; y: number; cages: Array<{ x: number; hp: number; hold: number }> }
+  /** The auto-shield pickup, on the same terms and for the same reason: one box,
+   *  one shoulder, one decision. See `Bulwark`. */
+  | { kind: 'bulwarks'; y: number; bulwarks: Array<{ x: number; hp: number }> }
   | { kind: 'barricade'; y: number; blocks: Array<{ x: number; w: number; hp: number }> }
   /** Boulders. No `hp` — they cannot be shot, only steered around.
    *  `passage` marks a rib walling one gate off from another; see `passage()`.
@@ -144,6 +168,12 @@ export type TrackEvent =
        *  a stray round. Indexed to match `levers`. See `Stone`. */
       stones: Array<{ x: number; y: number; w: number; hp: number }>
       box: { x: number; y: number; hp: number }
+      /** Half-extent of the box, world units. Omitted means `WEAPON_BOX_R`;
+       *  the stage-2 gift is far bigger — see `WEAPON_GIFT_BOX_R`. */
+      boxR?: number
+      /** Free to open: no levers to pull and no toll for standing on it.
+       *  See `WeaponBox.gift`. */
+      gift?: boolean
       /** Armour over the box, all of it on one line `WEAPON_GUARD_LEAD` in
        *  front of the prize. Deleted wholesale the instant both levers are
        *  pulled — see `unlockPuzzle` in `useSurvivalGame`. */
@@ -281,6 +311,131 @@ export const minRateCrates = (stage: number): number =>
 export const minDamageCrates = (stage: number): number =>
   MIN_DAMAGE_CRATES + Math.floor(Math.max(0, stage - 9) / 10)
 
+// ─── The two roadside prizes ────────────────────────────────────────────────
+//
+// A rescue cage and an auto-shield box. They are authored together and placed
+// by the same rule because they are the same beat with two payloads: ONE prop,
+// on the shoulder OPPOSITE the best leaf of a bank, far enough in front of that
+// bank that going for it means giving up the approach.
+//
+// Neither is ever placed on the centre line, and that is a hard invariant
+// rather than a preference. The campaign's oldest pinned rule is that a run
+// which never touches the screen must not reliably clear the taught stages
+// (`tests/sim/balance.test.ts`), and a crowd holding the middle of the road is
+// exactly what a centred prize would pay. `CAGE_DETOUR_X` is measured against
+// the crowd itself: a full-size crowd is `CROWD_MAX_R` = 1.65 across the
+// radius, so a prop at 2.9 is 1.25 units clear of a crowd sitting dead centre
+// and cannot be collected by accident.
+
+/**
+ * How far off the racing line the two prizes sit.
+ *
+ * Half a unit further out than `CRATE_DETOUR_X`, and the extra half unit is the
+ * whole difference between the two detours. A crate is a shallow swerve the
+ * player takes on the way past; these are a COMMITMENT — at 2.9 a crowd cannot
+ * be lined up on a gate leaf (`GATE_LEAF_X` = 2.3) and touching the prize at
+ * the same time, which is what makes "the cage or the door" a question with
+ * only one answer per run rather than a thing you collect en route.
+ */
+export const CAGE_DETOUR_X = CRATE_DETOUR_X + 0.45
+
+/**
+ * How far IN FRONT of its bank a prize stands.
+ *
+ * The cost of the detour is the approach, so the prize has to sit inside the
+ * stretch of road the player would otherwise be spending on the door — `gateAddBase`'s
+ * note measures that approach at ~2.0 s of in-range fire, which is 10–14 units
+ * at stage speed. Six units back is comfortably inside it and comfortably
+ * outside the bank's own readability band (`gateBandFor` for a crate is ±1.5),
+ * so the prop never draws on top of the numbers it is competing with.
+ */
+export const CAGE_BANK_LEAD = 6
+
+/**
+ * The first stage that carries a cage.
+ *
+ * Stages 1–5 are the authored teaching arc — one idea each — and a sixth object
+ * dropped into them buys nothing a first-time player can use and costs the one
+ * thing those stages are for. Six is the stage the road already uses to start
+ * introducing furniture (`PASSAGE_STAGE`), so a cage arrives with the rest of
+ * the game's vocabulary rather than as an interruption to the tutorial.
+ */
+export const CAGE_STAGE = 6
+
+/**
+ * …and the first stage that carries an auto-shield box.
+ *
+ * Two stages later than the cage, deliberately. The bulwark's whole meaning is
+ * "the next big blow does not land", and a player who has not yet been hit by
+ * one has nothing to attach that promise to. Stage 8 is where the roster's
+ * heavier bodies and the second miniboss arrive (`MINIBOSS_SECOND`,
+ * `PAIR_STAGE`), so it is the first stage on which a big blow is the normal
+ * experience rather than the unlucky one.
+ */
+export const BULWARK_STAGE = 8
+
+/**
+ * What a cage pays, as a share of what a door on the same stage prints.
+ *
+ * ── Why this is a curve and not the roadmap's flat `+5` ──
+ *
+ * Measured, on the real generator, before choosing: `gateAddBase` (what one
+ * ordinary `add` leaf prints) runs 8 / 10 / 13 / 18 / 24 / 41 at stages
+ * 6 / 8 / 12 / 20 / 30 / 60, and `perfectSquadFor` (the crowd a flawless run
+ * carries) runs 234 / 64 / 501 / 896 / 1914 / 2434 over the same stages. A flat
+ * `+5` is therefore 63 % of a door at stage 6 and 12 % of one at stage 60 — a
+ * five-fold decay against the thing it is competing with — while the COST of
+ * taking it (an approach spent off the line) does not decay at all. Against the
+ * crowd it lands in it is worse: 2.1 % at stage 6, 0.21 % at stage 60.
+ *
+ * That is precisely the "decisive at 3, invisible at 30" shape a flat bonus is
+ * warned about, so the number is expressed the way every other payout in this
+ * file already is: against `gateAddBase`, not as a literal. 0.6 of a door is
+ * the ratio the roadmap's own number describes at the stage cages debut —
+ * `gateAddBase(6)` is 8 and 0.6 × 8 rounds to **5** — so the curve does not
+ * change the beat that was specified, it holds it still.
+ *
+ * Six tenths and not more: a cage must never out-pay the door it is standing
+ * next to, because then it is not a detour, it is the correct line.
+ */
+export const CAGE_GATE_SHARE = 0.6
+
+/** Survivors in one cage. Always at least the roadmap's `+5`, which is also
+ *  what the share pays at `CAGE_STAGE` — the floor only ever binds if a future
+ *  pass takes `gateAddBase` below where it is now. */
+export const cageSurvivors = (stage: number): number =>
+  Math.max(CAGE_RESCUE_BASE, Math.round(gateAddBase(stage) * CAGE_GATE_SHARE))
+
+/**
+ * HP of one cage.
+ *
+ * Priced as a HEAVY crate (`CRATE_TIER_SCALE.heavy`), and that is the entire
+ * balance statement: a cage is not free crowd, it is crowd that costs about
+ * twice what a supply box costs, so a run whose damage is behind cannot open it
+ * in the window the approach gives them. Rolled off the damage curve rather
+ * than the rate one because a cage pays neither stat and the cheaper of the two
+ * curves is the honest baseline for a prop that is already the most expensive
+ * thing on the shoulder.
+ *
+ * No tier roll. A crate's tiers exist so a ROW of them reads as a row of
+ * different questions; a cage is always alone, so a tier would be invisible
+ * variance in the one number the player has to judge the detour by.
+ */
+export const cageHp = (stage: number): number =>
+  Math.max(1, Math.round(crateHp(stage, 'damage') * CRATE_TIER_SCALE.heavy))
+
+/**
+ * …and HP of one auto-shield box, at a standard crate's price.
+ *
+ * Cheaper than a cage on purpose, and the asymmetry is the point: the cage is a
+ * QUANTITY (more crowd, priced against the crowd you would otherwise gate for)
+ * and can be gated behind damage, but the bulwark is an INSURANCE, and insurance
+ * a struggling run cannot afford is insurance sold to the players who need it
+ * least. The run most likely to eat a slam it cannot survive is the run with the
+ * least DPS, so the box has to open for them too.
+ */
+export const bulwarkHp = (stage: number): number => crateHp(stage, 'damage')
+
 /**
  * A miniboss is worth about an eighth of the stage's end boss: long enough to
  * be a fight with a shape, short enough that it never becomes the climax.
@@ -329,16 +484,69 @@ export const MINIBOSS_EARLY = 0.8
 export const MINIBOSS_STAGE_THIRD = 20
 
 /**
- * Stage 1's single elite: 40 % of what a normal first miniboss carries.
+ * Stage 1's single elite: four times what a normal first miniboss carries.
  *
  * It is the only enemy on the stage that cannot be walked past, and it stands
  * in for the boss that stage 1 no longer has. The job is to teach "a big one
  * needs a bigger crowd" in a fight the player cannot lose — so it is priced to
- * fall over, not to be a wall. `0.4 x MINIBOSS_FIRST` keeps it expressed as a
- * fraction of the real thing rather than a magic number, so a balance pass on
- * the elites moves the tutorial with them.
+ * be BEATEN, not to be a wall. Expressed as a multiple of `MINIBOSS_FIRST`
+ * rather than as a raw number, so a balance pass on the elites still moves the
+ * tutorial with them.
+ *
+ * ─── It was 0.4, and that number was measured out of date ───────────────────
+ *
+ * At `0.4 x MINIBOSS_FIRST` the body carried 26 hp, and it was reported — from
+ * a real first session — as dying "in 0.25 seconds or so". The simulation says
+ * exactly that. Driven through `tests/game/tutorialPump.test.ts` (the real
+ * `steerOnly` hold, released by the shipping `tickTutorial` clock, seeds
+ * 1000/8919/16838):
+ *
+ *   policy      squad at the elite    dps    time to kill
+ *   average             26            112       0.18 s
+ *   good                26            112       0.23 s
+ *   optimal             47            430       0.53 s
+ *   careless            24            104       0.55 s
+ *
+ * — and every one of those runs finished the whole road having lost NOTHING to
+ * a monster or a box. The last beat before the arena was three frames long.
+ *
+ * Two things had moved out from under the constant.
+ *
+ *   1. THE OPENING DOOR. Stage 1 opens on a solo `+3` that pumps to
+ *      `OPENING_PUMP_CAP` = 10, and the crowd reaches it holding the full ten
+ *      (nine without the tutorial hold — the door caps either way, see below).
+ *      The road's beats were priced for the squad of ~6 that a `+3` produced;
+ *      what actually walks down it is 13 at the teaching wall and 24-47 at the
+ *      elite.
+ *   2. THE BOSS STOPPED BEING A FIXED BAR. `minibossHp` prices this against
+ *      `BOSS_BASE_HP * bossHpScale(1)` — a flat 1000 — but stage 1's boss has
+ *      been sized to the crowd that arrives since `game/adaptive.ts`, and it
+ *      measures 848-2277 in the runs above. So a fraction meant to read as
+ *      "about a quarter of the boss" (see `MINIBOSS_FIRST`) was landing at
+ *      1-3 % of the climax it is supposed to be warming up for.
+ *
+ * Four puts 258 hp on the body, which is 12-22 % of the bar the same run's boss
+ * actually turns out to carry (1151-2180) — back either side of the quarter the
+ * elites were designed around — and measures, same harness, same seeds:
+ *
+ *   policy      time to kill    survivors it costs
+ *   average        1.55 s              0
+ *   good           2.55 s             10
+ *   optimal        2.65 s             10
+ *   careless       2.63 s              1
+ *
+ * …and 1.58-5.30 s for the same four players on a run that never saw the
+ * lightbox, which is the shape that was wanted: the hold hands the player a
+ * head start, and the beat it walks into is now priced for the head start
+ * instead of for the squad of six a bare `+3` used to produce.
+ *
+ * A beat rather than a formality, and the first thing on stage 1 that charges
+ * a player who stands in front of it. It is deliberately still not a wall: the
+ * elite's leash is `ELITE_HOLD_MAX` = 3 s, so even the run that cannot kill it
+ * walks away rather than being stopped, and every policy above still clears the
+ * stage on every seed.
  */
-export const MINIBOSS_TUTORIAL = MINIBOSS_FIRST * 0.4
+export const MINIBOSS_TUTORIAL = MINIBOSS_FIRST * 4
 
 /**
  * Stage 1's boss used to be priced here, as `tutorialBossHp` — three times the
@@ -393,10 +601,11 @@ export const minibossHp = (stage: number, second: boolean, rank?: MinibossRank):
       bossHpScale(stage) *
       MINIBOSS_BOSS_FRACTION *
       MINIBOSS_PREMIUM[rank ?? (second ? 'second' : 'first')] *
-      // Cut again for a beginner, on top of the tutorial rank's own discount.
-      // Applied HERE and not in `bossHpScale`, which minibosses share with the
-      // end boss — the two take different cuts, and folding them together would
-      // make one of the two numbers a lie.
+      // Cut again for a beginner, on top of whatever the rank itself is worth
+      // (`MINIBOSS_TUTORIAL` is a premium rather than a discount now — see the
+      // measurements there). Applied HERE and not in `bossHpScale`, which
+      // minibosses share with the end boss: the two take different cuts, and
+      // folding them together would make one of the two numbers a lie.
       earlyMinibossHpMul(stage)
   )
 
@@ -823,6 +1032,131 @@ export const mulLeaves = (stage: number): number => {
  * a stage gets one, it goes to the widest bank on the road (see `canMulThree`),
  * and everything else that wants a multiplier gets a `×2`.
  */
+/**
+ * ─── Locked pairs ───────────────────────────────────────────────────
+ *
+ * Two banks, one bank-length apart, with a passage rib down the centre line
+ * between them: the door chosen at the first one is the lane run through the
+ * second. One decision covering two banks, taken before reaching either.
+ *
+ * This shape already turns up past stage 42, where `beatGap` has closed to
+ * ~6.4 units and two banks can land back to back on their own. It reads as the
+ * best question the road asks — so it is worth asking earlier, rarely, and
+ * deliberately rather than as a pacing accident.
+ *
+ * The three-leaf bank asks the player to rank three offers across the LANE.
+ * This asks them to rank two offers across TIME, which is a different skill and
+ * a harder one: the second leaf's worth depends on what the first one did to
+ * the crowd, so it cannot be answered by reading the biggest number.
+ */
+export const PAIR_STAGE = 8
+
+/** Past here the road produces this shape by itself (`beatGap` ≤ ~6.5), so the
+ *  generator stops forcing it and stays out of the way. */
+export const PAIR_STAGE_LAST = 41
+
+/**
+ * Odds a rolled bank becomes a pair. Deliberately tiny and almost flat.
+ *
+ * Read it as "per bank the body loop rolls", not per stage: a stage carries
+ * 5–13 of them, and `rollPair` then declines most offers anyway (it needs road
+ * on both sides, a spare multiplier, and no elite in the run-out). Measured
+ * end to end over stages 8–41, this lands a pair on 6 of the 34 — one every
+ * five or six stages, roughly four minutes of play. Rare enough that meeting
+ * one is an event rather than a beat, which is the whole ask.
+ *
+ * For calibration: 0.14 gives 9 stages and 0.18 gives 12, which start to read
+ * as the road's texture rather than as a spike.
+ */
+export const pairChance = (stage: number): number =>
+  stage < PAIR_STAGE || stage > PAIR_STAGE_LAST ? 0 : 0.10
+
+/** At most one per stage, ever. Two locked pairs on one road is not a rarity
+ *  any more, it is the stage's texture. */
+export const maxPairs = (stage: number): number =>
+  stage < PAIR_STAGE || stage > PAIR_STAGE_LAST ? 0 : 1
+
+/**
+ * Distance between the two banks of a pair.
+ *
+ * `MIN_RUN_GAP` is the tightest spacing the generator considers passable
+ * anywhere else, so it is the honest floor here too: the crowd is ~3.3 units
+ * deep, which clears the first bank's band completely before the second one
+ * arrives, and the rib needs ≥3 units of road to read as a wall rather than as
+ * debris (see `passage`). At stage 8's 5.9 u/s that is 0.83 s between the two
+ * decisions, and 0.66 s at stage 40 — under the ~0.25 s of reaction latency an
+ * ordinary player carries plus the time to re-aim, which is exactly why both
+ * doors have to be read on the approach.
+ */
+export const PAIR_GAP = MIN_RUN_GAP
+
+/**
+ * Where the pair's two lanes should be worth the same thing, in survivors.
+ *
+ * The pair is only a decision if the right answer DEPENDS on the crowd — a
+ * gamble lane that is always better is not a question, it is a tax on reading.
+ * So the two lanes are authored to cross over at a squad the player plausibly
+ * has: measured with the `average` policy, an ordinary run peaks around 50–130
+ * survivors across stages 12–40 and carries roughly half that at a mid-road
+ * bank. Three bank-payouts lands inside that band at every stage in range.
+ */
+export const PAIR_CROSSOVER_BANKS = 3
+
+/**
+ * The two lanes of a pair.
+ *
+ * Lane GAMBLE pays a bill and then multiplies: `(c − S) × 2`.
+ * Lane STEADY takes two adds:                  `c + P + Q`.
+ *
+ * They are equal at `c* = 2S + P + Q`, which is the number this solves for.
+ * Below it the steady lane wins, above it the gamble does, and the player has
+ * to know which side of it their own squad is on — with one bank's worth of
+ * road to work it out. That is the whole feature: a pair whose gamble lane is
+ * always better is not a decision, it is a reading test.
+ *
+ * At stage 22 (`gateAddBase` 20) it prints `−10 then ×2` against
+ * `+22 then +18` — equal at 60 survivors, so a squad of 45 should take the adds
+ * and a squad of 90 should take the bill. The printed multiplier opens at
+ * `gateMulOpen(2)` = 1.6 and pumps toward 2 under fire, so the real crossing is
+ * a BAND from ~100 down to 60 rather than a point, which is if anything better:
+ * shooting the door is what moves it.
+ *
+ * ⚠ WHY THE FIRST ADD IS THE BIG ONE, and why it is floored at `base + 2`.
+ *
+ * `legalise` rule 5 — "a hostile door needs something worth crossing the lane
+ * for beside it" — sees ONE bank at a time. The pair's first bank is `−S`
+ * beside an add, so if that add scores under `gateAddBase` the rule grows it to
+ * `base + 2` and the authored crossover quietly moves: asking for `+8` at
+ * stage 22 produced `+22` on the road and shifted the crossing from 60 to 74.
+ *
+ * The rule is right about ordinary banks and wrong about this one — here the
+ * thing worth crossing for is on the NEXT bank, and a lane is the offer rather
+ * than a door. But it is a safety rule, and the cost of exempting the pair from
+ * it is a `−S` with nothing beside it on any road where the second bank fails
+ * to materialise. So the shape obeys the rule instead of dodging it: the steady
+ * lane's larger add goes on the FIRST bank, where it has to clear the floor,
+ * and the smaller one on the second, where no hostile door means rule 5 never
+ * looks. The player is committed by then anyway — past the rib, the second
+ * bank's two doors are the CONSEQUENCES of the choice, not a fresh one — so
+ * nothing is lost by the second add being the modest half.
+ */
+export const pairOffers = (stage: number): {
+  bill: number; mul: number; first: number; second: number; crossover: number
+} => {
+  const base = gateAddBase(stage)
+  const target = PAIR_CROSSOVER_BANKS * base
+  // A sixth of the target, i.e. half a bank's payout: big enough that paying it
+  // hurts a small squad, small enough that the adds either side of it stay
+  // legible as real doors rather than as consolation.
+  const bill = Math.max(2, Math.round(target / 6))
+  const adds = Math.max(4, target - 2 * bill)
+  // Floored at `base + 2` for rule 5 (see above); otherwise a shade over half,
+  // so the pair front-loads its steady lane and the second door still pays.
+  const first = Math.max(base + 2, Math.round(adds * 0.55))
+  const second = Math.max(1, adds - first)
+  return { bill, mul: 2, first, second, crossover: 2 * bill + first + second }
+}
+
 export const mulThrees = (stage: number): number => {
   // Same reasoning as `mulLeaves`, one step behind it: the biggest multiplier
   // on a stage should stay rare, but "exactly one, forever" made it rarer every
@@ -943,6 +1277,31 @@ interface Beat {
    *  still be a `×3`. */
   mulLeft: number
   mulThreeLeft: number
+  /** Locked gate pairs the stage may still print. See `maxPairs`. */
+  pairsLeft: number
+  /**
+   * A SEPARATE stream for the pair's own coin flips, and it has to be separate.
+   *
+   * The roll sits in the body loop and is asked on every iteration of every
+   * stage, so drawing it from `rng` would advance the main stream one extra
+   * step per beat — which re-rolls the entire campaign, on every stage, whether
+   * or not a pair is ever placed. Measured: it moved a third trap onto stage 50
+   * and pushed stage 114's weapon box past the 95 % line, neither of which has
+   * anything to do with this feature. A private stream keeps the diff to the
+   * stages that actually get a pair.
+   */
+  pairRng: () => number
+  /**
+   * …and a THIRD stream, for the two roadside prizes, for the same reason.
+   *
+   * `placeRescues` runs after the body but BEFORE `clearGateBands` and
+   * `placeWeaponPuzzle`, both of which draw from `rng`. Every coin flip it made
+   * on the shared stream would therefore shift the weapon puzzle and the band
+   * sweep on every stage from `CAGE_STAGE` on — a cage placed on stage 6 would
+   * silently re-author stage 6's puzzle, which is a change nobody asked for and
+   * nobody could attribute. A private stream keeps the diff to the prop itself.
+   */
+  prizeRng: () => number
   /** Three-leaf banks the stage may still print, and how many it has. */
   triplesLeft: number
   triplesPlaced: number
@@ -1397,10 +1756,13 @@ const bank = (b: Beat, y: number, ...specs: LeafSpec[]): void => {
   // it: on a two-leaf bank the usable strip is [0.55, 4.35] and the safe aiming
   // band is [2.20, 2.70], half a unit wide around the painted centre at 2.30.
   // On a three-leaf bank the pillars at ±1.58 reach to ±[1.03, 2.13], leaving
-  // [2.13, 3.99] for an outer door — 1.86 wide, which is exactly twice
-  // `funnelRadius(GATE3_LEAF_HALF)`. Reason about the CONTACT widths here, not
-  // the drawn ones: doing it the other way round is what made `MIN_RUN_GAP` too
-  // small the first time.
+  // [2.13, 4.49] for an outer door and [-1.03, 1.03] for the middle one — both
+  // wider than `2 * funnelRadius(GATE3_LEAF_HALF)` (1.86), so all three doors
+  // have a real safe band rather than a single passable line. Reason about the
+  // CONTACT widths here, not the drawn ones: doing it the other way round is
+  // what made `MIN_RUN_GAP` too small the first time, and it is what hid a
+  // zero-width outer door behind a painted centre that looked fine (see
+  // `GATE3_LEAF_X`).
   const xs: readonly number[] = triple
     ? [-GATE3_LEAF_X, 0, GATE3_LEAF_X]
     : [-GATE_LEAF_X, GATE_LEAF_X]
@@ -1468,11 +1830,31 @@ const bank = (b: Beat, y: number, ...specs: LeafSpec[]): void => {
  * One wide door has neither problem. The choice arrives at the second bank,
  * with a pillar, once there are survivors to lose and a reason to care.
  */
-const soloGate = (b: Beat, y: number, value: number): void => {
+/**
+ * The opening doorway's pump, and where it stops.
+ *
+ * At stage 1's tick (500 ms) a door 9 units out is in range for ~1.8 s of
+ * approach — three ticks, `+3` to `+6`, which is not a spectacle. At 2.6× it
+ * ticks every ~190 ms: `+3` races to the cap inside the approach, the ladder
+ * climbs seven notes, and the first thing the game shows a stranger is the one
+ * thing it does that nothing else does. The cap keeps it a reward rather than a
+ * number that runs away from the player, and keeps the crowd it hands over —
+ * thirteen survivors — inside what stage 1 was priced against.
+ */
+export const OPENING_PUMP_MUL = 2.6
+export const OPENING_PUMP_CAP = 10
+/** Where the opening doorway stands. INSIDE the first screen (~13.7 units of
+ *  road are visible), so it is already on view — and already being shot at —
+ *  while the controls lightbox holds the road for a first-time player. */
+export const OPENING_GATE_Y = 9
+
+const soloGate = (
+  b: Beat, y: number, value: number, pump?: { pumpMul: number; pumpCap: number }
+): void => {
   b.events.push({
     kind: 'gates',
     y: r2(y),
-    leaves: [{ x: 0, halfW: LANE_HALF, op: 'add', value }],
+    leaves: [{ x: 0, halfW: LANE_HALF, op: 'add', value, ...(pump ?? {}) }],
     dividers: []
   })
 }
@@ -1669,6 +2051,85 @@ const rollBank = (b: Beat, y: number): void => {
       ? mul(canMulThree(b, false) && b.rng() < 0.35 ? 3 : 2)
       : add(base + 3 + Math.floor(b.rng() * 3))
   bank(b, y, side ? pumpable : other, side ? other : pumpable)
+}
+
+
+/**
+ * Two banks the player commits to as ONE decision.
+ *
+ * Bank A at `y`, bank B at `y + PAIR_GAP`, and a passage rib down the centre
+ * line between them so the door taken at A is the lane run through B. The
+ * offers are the two lanes of `pairOffers`, mirrored at random so the gamble is
+ * not always the same side of the road:
+ *
+ *     gamble lane   −S    then   ×2
+ *     steady lane   +P    then   +Q
+ *
+ * Returns false without touching the road if the pair cannot be laid honestly,
+ * and the caller falls back to an ordinary bank. Every one of those guards is
+ * load-bearing:
+ *
+ *   • the stage's multiplier budget must be able to pay for the `×2`. If
+ *     `legalise` rule 3 degrades it to an add, both lanes become adds and the
+ *     crossover — the entire point — silently stops existing;
+ *   • the bill must be past `SUB_EARLIEST`, or `bank()` rewrites it to an add
+ *     for the same reason, and past `MUL_EARLIEST` so the multiplier is worth
+ *     something to the crowd that meets it;
+ *   • and both banks need clear road, because a boulder or a crate landing
+ *     between them is a third obstacle inside a window that is already too
+ *     short to react in.
+ */
+const rollPair = (b: Beat, y: number): boolean => {
+  if (b.pairsLeft <= 0) return false
+  // TWO, not one: the pair may take a multiplier but never the stage's LAST
+  // one. `legalise` rule 3 degrades a `×N` it cannot pay for into an add, and
+  // the bank most likely to be standing behind the pair is a three-leaf one —
+  // which then prints `add | add | add` and stops being three different
+  // questions at all. Measured: stage 17's pair at y=242 emptied the budget and
+  // the triple at y=257 came out `+19 | +20 | +25`. Same reasoning as
+  // `tripleReserve`: a spike may not eat the road's vocabulary on its way past.
+  if (b.mulLeft < 2) return false
+  const second = y + PAIR_GAP
+  // Past the arena the road belongs to the boss run-in, and the closing bank is
+  // written at `arenaY − 12`; a pair has to clear both.
+  if (second > b.arenaY - 16) return false
+  // `SUB_EARLIEST` (0.33) is enforced inside `bank()` and `MUL_EARLIEST` (0.35)
+  // is what makes the multiplier worth taking. Ask for both, off the FIRST
+  // bank, since that is the one carrying the bill.
+  if (y <= b.arenaY * Math.max(SUB_EARLIEST, MUL_EARLIEST)) return false
+  if (bankWouldCrowd(b, y) || bankWouldCrowd(b, second)) return false
+  // An elite planted just past the pair turns a committed lane into a scramble
+  // — the same complaint `fillGateGaps` makes, over the whole pair's length.
+  if (b.events.some((e) => e.kind === 'miniboss' && e.y - y >= 0 && e.y - y < MINIBOSS_LEAD + PAIR_GAP)) {
+    return false
+  }
+
+  const o = pairOffers(b.stage)
+  const gambleLeft = b.pairRng() < 0.5
+
+  // The passage counter is HELD OFF across both banks, not merely restored
+  // afterwards. `bank()` decrements it and lays a rib the moment it reaches
+  // zero, so saving the value and putting it back leaves the rib already on the
+  // road — measured: stage 41 printed ten ribs in the gap instead of five,
+  // `bank()`'s and this function's stacked on the same centre line. Parking it
+  // out of reach first is what actually stops that.
+  //
+  // Restoring the original value afterwards is deliberate: a pair already IS a
+  // corridor, so it should not also spend the budget that the next ordinary
+  // bank is owed a rib from.
+  const passageIn = b.passageIn
+  b.passageIn = Number.MAX_SAFE_INTEGER
+  bank(b, y, ...(gambleLeft ? [sub(o.bill), add(o.first)] : [add(o.first), sub(o.bill)]))
+  bank(b, second, ...(gambleLeft ? [mul(o.mul), add(o.second)] : [add(o.second), mul(o.mul)]))
+  b.passageIn = passageIn
+
+  // The rib. Laid from the SECOND bank backwards over the gap, which is
+  // `passage()`'s own direction — it stops 0.6 short of the door it guards and
+  // the `back` argument keeps it off the first bank's plate.
+  passage(b, second, PAIR_GAP - 0.7)
+
+  b.pairsLeft--
+  return true
 }
 
 // ─── Barricades ─────────────────────────────────────────────────────────────
@@ -2070,6 +2531,39 @@ const bait = (b: Beat, y: number, trapOnRight: boolean): void => {
   coinTrail(b, y + 2.2, side * 0.55, side, 3, 1.3)
 }
 
+/** One rescue cage, on a shoulder. See `placeRescues` for where. */
+const cage = (b: Beat, y: number, x: number): void => {
+  b.events.push({
+    kind: 'cages',
+    y: r2(y),
+    cages: [{
+      x: clampX(x),
+      // Depth-priced exactly as a crate is: the crowd is built on the road, so
+      // a prop at the far end meets a much bigger squad than one at the near
+      // end and has to cost more to stay the same decision. See
+      // `crateDepthFactor`.
+      hp: Math.max(1, Math.round(
+        cageHp(b.stage) * crateDepthFactor(y / Math.max(1, b.arenaY), b.stage)
+      )),
+      hold: cageSurvivors(b.stage)
+    }]
+  })
+}
+
+/** One auto-shield box, on a shoulder. */
+const bulwarkBox = (b: Beat, y: number, x: number): void => {
+  b.events.push({
+    kind: 'bulwarks',
+    y: r2(y),
+    bulwarks: [{
+      x: clampX(x),
+      hp: Math.max(1, Math.round(
+        bulwarkHp(b.stage) * crateDepthFactor(y / Math.max(1, b.arenaY), b.stage)
+      ))
+    }]
+  })
+}
+
 /** One elite body, announced in the HUD, worth real coins. */
 const miniboss = (b: Beat, y: number, rank: MinibossRank): void => {
   const roster = foeRoster(b.stage)
@@ -2117,9 +2611,18 @@ const miniboss = (b: Beat, y: number, rank: MinibossRank): void => {
  * stage 2.
  */
 const stageOne = (b: Beat): void => {
-  // A clear opening. Nothing at all for fifteen units: a crowd runner has to let
-  // the player notice the crowd follows their thumb before it asks for anything.
-  soloGate(b, 15, 2)
+  // The opening doorway, INSIDE the first screen and pumping hot.
+  //
+  // It stood at 15 — just above the top of the screen — behind fifteen units
+  // of nothing, "so the player notices the crowd follows their thumb before
+  // the road asks for anything". The controls lightbox now guarantees exactly
+  // that before the road moves at all, which left the void doing only one
+  // thing: putting a black, empty lane and three people behind the first
+  // instruction a stranger ever reads. So the door is in view from the first
+  // frame, the crowd is already shooting it while the lightbox is up, and the
+  // number races (`OPENING_PUMP_MUL`) — the first thing the game shows is the
+  // one thing it does that nothing else does.
+  soloGate(b, OPENING_GATE_Y, 3, { pumpMul: OPENING_PUMP_MUL, pumpCap: OPENING_PUMP_CAP })
 
   // ── The first pickup in the game, and the one lesson it has to land ──
   //
@@ -2267,6 +2770,66 @@ const stageTwo = (b: Beat): void => {
 
   barricadeRow(b, 78, 2)
   // (miniboss lands at ~55 % — see `placeMinibosses`)
+
+  // ── The gift: a weapon box with the puzzle taken off it ──
+  //
+  // The first weapon box a player ever meets, and it is free. No levers, no
+  // cover, no armour — just the prize, on the centre line, at 40 % of the road's
+  // width. The earned version arrives on stage 4 and every other stage after
+  // (`stageHasWeapon`); this is the one that teaches what the thing IS, so that
+  // the levers on stage 4 read as a lock on something known rather than as two
+  // posts with no explanation.
+  //
+  // ⚠ IT SITS AFTER THE ELITE, and that is not a layout preference.
+  //
+  // The gift was at y = 77 first — mid-road, in the widest clear stretch the
+  // stage has — and it broke a rule the campaign is built on: a run that never
+  // touches the screen must not clear the taught stages RELIABLY (see
+  // `balance.test.ts`, "walks the taught stages and is stopped by the game"). A
+  // box this wide on the centre line is, by construction, exactly where a crowd
+  // that never steers already is, so a no-input run collected a free gatling
+  // — and stage 2's careless clear rate went from about a quarter to 3 of 3.
+  //
+  // The miniboss at ~91 is what stops those runs, so the fix is to hand the
+  // prize over AFTER it: the elite still has to be met on the squad's own gun,
+  // and the weapon is what the player carries into the closing bank and the
+  // boss. Measured, that puts the clear rate back under the line.
+  //
+  // y = 113 is the middle of the 104 → 122 gap, the widest clear stretch left
+  // once the elite has had its road: 7.2 units either side, nothing to nudge.
+  //
+  // Nothing here is lethal, which is the whole reason it can exist this early:
+  // the box grinds a trickle off a crowd that ploughs into it (`grindAgainst`,
+  // priced as a crate) and hands the weapon over when it breaks.
+  //
+  // ⚠ AND IT IS AN OPEN BOX, which is a rule about this beat and not about the
+  // mechanic. `gift: true` no longer only means "no toll to stand on it": it
+  // means the box spawns UNLOCKED, wears its lid thrown back and the gun lifted
+  // out of it, and is shootable from the moment it is on screen. The full
+  // argument — including why the stage-4 puzzle box deliberately stays shut —
+  // is on `WeaponBox.locked`, but the part that belongs to the LAYOUT is this:
+  // the position above buys the beat its fairness (after the elite, in the one
+  // clear stretch left), and the position is worthless if the player cannot
+  // tell what the object is until they are on top of it. A closed box at y=113
+  // asks "gamble on a crate"; an open one asks "is a gatling worth the line you
+  // are on", and only the second question is answerable at the 13.68 units of
+  // road the camera actually shows.
+  b.events.push({
+    kind: 'weapon',
+    y: 113,
+    weapon: WEAPON_GIFT_ID,
+    levers: [],
+    stones: [],
+    box: { x: 0, y: 113, hp: Math.max(1, Math.round(weaponBoxHp(b.stage) * WEAPON_GIFT_HP_MUL)) },
+    boxR: WEAPON_GIFT_BOX_R,
+    gift: true,
+    // No armour. `stepWeaponBoxes` unlocks a box the moment nothing is covering
+    // it, so an empty guard list opens this one as soon as it is on screen —
+    // the same code path the earned puzzle takes when a crowd chews through the
+    // plates instead of pulling the levers.
+    guardY: 113,
+    guards: []
+  })
 
   crates(b, 86, 'rate', [CRATE_DETOUR_X + 0.4])
   pincer(b, 94, 'creep', 1)
@@ -2652,7 +3215,19 @@ const stageTwelve = (b: Beat): void => {
   bank(b, A * 0.16, add(base + 1), add(base + 3))
   passage(b, A * 0.16, 15)
   boulderField(b, A * 0.28, 4)
-  bank(b, A * 0.4, add(base + 2), add(base + 4))
+  // THE PAIR'S TEACHING BEAT, and the only one in the authored campaign.
+  //
+  // Stages 1-15 are hand-written, so `proceduralBody`'s roll never reaches
+  // them — without this the mechanic simply would not exist below stage 16.
+  // It goes HERE because this bank was `+14 | +16`: two adds, the bigger one
+  // always right, the single weakest question on the road. Trading it for a
+  // locked pair costs the stage nothing it was using and gives the maze's
+  // navigational idea a decision-shaped sibling.
+  //
+  // `rollPair` validates its own road and returns false if it cannot be laid
+  // honestly, so the original bank stays the fallback rather than the stage
+  // losing a beat.
+  if (!rollPair(b, A * 0.4)) bank(b, A * 0.4, add(base + 2), add(base + 4))
 
   horde(b, A * 0.5, 'husk', packSize(12) + 2)
   bank(b, A * 0.62, add(base + 3), div(2), add(base + 4))
@@ -3028,11 +3603,19 @@ const proceduralBody = (b: Beat): void => {
       bait(b, b.y, b.rng() < 0.5)
       b.y += 8
     } else {
-      rollBank(b, b.y)
+      // A locked pair, very rarely, in place of the ordinary bank — and it has
+      // to be TRIED before `rollBank`, because it needs two clear stretches of
+      // road and `rollBank` would already have written a bank into the first.
+      // It declines itself whenever the road cannot carry one honestly.
+      const paired = b.pairRng() < pairChance(b.stage) && rollPair(b, b.y)
+      if (paired) b.y += PAIR_GAP
+      else rollBank(b, b.y)
       // Coins: still dopamine, now also a claim about the bank they run into —
       // usually true, occasionally not (`trailTruth`). Laid across the gap TO
-      // the bank rather than eating a beat of their own.
-      if (b.rng() < 0.55) trailInto(b, b.y, from)
+      // the bank rather than eating a beat of their own. A pair gets none: the
+      // trail points at ONE door, and the whole question here is which of two
+      // compound lanes is worth more to the squad the player is carrying.
+      if (!paired && b.rng() < 0.55) trailInto(b, b.y, from)
     }
   }
 }
@@ -3935,15 +4518,32 @@ const WEAPON_SLOT_ORDER: readonly WeaponSlotId[] = [
 ]
 
 /**
+ * Where the eight-long rotation starts: the SECOND puzzle stage.
+ *
+ * Anchored here rather than at `WEAPON_STAGE`, and the reason is that the
+ * campaign's first puzzle moved (6 → 4) after the rotation had been tuned
+ * against every road to stage 120. Re-phasing the whole rotation by one deal
+ * re-rolled which slot every later road gets, and two of them — 72 and 74 —
+ * then landed within a tenth of the road of each other, which is the exact
+ * repeat the order exists to prevent. Keeping the anchor where the rotation
+ * was measured means every road from stage 6 deals the slot it always did.
+ */
+export const WEAPON_ROTATION_FROM = WEAPON_STAGE + WEAPON_EVERY
+
+/** The slot the campaign's first puzzle takes — see `weaponSlotIdFor`. */
+export const WEAPON_FIRST_SLOT: WeaponSlotId = 'early'
+
+/**
  * Which slot this stage's puzzle aims for.
  *
- * The FIRST puzzle in the campaign — `WEAPON_STAGE`, and the only one below 8 —
- * takes the head of the order, which is MID on purpose. A player meeting the
- * beat for the first time has to be able to read it: the midpoint is where the
- * road is calmest, where the two halves of the puzzle are most likely to be on
- * screen together, and where a miss is cheapest to learn from. Variety is for
- * the player who already knows what a lever is, which is why the rotation
- * proper starts at stage 8.
+ * The FIRST puzzle in the campaign — `WEAPON_STAGE` — is pinned EARLY. The
+ * banner that opened the stage promised a weapon on the road, and a promise
+ * kept inside the first ten seconds is what makes the next promise on the
+ * ladder believable; the opening fifth of a road is also its calmest stretch,
+ * where the two halves of the beat are most likely to be on screen together
+ * and a miss is cheapest to learn from. Variety is for the player who already
+ * knows what a lever is, which is why the rotation proper starts one stage on
+ * (`WEAPON_ROTATION_FROM`), at the head of the order.
  *
  * A pure function of the stage number, like everything else on this road: the
  * point is that stage 20's prize is somewhere DIFFERENT from stage 18's, not
@@ -3951,8 +4551,9 @@ const WEAPON_SLOT_ORDER: readonly WeaponSlotId[] = [
  * the retry and can plan the sweep for it.
  */
 export const weaponSlotIdFor = (stage: number): WeaponSlotId => {
-  const n = Math.floor((stage - WEAPON_STAGE) / WEAPON_EVERY)
-  return WEAPON_SLOT_ORDER[n <= 0 ? 0 : n % WEAPON_SLOT_ORDER.length]!
+  if (stage < WEAPON_ROTATION_FROM) return WEAPON_FIRST_SLOT
+  const n = Math.floor((stage - WEAPON_ROTATION_FROM) / WEAPON_EVERY)
+  return WEAPON_SLOT_ORDER[n % WEAPON_SLOT_ORDER.length]!
 }
 
 const weaponSlotFor = (stage: number): WeaponSlot => WEAPON_SLOTS[weaponSlotIdFor(stage)]
@@ -4064,7 +4665,227 @@ const placeWeaponPuzzle = (b: Beat): void => {
   })
 }
 
-export const buildTrack = (stage: number): Track => {
+// ─── The roadside prizes ────────────────────────────────────────────────────
+
+/**
+ * Clear road either side of the weapon puzzle before a prize may stand there.
+ *
+ * Three units is the crowd's own depth plus the prop's — enough that the player
+ * finishes reading one beat before the next prop enters the frame, and small
+ * enough that it does not sterilise a fifth of the road on every stage that
+ * carries a puzzle (a flat ±10 around the puzzle's first lever did exactly
+ * that, and cost stage 8 its cage).
+ */
+const PRIZE_PUZZLE_BERTH = 3
+
+/** Every gate bank on the finished road, in the order the crowd meets them. */
+const banksOf = (b: Beat): Array<Extract<TrackEvent, { kind: 'gates' }>> =>
+  b.events
+    .filter((e): e is Extract<TrackEvent, { kind: 'gates' }> => e.kind === 'gates')
+    .sort((p, q) => p.y - q.y)
+
+/**
+ * The shoulder a prize takes, given the bank it is arguing with.
+ *
+ * Always the side AWAY from the leaf the bank wants the player on — ranked with
+ * `offerScore`, the same crude ordering the coin trails use, so the prop and the
+ * trail can never disagree about which door is the good one. A three-leaf bank
+ * whose best offer is the middle door has no "away" side, so it flips a coin
+ * (from the private stream); either shoulder is equally a detour from the
+ * centre line.
+ */
+const prizeSideFor = (b: Beat, bank: Extract<TrackEvent, { kind: 'gates' }>): -1 | 1 => {
+  let bestX = 0
+  let best = Number.NEGATIVE_INFINITY
+  for (const leaf of bank.leaves) {
+    const score = offerScore(b.stage, { op: leaf.op, value: leaf.value })
+    if (score > best) {
+      best = score
+      bestX = leaf.x
+    }
+  }
+  if (bestX === 0) return b.prizeRng() < 0.5 ? -1 : 1
+  return bestX > 0 ? -1 : 1
+}
+
+/**
+ * Nothing may already be standing where a prize wants to stand.
+ *
+ * Checked against the things a player has to READ or SHOOT and not against the
+ * whole event list, because a prize sharing a stretch of road with a pack of
+ * foes is fine — the crowd shoots through them — while one drawn half behind a
+ * gate curtain, or sat on top of a supply crate, is the readability bug
+ * `nudgeClearOfCrates` and `gateBandFor` already exist to prevent.
+ */
+const prizeSpotFree = (b: Beat, y: number, x: number): boolean => {
+  for (const e of b.events) {
+    switch (e.kind) {
+      case 'gates': {
+        const [lo, hi] = gateBandFor(b.stage, e.y, 'crates')
+        if (y + CAGE_R > lo && y - CAGE_R < hi) return false
+        break
+      }
+      case 'crates':
+        if (e.crates.some((c) => Math.hypot(c.x - x, e.y - y) < CRATE_CLEAR)) return false
+        break
+      case 'cages':
+        if (e.cages.some((c) => Math.hypot(c.x - x, e.y - y) < CRATE_CLEAR)) return false
+        break
+      case 'bulwarks':
+        if (e.bulwarks.some((c) => Math.hypot(c.x - x, e.y - y) < CRATE_CLEAR)) return false
+        break
+      case 'barricade':
+      case 'rocks':
+        // A row spans the road, so it clashes wherever the prize sits: a prop
+        // tucked immediately behind a wall is a prop the player cannot see
+        // until they have already committed to the lane it is in.
+        if (Math.abs(e.y - y) < CRATE_CLEAR) return false
+        break
+      case 'weapon': {
+        // The whole puzzle, treated as ONE body from its first stone to its
+        // prize — which is how the player reads it, and why the berth is its
+        // real span rather than a flat radius around the event's `y` (that `y`
+        // is only the first lever, so a flat radius is wrong at both ends at
+        // once: too wide behind it, too narrow in front of the box fourteen
+        // units later).
+        //
+        // The reason it needs a berth at all is columns. `clearPuzzleColumns`
+        // empties the three firing lanes of scenery precisely so the levers can
+        // be shot, and a prize at `CAGE_DETOUR_X` = 2.9 sits within a body's
+        // width of the prize box's own lane (`WEAPON_BOX_X` = 2.6). A prop that
+        // eats the rounds aimed at a puzzle makes the beat unsolvable for a
+        // reason nothing on screen explains.
+        let lo = Math.min(e.y, e.guardY, e.box.y)
+        let hi = Math.max(e.y, e.guardY, e.box.y)
+        for (const lv of e.levers) { lo = Math.min(lo, lv.y); hi = Math.max(hi, lv.y) }
+        for (const st of e.stones) { lo = Math.min(lo, st.y); hi = Math.max(hi, st.y) }
+        if (y > lo - PRIZE_PUZZLE_BERTH && y < hi + PRIZE_PUZZLE_BERTH) return false
+        break
+      }
+      default:
+        break
+    }
+  }
+  return true
+}
+
+/**
+ * Place the stage's rescue cage and its auto-shield box.
+ *
+ * ── The rule, in one sentence ──
+ *
+ * One prop, `CAGE_BANK_LEAD` in front of a bank, on the shoulder opposite that
+ * bank's best door — so the player cannot take it and be lined up on the door
+ * as well, and the price of the prize is the approach they gave up for it.
+ *
+ * ── Why it is a pass and not a beat ──
+ *
+ * `proceduralBody` only authors stages 16 and up; stages 1–15 are hand-shaped,
+ * and the campaign's pinned invariants live in there. Writing the prizes as a
+ * pass over the FINISHED road is what lets them exist from stage 6 without a
+ * single edit to a hand-authored stage: the bank they attach to is whichever
+ * bank that stage already wrote, and everything the generator arranged around
+ * it is untouched. It also means the rule is stated once instead of being
+ * copied into ten stage functions that would drift.
+ *
+ * ── Which banks are off limits ──
+ *
+ * The FIRST bank of a stage, because a stage's opening line is "choose" and the
+ * first time it is said there must be nothing else on screen; and the CLOSING
+ * bank, because the run-in to the arena is the biggest question on the road and
+ * a prize beside it would be answering a different one. Both are ruled out by
+ * construction (`slice(1, -1)`) rather than by a y test, so a stage that grew a
+ * filler bank still protects the right two.
+ */
+const placeRescues = (b: Beat): void => {
+  if (b.stage < CAGE_STAGE) return
+  const usable = banksOf(b).slice(1, -1)
+  if (usable.length === 0) return
+
+  const taken = new Set<Extract<TrackEvent, { kind: 'gates' }>>()
+
+  /**
+   * The bank nearest `at` (a fraction of the road) that can actually carry a
+   * prize, searched only inside `[lo, hi]` of the road.
+   *
+   * The WINDOW is the important half. Walking outward from the preferred bank
+   * and taking the first legal one sounds like graceful degradation and is not:
+   * measured across stages 1–60, it put stage 10's shield box at 25 % of the
+   * road, because every bank in the late half happened to be blocked and the
+   * nearest legal one was back at the start. A pickup whose entire design is
+   * "carry it into the arena" is worth nothing at 25 %, and a placement that
+   * silently becomes a different beat is worse than no placement at all. So the
+   * search is bounded and a stage that cannot honour the window simply does not
+   * get that prize.
+   *
+   * The LEAD is what flexes instead. Three offsets are tried in order — the
+   * authored one first, then a little further out, then a little closer — which
+   * all sit inside the ~2 s approach the lead is measured against, so a prize
+   * that has to move is still competing with the same door.
+   */
+  const place = (
+    at: number, lo: number, hi: number, put: (y: number, x: number) => void
+  ): void => {
+    const want = b.arenaY * at
+    const order = usable
+      .filter((e) => !taken.has(e) && e.y >= b.arenaY * lo && e.y <= b.arenaY * hi)
+      .sort((p, q) => Math.abs(p.y - want) - Math.abs(q.y - want))
+    for (const bank of order) {
+      const x = prizeSideFor(b, bank) * CAGE_DETOUR_X
+      for (const lead of [CAGE_BANK_LEAD, CAGE_BANK_LEAD + 2.5, CAGE_BANK_LEAD - 1.5, CAGE_BANK_LEAD + 5]) {
+        const y = bank.y - lead
+        // Never in the stage's opening stretch: the first twenty units are the
+        // player finding the road, and a detour offered there is offered before
+        // there is anything to detour FROM.
+        if (y < 20) continue
+        if (!prizeSpotFree(b, y, x)) continue
+        put(y, x)
+        taken.add(bank)
+        return
+      }
+    }
+  }
+
+  // The cage sits a little before the middle: far enough in that the crowd it
+  // pays is worth something against the doors still to come, early enough that
+  // the player has the rest of the stage to spend it.
+  //
+  // Its window STOPS where the shield box's begins, and the two do not overlap
+  // by design. They used to, and on a stage with only two eligible banks the
+  // cage took the late one first and the box — the prize with the tighter
+  // requirement — was left with nothing: stage 8, the very stage the box
+  // debuts on, shipped without one. Disjoint windows mean the two prizes can
+  // never bid against each other for the same door.
+  place(0.4, 0.2, 0.52, (y, x) => cage(b, y, x))
+  // The shield box sits late, and that placement IS the pickup's design: it is
+  // insurance against the boss, so it has to be bought within sight of the
+  // arena. Any earlier and the absorb is spent on a road hazard long before the
+  // fight it was for — which is why its window starts past the middle and stops
+  // short of the closing bank rather than degrading toward the start.
+  if (b.stage >= BULWARK_STAGE) place(0.74, 0.55, 0.92, (y, x) => bulwarkBox(b, y, x))
+}
+
+/**
+ * @param stage  Which rung of the curve the road is priced at — every knob in
+ *   this file (`packSize`, `gateAddBase`, `maxTriples`, the hand-authored
+ *   dispatch below) reads THIS and nothing else.
+ * @param seed   Which road that rung prints. Defaults to `stage`, so every
+ *   existing call site is byte-identical to what it built before this
+ *   parameter existed and a campaign stage stays learnable.
+ *
+ * The two are separate for exactly one caller: the daily expedition, which is
+ * a fixed rung (`EXPEDITION_STAGE`) with the date as its seed — the same road
+ * for every player on the same UTC day, at a difficulty that does not depend on
+ * how far that player has got. Passing `YYYYMMDD` as the STAGE, which is what
+ * the roadmap line literally suggested, would have priced the road at stage
+ * twenty million.
+ *
+ * Both RNG streams take the seed and neither takes the stage, which is the
+ * whole of the plumbing: `pairRng` exists as a separate stream so a roll asked
+ * on every beat cannot re-roll the entire campaign (see `Beat.pairRng`), and
+ * that property is a statement about the two constants, not about the input.
+ */
+export const buildTrack = (stage: number, seed: number = stage): Track => {
   const length = stageLength(stage)
   const arenaY = length - 4
   const bossY = length + 8
@@ -4074,7 +4895,7 @@ export const buildTrack = (stage: number): Track => {
   const closingTriple = stage >= CLOSING_TRIPLE_STAGE
   const b: Beat = {
     stage,
-    rng: mulberry32(Math.imul(stage, 0x9e3779b1) ^ 0x85ebca6b),
+    rng: mulberry32(Math.imul(seed, 0x9e3779b1) ^ 0x85ebca6b),
     arenaY,
     events: [],
     fieldId: 0,
@@ -4093,6 +4914,12 @@ export const buildTrack = (stage: number): Track => {
     routingNext: false,
     mulLeft: mulLeaves(stage),
     mulThreeLeft: mulThrees(stage),
+    pairsLeft: maxPairs(stage),
+    // Seeded off the same number as `rng`, with a different constant so the two
+    // streams do not march in step.
+    pairRng: mulberry32(Math.imul(seed, 0x27d4eb2f) ^ 0xc2b2ae35),
+    // …and a third constant for the prizes. See `Beat.prizeRng`.
+    prizeRng: mulberry32(Math.imul(seed, 0x165667b1) ^ 0x7feb352d),
     triplesLeft: maxTriples(stage),
     triplesPlaced: 0,
     tripleReserve: closingTriple ? 1 : 0,
@@ -4161,6 +4988,14 @@ export const buildTrack = (stage: number): Track => {
   // needs every bank and every obstacle at its final `y` to know where the three
   // firing lanes it requires can actually be opened.
   placeWeaponPuzzle(b)
+
+  // LAST of all, because the two prizes are the only things on the road that are
+  // placed RELATIVE to something else the generator wrote: each one attaches to
+  // a specific bank and to the shoulder away from that bank's best door, so it
+  // has to see every bank, every wall and the whole puzzle at their final `y`.
+  // It draws from `b.prizeRng` and never from `b.rng`, so running it here — or
+  // anywhere else — cannot move a single other beat. See `Beat.prizeRng`.
+  placeRescues(b)
 
   // Sorted by distance: the sim streams events in one forward pass and never
   // looks back. `Array.prototype.sort` is stable, so equal-y events keep the

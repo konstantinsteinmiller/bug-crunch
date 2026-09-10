@@ -631,6 +631,59 @@ reward, silently-discarded gate payouts, and a geometry comment that reasoned
 about painted widths instead of contact widths. All fixed; all listed in the
 report.
 
+## Poki fit test, second pass (2026-09-09)
+
+The measurement first. The per-stage sim (six seeds, five policies) put a
+clean career's clock at 0:26 / 1:00 / 1:35 / 2:14 / 2:51 / 3:30 for the ends
+of stages 1–6, against a gate of *average over 3 min and 25 % of 500 plays
+over 3 min*. Three full stops sat inside that window (after 3, 4 and 5); a
+player with a 650 ms thumb cleared stages 1–6 first try losing almost nobody
+(16 of 58 on stage 2), so difficulty was not what stopped anyone who played;
+and a run that never steers wiped at 64 % of stage 2 — a result screen at
+0:45. Neither weapon was ever seen inside the window (first box stage 6,
+first rocket stage 8). What shipped, all keyed on those numbers:
+
+- [x] **The opening doorway is in view during the lightbox** (`OPENING_GATE_Y`
+      = 9) and **races** (`OPENING_PUMP_MUL` 2.6, capped at `+10`). The hold now
+      streams the road and runs the guns; nothing that can hurt runs. The
+      15-unit void it replaced was doing only one thing once the lightbox
+      existed: putting a black lane behind the first instruction.
+- [x] **Continuous handover through stage 3.** First result screen after
+      stage 4 (~2:20), with a weapon already used, a shield announced and
+      coins worth spending.
+- [x] **The weapon choice** (`WEAPON_PICK_STAGE` = 3): a two-card reveal on the
+      handover into stage 3 — launcher or gatling, for that stage — on
+      `FReward`'s new `reveal` mode (sixteen light/dark rays from the centre,
+      turning; `revealRays.ts`). Persisted under `ts_weapon_pick`; re-armed by
+      `startStage` on every attempt. The gatling **pumps doors 1.6× faster**
+      (`WeaponDef.pumpMul`); the launcher **holds a door hot for 0.75 s** after
+      a hit (`gateHoldS`) — measured, its 0.88 s salvo gap was longer than the
+      0.4 s hot window, so a rocket-armed crowd could not pump at all.
+- [x] **The puzzle from stage 4** (`WEAPON_STAGE` 6 → 4; first slot `early`,
+      the rotation anchored at 6 so every later road deals what it did). The
+      shield moved to the stage-3 clear (`SHIELD_GIFT_STAGE` = 4).
+- [x] **The gift ladder** (`game/ladder.ts`): what is next, on every banner
+      without a gift, on a HUD chip beside the stage number, and as marks on
+      the rail (`stageBeats`: the box and the elites).
+- [x] **The rally** (`setRallyPolicy` / `rallies`): a wipe past 75 % of stages
+      2–3 hands back 40 % of the peak squad once per stage while stage 3 has
+      never been cleared; `RALLY_GRACE_MS` of collision immunity so it is not
+      a second wipe on the same frame.
+- [x] **Auto-advance** on the result screens of stages 1–5 only: a ring
+      closes around the primary button over 6 s and fires it; any touch, an
+      open modal or an ad in flight cancels or holds it. From stage 6 the
+      screen waits for the player — by then they have decided to stay and are
+      spending between runs.
+- [x] **No decline lean through stage 6** (`DECLINE_FREE_THROUGH_STAGE`) — the
+      same boundary the relief curves let go on.
+- [x] Art: two `ui` stills for the cards (`weapon-card-rocket|gatling`), in the
+      manifest, the catalogue, the preloader (tier 1 until the pick is made)
+      and `art-todo.md`; prompts in `art-sheets/PROMPTS-STILLS.md`.
+
+Still to measure: the first Poki playtest on this build, read against the
+recordings checklist — did they steer inside five seconds, did they leave
+mid-stage while winning, on a wipe screen, or on the first result screen.
+
 ## Next (see `retention-roadmap.md` for the ranked list)
 
 1. Auto-advance timer on the result screen (kill the dead air between runs).

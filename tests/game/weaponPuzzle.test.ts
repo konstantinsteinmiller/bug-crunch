@@ -28,12 +28,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildTrack, MIN_RUN_GAP, WEAPON_CLOSING_CLEAR, weaponSlotIdFor, type TrackEvent
 } from '@/game/track'
-import { LANE_HALF } from '@/game/survival'
+import {
+  BULLET_RANGE, CROWD_MAX_R, CROWD_SCREEN_Y, LANE_HALF, UNIT_R, VIEW_HEIGHT, stageSpeed
+} from '@/game/survival'
 import {
   LEVER_R, LEVER_STAGGER, LEVER_STONE_HP_MUL, LEVER_STONE_LEAD, LEVER_STONE_W,
   LEVER_X, ROCKET_SPLASH_SHARE, WEAPONS, WEAPON_BOX_AHEAD,
   WEAPON_BOX_X, WEAPON_EVERY, WEAPON_FREE_LANE, WEAPON_GUARD_LEAD, WEAPON_STAGE,
-  stageHasWeapon, weaponDpsMul, weaponForStage, weaponReactionS
+  stageHasWeapon, stageHasWeaponBox, stageHasWeaponGift, weaponDpsMul, weaponForStage,
+  weaponReactionS, WEAPON_GIFT_LANE_SHARE, WEAPON_GIFT_STAGE, WEAPON_REVEAL_S
 } from '@/game/weapons'
 import { barricadeHp } from '@/game/track'
 import { WEAPON_BOX_R } from '@/game/weapons'
@@ -72,9 +75,17 @@ const puzzleOf = (stage: number): WeaponEvent | null => {
 // ─── 1. It is always there, and always in the middle ────────────────────────
 
 describe('every other stage carries one', () => {
-  it('places none at all while the game is still teaching', () => {
+  it('places no PUZZLE at all while the game is still teaching', () => {
+    // Stage 2 carries a weapon BOX now (the gift, below) and it is not a
+    // puzzle: what may not exist before `WEAPON_STAGE` is the lever/cover/armour
+    // furniture, because every piece of it is a wall and stages under
+    // `HARD_OBSTACLE_FROM_STAGE` carry nothing that can kill. So the assertion
+    // is about those three lists rather than about the beat existing.
     for (let stage = 1; stage < WEAPON_STAGE; stage++) {
-      expect(puzzleOf(stage), `stage ${stage}`).toBeNull()
+      const w = puzzleOf(stage)
+      expect(w?.levers.length ?? 0, `stage ${stage} has levers`).toBe(0)
+      expect(w?.stones.length ?? 0, `stage ${stage} has lever cover`).toBe(0)
+      expect(w?.guards.length ?? 0, `stage ${stage} has armour`).toBe(0)
     }
   })
 
@@ -89,6 +100,7 @@ describe('every other stage carries one', () => {
   })
 
   it('leaves the stages BETWEEN them carrying nothing', () => {
+    // (from `WEAPON_STAGE` up — the stage-2 gift is checked on its own below)
     // The half of the cadence that makes the prize a prize: a road that always
     // has a launcher on it is not a road with a launcher on it. See
     // `WEAPON_EVERY`.
@@ -97,8 +109,10 @@ describe('every other stage carries one', () => {
       if (!stageHasWeapon(stage) && puzzleOf(stage)) extra.push(stage)
     }
     expect(extra).toEqual([])
-    // …and that it really is every OTHER stage, from stage 6.
-    expect(WEAPON_STAGE).toBe(6)
+    // …and that it really is every OTHER stage, from stage 4 — the floor set by
+    // `HARD_OBSTACLE_FROM_STAGE`, and one stage after the weapon the player
+    // CHOSE for stage 3 (`WEAPON_PICK_STAGE`).
+    expect(WEAPON_STAGE).toBe(4)
     expect(WEAPON_EVERY).toBe(2)
     expect(stageHasWeapon(WEAPON_STAGE)).toBe(true)
     expect(stageHasWeapon(WEAPON_STAGE + 1)).toBe(false)
@@ -169,15 +183,20 @@ describe('every other stage carries one', () => {
     }
   })
 
-  it('opens the campaign in the middle, where the beat is easiest to read', () => {
-    // The first puzzle a player ever meets is pinned. The midpoint is where the
-    // road is calmest and where the two halves of the beat are most likely to
-    // be on screen together; variety is for the player who already knows what a
-    // lever is.
-    expect(weaponSlotIdFor(WEAPON_STAGE)).toBe('mid')
+  it('opens the campaign EARLY, where the promise was just made', () => {
+    // The first puzzle a player ever meets is pinned. It sits in the opening
+    // fifth of stage 4 because the banner that opened the stage said "a weapon
+    // on the road" — a promise kept inside ten seconds is what makes the next
+    // one believable. The road's opening is also its calmest stretch, so the
+    // two halves of the beat are on screen together. Variety is for the player
+    // who already knows what a lever is; the rotation starts one stage on.
+    expect(weaponSlotIdFor(WEAPON_STAGE)).toBe('early')
     const at = puzzleOf(WEAPON_STAGE)!.y / buildTrack(WEAPON_STAGE).arenaY
-    expect(at).toBeGreaterThan(0.3)
-    expect(at).toBeLessThan(0.6)
+    expect(at).toBeGreaterThan(0.1)
+    expect(at).toBeLessThan(0.35)
+    // The rotation proper is anchored one stage on, unchanged, so every road
+    // from 6 deals the slot it always did.
+    expect(weaponSlotIdFor(WEAPON_STAGE + WEAPON_EVERY)).toBe('mid')
   })
 
   it('is still the same road on the retry', () => {
@@ -687,5 +706,232 @@ describe('the rocket blast', () => {
     // twelve is worth roughly four rounds, one body is worth exactly one.
     expect(ROCKET_SPLASH_SHARE).toBeGreaterThan(0)
     expect(ROCKET_SPLASH_SHARE).toBeLessThan(1)
+  })
+})
+
+// ─── The stage-2 gift ───────────────────────────────────────────────────────
+//
+// The first weapon box a player ever meets: the mechanic with the puzzle taken
+// off it, so stage 4's levers read as a lock on something already understood.
+// It can only exist because it is not a wall — see `WEAPON_GIFT_STAGE`.
+describe('the stage-2 gift box', () => {
+  const gift = puzzleOf(WEAPON_GIFT_STAGE)
+
+  it('is there, exactly once, and only on stage 2', () => {
+    expect(gift, 'stage 2 carries no weapon box').not.toBeNull()
+    expect(stageHasWeaponGift(WEAPON_GIFT_STAGE)).toBe(true)
+    for (const stage of [1, 3, 4, 5, 6]) {
+      expect(stageHasWeaponGift(stage), `stage ${stage}`).toBe(false)
+    }
+    // …and it is not quietly a second puzzle stage.
+    expect(stageHasWeapon(WEAPON_GIFT_STAGE)).toBe(false)
+    expect(stageHasWeaponBox(WEAPON_GIFT_STAGE)).toBe(true)
+  })
+
+  it('carries nothing that can kill', () => {
+    // The rule that keeps `WEAPON_STAGE` at 4 is about walls, and this beat has
+    // none. If any of these ever fills up, the gift has to move to stage 4 with
+    // the rest of them.
+    expect(gift!.levers).toEqual([])
+    expect(gift!.stones).toEqual([])
+    expect(gift!.guards).toEqual([])
+  })
+
+  it('sits on the centre line and takes 40 % of the road', () => {
+    expect(gift!.box.x, 'the gift drifted off the centre line').toBe(0)
+    const width = (gift!.boxR ?? WEAPON_BOX_R) * 2
+    expect(width / (LANE_HALF * 2)).toBeCloseTo(WEAPON_GIFT_LANE_SHARE, 2)
+    // Twice an earned box in each direction, which is what needed `WeaponBox.r`
+    // to stop being one global constant.
+    expect(gift!.boxR).toBeGreaterThan(WEAPON_BOX_R * 1.9)
+  })
+
+  it('still leaves a full-size crowd a way past it', () => {
+    // "Almost not missable" is the brief, not "unavoidable": a player who
+    // deliberately hugs a rail has to be able to get by, or the box is a toll.
+    const free = LANE_HALF - (gift!.boxR ?? WEAPON_BOX_R)
+    expect(free, `only ${free.toFixed(2)} units of road at each rail`)
+      .toBeGreaterThan(CROWD_MAX_R + UNIT_R)
+  })
+
+  it('lands in clear road, mid-stage', () => {
+    const t = buildTrack(WEAPON_GIFT_STAGE)
+    const r = gift!.boxR ?? WEAPON_BOX_R
+    // Nothing the player has to react to precisely may overlap the box's depth.
+    for (const e of t.events) {
+      if (e === gift || e.kind === 'coins') continue
+      if (e.kind !== 'gates' && e.kind !== 'crates' && e.kind !== 'miniboss') continue
+      expect(Math.abs(e.y - gift!.y), `${e.kind}@${e.y} sits on the gift`)
+        .toBeGreaterThan(r + 1)
+    }
+    // …and it comes AFTER the stage's elite. Not cosmetic: a box this wide on
+    // the centre line is exactly where a crowd that never steers already is, so
+    // handing the weapon over before the miniboss let a no-input run clear
+    // stage 2 on every seed — the rule `balance.test.ts` calls "walks the taught
+    // stages and is stopped by the game". The elite has to be met on the
+    // squad's own gun.
+    const elite = t.events.find((e) => e.kind === 'miniboss')
+    expect(elite, 'stage 2 lost its elite').toBeDefined()
+    expect(gift!.y, 'the gift moved back in front of the elite')
+      .toBeGreaterThan(elite!.y)
+    // …and still on the road rather than inside the arena.
+    const at = gift!.y / t.arenaY
+    expect(at, `the gift sits at ${Math.round(at * 100)}% of the road`).toBeLessThan(0.92)
+  })
+})
+
+// ─── 6. The gift is an OPEN box ─────────────────────────────────────────────
+//
+// The reward-design sense of the phrase: the prize is visible before the player
+// commits, so steering into it is a decision about a known reward rather than a
+// gamble on a crate. On the road that is furniture (`drawWeaponBoxes`); in the
+// sim it is one bit — a gift spawns with `locked` false — and this block pins
+// the bit, because the furniture is worthless the moment the bit goes back.
+//
+// It also pins the OTHER half of the decision: the earned stage-4+ box stays
+// shut on purpose. See `WeaponBox.locked` for the argument. A future
+// "consistency" pass that opens both would sail past every test in this file
+// without these.
+
+/** Stage 2, stepped until the gift box is on the road. */
+const atGift = async (boost = 0): Promise<Game> => {
+  const game = await importGame()
+  game.startStage(WEAPON_GIFT_STAGE)
+  if (boost > 0) {
+    game.debugAddUnits(boost)
+    game.debugAddDamage(4)
+  }
+  for (let i = 0; i < 12_000 && game.getWeaponBoxes().length === 0; i++) game.step(STEP_MS)
+  expect(game.getWeaponBoxes().length, 'stage 2 never streamed its gift box').toBe(1)
+  return game
+}
+
+describe('the gift is an open box', () => {
+  it('is unlocked from the instant it exists — before it is even in range', async () => {
+    const game = await atGift()
+    const box = game.getWeaponBoxes()[0]!
+    const away = box.y - game.anchor().y
+
+    // The bit itself. A gift has no armour, so there is nothing for `locked` to
+    // mean; it used to start true anyway and was flipped by the proximity test
+    // in `stepWeaponBoxes`, which does not run until `anchorY + 6`.
+    expect(box.locked, 'the gift box spawned shut').toBe(false)
+    expect(box.gift).toBe(true)
+
+    // …and it is open while still WELL out of gun range, which is the property
+    // the old design could not have: `streamTrack` builds it at `anchorY + 30`.
+    expect(away, `the gift only appeared ${away.toFixed(1)} units out`)
+      .toBeGreaterThan(BULLET_RANGE)
+  })
+
+  it('does not play the reveal ring it has no cause for', async () => {
+    // The ring means "the thing you shot did THIS" (`unlockPuzzle`). A box that
+    // was never shut has no such moment, and firing it at spawn would play it
+    // thirty units up the road, off the top of the camera. Suppressed by
+    // spawning past the window rather than by a `gift` test in the renderer, so
+    // the two files have to agree on `WEAPON_REVEAL_S` — hence the assertion.
+    const game = await atGift()
+    expect(game.getWeaponBoxes()[0]!.openFor).toBeGreaterThanOrEqual(WEAPON_REVEAL_S)
+  })
+
+  it('says FREE on the HUD instead of counting levers it does not have', async () => {
+    const game = await atGift()
+    expect(game.puzzleWeapon.value, 'the gift did not raise the badge').not.toBeNull()
+    expect(game.puzzleGift.value, 'the badge is advertising a lock that is not there')
+      .toBe(true)
+    expect(game.puzzleTotal.value).toBe(0)
+  })
+
+  it('pays out from up the road, not on the last frame before contact', async () => {
+    // The measured consequence, and the one a regression would actually be felt
+    // as. A locked box refuses damage outright, so under the old design the
+    // earliest the gift COULD break was the `anchorY + 6` unlock. Measured on
+    // stage 2 across four squad sizes (bare, +6, +20, +60), the break distance
+    // shut was 5.93 / 5.99 / 6.00 / 6.00 units — pinned to the threshold, and
+    // flat, because the constraint was never the squad's damage. Open, the same
+    // four broke at 11.2 to 13.0: essentially the moment the box entered gun
+    // range. Twice the road, and it is the WEAK squad that gains it, because a
+    // strong one was being clamped by the same 6 units as everyone else.
+    const game = await atGift(60)
+    let brokeAt = -1
+    for (let i = 0; i < 4000; i++) {
+      const box = game.getWeaponBoxes()[0]
+      const away = box && !box.dead ? box.y - game.anchor().y : brokeAt
+      game.step(STEP_MS)
+      if (game.activeWeapon.value) { brokeAt = away; break }
+      brokeAt = away
+      if (game.phase.value !== 'run') break
+    }
+    expect(game.activeWeapon.value, 'the gift never paid out').not.toBeNull()
+    expect(brokeAt, `the gift only broke ${brokeAt.toFixed(1)} units out`)
+      .toBeGreaterThan(6)
+  })
+
+  it('is fully on screen for many times what a lane change costs', async () => {
+    // The constraint the tell is sized against, measured rather than asserted
+    // from taste — and the measurement is also the correction to the first
+    // theory of this bug.
+    //
+    // The theory was that a box that only lit up at `anchorY + 6` gave the
+    // player no road to react in. It does not survive the number: measured
+    // here, a full-lane correction settles in about a quarter of a second, so
+    // even six units is four or five crossings' worth of road. Steering was
+    // never the binding constraint, which is exactly why a closed box survived
+    // this long — nobody could point at a moment where it was unreachable.
+    //
+    // What it cost is the other two things, and both are pinned elsewhere in
+    // this block: the object signalled the wrong CATEGORY for 56 % of its
+    // approach (a braced steel crate, which on this road is what an obstacle
+    // looks like), and a locked box refuses damage, so the guns got 6 units of
+    // window instead of `BULLET_RANGE`'s 10.83 — and this box is opened by
+    // being SHOT, not by being touched.
+    //
+    // So what this asserts is the honest version: the prize is fully on screen
+    // for far longer than any decision it asks for could possibly need.
+    const game = await importGame()
+    game.startStage(WEAPON_GIFT_STAGE)
+    for (let i = 0; i < 120; i++) game.step(STEP_MS)
+    const from = -LANE_HALF + 0.5
+    const to = LANE_HALF - 0.5
+    game.steerTo(from)
+    for (let i = 0; i < 400 && Math.abs(game.anchor().x - from) > 0.1; i++) game.step(STEP_MS)
+    game.steerTo(to)
+    let frames = 0
+    for (; frames < 400 && Math.abs(game.anchor().x - to) > 0.25; frames++) game.step(STEP_MS)
+    expect(frames, 'the crowd never crossed the lane').toBeLessThan(400)
+
+    const crossS = (frames * STEP_MS) / 1000
+    const crossUnits = crossS * stageSpeed(WEAPON_GIFT_STAGE)
+    // The box's FAR edge clearing the top of the screen, not its centre: half
+    // an object hanging off the camera is a silhouette, not a read.
+    const gift = puzzleOf(WEAPON_GIFT_STAGE)!
+    const visible = CROWD_SCREEN_Y * VIEW_HEIGHT - (gift.boxR ?? WEAPON_BOX_R)
+    expect(
+      visible,
+      `a full-lane correction eats ${crossUnits.toFixed(2)} units of road and the box ` +
+        `is only fully on screen for ${visible.toFixed(1)}`
+    ).toBeGreaterThan(crossUnits * 4)
+    // And the shootable window is the one that actually binds, so it gets an
+    // assertion of its own: opening at range rather than at `anchorY + 6` is
+    // worth most of a doubling. If someone re-locks the gift, this is the
+    // number that says what it cost.
+    expect(BULLET_RANGE / 6, 'the gift stopped being shootable at range')
+      .toBeGreaterThan(1.7)
+  })
+
+  it('leaves the EARNED box shut, which is a decision and not an oversight', async () => {
+    // The levers are the drama and `unlockPuzzle`'s reveal is the only moment in
+    // the game that says "the thing you shot did THIS". The player is not kept
+    // in the dark either way: `WeaponTag` names the weapon on the HUD from the
+    // moment the beat streams in, twelve units before the box is on screen. So
+    // both beats tell you the prize before you commit; only one of them opens.
+    const game = await atPuzzle(WEAPON_STAGE)
+    const box = game.getWeaponBoxes()[0]!
+    expect(box.gift, 'the stage-4 box became a gift').toBe(false)
+    expect(box.locked, 'the earned box stopped being a puzzle').toBe(true)
+    expect(box.openFor, 'the earned box skipped its reveal').toBe(0)
+    expect(game.puzzleGift.value, 'the earned box is advertising itself as free')
+      .toBe(false)
+    expect(game.puzzleTotal.value).toBeGreaterThan(0)
   })
 })

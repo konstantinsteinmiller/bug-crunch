@@ -194,6 +194,14 @@ ignores attrition, so a real run never approaches it.
   that cannot move. The endless tail is priced *gentler* than the authored head
   (×1.16 a level against ×1.38–1.55): continuing the authored slope would put
   level 21 tens of stages away, and "endless" would mean "locked".
+* **The gift ladder (stages 1–4):** the opening stages hand over without a
+  result screen (through stage 3) and each banner names the NEXT gift. Stage 2's
+  clear opens a two-card reveal — **launcher or gatling, the player's own for
+  stage 3** (`WEAPON_PICK_STAGE`); stage 3's clear hands over the **shield**;
+  from stage 4 a weapon is on the road every other stage (`WEAPON_STAGE`). The
+  HUD carries the promise as a chip beside the stage number and marks the box
+  and the elites on the progress rail. A first-session wipe past 75 % of stages
+  2–3 is **rallied** once per stage instead of ended; stage 4 keeps the floor.
 * **Standing:** highest stage ever reached, posted to a global board, with squad
   size as the tie-breaking second column. Read once per page load, written only
   when the player beats their own posted record — the board is a decoration on a

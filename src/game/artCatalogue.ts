@@ -38,7 +38,10 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero'>, readonl
   bg: ['ridge-far', 'ridge-near'],
   // The crown is on the field; the rest are the DOM's — the result banner
   // (nine-sliced by CSS), the idle chest on the wallet column, the shop's
-  // forge and the two skill buttons' icons, shown through `ArtIcon` and
-  // `FReward`. See `uiArt.ts`.
-  ui: ['crown', 'ribbon', 'chest', 'forge', 'skill-grenade', 'skill-shield']
+  // forge, the two skill buttons' icons and the two cards of the stage-3
+  // weapon choice, shown through `ArtIcon` and `FReward`. See `uiArt.ts`.
+  ui: [
+    'crown', 'ribbon', 'chest', 'forge', 'skill-grenade', 'skill-shield',
+    'weapon-card-rocket', 'weapon-card-gatling'
+  ]
 }

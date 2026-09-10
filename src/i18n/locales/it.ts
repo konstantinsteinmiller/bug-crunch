@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': 'Attacco in arrivo!',
     'dodge': 'Schiva',
+    'milestone': '{n} in campo!',
     'weaponActive': '{name} pronto',
-    'weaponLocked': '{name} bloccato — {n} di {total} leve colpite'
+    'weaponLocked': '{name} bloccato — {n} di {total} leve colpite',
+    'weaponGift': '{name} più avanti — gratis, niente leve',
+    'weaponFree': 'GRATIS'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': 'Casse blu: tutti sparano più veloce', 'desktop': 'Casse blu: tutti sparano più veloce' },
     'boss': { 'touch': 'Stai fuori dal cerchio rosso!', 'desktop': 'Stai fuori dal cerchio rosso!' },
     'lever': { 'touch': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi', 'desktop': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi' },
-    'guard': { 'touch': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!', 'desktop': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!' }
+    'guard': { 'touch': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!', 'desktop': 'Scudo attivo: i tuoi colpi non fanno nulla. MUOVITI!' },
+    'cage': { 'touch': 'Spara alle gabbie: i prigionieri si uniscono alla squadra', 'desktop': 'Spara alle gabbie: i prigionieri si uniscono alla squadra' },
+    'shieldBox': { 'touch': 'Cassa scudo: aspetta, poi blocca un colpo grosso', 'desktop': 'Cassa scudo: aspetta, poi blocca un colpo grosso' }
   },
 
   'flow': {
 
-    'unlocked': 'Sbloccato!'
+    'unlocked': 'Sbloccato!',
+
+    'guardian': "Un angelo custode ti ha salvato!",
+
+    'guardianSub': "{n} sopravvissuti sono tornati",
+
+    'next': "Prossimo: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "Scegli un'arma",
+    'nextStage': "prossimo livello",
+    'stagesAway': "tra {n} livelli"
+  },
+  'weaponPick': {
+    'title': "Scegli la tua arma",
+    'subtitle': "Tua per il livello {n}. Altre ti aspettano sulla strada.",
+    'take': "Prendila",
+    'rocket': {
+      'a': "Salva a ricerca",
+      'b': "Danno esplosivo"
+    },
+    'gatling': {
+      'a': "Cadenza di fuoco doppia",
+      'b': "Carica i cancelli più in fretta"
+    }
+  },
   'result': {
     'stageClear': 'Livello superato!',
     'wipedOut': 'Squadra annientata',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': 'Potenzia la squadra!',
     'rankOf': 'su {n}',
     'upNext': 'Prossimo: Livello {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'Condividi la partita',
+    'text': 'Sono arrivato al livello {n} in {game}. Riesci ad andare più lontano?'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': 'Apri il forziere per {n} monete',
     'filling': 'Forziere: si sta riempiendo',
     'spent': 'Forziere: vuoto fino a domani'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'Spedizione del giorno',
+    'hud': 'Spedizione',
+    'multiplier': '{n}×',
+    'available': 'Spedizione del giorno: la strada di oggi, monete triple',
+    'confirm': 'Inizia la spedizione',
+    'spent': 'Spedizione del giorno: nuova strada tra {time}',
+    'done': 'Torna domani',
+    'back': 'Torna alla campagna'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': 'Opzioni', 'general': 'Generale', 'audio': 'Audio', 'language': 'Lingua',
     'difficulty': 'Difficoltà', 'soundEffects': 'Effetti sonori', 'music': 'Musica', 'musicTrack': 'Traccia musicale',
     'musicTracks': { 'cozy': 'Armonia accogliente', 'trance': 'Tunnel trance' },
+    'haptics': 'Vibrazione', 'on': 'Attivo', 'off': 'Disattivo',
     'close': 'Salva e chiudi',
     'difficulties': { 'easy': 'Facile', 'medium': 'Media', 'hard': 'Difficile' },
     'difficultyHints': {

@@ -405,6 +405,13 @@ export const GATE_LEAF_HALF = 2.05
 /** Centre of each leaf in a two-leaf bank. */
 export const GATE_LEAF_X = 2.3
 
+/** Half-width of the solid pillar between two leaves. Anything that touches it
+ *  dies — this is what makes the choice a commitment rather than a preference.
+ *  Declared here because the three-leaf geometry below is derived from it. */
+export const DIVIDER_HALF_W = 0.25
+/** Vertical thickness of the divider, matched to the gate band. */
+export const DIVIDER_H = 1.1
+
 /**
  * ─── Three-leaf banks ───────────────────────────────────────────────────────
  *
@@ -413,7 +420,33 @@ export const GATE_LEAF_X = 2.3
  * the crowd they are carrying, in the second and a half before they arrive.
  *
  * The arithmetic: 9 units of lane, minus two 0.5-wide pillars, leaves 8.0 for
- * three doors → 2.66 each, so `halfW = 1.33` and the pillars sit at ±1.58.
+ * three doors — 2.66 WIDE each, so `halfW = 1.33`, the pillars sit at ±1.58 and
+ * the outer doors are centred at ±(1.58 + 0.25 + 1.33) = ±3.16.
+ *
+ * ⚠ That last number was 2.66 — the door's WIDTH written into the slot that
+ * holds its CENTRE. It is worth spelling out what that cost, because both
+ * symptoms read as art bugs and neither points at this constant:
+ *
+ *   • The doors tiled the lane from x = 0 outward instead of filling it, so
+ *     the outer leaf spanned [1.33, 3.99] — starting exactly where the middle
+ *     leaf ended, with no pillar gap between them and 0.51 units of lane left
+ *     unused at each rail. The three painted frames butted together and their
+ *     posts overlapped: each frame paints a post ~0.75 units in from its own
+ *     edge, so the middle door's right post landed at [1.24, 1.58] and the
+ *     right door's left post at [1.08, 1.42] — two posts, offset, doubled.
+ *   • The divider pillar [1.33, 1.83] then sat INSIDE the outer door rather
+ *     than in a gap between doors, which is why it read as a hazard post
+ *     standing in a doorway.
+ *   • And the real damage: a pillar reaches `DIVIDER_HALF_W + UNIT_R` into its
+ *     neighbours, so the outer door's usable strip was [2.13, 3.99] — 1.86
+ *     wide, exactly `2 * funnelRadius(1.33)`. A safe aiming band of ZERO width,
+ *     with the painted centre 0.4 units outside it. Aiming at the outer door of
+ *     a three-leaf bank exactly where it is drawn always clipped the pillar.
+ *
+ * At 3.16 the doors tile the whole lane, each frame's post hides under the
+ * pillar the way a two-leaf bank's pair does, and the safe band is [3.06, 3.56]
+ * — 0.50 wide, the same as the two-leaf bank's [2.20, 2.70], with the painted
+ * centre inside it.
  *
  * A full-size crowd (radius 1.65) does NOT fit through a 1.33 door — which is
  * why the formation funnels (see `funnelRadius`). A crowd squeezing through a
@@ -421,15 +454,11 @@ export const GATE_LEAF_X = 2.3
  * is what makes three-leaf banks feel different from two-leaf ones without
  * needing a single extra rule.
  */
-export const GATE3_LEAF_X = 2.66
 export const GATE3_LEAF_HALF = 1.33
 export const GATE3_DIVIDER_X = 1.58
-
-/** Half-width of the solid pillar between two leaves. Anything that touches it
- *  dies — this is what makes the choice a commitment rather than a preference. */
-export const DIVIDER_HALF_W = 0.25
-/** Vertical thickness of the divider, matched to the gate band. */
-export const DIVIDER_H = 1.1
+/** Centre of each OUTER leaf. Derived, never typed: the door starts where the
+ *  pillar ends, so this is pillar centre + pillar half + door half. */
+export const GATE3_LEAF_X = GATE3_DIVIDER_X + DIVIDER_HALF_W + GATE3_LEAF_HALF
 
 /** Vertical thickness of the gate's trigger band. */
 export const GATE_DEPTH = 0.34
@@ -715,9 +744,26 @@ export const earlyObstacleKeep = (stage: number): number =>
  * between one stage and the next — the jump that got reported. Stage 5 is left
  * at full price on purpose: it was never the stage anybody complained about,
  * and discounting it would only move the cliff to 5 -> 6.
+ *
+ * ─── …and stage 1 pays full price, which is not the inversion it looks like ─
+ *
+ * 0.69 -> 1. Stage 1's discount was buying nothing, and the reason is
+ * `earlyPackCap`: stage 1 shows ONE body at a time, so the entire monster
+ * budget of the stage is a single creep, and the discount was worth exactly
+ * 2 hp on it (6 against 8). Measured through `tests/game/tutorialPump.test.ts`,
+ * no policy — not even `careless` — lost a single survivor to a monster on
+ * stage 1 either side of the change; the creep dies in a tenth of a second at
+ * both prices because the crowd meets it 13-20 strong out of the pumped opening
+ * door (`OPENING_PUMP_CAP`).
+ *
+ * So this is a correctness fix rather than a difficulty one: a stage whose road
+ * hands out a `+10` before its first monster has no business ALSO holding a
+ * health discount, and leaving one there is a knob that reads as tuned when it
+ * is inert. Stage 2 keeps its 0.805, because stage 2 fields two husks at once
+ * and no pumped opener — there the number still does something.
  */
 export const earlyFoeHpMul = (stage: number): number =>
-  stage <= 1 ? 0.69 : stage <= 2 ? 0.805 : stage <= 3 ? 0.7 : stage <= 4 ? 0.8 : 1
+  stage <= 1 ? 1 : stage <= 2 ? 0.805 : stage <= 3 ? 0.7 : stage <= 4 ? 0.8 : 1
 
 /** …and there are fewer of them per pack. A hard cap, not a scale: stage 1
  *  shows ONE monster at a time so the verb is unmistakable. */
@@ -735,11 +781,22 @@ export const earlyPackMul = (stage: number): number =>
  *
  * A pickup that kills you is the worst object in the game: it is the one thing
  * the road actively invites you to drive into. Rolled HP only — a row with an
- * authored `fixedHp` (stage 1's teaching wall, pinned at 1) is already priced
- * for exactly this and is left alone.
+ * authored `fixedHp` (stage 1's teaching wall pinned at 1, `SECOND_PICKUP_HP`
+ * at 4) is already priced for exactly this and is left alone.
+ *
+ * Stage 1 is out of it, for the same reason it is out of `earlyFoeHpMul`: the
+ * discount there was protecting a squad of six that no longer exists. Only two
+ * boxes on the whole road are rolled — the detour crate at y = 70 and the rate
+ * crate at y = 87 — and at 0.6 they were 4 and 5 hp against a crowd that
+ * arrives 26 strong at ~110 dps out of the pumped opening door. Full price
+ * makes them 7 and 9, which is still under a tenth of a second of fire and
+ * measured (`tests/game/tutorialPump.test.ts`) costs no policy a survivor; what
+ * it buys is that ploughing one now takes a visible beat instead of none. The
+ * boxes the beginner cannot afford to lose are the two AUTHORED ones, and they
+ * are untouched.
  */
 export const earlyCrateHpMul = (stage: number): number =>
-  stage <= 5 ? 0.6 : stage <= 6 ? 0.8 : 1
+  stage <= 1 ? 1 : stage <= 5 ? 0.6 : stage <= 6 ? 0.8 : 1
 
 /** Stage 6 is the first road with TWO elites on it (`placeMinibosses`), which
  *  is a x2 nobody can tune away — so the last 10 % of the health discount is
@@ -1140,6 +1197,57 @@ export const SLAM_MAX_FRACTION = 0.31
  */
 export const BOSS_MIN_KILL = 3
 
+/**
+ * ─── …and why the floor CLIMBS ──────────────────────────────────────
+ *
+ * Three bodies a swing is a real hit on stage 2 and a rounding error on stage
+ * 45, and the case it fails is the worst one to fail: a crowd that arrived at
+ * the arena too thin to get through the boss's health bar.
+ *
+ * That player has already lost — the bar is bigger than everything they can put
+ * out before the swings take them — but a flat floor of three makes losing take
+ * a very long time. They stand there dodging, chipping, and being billed three
+ * survivors at a time out of forty, for the better part of a minute, to reach a
+ * result screen that was decided when they walked in. Tedium, not difficulty.
+ *
+ * So the floor grows with the road: `BOSS_MIN_KILL_STEP` bodies every
+ * `BOSS_MIN_KILL_PER_STAGES` stages. It changes nothing for a healthy crowd,
+ * because the SHARE owns every case where it is bigger — at stage 45 the floor
+ * is 21 and a swing against a 1500-crowd already takes 465 — so this is only
+ * ever felt by the runs it is written for, and what it does for them is end a
+ * decided fight promptly.
+ *
+ * It rides the same discounts the flat floor did: the beginner's cut and the
+ * stuck-player relief both multiply it in `bossHitFloor`, so a struggling player
+ * is not billed the full climb, and the tutorial keeps its own token number.
+ */
+export const BOSS_MIN_KILL_STEP = 2
+export const BOSS_MIN_KILL_PER_STAGES = 5
+
+/**
+ * …and the ceiling on the climb, because the campaign does not end.
+ *
+ * The share is capped (`SLAM_FRACTION_MAX` = 0.5) and a linear climb is not, so
+ * an uncapped floor eventually overtakes it and the whole thing stops being a
+ * floor: at stage 100 it would be 43 against a share that takes 40 from an
+ * 80-strong crowd, which is a second and harsher difficulty curve wearing a
+ * floor's name. Measured exactly there — an 80-crowd's swing went from 40 to 43.
+ *
+ * Thirty keeps the crossover — the crowd size below which the floor is what
+ * binds — under about seventy survivors at every depth, which is the band this
+ * is meant to serve and no wider. It does not bite until stage 65, so the
+ * authored campaign and the depths this was reported from (45+) are the plain
+ * `+2 per 5 stages` throughout.
+ */
+export const BOSS_MIN_KILL_MAX = 30
+
+/** The floor under one boss swing at this depth, before any discount. */
+export const bossMinKill = (stage: number): number => Math.min(
+  BOSS_MIN_KILL_MAX,
+  BOSS_MIN_KILL
+    + BOSS_MIN_KILL_STEP * Math.floor(Math.max(0, stage) / BOSS_MIN_KILL_PER_STAGES)
+)
+
 export const ELITE_SWEEP_FRACTION = 0.2
 /**
  * How far down the road the arc reaches, from the elite's own feet. It spans
@@ -1421,6 +1529,19 @@ export const challengeBiteFactor = (streak: number): number =>
  */
 export const DECLINE_STEP = 0.07
 export const DECLINE_MAX = 6
+/**
+ * No lean is recorded for a result screen on this stage or any before it.
+ *
+ * The lean is a nudge aimed at a player who has DECIDED to stay and is choosing
+ * not to pay. A stranger on their first session has decided nothing yet, and
+ * the first result screen they meet is inside the window a portal's fit test
+ * grades: a tester who skips the ×3 there and on the next two screens was
+ * arriving at stage 6 — the steepest step in the game — carrying an extra 21 %
+ * of enemy health they had no way to know about. The lean now starts counting
+ * where the shop starts mattering, which is the same stage the onboarding
+ * relief curves let go (`earlyFoeHpMul` and friends).
+ */
+export const DECLINE_FREE_THROUGH_STAGE = 6
 
 export const rewardDeclineFactor = (declines: number): number =>
   1 + Math.max(0, Math.min(DECLINE_MAX, declines)) * DECLINE_STEP
@@ -1615,8 +1736,21 @@ export interface Gate {
   value: number
   /** Accumulated fire toward the next tick, ms. */
   charge: number
-  /** Seconds since the last hit — the frame stops glowing when fire stops. */
+  /** Seconds since the last hit — the frame stops glowing when fire stops.
+   *  NEGATIVE after a hit from a weapon with a `gateHoldS`: the door is owed
+   *  that much extra warmth before the ordinary window starts counting. */
   hotFor: number
+  /**
+   * How much faster than `gateTickMs` this particular door pumps. 1 for every
+   * door the road rolls; stage 1's opening doorway runs hot on purpose, so the
+   * first number a stranger ever sees is one that visibly races. Authored on
+   * the leaf — see `GateLeaf.pumpMul`.
+   */
+  pumpMul: number
+  /** A ceiling below `gatePumpCap` for this door alone, or `undefined` for
+   *  the op's own. The opening doorway stops at a number that reads as a
+   *  reward rather than a glitch. */
+  pumpCap?: number
   /** Consumed once the crowd runs through it. */
   used: boolean
   /** Claimed by another leaf of the same bank — this one pays nothing and is
@@ -1669,6 +1803,165 @@ export interface Crate {
    */
   gain?: number
 }
+
+/**
+ * ─── Rescue cages ───────────────────────────────────────────────────────────
+ *
+ * A supply crate with people in it. Mechanically it IS a crate — position,
+ * health, solid until it breaks, broken by the same rounds — and everything
+ * about it that differs is downstream of the one change: it pays `spawnUnit`
+ * rather than a stat.
+ *
+ * It exists because the road had exactly ONE reason to leave the racing line
+ * (the crates) and therefore exactly one detour question, asked over and over
+ * with the same two answers. A cage asks a different one — *is this crowd worth
+ * more to me than the door I am lined up on?* — because a cage is deliberately
+ * authored beside a gate bank, on the shoulder AWAY from that bank's best leaf
+ * (`placeRescues` in `track.ts`). Taking it costs the approach: the seconds the
+ * crowd would have spent pumping the good door, and the lane position it would
+ * have spent them from.
+ *
+ * ── How it is told apart from a crate at speed ──
+ *
+ * The player has about a quarter of a second, so the two props may not share a
+ * silhouette, a colour or a mark, and the difference has to survive being 30 px
+ * tall on a phone. Three channels, any one of which is enough:
+ *
+ *   SHAPE   a crate is a squat rounded box; a cage is a TALL barred cabinet —
+ *           the drawn body is half as high again as it is wide and its outline
+ *           is broken by four vertical bars, so the silhouette alone reads as
+ *           "bars" against the crates' solid block.
+ *   COLOUR  the crates own warm green and cold blue with a throbbing rim in the
+ *           same hue. A cage is dead grey iron with NO coloured rim at all and
+ *           a warm lamp INSIDE it — light coming out of a dark shape, which is
+ *           the opposite arrangement to a crate's lit face.
+ *   MARK    a crate's badge is a stat glyph (chevron / bolt) and its number is
+ *           the HP it costs. A cage carries no stat glyph; it carries a head
+ *           count, `+N`, in the crowd's own colour — the same `+` the gates
+ *           print, because it pays the same currency they do.
+ *
+ * `flash` is the shot-feedback channel: it is what makes an unbroken cage
+ * rattle, which is the third read (a crate takes cracks, a cage shakes).
+ */
+export interface Cage {
+  id: number
+  x: number
+  y: number
+  hp: number
+  maxHp: number
+  /**
+   * Survivors inside — handed to the crowd the moment it breaks.
+   *
+   * Authored on the event rather than read from a constant here because what it
+   * is WORTH depends on the stage: see `cageSurvivors` in `track.ts`, which
+   * prices it against the door it is competing with.
+   */
+  hold: number
+  /** 0..1, decayed by the sim. Drives the rattle a shot puts through the bars. */
+  flash: number
+  dead: boolean
+}
+
+/** Half-extent of a cage's FOOTPRINT on the road, world units. Slightly wider
+ *  than a crate — it is the bigger prop — and square, like every other box: the
+ *  drawn body is taller than this, exactly as a barricade's is. */
+export const CAGE_R = 0.68
+
+/**
+ * The roadmap's number, and the floor under the curve that replaced it.
+ *
+ * `+5` is what a cage pays on the stage cages first appear, and it is not a
+ * coincidence: `cageSurvivors` prices a cage at `CAGE_GATE_SHARE` of what a
+ * door on that stage prints, and at stage `CAGE_STAGE` that arithmetic comes
+ * out at 5. The measurement behind choosing a curve at all is written down on
+ * `cageSurvivors`.
+ */
+export const CAGE_RESCUE_BASE = 5
+
+/**
+ * ─── The bulwark: an auto-shield in a box ───────────────────────────────────
+ *
+ * A pickup that arms ONE absorb and then waits. It is not a second timed
+ * shield — the skill on the button already is that (`shieldActive`) — and the
+ * whole design problem here is that it has to look enough like the skill to be
+ * understood without a tutorial and behave differently enough that a player who
+ * confuses the two is never punished for it.
+ *
+ * The split is: **the skill answers bodies, the bulwark answers BLOWS.**
+ *
+ *   • the SKILL is a clock. It takes every second survivor that would have been
+ *     lost, whatever took them, for as long as it is up — it is hooked inside
+ *     `killUnit`, one body at a time, and by construction it cannot see how big
+ *     the thing that is killing them was.
+ *   • the BULWARK has no clock at all. It sits armed, indefinitely, until one
+ *     blow arrives that would take more than `BULWARK_SHARE` of the crowd; that
+ *     blow is then vetoed WHOLE, before a single body is billed, and the pickup
+ *     is spent.
+ *
+ * They are asked in that order — bulwark first, at the blow; skill second, per
+ * body — because only one of them CAN be asked first. A blow can only be vetoed
+ * atomically if it is measured before it lands, and the skill's halving happens
+ * inside the loss funnel where the blow no longer exists as an object. So while
+ * both are up, a big blow costs the pickup and nothing else, the skill's
+ * remaining seconds are untouched, and every blow under the threshold falls
+ * through to the skill exactly as it did before this existed.
+ */
+export interface Bulwark {
+  id: number
+  x: number
+  y: number
+  hp: number
+  maxHp: number
+  /** Slow idle rotation on the plate inside the housing, so an armed pickup
+   *  standing on an empty shoulder still reads as a live object. */
+  spin: number
+  dead: boolean
+}
+
+/** Half-extent of the pickup box. The same square as a supply crate, on
+ *  purpose: it is the same kind of object — a reward you drive at and shoot. */
+export const BULWARK_R = 0.62
+
+/**
+ * What makes a loss a BLOW rather than a scrape: more than this share of the
+ * crowd, taken by one attack, in one stroke.
+ *
+ * 5 % is the player's own number and it is a good one, because it is the scale
+ * at which every deliberate percentage hit in this game is already priced —
+ * `ELITE_SWEEP_FRACTION` is 0.2, `SLAM_MAX_FRACTION` and `BOMBER_FRACTION` land
+ * between a fifth and a half, and a foe's ordinary bite is `biteShareFor`, 0.4
+ * to 1.8 %. So the threshold sits cleanly in the gap the design already left:
+ * every telegraphed area attack in the game is four to ten times over it, and
+ * every routine mouthful is three to twelve times under it.
+ */
+export const BULWARK_SHARE = 0.05
+
+/**
+ * …and the absolute floor under that share, in bodies.
+ *
+ * The share alone is wrong at the small end and the player said exactly why: a
+ * ten-strong squad losing ONE body to a barricade is 10 % of the crowd, which
+ * clears the 5 % test comfortably — and spending a one-shot absorb on a scrape
+ * is the single worst thing this pickup could do, because the player never
+ * asked for it and never sees it coming.
+ *
+ * `BOSS_MIN_KILL` is the floor, rather than a new number, because it is already
+ * this game's definition of "a real hit": every budgeted big attack in the sim
+ * — the boss's slam, rake, charge and bolt, an elite's sweep, a bomber's blast,
+ * a rolling ball, a miniboss's bite — floors its own budget at exactly this, on
+ * the argument that a thing with a name and a health bar may not take less than
+ * a husk-and-a-half. A blow that cannot even clear the bar the attacks set for
+ * THEMSELVES is not a blow.
+ *
+ * Three also covers the case the player described end to end. An obstacle
+ * scrape is `grindAgainst`, which bills at most `max(1, squad × fraction) × dt`
+ * per frame — one body, or two on a very large crowd — and it is excluded on
+ * its own terms as well (see `bulwarkAbsorb`: a grind is a RATE, not a blow).
+ * An ordinary foe's bite is 1–2 bodies. A monster's body takes half of what
+ * runs into it, which on a ten-strong squad is one or two. All of them are
+ * under three; every one of them survives a maxed bulwark untouched.
+ */
+export const BULWARK_FLOOR = BOSS_MIN_KILL
 
 /**
  * ─── TNT barrels ────────────────────────────────────────────────────────────

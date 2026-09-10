@@ -12,8 +12,63 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  GATE_DIV_MAX, GATE_MUL_MAX, GATE_SCALE_STEP, GATE_TICK_MS, gateMulOpen, gateValueLabel
+  BASE_FIRE_RATE, GATE_DIV_MAX, GATE_MUL_MAX, GATE_SCALE_STEP, GATE_TICK_MS, gateMulOpen,
+  gateValueLabel
 } from '@/game/survival'
+import { WEAPONS } from '@/game/weapons'
+import { OPENING_PUMP_CAP, OPENING_PUMP_MUL, buildTrack } from '@/game/track'
+
+/** The hot window a door forgets it was shot after — see `stepGates`. */
+const GATE_HOT_S = 0.4
+
+describe('the weapons and the pump', () => {
+  it('lets the launcher pump a door at all: its hold bridges the salvo\'s reload', () => {
+    // One trigger pull per `1 / (fireRate × rateMul)` seconds, every muzzle at
+    // once (`volley`). At the base fire rate that gap is longer than the hot
+    // window, so without the hold a rocket-armed crowd could not pump a door
+    // until its fire rate had climbed most of a run.
+    const r = WEAPONS.rocket
+    const salvoGapS = 1 / (BASE_FIRE_RATE * r.rateMul)
+    expect(salvoGapS).toBeGreaterThan(GATE_HOT_S)
+    expect(r.gateHoldS + GATE_HOT_S).toBeGreaterThan(salvoGapS)
+    // …but still goes cold inside two seconds once the crowd looks away.
+    expect(r.gateHoldS + GATE_HOT_S).toBeLessThan(2)
+  })
+
+  it('makes the gatling wind a door up faster than the squad\'s own gun', () => {
+    // The hose's one honest advantage over the launcher, made visible on the
+    // plate: the pump is a clock, so a faster gun needs its own multiplier.
+    expect(WEAPONS.gatling.pumpMul).toBeGreaterThan(1)
+    expect(WEAPONS.gatling.pumpMul).toBeLessThanOrEqual(2)
+    expect(WEAPONS.rocket.pumpMul).toBe(1)
+    expect(WEAPONS.gatling.gateHoldS).toBe(0)
+    // The gatling never fires slower than the hot window, so it needs no hold.
+    expect(1 / (BASE_FIRE_RATE * WEAPONS.gatling.rateMul)).toBeLessThan(GATE_HOT_S)
+  })
+})
+
+describe('the opening doorway races', () => {
+  it('is the only door on the road with its own pump, and it stops at ten', () => {
+    const doors = buildTrack(1).events.filter((e) => e.kind === 'gates')
+    const opener = doors[0]!
+    expect(opener.kind === 'gates' && opener.leaves).toHaveLength(1)
+    const leaf = opener.kind === 'gates' ? opener.leaves[0]! : null!
+    expect(leaf.pumpMul).toBe(OPENING_PUMP_MUL)
+    expect(leaf.pumpCap).toBe(OPENING_PUMP_CAP)
+    expect(OPENING_PUMP_CAP).toBe(10)
+    for (const d of doors.slice(1)) {
+      if (d.kind !== 'gates') continue
+      for (const l of d.leaves) {
+        expect(l.pumpMul, `stage 1 @${d.y}`).toBeUndefined()
+        expect(l.pumpCap, `stage 1 @${d.y}`).toBeUndefined()
+      }
+    }
+    // Fast enough to reach the cap inside the approach: at 2.6× a tick is
+    // under 200 ms, and the door is ~1.8 s of road from the start line.
+    expect(GATE_TICK_MS / OPENING_PUMP_MUL).toBeLessThan(200)
+    expect((OPENING_PUMP_CAP - leaf.value) * (GATE_TICK_MS / OPENING_PUMP_MUL) / 1000).toBeLessThan(1.8)
+  })
+})
 
 describe('what a multiplier is worth', () => {
   it('opens below its headline, so taking it cold is a real cost', () => {

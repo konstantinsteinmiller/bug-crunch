@@ -435,3 +435,77 @@ export const adaptiveBigHitMul = (authored: number, squad: number, perfect: numb
   const t = (perf - SLAM_HARD_PERF) / (SLAM_SOFT_PERF - SLAM_HARD_PERF)
   return HOPELESS_SLAM_MUL + (authored - HOPELESS_SLAM_MUL) * t
 }
+
+/**
+ * ─── The melt floor, stage 6 and up ─────────────────────────────────────────
+ *
+ * Everything above prices the boss BOTH ways: a strong run gets a smaller bar
+ * and a weak one gets a bigger bar. That is right for stages 1-5 and wrong
+ * from 6, for the reason stated above — a bar that is always exactly as big as
+ * you are is a bar your upgrades can never beat, and from stage 6 the shop is
+ * most of the game.
+ *
+ * So from stage 6 the adaptive number stops being the price and becomes a
+ * FLOOR. The authored curve is still the bar; the floor only raises it, and
+ * only when the authored bar would not survive three seconds of this run's
+ * fire.
+ *
+ * That single `Math.max` is what makes the whole thing scoped without needing a
+ * squad-size threshold to argue about:
+ *
+ *   a mid or low run   the authored bar is already worth far more than three
+ *                      seconds of their fire, so the floor is below it and
+ *                      NOTHING changes. No new difficulty, anywhere, for the
+ *                      players this was not written for.
+ *   an overpowered run the floor is above it and takes over. Upgrades keep
+ *                      shortening the fight right up to three seconds and then
+ *                      stop mattering, which is the correct place for a power
+ *                      curve to run out rather than at "the bar vanishes".
+ *
+ * ─── Why it was needed ──────────────────────────────────────────────────────
+ *
+ * Reported from stage 45+: a run read well enough arrives at the arena with
+ * ~1500 survivors and a launcher, and `BOSS_BASE_HP * bossHpScale(stage)` is a
+ * curve authored against an ordinary crowd. The bar is gone before the boss has
+ * finished walking in — the climax of a two-minute stage is a flash. Playing
+ * perfectly should buy a SHORT fight (three seconds, the top rung of the ladder
+ * above); it should not buy no fight at all.
+ */
+
+/** First stage the floor applies to. Below this the full ladder already runs. */
+export const MELT_FLOOR_STAGE = ADAPTIVE_BOSS_STAGES + 1
+
+/** True for the stages whose boss gets a floor but not the full ladder. */
+export const meltFloorStage = (stage: number): boolean => stage >= MELT_FLOOR_STAGE
+
+/**
+ * Seconds of straight fire the floor guarantees.
+ *
+ * Not a new number: it is `ADAPTIVE_RUNGS[0].seconds`, the top rung, which is
+ * already the game's answer to "how long should a fight last for someone who
+ * played it about as well as it can be played". A player who melts a stage-45
+ * boss has done exactly that, so they get exactly that.
+ */
+export const BOSS_MIN_FIRE_SECONDS = ADAPTIVE_RUNGS[0]!.seconds
+
+/**
+ * What the grenade's multiplier is capped at while the floor is holding the bar
+ * up — against the BOSS only, and never against anything else on the road.
+ *
+ * The cap is not decoration, it is what stops the floor being cosmetic. A
+ * grenade deals `squadDps × mult` as one instant hit, and the floor prices the
+ * bar at `BOSS_MIN_FIRE_SECONDS` of `squadDps`. At the base multiplier of 3
+ * those are THE SAME NUMBER: one bomb is worth exactly the three seconds the
+ * floor just bought, so without this the guaranteed fight is a bomb and a
+ * corpse. (Upgrades take the multiplier to 6, i.e. twice the whole bar.)
+ *
+ * Capped rather than scaled, deliberately. A proportional cut would leave a
+ * fully-upgraded grenade at 4x — still more than the bar — and the point is a
+ * guarantee that does not depend on how much the player has spent.
+ *
+ * Two seconds of the three, so a bomb thrown into a floored fight is a real
+ * decision (it ends the climax in about a second) rather than a delete button.
+ * Below the floor nothing changes: the grenade is the crowd's answer to a big
+ * bar and it stays that way everywhere the bar is honest.
+ */
+export const BOSS_FLOOR_GRENADE_MULT = 2

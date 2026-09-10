@@ -8,6 +8,7 @@ import FButton from '@/components/atoms/FButton.vue'
 import FSlider from '@/components/atoms/FSlider.vue'
 import FSelect from '@/components/atoms/FSelect.vue'
 import { LANGUAGES, LANGUAGE_AUTONYMS, DIFFICULTY } from '@/utils/enums'
+import { hapticsAvailable, hapticsEnabled, setHapticsEnabled } from '@/use/useHaptics'
 
 defineProps<{
   isOpen: boolean
@@ -73,6 +74,22 @@ const musicTrackList = computed(() => [
   { value: 'trance', label: t('options.musicTracks.trance') },
   { value: 'cozy', label: t('options.musicTracks.cozy') }
 ])
+
+// ─── Vibration ──────────────────────────────────────────────────────────────
+//
+// `hapticsAvailable` is resolved once at module load and is false on every
+// desktop and on every iPhone — `navigator.vibrate` is absent on iOS Safari
+// entirely, and desktop Chrome ships it as a silent no-op. The row is therefore
+// hidden rather than disabled: a settings control that provably cannot do
+// anything on this device teaches the player that the settings lie.
+//
+// An `FSelect` rather than a bespoke switch, because every other control on
+// this tab is one and the modal has no toggle atom — a one-off switch here
+// would be the only control in the game that looks like that.
+const hapticsList = computed(() => [
+  { value: 'on', label: t('options.on') },
+  { value: 'off', label: t('options.off') }
+])
 </script>
 
 <template lang="pug">
@@ -113,6 +130,19 @@ const musicTrackList = computed(() => [
             :options="musicTrackList"
             :model-value="userMusicTrack"
             @update:model-value="setSettingValue('musicTrack', $event)"
+          )
+        //- Phones only, and it lives on the GENERAL tab rather than the audio
+        //- one for a structural reason: `tabs` above drops the audio tab
+        //- entirely on touch devices, so a vibration setting parked there would
+        //- be reachable by exactly nobody who has a motor.
+        //- Lowest z of the four dropdowns — it is the last one down the column,
+        //- so its open list has to sit over nothing and under everything.
+        div(v-if="hapticsAvailable" class="z-[1] flex flex-col gap-1")
+          FSelect(
+            :label="t('options.haptics')"
+            :options="hapticsList"
+            :model-value="hapticsEnabled ? 'on' : 'off'"
+            @update:model-value="setHapticsEnabled($event === 'on')"
           )
 
     div(v-else-if="currentTab === 'audio'").flex.flex-col.justify-between.items-center

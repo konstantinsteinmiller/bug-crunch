@@ -13,6 +13,11 @@
             :key="i"
             :class="{ 'is-on': i <= pulled }"
           )
+        //- The gift's price, which is the whole of what makes it a gift. It
+        //- takes the pips' slot because a box with no levers has no pips, and
+        //- the row was rendering EMPTY there — a badge that showed a name and
+        //- then nothing, which reads as a thing still loading.
+        span.wtag__note(v-else-if="mode === 'gift'") {{ t('hud.weaponFree') }}
         //- What the weapon is actually worth, as a bare multiplier.
         //- Deliberately a NUMBER rather than a word: it is the one thing the
         //- player wants to know at the moment of pickup, it answers "was that
@@ -34,6 +39,16 @@ import { weaponTotalMul } from '@/use/useUpgrades'
  *
  * One badge doing two jobs, in the order the player meets them:
  *
+ *   GIFT   — a LIT glyph and the word "free", while stage 2's open box is on
+ *            the road. It is a third state rather than a puzzle with zero
+ *            pips, because the two say opposite things: the puzzle badge is a
+ *            to-do list ("there are two of these and you have both to do") and
+ *            the gift badge is a price tag ("this one costs nothing"). Dimmed
+ *            with an empty pip row — which is what a zero-lever puzzle rendered
+ *            as — the badge was actively arguing against the box, whose entire
+ *            job on stage 2 is to be walked into. The glyph is lit here for the
+ *            same reason the box on the road is: the player is being told what
+ *            the prize is BEFORE they commit to steering at it.
  *   PUZZLE — a dimmed glyph and a row of pips while a lever puzzle is live.
  *            This is the entire discoverability budget of the mechanic. The
  *            levers themselves are out at the rails with a chevron over them,
@@ -60,6 +75,9 @@ interface Props {
   /** Levers pulled so far, and how many there are. */
   pulled: number
   total: number
+  /** …and whether that box is the FREE one — stage 2's gift. See
+   *  `puzzleGift`: it is carried rather than inferred from `total === 0`. */
+  gift: boolean
   /** The weapon the player is actually carrying, or `null`. */
   active: WeaponId | null
 }
@@ -77,8 +95,8 @@ const WEAPON_ICONS: Record<WeaponId, GameIconName> = {
  * been cleared yet — and in that frame the truthful thing to show is the weapon
  * in the player's hands, not the puzzle they have just finished.
  */
-const mode = computed<'active' | 'puzzle' | null>(() =>
-  props.active ? 'active' : props.puzzle ? 'puzzle' : null
+const mode = computed<'active' | 'gift' | 'puzzle' | null>(() =>
+  props.active ? 'active' : props.puzzle ? (props.gift ? 'gift' : 'puzzle') : null
 )
 
 const weapon = computed<WeaponId | null>(() => props.active ?? props.puzzle)
@@ -95,9 +113,12 @@ const mult = computed(() => (props.active ? weaponTotalMul(props.active) : 0))
  *  gets no help at all from a dimmed glyph and a row of dots. */
 const label = computed(() => {
   if (!weapon.value) return ''
-  return props.active
-    ? t('hud.weaponActive', { name: name.value })
-    : t('hud.weaponLocked', { name: name.value, n: props.pulled, total: props.total })
+  if (props.active) return t('hud.weaponActive', { name: name.value })
+  // A gift has no levers, so the locked wording's "{n} of {total}" would read
+  // "0 of 0" to a screen reader — which is worse than silence, because it
+  // describes a lock that is not there.
+  if (mode.value === 'gift') return t('hud.weaponGift', { name: name.value })
+  return t('hud.weaponLocked', { name: name.value, n: props.pulled, total: props.total })
 })
 </script>
 
@@ -127,6 +148,16 @@ const label = computed(() => {
   // that pulses for the rest of the stage is a badge the player stops seeing.
   animation: wtag-pop 0.42s cubic-bezier(0.2, 1.5, 0.4, 1)
 
+// The gift, on the road and free. Warm like the active badge because it is the
+// same promise one beat earlier, but WITHOUT `wtag-pop`: the pop is the
+// arrival, and if the badge already jumped when the box came into view the
+// player gets no read at all on the moment they actually collect it. That
+// hand-off — warm badge, then the same badge popping and gaining a ×N — is
+// what keeps an open box's payoff worth watching.
+.wtag--gift
+  border-color: rgba(255, 214, 96, 0.42)
+  background-color: rgba(32, 22, 6, 0.78)
+
 .wtag__icon
   flex: 0 0 auto
   width: clamp(1.05rem, 4.6vw, 1.5rem)
@@ -136,6 +167,9 @@ const label = computed(() => {
 .wtag--active .wtag__icon
   color: #ffd93c
   filter: drop-shadow(0 0 6px rgba(255, 200, 60, 0.55))
+
+.wtag--gift .wtag__icon
+  color: #ffd07a
 
 .wtag__body
   display: flex
@@ -157,12 +191,24 @@ const label = computed(() => {
 .wtag--active .wtag__name
   color: #ffe9a8
 
+.wtag--gift .wtag__name
+  color: #f0dcb4
+
 .wtag__note
   font-size: clamp(0.44rem, 2vw, 0.58rem)
   font-weight: 700
   line-height: 1
   color: rgba(255, 233, 168, 0.75)
   white-space: nowrap
+
+// The active badge's note is a bare multiplier that the eye finds because the
+// whole pill just popped. The gift's note is a WORD, on a pill that arrives
+// quietly, and it is the argument for steering — so it gets the weight the
+// animation is not spending.
+.wtag--gift .wtag__note
+  font-weight: 900
+  letter-spacing: 0.06em
+  color: #ffd07a
 
 .wtag__pips
   display: flex

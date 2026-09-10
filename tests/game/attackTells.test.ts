@@ -37,8 +37,8 @@ const STEP_MS = 16
  * the question that measures it. `bossKinds.test.ts` measures the bolt on its
  * own terms — that it exists in the world, visibly, before it hurts anybody.
  */
-const CASTS = new Set<FxEvent['kind']>(['meteorCast', 'sliceCast', 'rakeCast'])
-const LANDS = new Set<FxEvent['kind']>(['bossSlam', 'eliteSweep', 'bossRake'])
+const CASTS = new Set<FxEvent['kind']>(['meteorCast', 'sliceCast', 'rakeCast', 'chargeCast'])
+const LANDS = new Set<FxEvent['kind']>(['bossSlam', 'eliteSweep', 'bossRake', 'bossCharge'])
 
 const fresh = async () => {
   localStorage.clear()

@@ -88,7 +88,12 @@ describe('the boss cannot be skipped', () => {
     const fx = await reachBoss(game)
 
     const rages = fx.filter((e) => e.kind === 'bossRage')
-    const slams = fx.filter((e) => e.kind === 'bossSlam')
+    // "The boss's big attack" is one idea whichever shape it arrives in — the
+    // same vocabulary `throwRake` bills a rake under. The LAST gate is the one
+    // that turns the fight over (see `BOSS_ENRAGE_AT`) and the swing it owes
+    // arrives as a lane charge, so counting only `bossSlam` here would read a
+    // paid gate as a skipped one.
+    const swings = fx.filter((e) => e.kind === 'bossSlam' || e.kind === 'bossCharge')
 
     // Both gates, in order, exactly once each.
     expect(rages.length, 'the boss skipped a guard phase').toBe(BOSS_GUARD_GATES.length)
@@ -96,7 +101,7 @@ describe('the boss cannot be skipped', () => {
 
     // …and every guard is paid off with an actual swing. This is the whole
     // point: a player with 30 000 DPS still has to dodge twice.
-    expect(slams.length, 'a guard phase never produced a slam')
+    expect(swings.length, 'a guard phase never produced a swing')
       .toBeGreaterThanOrEqual(BOSS_GUARD_GATES.length)
     expect(game.phase.value).toBe('clear')
   })

@@ -3797,13 +3797,95 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 
 ---
 
-# chest — The shop chest  (images/ui/chest.webp)
+# chest — The idle treasure chest  (images/ui/chest.webp)
 
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
-WHAT IT IS: The shop button's treasure chest: a squat iron-banded strongbox of dark oak seen straight on and a little from above, its domed lid raised a crack so a cold gold light leaks from the gap, a skull-faced iron hasp on the front, riveted black-iron bands and corners. A thing you would loot. Bold shape, no fine detail — it is read at 24 px on a button — and the same silhouette as the reference: a wide lid over a box, the lid overhanging.
+WHAT IT IS: The HUD's treasure chest: a squat iron-banded strongbox of dark oak seen straight on and a little from above, its domed lid raised a crack so a cold gold light leaks from the gap, a skull-faced iron hasp on the front, riveted black-iron bands and corners. A thing you would loot. Bold shape, no fine detail — it is read at 24 px beside the coin badge — and the same silhouette as the reference: a wide lid over a box, the lid overhanging.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+
+---
+
+# forge — The upgrade forge  (images/ui/forge.webp)
+
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The upgrade shop button's mark: a squat blackened-iron anvil, its horn to the LEFT and its foot splayed, standing under a bold upward chevron of hot molten gold, with two or three sparks flying off it. The anvil's face glows orange where the chevron rises off it. Bold shape, no fine detail — it is read at 24 px on a button — and the same layout as the reference: the chevron in the top half, the anvil in the bottom half, both centred and filling the frame.
 
 STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
 bestiary or the key art of a dungeon crawler. Match this in every panel:
@@ -3968,6 +4050,170 @@ The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
 
 WHAT IT IS: The shield skill's button icon: a heater shield of cold steel with a heavy near-black rim and a raised iron boss, a cold blue witch-light glowing in its centre band — the same cold blue as the dome it raises over the crowd. Bold and simple, read at 24 px on a round button; the same silhouette as the reference.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+
+---
+
+# weapon-card-rocket — The launcher card  (images/ui/weapon-card-rocket.webp)
+
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The stage-3 weapon choice's ROCKET LAUNCHER card: a shoulder-fired launcher of blackened iron and dark scorched wood seen three-quarters from the front-left, its muzzle pointing to the upper right, a fat finned rocket seated in the tube with its warhead just showing, a strap and two rivet bands along the barrel, and a hot ember-orange glow inside the mouth of the tube as if a shot is a heartbeat away. Weight and menace: this is the heavy option. Bold silhouette read at 100 px, the same layout as the reference — the weapon diagonal across the frame, filling about nine tenths of it.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+
+---
+
+# weapon-card-gatling — The gatling card  (images/ui/weapon-card-gatling.webp)
+
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The stage-3 weapon choice's GATLING GUN card: a six-barrelled rotary gun of gunmetal and brass seen three-quarters from the front-left, barrels pointing to the upper right and mid-spin, a cold soul-blue glow between the barrels and a spray of brass casings falling from the breech. Speed and volume: this is the fast option, so everything about it should look like it is already moving. Bold silhouette read at 100 px, the same layout as the reference — the weapon diagonal across the frame, filling about nine tenths of it.
 
 STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
 bestiary or the key art of a dungeon crawler. Match this in every panel:

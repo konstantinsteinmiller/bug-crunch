@@ -358,7 +358,11 @@ export const UI_ICON_GLYPH = {
   chest: 'chest',
   forge: 'anvil',
   'skill-grenade': 'bomb',
-  'skill-shield': 'shield'
+  'skill-shield': 'shield',
+  // The two cards of the stage-3 weapon choice — the weapon itself, big, on a
+  // lit plate. Their glyphs are the HUD's own weapon marks.
+  'weapon-card-rocket': 'rocket',
+  'weapon-card-gatling': 'gatling'
 } as const satisfies Record<string, GameIconName>
 
 export type UiIconId = keyof typeof UI_ICON_GLYPH

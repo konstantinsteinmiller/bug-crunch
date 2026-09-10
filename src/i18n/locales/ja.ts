@@ -31,8 +31,11 @@ export default {
     'fireRate': '連射',
     'incoming': '攻撃が来る！',
     'dodge': '回避',
+    'milestone': '{n}人突破！',
     'weaponActive': '{name} 準備完了',
-    'weaponLocked': '{name} ロック中 — レバー {total} 本中 {n} 本'
+    'weaponLocked': '{name} ロック中 — レバー {total} 本中 {n} 本',
+    'weaponGift': '{name} が前方に — 無料、レバーなし',
+    'weaponFree': '無料'
   },
 
   'weapons': {
@@ -53,15 +56,41 @@ export default {
     'rate': { 'touch': '青い箱：全員の連射が速くなる', 'desktop': '青い箱：全員の連射が速くなる' },
     'boss': { 'touch': '赤い輪から離れろ！', 'desktop': '赤い輪から離れろ！' },
     'lever': { 'touch': '道の両端のレバーを両方撃て — 武器箱が開く', 'desktop': '道の両端のレバーを両方撃て — 武器箱が開く' },
-    'guard': { 'touch': 'シールド展開中 — 攻撃は効かない。動け！', 'desktop': 'シールド展開中 — 攻撃は効かない。動け！' }
+    'guard': { 'touch': 'シールド展開中 — 攻撃は効かない。動け！', 'desktop': 'シールド展開中 — 攻撃は効かない。動け！' },
+    'cage': { 'touch': '檻を撃て — 囚人が仲間になる', 'desktop': '檻を撃て — 囚人が仲間になる' },
+    'shieldBox': { 'touch': 'シールド箱 — 待機して大きな一撃を1回防ぐ', 'desktop': 'シールド箱 — 待機して大きな一撃を1回防ぐ' }
   },
 
   'flow': {
 
-    'unlocked': '解放！'
+    'unlocked': '解放！',
+
+    'guardian': "守護天使が救ってくれた！",
+
+    'guardianSub': "{n}人の生存者が復帰",
+
+    'next': "次: {label} · {when}"
 
   },
 
+  'ladder': {
+    'weaponPick': "武器を選ぶ",
+    'nextStage': "次のステージ",
+    'stagesAway': "{n}ステージ後"
+  },
+  'weaponPick': {
+    'title': "武器を選ぼう",
+    'subtitle': "ステージ{n}で使える。道の先にもっと待っている。",
+    'take': "もらう",
+    'rocket': {
+      'a': "追尾サルボ",
+      'b': "爆発ダメージ"
+    },
+    'gatling': {
+      'a': "連射速度2倍",
+      'b': "ゲートを速く育てる"
+    }
+  },
   'result': {
     'stageClear': 'ステージクリア！',
     'wipedOut': '部隊全滅',
@@ -79,6 +108,16 @@ export default {
     'upgradeHint': '部隊を強化しよう！',
     'rankOf': '{n} 人中',
     'upNext': '次: ステージ {n}'
+  },
+
+  // Two strings only; everything ON the card comes from keys this file
+  // already had (see en.ts). `action` is the accessible name of an
+  // icon-only button. `text` rides in the share sheet and is read by the
+  // person who receives the picture, so it is a boast, and it has to still
+  // make sense if the image never arrives.
+  'share': {
+    'action': 'リザルトを共有',
+    'text': '{game} でステージ {n} まで到達しました。これより先へ行けますか？'
   },
 
   'leaderboard': {
@@ -100,6 +139,19 @@ export default {
     'ready': '宝箱を開けてコイン{n}枚を獲得',
     'filling': '宝箱を補充中',
     'spent': '宝箱は明日まで空です'
+  },
+
+  // Daily expedition. See en.ts for what each state means, why the multiplier
+  // is split from any word, and why `hud` has to stay one short word.
+  'expedition': {
+    'title': 'デイリー遠征',
+    'hud': '遠征',
+    'multiplier': '{n}×',
+    'available': 'デイリー遠征 — 今日のコース、コイン3倍',
+    'confirm': '遠征を開始',
+    'spent': 'デイリー遠征 — 次のコースまで{time}',
+    'done': 'また明日',
+    'back': 'キャンペーンに戻る'
   },
 
   'skills': {
@@ -143,6 +195,7 @@ export default {
     'title': '設定', 'general': '一般', 'audio': 'オーディオ', 'language': '言語',
     'difficulty': '難易度', 'soundEffects': '効果音', 'music': '音楽', 'musicTrack': '楽曲',
     'musicTracks': { 'cozy': 'コージーハーモニー', 'trance': 'トランストンネル' },
+    'haptics': 'バイブレーション', 'on': 'オン', 'off': 'オフ',
     'close': '保存して閉じる',
     'difficulties': { 'easy': 'イージー', 'medium': 'ノーマル', 'hard': 'ハード' },
     'difficultyHints': {
