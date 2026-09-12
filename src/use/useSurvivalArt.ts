@@ -33,11 +33,12 @@ import {
 } from '@/use/useSkillFx'
 import { CLAW_CORE_FRACTION, HEAL_FRACTION } from '@/game/threats'
 import {
-  HERO_CYCLE_MS, HERO_FOOT_R, HERO_FRAME_ASPECT, HERO_HEIGHT_R, outfitIndex, outfitTone,
-  primeSurvivors, survivorFrame
+  DOWN_FALL_SIDE, HERO_CYCLE_MS, HERO_FOOT_R, HERO_FRAME_ASPECT, HERO_HEIGHT_R,
+  outfitIndex, outfitTone, primeSurvivors, SURVIVOR_FALL_MS, survivorDownFrame,
+  survivorFallStep, survivorFrame
 } from '@/game/heroSprites'
 import {
-  SPRITE_FOOT_R, SPRITE_HEIGHT_R, bakeMonsterSlice, deathFallSide,
+  MONSTER_FRAME_ASPECT, SPRITE_FOOT_R, SPRITE_HEIGHT_R, bakeMonsterSlice, deathFallSide,
   monsterDeathFrame, monsterDeathLength, monsterFaces, monsterFrame, monstersReady,
   primeMonsterDeaths, primeMonsterSprites
 } from '@/game/monsterSprites'
@@ -4591,6 +4592,67 @@ let crowdBoxT = 0
 let crowdBoxB = 0
 let crowdBoxN = 0
 
+/**
+ * The boss's drawn box, measured the same way and for the same reason: the
+ * result screen's "boss felled" label is a DOM node over the canvas, and where
+ * the body is on screen is not derivable outside the render pass. A boss is
+ * foot-anchored like a survivor, its height is a multiple of the camera scale
+ * that changes with the design, and — the part that decides the whole placement
+ * — it LIES DOWN when it dies, which is exactly when the label is shown.
+ *
+ * Measured during the draw, read by the scene on its own clock. In CSS pixels,
+ * because `setViewport` is handed `cssW/cssH` and the canvas carries the DPR in
+ * its transform: `worldToScreenX/Y` are already in the space the scene positions
+ * overlays in (the same space `laneHalfPx` and `squadFloorPx` are computed in).
+ */
+let bossBoxL = 0
+let bossBoxR = 0
+let bossBoxT = 0
+let bossBoxB = 0
+let bossBoxN = 0
+
+/**
+ * Record a boss body's box. `down` is 0 for a boss on its feet and 1 for one
+ * lying where it fell, which pulls the top of the box down with the body — a
+ * label parked at a standing boss's crown floats a long way above a corpse.
+ *
+ * The box is the BLIT box, a little wider and taller than the ink inside it.
+ * That is the safe side of the error for "above the body and not overlapping
+ * it": the label is placed clear of the frame, so it cannot clip a horn.
+ */
+const measureBossBox = (sx: number, sy: number, size: number, down: number): void => {
+  // The same numbers the body's own blit uses (`size * 1.6` of character height
+  // through the sprite's foot line), so the box cannot drift away from the art.
+  const h = (size * 1.6) / SPRITE_HEIGHT_R
+  const top = sy - h * SPRITE_FOOT_R * (1 - 0.45 * down)
+  const halfW = h * MONSTER_FRAME_ASPECT * 0.5
+  bossBoxL = sx - halfW
+  bossBoxR = sx + halfW
+  bossBoxT = top
+  bossBoxB = sy
+  bossBoxN = 1
+}
+
+/**
+ * Screen-space box of the boss's body — `x`/`y` its TOP-LEFT, in CSS pixels
+ * relative to the canvas — or null when there is no boss on screen.
+ *
+ * Named for what reads it: the scene's "boss felled" label, which sits above
+ * the body and must not overlap it, so it takes `y` for its bottom-anchored
+ * line and `x + w / 2` for its centre. It keeps answering for the whole of
+ * `BOSS_FELLED_MS` after the kill — the body IS what the label is about, and it
+ * is lying down by then, which is why `measureBossBox` pulls the top of the box
+ * down with the fall — and for the corpse the next stage opens beside.
+ *
+ * A LIVE boss answers too, rather than null: the label appears on the frame the
+ * kill lands, when the body is still going over, and a reader that has to wait
+ * for a state change would spend that frame at its fallback position.
+ */
+export const felledBossBox = (): { x: number; y: number; w: number; h: number } | null =>
+  bossBoxN === 0
+    ? null
+    : { x: bossBoxL, y: bossBoxT, w: bossBoxR - bossBoxL, h: bossBoxB - bossBoxT }
+
 /** Longest remaining time seen this activation — the countdown ring's 100%. */
 let shieldTotalMs = 0
 /** When the shield last ate a hit, so the bubble can flash on absorb. */
@@ -6098,14 +6160,23 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
     const halfW = g.halfW * scale
     const height = scale * 1.5
     const hot = g.hotFor < 0.4
-    const mul = g.op === 'mul'
-    const bad = g.op === 'div'
-    // Both hostile ops get the trap's unlit curtain and crooked plate: whatever
-    // else separates them, the first thing the player has to read is 'this door
-    // takes something', and that read is carried by lighting and tilt long
-    // before the glyph is legible.
-    const hostile = g.op === 'div' || g.op === 'sub'
-    const tint = GATE_TINT[g.op]
+    const mul = g.op === 'mul' && !g.mystery
+    const bad = g.op === 'div' && !g.mystery
+    // ── A face-down door gives nothing away ──
+    //
+    // Not just the number: the whole dressing. The curtain's tint, the crooked
+    // plate and the trap's unlit frame are all tells a player learns to read in
+    // the first five stages, and a `?` sitting behind a red unlit curtain is
+    // not a mystery — it is a `÷` with the number filed off. So a mystery leaf
+    // borrows the neutral `add` dressing and stands square: the ONLY thing the
+    // player has to go on is where it is.
+    // Both hostile ops otherwise get the trap's unlit curtain and crooked plate:
+    // whatever else separates them, the first thing the player has to read is
+    // 'this door takes something', and that read is carried by lighting and
+    // tilt long before the glyph is legible.
+    const mystery = g.mystery
+    const hostile = !mystery && (g.op === 'div' || g.op === 'sub')
+    const tint = GATE_TINT[mystery ? 'add' : g.op]
     const pop = g.pop
 
     ctx.save()
@@ -6213,7 +6284,11 @@ const drawGates = (ctx: CanvasRenderingContext2D): void => {
     // crooked, so the tilt alone flags it before the glyph is readable.
     const s = 1 + pop * 0.28
     const shown = gateValueLabel(g.value)
-    const label = bad ? `÷${shown}` : g.op === 'sub' ? `−${shown}` : mul ? `×${shown}` : `+${shown}`
+    // A face-down door wears a question mark and nothing else — the dressing
+    // around it was already neutralised at the top of the loop.
+    const label = g.mystery
+      ? '?'
+      : bad ? `÷${shown}` : g.op === 'sub' ? `−${shown}` : mul ? `×${shown}` : `+${shown}`
     const plateH = height * 0.52
     // Measured OUTSIDE the pop scale, so the punch magnifies a plate that was
     // already the right size rather than changing how the number is laid out
@@ -7734,13 +7809,21 @@ const paintFallenBoss = (
  * everything that moves, because the crowd walks over it.
  */
 const drawBossCorpse = (ctx: CanvasRenderingContext2D): void => {
+  // The first of the frame's two boss draws, so it is where the body's box is
+  // forgotten — a boss that has left the screen must stop answering
+  // `felledBossBox`. The live body is drawn after this one and overwrites it,
+  // which is the right precedence: the label belongs to the boss being fought
+  // or just felled, not to the one the last stage left lying on the road.
+  bossBoxN = 0
   const c = getBossCorpse()
   if (!c) return
   const sy = worldToScreenY(c.y)
   const size = c.scale * scale * 1.3
   // Behind the bottom edge (the crowd is long past it) or not yet on screen.
   if (sy - size * 1.2 > viewH || sy + size * 1.2 < 0) return
-  paintFallenBoss(ctx, c.design, worldToScreenX(c.x), sy, size, 1, c.fall)
+  const sx = worldToScreenX(c.x)
+  measureBossBox(sx, sy, size, 1)
+  paintFallenBoss(ctx, c.design, sx, sy, size, 1, c.fall)
 }
 
 /**
@@ -7778,6 +7861,10 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   const sy = worldToScreenY(b.y)
   const size = b.scale * scale * 1.3
   const dying = b.dead ? Math.min(1, b.dying / 900) : 0
+  // Where the body is, for the scene's "boss felled" label. Measured for a live
+  // boss as well as a dead one: the label appears the moment the kill lands, and
+  // the body it points at is still going down at that moment.
+  measureBossBox(sx, sy, size, dying)
 
   // Slam telegraph: a ring that closes on the ground the boss is about to hit.
   //
@@ -8028,11 +8115,30 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
 /**
  * Draw the squad.
  *
- * Sorted back-to-front so the crowd overlaps correctly — without it a hundred
- * and ninety sprites at random depths look like confetti. The sort is over a
- * pre-allocated index array to keep the frame allocation-free.
+ * Ordered back-to-front so the crowd overlaps correctly — without it a hundred
+ * and ninety sprites at random depths look like confetti. The ordering runs
+ * over pre-allocated index arrays to keep the frame allocation-free.
+ *
+ * ─── Why it is a BUCKET sort and not a comparison sort ──────────────────────
+ *
+ * This ran as `order.sort((a, b) => units[b].y - units[a].y)` every frame: a
+ * comparison sort is O(n log n) with a JS closure called at every comparison —
+ * about 1 500 calls at a hundred and ninety bodies, sixty times a second, each
+ * one two array index lookups and a subtract. On a cheap Android that is real
+ * frame time spent establishing an order the eye cannot resolve to better than
+ * a sprite's height anyway.
+ *
+ * A counting sort into `DEPTH_BANDS` bands is O(n), branch-free in the hot pass
+ * and closure-free throughout. The crowd is ~3.3 units deep at full squeeze, so
+ * sixteen bands put every band well under one body height — bodies inside a
+ * band are drawn in index order, and two sprites whose feet are two centimetres
+ * apart may overlap either way round without anybody being able to say which
+ * was wrong.
  */
+const DEPTH_BANDS = 16
 let order: number[] = []
+let ordered: number[] = []
+const bandStart = new Int32Array(DEPTH_BANDS + 1)
 
 const drawUnits = (ctx: CanvasRenderingContext2D): void => {
   const units = getUnits()
@@ -8073,8 +8179,44 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
     for (let i = 0; i < n; i++) if (units[i]!.seed < keep) order[drawn++] = i
   }
   if (order.length !== drawn) order.length = drawn
-  // Far (higher y) first.
-  order.sort((a, b) => (units[b]!.y - units[a]!.y))
+
+  // ── Depth order, far (higher y) first ──
+  //
+  // Counting sort over the crowd's OWN y extent, re-measured each frame: the
+  // formation is a few units deep and moves down the road continuously, so a
+  // fixed band range would put every body in one band on most frames. Two
+  // passes to count and place, plus one to measure — three linear walks instead
+  // of n·log n comparisons through a closure.
+  let minY = Infinity
+  let maxY = -Infinity
+  for (let k = 0; k < drawn; k++) {
+    const y = units[order[k]!]!.y
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const span = maxY - minY
+  // A crowd standing on one line (one survivor, or a formation not yet spread)
+  // has no depth to sort and the division below would be infinite.
+  if (span > 1e-4) {
+    // Band 0 is the FARTHEST, so it is painted first and everything after it
+    // lands in front. `maxY - y` rather than `y - minY` for exactly that.
+    const k01 = DEPTH_BANDS / span
+    bandStart.fill(0)
+    for (let k = 0; k < drawn; k++) {
+      const b = (maxY - units[order[k]!]!.y) * k01 | 0
+      bandStart[(b < DEPTH_BANDS ? b : DEPTH_BANDS - 1) + 1]!++
+    }
+    for (let b = 1; b <= DEPTH_BANDS; b++) bandStart[b]! += bandStart[b - 1]!
+    if (ordered.length !== drawn) ordered.length = drawn
+    for (let k = 0; k < drawn; k++) {
+      const i = order[k]!
+      const b = (maxY - units[i]!.y) * k01 | 0
+      ordered[bandStart[b < DEPTH_BANDS ? b : DEPTH_BANDS - 1]!++] = i
+    }
+    const swap = order
+    order = ordered
+    ordered = swap
+  }
 
   const t = nowMs()
   const squeeze = crowdSqueeze
@@ -8145,10 +8287,13 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
   // was built. Keyed on the two numbers that shape it, so it also survives
   // across frames for as long as the camera scale and the fire rate hold.
   const size = scale * 1.15
+  // The blit box and the bubble's half-width. Both are pure functions of
+  // `size`, which is latched for the frame, so they were being recomputed up to
+  // a hundred and ninety times for one answer.
+  const boxH = (size * 1.05) / HERO_HEIGHT_R
+  const boxHalfW = boxH * HERO_FRAME_ASPECT * 0.26
   const flashY = -size * 0.95
   const flashR = size * (0.34 + rateHeat * 0.13)
-  // Frame-constant, and it was a template literal built once per drawn body.
-  const shadowTone = `rgba(0,0,0,${0.3 + squeeze * 0.16})`
   const flashRamp = muzzleRamp(ctx, flashY, flashR)
 
   for (let k = 0; k < drawn; k++) {
@@ -8158,26 +8303,37 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
     const sx = worldToScreenX(u.x)
 
 
-    const dieK = u.dying > 0 ? u.dying / 420 : 1
+    // ── Going down ──
+    //
+    // `u.dying` counts DOWN from `SURVIVOR_FALL_MS` toward the frame the
+    // simulation splices the body out on, so the fall's progress is its
+    // complement. What comes back is which picture to blit and the transform to
+    // blit it under — see `survivorFallStep`, which owns the shape of the fall
+    // and is the only thing that has to change to retime it.
+    // `u.cause` is what parts a fall from a crash: a body billed to a barricade,
+    // a crate or a divider stays crumpled against the thing that stopped it
+    // instead of going on over onto the road (`CRASH_CAUSES`, in the sim,
+    // because the sim is what knows what a barricade is).
+    const fall = u.dying > 0
+      ? survivorFallStep(1 - u.dying / SURVIVOR_FALL_MS, u.seed, u.cause)
+      : null
 
     // Feed the bubble's bounding box. Dying bodies are excluded: they fall
     // outward, and a shield that swelled to cover the casualties would grow
     // every time it failed to prevent one.
-    if (u.dying <= 0) {
+    if (!fall) {
       // Derived from the same numbers the blit uses, so the box cannot drift
       // away from the art if the sprite metrics are ever retuned. The width is
       // the visible torso rather than the padded frame, which is mostly air.
       // In frame heights rather than the bake's pixels, so the box holds for a
       // painted strip at any resolution.
-      const boxH = (size * 1.05) / HERO_HEIGHT_R
-      const halfW = boxH * HERO_FRAME_ASPECT * 0.26
       const top = sy - boxH * HERO_FOOT_R * pitch
       if (crowdBoxN === 0) {
-        crowdBoxL = sx - halfW; crowdBoxR = sx + halfW
+        crowdBoxL = sx - boxHalfW; crowdBoxR = sx + boxHalfW
         crowdBoxT = top; crowdBoxB = sy
       } else {
-        if (sx - halfW < crowdBoxL) crowdBoxL = sx - halfW
-        if (sx + halfW > crowdBoxR) crowdBoxR = sx + halfW
+        if (sx - boxHalfW < crowdBoxL) crowdBoxL = sx - boxHalfW
+        if (sx + boxHalfW > crowdBoxR) crowdBoxR = sx + boxHalfW
         if (top < crowdBoxT) crowdBoxT = top
         if (sy > crowdBoxB) crowdBoxB = sy
       }
@@ -8186,25 +8342,56 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
 
     ctx.save()
     ctx.translate(sx, sy)
-    ctx.globalAlpha = dieK
+    // Assigned for a LIVING body too, and not only for a falling one: the old
+    // code set it unconditionally (`dieK` is 1 while alive), so an alpha left
+    // behind by an earlier layer has never reached the crowd, and finding out
+    // the hard way that one does is a translucent squad.
+    ctx.globalAlpha = fall ? fall.alpha : 1
 
-    // Shadow first — it is what plants the crowd on the road. It TIGHTENS and
-    // darkens as the formation compresses: a body with room around it casts a
-    // soft pool, a body being shoved from both sides casts a hard contact patch.
+    // ── There is no per-body shadow here any more ──
     //
-    // Seventy of these at `min`, a hundred and ninety at `high`, and each is a
-    // path build plus a fill. The pooled sheet above is what actually plants the
-    // formation on the road; the per-body patch is the detail on top of it, and
-    // it is the first thing to go.
-    if (!minFx) {
-      ctx.fillStyle = shadowTone
-      ctx.beginPath()
-      ctx.ellipse(0, 0, size * 0.2 * (1 - squeeze * 0.34), size * 0.07, 0, 0, Math.PI * 2)
-      ctx.fill()
-    }
-
-    if (u.dying > 0) ctx.rotate((1 - dieK) * 1.5)
-    else if (squeeze > 0.05) {
+    // There used to be: an ellipse path plus a fill under every drawn survivor,
+    // up to a hundred and ninety of them a frame, tightening as the formation
+    // compressed. It was the single most expensive thing in this loop and the
+    // least visible — at crowd size the bodies overlap several times over, so
+    // each patch was drawn almost entirely underneath the sprites in front of
+    // it, and the ones that did show never merged into a mass: two hundred
+    // separate pools read as two hundred people standing near each other, which
+    // is the exact effect the pooled sheet above was added to replace.
+    //
+    // So the pooled gradient IS the crowd's shadow now, at one fill for the
+    // whole formation, and it already carries the compression that the per-body
+    // patch was varying. Nothing else in this function reads `squeeze` for
+    // shade, and no tier draws them: `minFx` no longer changes what is under a
+    // survivor, only what is around them.
+    if (fall) {
+      // ── The fall ──
+      //
+      // WHICH WAY it goes over is the blow's own direction: `killUnit` throws
+      // the body along the `dirX` it was hit from and adds a jitter smaller than
+      // that impulse, so the sign of `vx` IS the side of the blow. A body killed
+      // against a barricade, a crate or a pillar is thrown away from it
+      // (`Math.sign(u.x - prop.x)`), so it crashes into the thing, jolts back
+      // against it and then goes down BESIDE it — never through it. The old
+      // code turned every body clockwise whatever hit it.
+      //
+      // Everything here is scale and rotation about the feet the body is
+      // already translated to, which is why a fall costs the same as a lean.
+      const side = u.vx >= 0 ? 1 : -1
+      if (fall.sink > 0) ctx.translate(0, fall.sink * boxH)
+      if (fall.squash !== 1) ctx.scale(fall.stretch, fall.squash)
+      if (fall.pose === 'run') {
+        ctx.rotate(side * fall.tilt)
+      } else {
+        // The held poses are DRAWN going over to one side (`DOWN_FALL_SIDE`),
+        // so a body thrown the other way is mirrored — and inside a mirrored
+        // frame the residual roll has to be signed by the side the drawing
+        // falls to, not by the side the body was thrown, or it would rock back
+        // up the way it came.
+        if (side !== DOWN_FALL_SIDE) ctx.scale(-1, 1)
+        ctx.rotate(DOWN_FALL_SIDE * fall.tilt)
+      }
+    } else if (squeeze > 0.05) {
       // ── The funnel, part 3: the lean ──
       //
       // Every survivor leans INWARD, toward the centre line they are being
@@ -8217,14 +8404,23 @@ const drawUnits = (ctx: CanvasRenderingContext2D): void => {
       ctx.rotate(-lean * squeeze * 0.16)
     }
 
-    const frame = survivorFrame(outfitIndex(u.i), (t / HERO_CYCLE_MS + u.phase) % 1)
+    // A body on the ground is its own picture — the painted panel if the fall
+    // sheet is there, and the same fall DRAWN until it is (`survivorDownFrame`).
+    // Never the run frame rolled over: that is the shortcut the boss deaths were
+    // rejected for, and it is only ever on screen here while the body is still
+    // in the air and moving too fast to read as a pose.
+    const frame = fall && fall.pose !== 'run'
+      ? survivorDownFrame(outfitIndex(u.i), fall.pose)
+      : survivorFrame(outfitIndex(u.i), (t / HERO_CYCLE_MS + u.phase) % 1)
     if (frame) {
-      const boxH = (size * 1.05) / HERO_HEIGHT_R
       const dw = boxH * (frame.width / frame.height)
       const dh = boxH * pitch
       const dy = -boxH * HERO_FOOT_R * pitch
       ctx.drawImage(frame, -dw / 2, dy, dw, dh)
-      if (u.flash > 0) {
+      // Not on a body that is going down: the bloom is its own muzzle flash
+      // lighting it, and a corpse lit from a shot it no longer fires reads as a
+      // sprite flickering.
+      if (u.flash > 0 && !fall) {
         ctx.save()
         ctx.globalAlpha = Math.min(1, u.flash / 220) * 0.5
         ctx.globalCompositeOperation = 'lighter'
@@ -9780,13 +9976,39 @@ const applyFx = (e: FxEvent): void => {
     case 'unitLost': {
       playFx('unitLost')
       hurtPulse = Math.min(1, hurtPulse + 0.35)
-      const tone = outfitTone(e.outfit)
-      void tone
+
+      // ── Kicked-up ground, not a spray ──
+      //
+      // This burst was eight round particles at `[220, 90, 80]` — a flat red,
+      // thrown upward and outward from the body with gravity on it. Nothing in
+      // the code called it blood and the intent was clearly a "hit" accent, but
+      // that is precisely what it drew: a red spatter leaving a person. It is a
+      // children's game, and the rule is no blood.
+      //
+      // It survived this long because a death used to be over in a blink. Now
+      // that a body visibly falls, crumples and lies there for the better part
+      // of half a second, the spray sits ON the fallen body for all of it, which
+      // is the read that made it obvious.
+      //
+      // So the burst is the ROAD instead of the body: the same eight particles
+      // in the crowd's own `DUST`, lower, flatter and slower, so a loss still
+      // lands as an impact without anything leaving the survivor.
+      //
+      // Not tinted per outfit, and the dead `outfitTone(e.outfit)` call that
+      // used to sit here (fetched, then thrown away on a `void`) is gone with
+      // the red: `CelTones.base` is a CSS colour STRING and a particle takes an
+      // RGB triple, so mixing the two means parsing a hex on every death of a
+      // hundred-strong wipe. Dust off a road does not need to know whose boots
+      // kicked it.
       for (let i = 0; i < 8; i++) {
         const a = Math.random() * Math.PI * 2
         emit({
-          x: e.x, y: e.y + 0.3, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3 + 2,
-          life: 420, size: 0.09, color: [220, 90, 80], shape: 0, gravity: 8, drag: 1.5
+          // Flat and low: dust is pushed OUT along the ground by something
+          // landing on it, not thrown up out of it.
+          x: e.x, y: e.y + 0.12,
+          vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 1.1 + 0.5,
+          life: 520, size: 0.11, color: DUST, shape: 3,
+          alpha: 0.5, gravity: 2.4, drag: 3
         })
       }
       break

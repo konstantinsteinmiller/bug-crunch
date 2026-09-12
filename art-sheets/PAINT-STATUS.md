@@ -4,7 +4,7 @@ A report, not a contract: it is a picture of `art-sheets/painted/` and the
 slicer's receipt at the moment it was written. Re-run `pnpm art:prompts`
 after painting or slicing anything.
 
-**10 sliced · 0 need a repaint · 62 painted, unreceipted · 1 outstanding**
+**11 sliced · 0 need a repaint · 62 painted, unreceipted · 1 outstanding**
 
 | | Sheet | Prompt block in | Reference | State |
 | --- | --- | --- | --- | --- |
@@ -81,6 +81,7 @@ after painting or slicing anything.
 | ✓ | **Marrow Knight — death** | `PROMPTS-DEATHS.md` | `death-marrowknight.png` (rev `5e868a51b238`) | sliced 2026-09-12 |
 | ✓ | **Cinderhound — death** | `PROMPTS-DEATHS.md` | `death-cinderhound.png` (rev `c926e611e39c`) | sliced 2026-09-12 |
 | ✓ | **Rattlejack — death** | `PROMPTS-DEATHS.md` | `death-rattlejack.png` (rev `b7feff195a16`) | sliced 2026-09-12 |
+| ✓ | **Survivors, down** | `PROMPTS-DEATHS.md` | `fall-survivors.png` (rev `7ec7e5d15b1b`) | sliced 2026-09-12 |
 
 ## What the marks mean
 

@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type GateOpts = {
   crazy?: boolean
+  wavedash?: boolean
   fullRelease?: boolean
   rewardedReady?: boolean
   /** Which ad provider resolved. `'noop'` is local dev / plain web. */
@@ -21,7 +22,10 @@ type GateOpts = {
 
 const loadGate = async (opts: GateOpts = {}) => {
   vi.resetModules()
-  vi.doMock('@/use/useUser', () => ({ isCrazyWeb: opts.crazy ?? false }))
+  vi.doMock('@/use/useUser', () => ({
+    isCrazyWeb: opts.crazy ?? false,
+    isWaveDash: opts.wavedash ?? false
+  }))
   vi.doMock('@/use/useMatch', () => ({ isCrazyGamesFullRelease: opts.fullRelease ?? false }))
   const showRewardedAd = vi.fn(async () => true)
   vi.doMock('@/use/useAds', async () => {
@@ -81,6 +85,24 @@ describe('reward gating', () => {
     expect(gate.canOfferReward.value).toBe(false)
 
     // And it is unreachable by any other route, not merely unrendered.
+    await expect(gate.claimReward(grant)).resolves.toBe(false)
+    expect(grant).not.toHaveBeenCalled()
+    expect(gate.showRewardedAd).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing at all on a Wavedash build', async () => {
+    // Wavedash has no ad SDK, so `resolveAdProvider` falls through to noop and
+    // the "no provider → the perk is free" rule above fires. That rule is right
+    // for local dev and itch and wrong for a portal: the result screen showed a
+    // button marked with a film frame and paid the +3x out on the tap, with no
+    // video anywhere. The offer is withdrawn instead, the same way it is on a
+    // CG pre-release.
+    const gate = await loadGate({ wavedash: true, provider: 'noop' })
+    const grant = vi.fn()
+
+    expect(gate.canOfferReward.value).toBe(false)
+
+    // And not reachable by any other route — a free +3x is the failure mode.
     await expect(gate.claimReward(grant)).resolves.toBe(false)
     expect(grant).not.toHaveBeenCalled()
     expect(gate.showRewardedAd).not.toHaveBeenCalled()

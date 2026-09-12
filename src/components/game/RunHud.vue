@@ -10,17 +10,22 @@ import { crossedMilestone, milestoneRung } from '@/components/game/squadMileston
 /**
  * The run readout.
  *
- * Three numbers and one rail, and nothing else — a runner is played with the
- * eyes on the lane, so anything in the HUD that cannot be read in a quarter of
- * a second is worse than not being there:
+ * ONE number and one rail, and nothing else — a runner is played with the eyes
+ * on the lane, so anything in the HUD that cannot be read in a quarter of a
+ * second is worse than not being there:
  *
  *   STAGE   — where you are (and the best you have ever done, small, beside it)
- *   SQUAD   — how many of you there are. The number the whole game is about.
- *   DMG     — how hard each of you hits, so a crate pickup has a visible home.
+ *   SQUAD   — how many of you there are. The number the whole game is about,
+ *             and now the only stat on the strip — it tints green when the
+ *             crowd grows and red when it shrinks (see `squadMove`).
  *   RAIL    — how far through the stage you are, with the boss skull at the end
  *
  * During the boss fight the rail turns into the boss's health, because at that
  * point "how far along am I" and "how dead is it" are the same question.
+ *
+ * The strip carried three more chips until a first-contact playtest — damage,
+ * fire rate, and the streak flame. They are gone; the argument is on the
+ * `damage` prop below, where the props that outlived their chips live.
  */
 
 interface Props {
@@ -39,8 +44,34 @@ interface Props {
   /** 0..1 along the stage. */
   progress: number
   squad: number
+  /**
+   * ─── Three numbers this HUD is given and does not draw ────────────────────
+   *
+   * `damage`, `fireRate` and `challenge` are still accepted, and nothing is
+   * rendered from any of them.
+   *
+   * Five first-time players were sat in front of the four-chip stats row and
+   * four of them could not name a single chip on it. The orange streak flame
+   * was read as a DROPLET by all four and nobody guessed "win streak"; the
+   * bolt and the clock were matched to damage and fire rate only after the
+   * player had opened the shop and seen the same glyphs next to their prices.
+   * A readout nobody can decode is worse than no readout at all: it spends the
+   * one corner of the screen a runner's player ever glances at on three
+   * mysteries, and it leaves the number the whole game is about sitting in the
+   * middle of them looking like a fourth. Teaching the three was considered
+   * and rejected — the owner's call was deletion, because a chip that needs a
+   * tutorial is not a chip that can be read in a quarter of a second.
+   *
+   * The PROPS stay for a reason that is not laziness: `GameScene.vue` binds all
+   * three, and dropping them from this interface would move the change into a
+   * file that has no stake in it and that other people are editing right now.
+   * An accepted-and-ignored prop costs a render nothing. If a later HUD wants
+   * these numbers back it will want them from exactly this source — so do not
+   * "tidy" them away without editing the scene in the same commit.
+   */
   damage: number
-  /** Live shots/second per shooter — the stat rate crates raise. */
+  /** Live shots/second per shooter — the stat rate crates raise. Accepted and
+   *  not drawn; see `damage` above. */
   fireRate: number
   phase: RunPhase
   /** 0..1 boss health; only read while `phase === 'boss'`. */
@@ -49,8 +80,25 @@ interface Props {
   elite: boolean
   /** 0..1 miniboss health. */
   eliteHp: number
-  /** Stages cleared in a row — the autobalancer's handicap. */
+  /** Stages cleared in a row — the autobalancer's handicap. Accepted and not
+   *  drawn: the flame that used to show it is the chip the playtest killed
+   *  outright, and a handicap shown as a droplet is worse than one shown as
+   *  nothing. See `damage` above. */
   challenge: number
+  /**
+   * Stages left until the next milestone pays (`milestoneReward`), or null to
+   * hide the chip.
+   *
+   * A COUNT, not a stage number: "2" is a distance the player can act on, and
+   * "stage 10" is a fact they have to subtract from. Drawn as a star and a
+   * digit with no words at all — the whole chip is two characters wide, which
+   * is the only reason a HUD already carrying five readouts can afford it.
+   *
+   * The glyph is `star` rather than `chest` on purpose: the treasure chest is a
+   * button living ten pixels away on the same screen, and two different things
+   * may not wear the same drawing.
+   */
+  milestoneIn?: number | null
   /**
    * The next rung of the gift ladder (`game/ladder.ts`), as a chip under the
    * stage label: a glyph and "Shield · next stage". A goal two stages ahead is
@@ -79,7 +127,7 @@ const elitePct = computed(() => Math.round(Math.max(0, Math.min(1, num(props.eli
  * Every number that reaches this HUD goes through here first.
  *
  * A readout is the one place in a game where a bad number is guaranteed to be
- * seen: a `NaN` in the fire-rate pill reads as a broken game even when the
+ * seen: a `NaN` in the squad chip reads as a broken game even when the
  * simulation underneath is fine, and it only takes one undefined prop (a
  * hot-reloaded parent, a prop renamed on one side of a refactor) to produce
  * one. The HUD refusing to render nonsense is cheaper than every future caller
@@ -87,16 +135,7 @@ const elitePct = computed(() => Math.round(Math.max(0, Math.min(1, num(props.eli
  */
 const num = (v: number): number => (Number.isFinite(v) ? v : 0)
 
-/** One decimal, because a rate crate moves this by 0.55 and an integer readout
- *  would make half the pickups look like they did nothing. */
-const rateLabel = computed(() => (Math.round(num(props.fireRate) * 10) / 10).toFixed(1))
 const squadLabel = computed(() => Math.max(0, Math.round(num(props.squad))))
-/** Damage is fractional now (the shop hands out +0.4 a level), so the pill
- *  shows a decimal only when there is one — "3" stays "3", "1.4" stays "1.4". */
-const damageLabel = computed(() => {
-  const v = Math.max(0, num(props.damage))
-  return Number.isInteger(v) ? String(v) : v.toFixed(1)
-})
 
 /**
  * ─── The round-number punch ─────────────────────────────────────────────────
@@ -171,14 +210,95 @@ const announceMilestone = (milestone: number): void => {
   }, MILESTONE_WORD_MS)
 }
 
-watch(() => props.squad, (next) => {
+/**
+ * ─── Which way the crowd just moved ─────────────────────────────────────────
+ *
+ * The same playtest that killed the other three chips found that nobody read
+ * this one as a COUNT OF PEOPLE either — it was a number beside a glyph, and a
+ * number beside a glyph is what the other three were. The glyph is redrawn as a
+ * crowd (`iconPaths.ts`), and the chip now says which way that crowd is going:
+ * green while it grows, red while it shrinks. A player who has learnt nothing
+ * else still learns "red is bad, and it happens when I touch that" inside one
+ * stage, which is the whole lesson the HUD is there to teach.
+ *
+ * ─── Why this is a LATCH and not a watcher ──────────────────────────────────
+ *
+ * `squad` moves several times a second — a gate bank pays out in per-frame
+ * increments, a boss sweep takes bodies the same way — so a tint driven
+ * directly off the prop would strobe, and a queue of tints would still be
+ * playing the payout back after the payout had ended. So:
+ *
+ *   • the DIRECTION is latched and the tint is held for a fixed window;
+ *   • another change the same way only EXTENDS the window (a 40-frame payout is
+ *     one continuous green, not forty flashes);
+ *   • a change the other way is dropped rather than queued — the run has moved
+ *     on by the time a queue would drain, and the next real change re-tints
+ *     within a frame anyway;
+ *   • except that a LOSS always interrupts a gain. Red outranks green because
+ *     the two mistakes do not cost the same: a gain the player missed costs
+ *     them nothing, and a loss they missed is how they arrive at the result
+ *     screen with no idea what hit them. A payout that was still running paints
+ *     itself green again on its very next increment.
+ *
+ * It tints the ICON and nothing else: no size, no position, no margin. The chip
+ * is already animated on its own axis (the milestone punch scales the whole
+ * plate) and two animations on one box fight each other — this one rides on
+ * `color` and a drop-shadow, which cannot move the row it is in even by a
+ * subpixel. A reduced-motion preference therefore has nothing to switch off
+ * here: the cue is a colour, not a movement, and this file's position on that
+ * (see the punch's still variant) is that feedback survives the preference.
+ */
+type SquadMove = 'up' | 'down'
+/** The direction being shown, or null for none. */
+const squadMove = ref<SquadMove | null>(null)
+let squadMoveTimer: ReturnType<typeof setTimeout> | null = null
+
+/** How long each tint is held.
+ *
+ *  Short enough to read as a hit rather than a state — a chip that stays green
+ *  for a second is a chip that is green — and the loss is held half again as
+ *  long because it is the one of the two that has to survive being seen out of
+ *  the corner of an eye while the player is dodging the thing that caused it. */
+const SQUAD_GAIN_MS = 300
+const SQUAD_LOSS_MS = 460
+
+const flashSquad = (dir: SquadMove): void => {
+  // The one asymmetry in the rule — see the block above.
+  if (dir === 'up' && squadMove.value === 'down') return
+  squadMove.value = dir
+  if (squadMoveTimer) clearTimeout(squadMoveTimer)
+  squadMoveTimer = setTimeout(() => {
+    squadMove.value = null
+    squadMoveTimer = null
+  }, dir === 'up' ? SQUAD_GAIN_MS : SQUAD_LOSS_MS)
+}
+
+const clearSquadMove = (): void => {
+  squadMove.value = null
+  if (squadMoveTimer) {
+    clearTimeout(squadMoveTimer)
+    squadMoveTimer = null
+  }
+}
+
+watch(() => props.squad, (next, prev) => {
   const milestone = crossedMilestone(highestMilestone.value, num(next))
   if (milestone > 0) announceMilestone(milestone)
+  // Rounded on both sides, because the chip shows a rounded number: a crowd
+  // drifting 19.6 → 19.4 as bodies settle is not a loss the player can see, and
+  // tinting it red would make the HUD look like it was reporting phantom deaths.
+  const from = Math.round(num(prev))
+  const to = Math.round(num(next))
+  if (to > from) flashSquad('up')
+  else if (to < from) flashSquad('down')
 })
 
 const rearmMilestones = (): void => {
   highestMilestone.value = 0
   milestoneShown.value = 0
+  // A tint held across the seam would be a statement about the run that just
+  // ended, sitting on the first frame of the next one.
+  clearSquadMove()
   if (milestoneTimer) {
     clearTimeout(milestoneTimer)
     milestoneTimer = null
@@ -197,6 +317,7 @@ watch(() => props.stage, () => rearmMilestones())
 onBeforeUnmount(() => {
   if (milestoneTimer) clearTimeout(milestoneTimer)
   milestoneTimer = null
+  clearSquadMove()
 })
 </script>
 
@@ -211,30 +332,33 @@ onBeforeUnmount(() => {
         span.run-hud__next(v-if="nextUnlock && !isBoss")
           GameIcon.run-hud__next-icon(:name="nextUnlock.icon")
           span.run-hud__next-text {{ nextUnlock.text }}
+        //- The countdown to the next milestone. Gold like the ladder's promise
+        //- above it, and gone during the boss for the same reason: the fight is
+        //- the only thing worth reading then. The words live in the
+        //- screen-reader label — the chip itself is a star and a digit.
+        span.run-hud__chest(
+          v-if="milestoneIn !== null && milestoneIn !== undefined && !isBoss"
+          :class="{ 'is-now': milestoneIn === 0 }"
+        )
+          GameIcon.run-hud__chest-icon(name="star")
+          span.sr-only {{ t('hud.toMilestone') }}
+          //- No digit on the stage that pays: "★ 0" reads as an empty counter
+          //- rather than as arrival. The star lighting up IS the zero.
+          span.run-hud__chest-text(v-if="milestoneIn > 0") {{ milestoneIn }}
 
       div.run-hud__stats
         //- Re-keyed on every milestone so the punch animation restarts from
         //- frame zero — see `announceMilestone`. The word hangs off the chip's
         //- own box (`top: 100%`) so a milestone never moves the row it is in.
         div.run-hud__chip.is-squad(:key="punchCount" :class="{ 'is-punched': punchCount > 0 }")
-          GameIcon.run-hud__icon(name="squad")
+          //- Green up, red down, held for a beat — see `squadMove`. The class
+          //- rides on the ICON so nothing in the row can move.
+          GameIcon.run-hud__icon(
+            name="squad"
+            :class="{ 'is-gain': squadMove === 'up', 'is-loss': squadMove === 'down' }"
+          )
           span.run-hud__value {{ squadLabel }}
           span.run-hud__milestone(v-if="milestoneShown > 0") {{ t('hud.milestone', { n: milestoneShown }) }}
-        div.run-hud__chip.is-damage
-          GameIcon.run-hud__icon(name="bolt")
-          span.run-hud__value {{ damageLabel }}
-        //- Fire rate is the stat a run has to EARN, so it gets equal billing
-        //- with the two it multiplies.
-        //- The autobalancer, made visible. A handicap the player cannot see is
-        //- indistinguishable from the game being inconsistent — and a streak is
-        //- a thing worth being proud of, so it is shown as a reward rather than
-        //- as a warning. Appears only once it is actually doing something.
-        div.run-hud__chip.is-streak(v-if="challenge > 0")
-          GameIcon.run-hud__icon(name="flame")
-          span.run-hud__value {{ challenge }}
-        div.run-hud__chip.is-rate
-          GameIcon.run-hud__icon(name="rate")
-          span.run-hud__value {{ rateLabel }}
 
     div.run-hud__rail(:class="{ 'is-boss': isBoss }")
       //- The CHIP. A second fill on the same number with a slower, delayed
@@ -341,6 +465,40 @@ onBeforeUnmount(() => {
 .run-hud__next-text
   color: #fff
 
+// The milestone countdown. Same plate as the ladder's promise, half the width:
+// it is a star and a digit, and it has to cost the stage column almost nothing
+// because the ladder chip is frequently above it.
+.run-hud__chest
+  display: inline-flex
+  align-items: center
+  gap: 0.2em
+  margin-top: 0.1rem
+  padding: clamp(0.1rem, 0.7vw, 0.2rem) clamp(0.24rem, 1.2vw, 0.4rem)
+  border: 2px solid rgba(255, 217, 60, 0.28)
+  border-radius: 999px
+  background-color: rgba(10, 16, 30, 0.72)
+  backdrop-filter: blur(3px)
+  color: #ffd93c
+  font-weight: 900
+  font-size: clamp(0.52rem, 2.4vw, 0.72rem)
+  line-height: 1
+  text-shadow: 2px 2px 0 #000
+
+.run-hud__chest .run-hud__chest-icon
+  width: clamp(0.6rem, 2.7vw, 0.82rem)
+  height: clamp(0.6rem, 2.7vw, 0.82rem)
+  flex: 0 0 auto
+
+.run-hud__chest-text
+  color: #fff
+  font-variant-numeric: tabular-nums
+
+// The stage that pays. Solid gold plate instead of a hairline, so the chip the
+// player has been counting down visibly arrives.
+.run-hud__chest.is-now
+  border-color: #ffd93c
+  background-color: rgba(120, 84, 8, 0.85)
+
 .run-hud__stats
   display: flex
   align-items: center
@@ -359,17 +517,11 @@ onBeforeUnmount(() => {
   &.is-squad
     color: #8fd6ff
     // The milestone word hangs off this box rather than sitting in the flex
-    // row: a chip that grew a label would push the three chips beside it
+    // row: a chip that grew a label would shove the stage column and the wallet
     // sideways for a second and a half, mid-fight, for a thing that is pure
-    // decoration.
+    // decoration. Written when three more chips sat beside it, and still the
+    // rule now that it stands alone — this row may not change size.
     position: relative
-  &.is-damage
-    color: #ffca6b
-  &.is-rate
-    color: #a6ff9c
-  &.is-streak
-    color: #ff9a4a
-    border-color: rgba(255, 154, 74, 0.55)
 
 // Nested rather than written flat, and that is load-bearing: `GameIcon`'s own
 // scoped rule is `.game-icon[data-v-…]` — one class plus one attribute, exactly
@@ -380,6 +532,45 @@ onBeforeUnmount(() => {
   width: clamp(0.75rem, 3.4vw, 1rem)
   height: clamp(0.75rem, 3.4vw, 1rem)
   flex: 0 0 auto
+  // The tint's way OUT — see the block below.
+  transition: color 200ms ease-out, filter 200ms ease-out
+
+// ─── Green up, red down ─────────────────────────────────────────────────────
+//
+// The squad glyph, tinted for a beat in the direction the crowd just moved
+// (`squadMove` carries the rule and the coalescing). Why it is two properties on
+// the icon rather than a keyframe on the chip:
+//
+//   • neither `color` nor `filter` can affect layout, so the tint cannot nudge
+//     the stage column or the wallet beside it — the row is the same shape in
+//     every frame of it;
+//   • the chip's own punch (below) owns `scale` and `box-shadow`, and two
+//     animations on one box is how a chip ends up parked mid-scale the first
+//     time one of them is interrupted;
+//   • there is no animation to RESTART, which is the trap the punch needs a
+//     re-keyed node to get out of. A held class cannot fall out of step with
+//     the state that set it.
+//
+// It arrives hard and leaves soft: `transition: none` on the two tinted states
+// makes adding the class a cut, and removing it falls back to the rule above,
+// which fades. A tint that faded IN read as the number drifting rather than as
+// something happening to it.
+//
+// The two colours are also far apart in LIGHTNESS, not just in hue: green and
+// red are the one pair of signal colours a red-green colour-blind player cannot
+// separate, and roughly half this game's audience is eight years old with
+// nobody to ask. Desaturate these two to grey and the gain is still the pale one.
+.run-hud__chip .run-hud__icon.is-gain,
+.run-hud__chip .run-hud__icon.is-loss
+  transition: none
+
+.run-hud__chip .run-hud__icon.is-gain
+  color: #6bf58f
+  filter: drop-shadow(0 0 0.3rem rgba(107, 245, 143, 0.7))
+
+.run-hud__chip .run-hud__icon.is-loss
+  color: #ff4747
+  filter: drop-shadow(0 0 0.3rem rgba(255, 71, 71, 0.75))
 
 .run-hud__value
   color: #fff

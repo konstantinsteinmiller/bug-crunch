@@ -1708,6 +1708,102 @@ export const stageReward = (stage: number, squad: number): number =>
 export const wipeReward = (stage: number, bestSquad: number, progress01: number): number =>
   Math.round((6 + stage * 2 + bestSquad * 0.5) * (0.35 + progress01 * 0.65))
 
+/**
+ * How long the felled boss is left on screen before the result arrives.
+ *
+ * The kill is the thing the whole stage was for, and until now it was over in a
+ * frame: the boss died and a screen slid over the top of it. Two seconds is
+ * long enough to watch the body go down and read the words, and short enough
+ * that it never becomes a wait — the player has already won, and the only thing
+ * being sold here is the win.
+ *
+ * Read by the renderer (which paints the fall and reports where the body ended
+ * up) and by the scene (which holds the result screen back by exactly this).
+ */
+export const BOSS_FELLED_MS = 2000
+
+// ─── How far the run actually got ───────────────────────────────────────────
+//
+// `progress01` is where the crowd is along the ROAD, and it reaches 1 the
+// moment the arena opens — so a run that walked into the boss and was flattened
+// by its first swing reports 100 %, which is exactly the number a near-miss
+// readout must never print over a loss.
+//
+// The player's own mental model is already the right one, because the HUD rail
+// does this: it runs as road progress until the arena and then becomes the
+// boss's health. One number, two halves. `reachOf` is that rail as a scalar.
+//
+// The boss is the last fifth of it. Not half — the fight is a handful of
+// seconds against a road of ninety — and not a tenth, because "I took it to a
+// sliver" has to be visibly further than "I reached it", or the readout stops
+// distinguishing the two runs that feel most different to the player.
+
+export const BOSS_REACH_SHARE = 0.2
+
+/**
+ * The rail the player watched, as one 0..1 number.
+ *
+ * `sawBoss` rather than `progress01 >= 1`, because the road's own accumulator
+ * can land a hair short of 1 on the frame the arena opens, and a boss taken to
+ * half health would then read as less progress than simply arriving.
+ *
+ * Deliberately NOT fed back into `wipeReward`: the payout is priced off road
+ * progress and re-pricing it here would turn a readout into a balance change.
+ */
+export const reachOf = (progress01: number, sawBoss: boolean, bossHp01: number): number => {
+  const road = Math.max(0, Math.min(1, Number.isFinite(progress01) ? progress01 : 0))
+  if (!sawBoss) return road * (1 - BOSS_REACH_SHARE)
+  const hp = Math.max(0, Math.min(1, Number.isFinite(bossHp01) ? bossHp01 : 1))
+  return (1 - BOSS_REACH_SHARE) + BOSS_REACH_SHARE * (1 - hp)
+}
+
+// ─── Milestones — a goal two stages ahead ───────────────────────────────────
+//
+// Every reward in the game until now has been about the stage the player is
+// IN: the road pays, the boss pays, the shop spends it. Nothing has ever been
+// about a stage they have not reached, and a session ends at the moment the
+// player has no reason in mind to start the next one.
+//
+// So every fifth clear pays a lump. The number is not the point — the point is
+// that it is VISIBLE from two stages away (the HUD chip counts down to it), so
+// "one more" has something on the other side of it.
+//
+// Why five: three is close enough to read as the ordinary payout and stops
+// being an event; ten is further than a first session goes. Five puts the first
+// one inside the opening session and every later one inside a sitting.
+
+export const MILESTONE_EVERY = 5
+
+/** Is this stage a milestone? */
+export const isMilestone = (stage: number): boolean =>
+  stage >= MILESTONE_EVERY && stage % MILESTONE_EVERY === 0
+
+/** The next stage that pays one, counted from the stage about to be played. */
+export const nextMilestone = (stage: number): number => {
+  const from = Math.max(1, Math.floor(stage))
+  return Math.ceil(from / MILESTONE_EVERY) * MILESTONE_EVERY
+}
+
+/** How many stages are left to reach it — 0 while standing on one. */
+export const stagesToMilestone = (stage: number): number =>
+  Math.max(0, nextMilestone(stage) - Math.max(1, Math.floor(stage)))
+
+/**
+ * What a milestone pays.
+ *
+ * Priced at roughly one good stage's income, deliberately: a lump worth less
+ * than the road that earned it is a formality, and one worth three stages would
+ * re-price the whole upgrade ladder off a counter the player cannot influence.
+ * `stageReward` at the same depth with a healthy crowd lands in the same band,
+ * which is the comparison this number was chosen against.
+ *
+ * Linear in the stage rather than compounding: the shop's own costs grow far
+ * faster (1.38–1.55 a level), so a milestone stays a boost and never becomes
+ * the income the curve is balanced against.
+ */
+export const milestoneReward = (stage: number): number =>
+  Math.round(60 + Math.max(0, Math.floor(stage)) * 25)
+
 // ─── Entities ───────────────────────────────────────────────────────────────
 
 /**
@@ -1781,6 +1877,18 @@ export interface Gate {
   dismissed: boolean
   /** 0..1 punch animation on the number, driven by the renderer. */
   pop: number
+  /**
+   * The door is face-down: it wears a `?` instead of its number, and neither
+   * the player nor the pump can see what it is worth until the crowd commits.
+   *
+   * The op and value underneath are perfectly ordinary and already sitting in
+   * the two fields above — a mystery is a way of PRESENTING a rolled door, not
+   * a fifth kind of door. Cleared at `claimBank`, for the taken leaf and the
+   * dismissed ones alike, so the bank always finishes by showing its whole hand:
+   * a door that stays a secret after it has been resolved teaches nothing, and
+   * "what would the other one have been" is most of the reason to gamble again.
+   */
+  mystery: boolean
 }
 
 /** A solid pillar between two leaves of a gate bank. Kills on contact — until
@@ -2304,6 +2412,45 @@ export interface Pickup {
   phase: number
 }
 
+/**
+ * What took a survivor.
+ *
+ * Lives HERE rather than in the simulation because `Unit` carries one — the
+ * renderer needs it to tell a fall from a crash — and a type on an entity in
+ * this module cannot be imported from the module that steps it without a cycle.
+ *
+ * Kept because "why did they stop?" is unanswerable without it: a stage that
+ * bleeds survivors to dividers is badly TAUGHT, one that bleeds them to foes is
+ * badly TUNED, and one that bleeds them to traps is working exactly as intended.
+ * The balance harness reads it, and the analytics `wipe` event bills a run's
+ * loss to whichever of these took the most bodies.
+ */
+export type DeathCause = 'foe' | 'elite' | 'barricade' | 'crate' | 'divider' | 'trap' | 'slam'
+
+/**
+ * How long a killed survivor takes to go down, ms.
+ *
+ * The simulation owns this clock — `killUnit` sets `u.dying` from it and the
+ * step splices the body out when it reaches zero — and the renderer scales its
+ * whole fall across the same number (`survivorFallStep` in `heroSprites.ts`,
+ * which re-exports this). One constant, because the failure mode of a drift is
+ * silent: the fall would simply play at the wrong speed or be cut off
+ * mid-topple, and read as a tuning problem rather than as a bug.
+ *
+ * Not longer, and that is a measured trade rather than a shrug. The renderer's
+ * draw budget samples `budget / units.length`, and `units` counts the bodies
+ * still falling — so a window half again as long thins the LIVING crowd by the
+ * same fraction during exactly the moments a player is losing people and
+ * watching hardest. The lie-still beat is bought out of the fade instead.
+ */
+export const SURVIVOR_FALL_MS = 420
+
+/** The causes that are a THING the crowd ran into rather than something that
+ *  reached for them. A body stopped by one of these stays crumpled against it;
+ *  everything else ends prone in the open. Read only by the renderer. */
+export const CRASH_CAUSES: ReadonlySet<DeathCause> =
+  new Set<DeathCause>(['barricade', 'crate', 'divider'])
+
 export interface Unit {
   /** Slot index inside the formation; also the sprite-phase seed. */
   i: number
@@ -2329,6 +2476,21 @@ export interface Unit {
   flash: number
   /** Death animation, ms remaining. `> 0` means it is falling out. */
   dying: number
+  /**
+   * What killed it, or `null` while it is alive.
+   *
+   * Carried on the body purely so the RENDERER can tell a fall from a crash: a
+   * survivor taken by a bite goes down in the open and ends prone, and one that
+   * ran into a barricade or a crate should stay crumpled against the thing it
+   * hit. Both are the same fall for the first third — see `survivorFallStep` —
+   * and they part at the pose the crash cuts to.
+   *
+   * It is a renderer input and nothing else. Nothing in the simulation reads it,
+   * and nothing should: the loss has already been billed to `deaths[cause]` by
+   * the time this is set, and a second source of truth for the same fact is how
+   * the two drift apart.
+   */
+  cause: DeathCause | null
   /** Monster-collision immunity, ms remaining. See `FOE_COLLIDE_IFRAMES_MS`. */
   inv: number
   /**

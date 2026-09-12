@@ -28,6 +28,9 @@ export default {
     'best': '最佳 {n}',
     'boss': '首领',
     'miniboss': '小首领',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': '距离下一个奖励的关卡数',
     'fireRate': '射速',
     'incoming': '攻击来袭！',
     'dodge': '闪避',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': '蓝色箱子：全队射速提升', 'desktop': '蓝色箱子：全队射速提升' },
     'boss': { 'touch': '远离红圈！', 'desktop': '远离红圈！' },
     'lever': { 'touch': '击中路两侧的两个拉杆 —— 它们会打开武器箱', 'desktop': '击中路两侧的两个拉杆 —— 它们会打开武器箱' },
-    'guard': { 'touch': '护盾开启——射击无效，快躲开！', 'desktop': '护盾开启——射击无效，快躲开！' },
+    'guard': { 'touch': '护盾开启——射击暂时无效', 'desktop': '护盾开启——射击暂时无效' },
     'cage': { 'touch': '射击囚笼——被救的人会加入队伍', 'desktop': '射击囚笼——被救的人会加入队伍' },
     'shieldBox': { 'touch': '护盾箱——待命并挡下一次重击', 'desktop': '护盾箱——待命并挡下一次重击' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} 名幸存者已兑换',
     'unlocked': '已解锁！',
 
     'guardian': "守护天使救了你！",
@@ -102,7 +113,17 @@ export default {
     'stageClear': '通关！',
     'wipedOut': '小队全灭',
     'reachedStage': '第 {n} 关',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': '最佳 {n}%',
+    'newReach': '新纪录！',
     'newRecord': '新纪录！',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': '首领已倒下！',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': '里程碑！',
     'rallied': '重整旗鼓',
     'peakSquad': '最大人数',
     'kills': '击杀',
@@ -239,5 +260,12 @@ export default {
     'retry': '重试', 'dismiss': '忽略'
   },
   'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。', 'boo': '哇！', 'laugh': '哈哈哈！' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': '请旋转手机',
+    'body': '《Survivalist》为竖屏游戏。'
+  },
   'license': { 'denied': '访问被拒绝：请购买许可证。' }
 }

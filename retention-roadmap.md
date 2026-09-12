@@ -30,8 +30,10 @@ exist (`useSurvivalGame.ts`, `useVfx.ts`, `useGameAudio.ts`, `useUpgrades.ts`).
 
 > **Shipped 2026-09-09, as one onboarding pass** (see the *Poki fit test*
 > block in `game-implementation-plan.md` for the measurements behind it):
-> **#1** auto-advance ring on the result screens of stages 1–5 (6 s,
-> cancelled by any touch; none from stage 6 on); **#3** the free rally, automatic and silent, once per stage on
+> **#1** ~~auto-advance ring on the result screens of stages 1–5 (6 s,
+> cancelled by any touch; none from stage 6 on)~~ — **deleted 2026-09-13 after a
+> playtest, and replaced by a five-second bounce on the forward button; see
+> item 19 for what it cost**; **#3** the free rally, automatic and silent, once per stage on
 > stages 2–3 for a first session; **#2** re-cut as the **gift ladder** — a
 > weapon choice into stage 3, the shield into stage 4, a weapon on the road
 > every other stage from 4, promised on every banner and on a HUD chip, with
@@ -39,6 +41,18 @@ exist (`useSurvivalGame.ts`, `useVfx.ts`, `useGameAudio.ts`, `useUpgrades.ts`).
 > doorway stands inside the first screen and races under the crowd's fire
 > while the controls lightbox is up. Continuous handover now runs through
 > stage 3, so the first result screen lands after stage 4.
+
+> **The ladder's two late gifts are ESCAPE HATCHES, and are priced as such
+> (2026-09-12).** Frost Nova (stage 7) and the Decoy Flare (stage 10) are strong
+> enough to decide a fight on their own, and on the grenade's thirty-second
+> clock a boss could be frozen or lured two or three times over — which turned
+> "how do I survive this" into "press it again in half a minute". The nova now
+> waits **90 s** and freezes for **2.6 s** (was 3.5: long enough to outlast the
+> wind-up it was pressed to escape, not long enough to read the road,
+> reposition and come back); the flare waits **75 s**. The grenade and the
+> shield keep the thirty seconds — they are the run's rhythm, not its way out.
+> Numbers in `game/skills.ts`, picked per skill by `skillCooldownMs`. The
+> career study cannot judge this: its scripted policies never press a skill.
 
 ### 1. Kill the dead air between runs — **SHIPPED**
 **Moves:** put-down resistance, APT · **Effort:** 2 h · **Risk:** low
@@ -53,7 +67,30 @@ overlay — a thin radial timer on the primary button that fires `onNext()` /
 for players who want the shop. Measure: % of sessions with ≥ 3 consecutive
 stages (expect a large jump).
 
-### 2. Milestone chests every 5 stages
+*Taken further, 2026-09-11 — the road itself stopped stopping.* Playtests put
+**a quarter of the players who killed the stage-1 boss** out of the game right
+there: the kill reads as the end of the session unless something is handed over
+in the same breath. So stage 1 now skips the win screen and the chest entirely
+and reveals the launcher the boss drops (`presentBossReward`, closes itself at
+three seconds), and every clear through stage 3 hands over with no screen at
+all — `advanceStage` re-bases the world instead of reloading the level, so the
+crowd walks on from the ground it won, with the boss lying where it was shot
+(`monsterDeathFrame` plays a real fall, drawn by the same rigs that walk, and
+the violet pool is what says "fallen" rather than "lying down"). The next stage
+is running before the player has decided whether to stop.
+
+⚠ **A stage that never stops still has to be counted.** With the road
+continuous, `phase` passes `'boss' → 'clear' → 'run'` inside a single tick and
+no watcher sees gameplay end, so the portals were told neither that the play
+finished nor that the next one began — a twenty-stage career arrived at
+CrazyGames and Poki as one endless play, which is the number their funnels are
+built on. `restartGameplayBracket()` (in `useGameplayLifecycle`, called from
+`continueRoad`) is what a seamless handover says instead; it no-ops when a
+screen already closed the bracket, because a redundant pair is what costs Poki
+a bad event. Anything else that keeps the road running — a revive, a stage
+skip, endless mode — owes the same call.
+
+### 2. Milestone chests every 5 stages — **SHIPPED (2026-09-12)**
 **Moves:** D1, put-down resistance · **Effort:** 3 h · **Risk:** low
 
 A goal 2–3 stages ahead is the single cheapest way to stop a session ending at
@@ -66,6 +103,31 @@ stage label with "2 stages to go", and on the result screen replace the coin
 readout with a chest-opening sequence when the milestone lands (reuse
 `spawnCoinExplosion` in `useCoinExplosion.ts`). Persist claimed milestones under
 a new `ts_milestones` key in `src/keys.ts`.
+
+*As built:* the rules are pure and live with the other payouts
+(`isMilestone` / `nextMilestone` / `milestoneReward` in `game/survival.ts`);
+the lump is `60 + stage × 25`, roughly one good stage's income and deliberately
+LINEAR, because the shop's own costs grow 1.38–1.55 a level and a compounding
+milestone would become the income the ladder is balanced against.
+
+Two departures from the text above, both deliberate. The chip wears a **star**,
+not a chest: the idle treasure chest is a button ten pixels away on the same
+screen, and two different things may not wear the same drawing. And the lump is
+a SEPARATE line on the result screen rather than a chest-opening sequence over
+the coin readout — `coins` is what the road paid and the milestone is what the
+COUNTDOWN paid, and folding them together would make the number the player was
+promised disappear into a bigger one at the moment it arrived.
+
+The ledger is one monotonic number (`ts_milestones` = highest milestone paid),
+which is the only shape that cannot pay twice whichever of two saves wins a
+cloud merge. Pinned by `tests/game/milestones.test.ts`, including a real
+stage-5 clear through the balance harness's own `optimal` policy.
+
+*One consequence worth knowing:* an existing save is **not** paid retroactively.
+A player sitting on stage 12 when this shipped starts counting at 15 rather than
+collecting 5 and 10 they already walked past — which is the right answer (the
+countdown is the feature, and there was no countdown behind them) but it does
+mean the first milestone an existing player sees is up to four stages away.
 
 ### 3. A free revive at the boss, once per stage — **SHIPPED** (first session only)
 **Moves:** APT, D1 · **Effort:** 3 h · **Risk:** medium (can devalue failure)
@@ -149,7 +211,7 @@ it for the emission pattern, `resolveBullet` gains a `pierce` flag. Draw the
 variants in `drawBullets`. This is the highest-variance-per-hour feature in the
 list — it is what makes run 40 feel different from run 4.
 
-### 7. Gate variety pack
+### 7. Gate variety pack — **SHIPPED**, the last leaf on 2026-09-12
 **Moves:** pick-up (readability), put-down resistance · **Effort:** 1 d
 
 Four new leaf types, all reusing the existing gate frame and number plate:
@@ -161,6 +223,27 @@ core loop blurs.
 *Implementation:* extend `GateOp` in `src/game/survival.ts` and the
 `gatePair()` roller in `track.ts`; the renderer switches its tint table on the
 op.
+
+*As built, over three passes.* `−N` and `×N` landed with the op set
+(`GateOp = add | sub | mul | div`), and the "locked" gate became something
+better than a gate that must be shot open: the **pump**, where fire raises any
+door's number, so a bank is an investment rather than a reading test. The
+locked PAIR — two banks a bank-length apart, the door chosen at the first one
+being the lane run through the second — is the shape that carries "commit
+early", about one stage in six from stage 8.
+
+The **mystery** leaf closed the set on 2026-09-12, and it is the only one that
+is not arithmetic. One leaf of a bank is drawn face-down as a `?`; the op and
+value underneath are rolled and paid the ordinary way. Four rules keep it a
+decision rather than a coin flip: never alone on a bank (there is always a
+readable offer beside it), never on a dilemma where both doors already take
+something, never pumpable — fire raises a number, and a number nobody can see
+cannot be raised in front of them — and never before stage 9, because a
+face-down door is only interesting to somebody who knows what a face-up one is
+worth. The leaf hidden is the WORST one: hiding the best offer would only ever
+punish a player for reading well, while a hidden bad door is a real question.
+At most one bank a road, ~0.08 per bank, on its own RNG stream so it cannot
+re-roll the campaign. `tests/game/mysteryGate.test.ts`.
 
 ### 8. Rescue cages — **SHIPPED**, with a curve instead of the flat +5
 **Moves:** APT, pick-up · **Effort:** 1 d
@@ -369,13 +452,23 @@ mute, mobile mute) plus availability — iOS Safari has no API and desktop Chrom
 has a no-op one, so the settings row only renders where a motor exists, on the
 **General** tab because the Audio tab is dropped on touch devices.
 
-### 14. Music that follows the squad
+### 14. Music that follows the squad — **SHIPPED (2026-09-12)**
 **Moves:** juice, APT · **Effort:** 2 h
 
 `useSound.ts` already exposes `setMusicRate()`. Drive it from squad size:
 `1.0 + min(0.18, squad / 600)`, plus a hard drop to `0.85` for the two seconds
 after a wipe. The track speeding up as the crowd grows is felt long before it is
 noticed.
+
+*As built:* exactly that, with one correction the spec above hides. Written
+literally, `min(0.18, squad / 600)` saturates at **108** survivors — a number
+most runs pass inside two stages — so the tempo would have been pinned at
+maximum for nine tenths of a career and the feature would have been a constant
+rather than a signal. The shipped curve is `RANGE × min(1, squad / FULL)`, which
+rises linearly to +18 % at 600. Driven off `squadCount` rather than the frame
+loop, so a gate that spawns forty people costs one assignment; the wipe drop is
+a two-second hold that overrides it. A test caught the saturation bug, not a
+listen (`tests/game/resultFlow.test.ts`).
 
 ### 15. Screen-space crowd counter pop — **SHIPPED**, and the ladder had to keep going
 **Moves:** juice · **Effort:** 2 h
@@ -406,7 +499,7 @@ mid-stage chime that sounds like a stage clear tells the player their run just
 ended. It is three notes of the game's own pentatonic ladder an octave above
 the reward chord, and it brightens with the rung.
 
-### 16. Performance headroom for 200+ crowds
+### 16. Performance headroom for 200+ crowds — **SHIPPED (2026-09-12)**
 **Moves:** APT on low-end Android · **Effort:** 1 d
 
 Currently the crowd is sorted every frame (`order.sort` in `useSurvivalArt.ts`)
@@ -415,7 +508,27 @@ bucket-sort by `y` into 16 bands instead of a comparison sort, and draw the
 shadows for the whole crowd in ONE path (`ctx.beginPath()` + N `ellipse()` calls
 + one `fill()`). Expect ~25 % of the crowd's frame cost back.
 
-### 17. Analytics that can actually answer "why did they stop?"
+*As built, and the shadow half went further than written.* The sort is a
+counting sort into 16 depth bands over the crowd's own y extent — three linear
+walks instead of ~1 500 comparator calls through a JS closure. The per-body
+shadow was not batched into one path; it was **removed entirely**, at the
+owner's call, which makes half of this a rendering decision. It was the least
+visible thing in the loop: at crowd size the sprites overlap several times over,
+so most patches were drawn underneath the bodies in front of them, and the ones
+that showed never merged — two hundred separate pools read as two hundred people
+standing near each other, which is exactly what the single pooled gradient under
+the whole formation was added to replace. That sheet stays and carries the same
+compression term. About 570 canvas calls a frame gone at the top tier.
+
+⚠ **Unmeasured, and this file should say so.** There is no `perf=` variant
+behind it, so the claim above is arithmetic and not a timing. `PERF-LEDGER.md`'s
+own A/A puts the real game at `workP95 ≈ 4.4 ms` against a 16.7 ms budget at 4×
+CPU throttle — by that file's rule, further renderer micro-optimization is
+unjustified. The case here is the tail that A/A does not sample (a 200+ crowd on
+a real cheap Android) plus the look. See the 2026-09-12 row there for how to
+price it properly.
+
+### 17. Analytics that can actually answer "why did they stop?" — **SHIPPED (2026-09-12)**
 **Moves:** everything (measurement) · **Effort:** 4 h · **Risk:** none
 
 Without these the rest of this list is guesswork. Emit: `stage_start`,
@@ -428,7 +541,44 @@ Without these the rest of this list is guesswork. Emit: `stage_start`,
 that forwards to whichever portal SDK is active (each already has an event API)
 and no-ops elsewhere.
 
-### 18. Share card for a best run — **SHIPPED**
+*What already exists, 2026-09-12:* the portals' own coarse measurement — plays
+and playtime, off the `gameplayStart` / `gameplayStop` bracket. It is one
+function (`useGameplayLifecycle`), it now covers CrazyGames, Poki AND Playgama
+(whose two calls had sat in `playgamaPlugin` with no caller, so that portal saw
+sessions containing no plays at all), and it sends a pair per STAGE rather than
+per session — see the warning under item 1. That is not a substitute for the
+events above: it answers "how long, how often", never "why did they stop".
+
+*As built:* `src/use/useAnalytics.ts`, all six events, wired at the four places
+that own them — `startStage` and `finishRun` in the simulation, the gate branch
+in `claimBank`, the shop watcher and the buy path. Three things are worth
+knowing before anyone reads a number out of it:
+
+- **The wipe cause is the DOMINANT one, not the last one.** `deathBreakdown()`
+  already counted every body by cause; a crowd chewed to four by barricades and
+  finished by a boss slam is a barricade problem, and billing it to the slam
+  sends the next tuning pass at the wrong file.
+- **`progress01` was lying on a boss wipe.** It reaches 1 the instant the arena
+  opens, so a crowd flattened by the boss's first swing reported 100 %. The
+  event keeps the raw road number and the screen reads `reachOf` instead, which
+  is the rail the player actually watched: road progress to the arena, then the
+  boss's health as the last fifth.
+- **Where it goes.** Two sinks, neither load-bearing: a 256-event in-memory ring
+  (`window.__analytics()` in debug, which is how a device session is read back)
+  and a PROBED portal sink. Most SDKs we ship against have no custom-event API
+  at all, so the fan-out looks for one — Poki's `customEvent`, GamePix's
+  reporter, a host page's own `gtag`/`dataLayer` — and silently no-ops when
+  nobody is listening. It imports no portal module: a static import would pull
+  one portal's loader into every other portal's bundle for a probe that reads a
+  global anyway. A sink that throws is dropped for the session rather than
+  retried on every gate.
+
+⚠ **Nothing is stored or sent anywhere of ours.** The ring dies with the tab.
+Until a portal with an event API is the one live, this answers "why did they
+stop?" for a device in your hand, not for a cohort.
+
+
+### 18. Share card for a best run — **BUILT, then TAKEN OUT (2026-09-12)**
 **Moves:** organic acquisition, D1 · **Effort:** 1 d
 
 On a new record compared to all pears from the leaderboard on the same stage, render a 1080×1080 canvas (stage, peak squad, the crowd
@@ -443,6 +593,17 @@ from the real baked survivor strips through the renderer's own contracts, so the
 card is the game rather than a drawing of it, and the whole thing is
 deterministic (no `Math.random`, no clock) which is what makes it testable.
 
+*Why it is not in the game (2026-09-12).* On the devices that actually reached
+the button, the share sheet had no target that takes a picture, so the only
+thing it could do was DOWNLOAD the card. A download is not a share: it tells
+nobody about the run, it leaves a stray file on the phone, and it spends the one
+action on the result screen that is not the loop. The button is commented out of
+`GameScene.vue` — the card renderer, the offer rules and their specs are
+untouched, so it comes back in one uncomment if a real share path appears
+(a portal SDK share, or an own-domain build where the sheet has somewhere to
+go). **The acquisition line of this item is therefore unclaimed**, and the
+effort it cost is sunk until then.
+
 Two traps worth keeping:
 
 - **`navigator.share` existing proves nothing on a portal.** It is present
@@ -455,6 +616,84 @@ Two traps worth keeping:
   the button for the session.
 - **JPEG, not PNG.** The card is a full-bleed gradient over gravel noise —
   PNG's worst case — and a multi-megabyte file hangs a phone's share sheet.
+
+---
+
+---
+
+## Not on the original list, built anyway (2026-09-12)
+
+Two of these came out of reading the eighteen against the code rather than out
+of the list itself. Both are small, and both are about the two screens where a
+session actually ends.
+
+### 19. The result screen closes itself when there is nothing to buy — **BUILT, then DELETED (2026-09-13)**
+**Moves:** APT, put-down resistance · **Effort:** 1 h · **Risk:** low
+
+The auto-advance ring from item 1 stopped at stage 5 on a stated reason: a
+player on stage 6 has decided to stay, is spending coins between runs, and a
+screen that closes itself under them takes a decision away.
+
+That holds exactly while there is something to spend on. `affordableCount(coins)`
+was **already computed on that very screen**; when it reads 0 and the ×3 has
+been resolved, the screen is a full stop offering one button and nothing else —
+at the depth where sessions are long enough to end. The rule is now three lines
+of `game/resultFlow.ts` (`shouldAutoAdvance`), pure and specced, with one hard
+exception at every depth: never over an unclaimed rewarded video, because six
+seconds saved is not worth spending real income. A touch latches a refusal, so
+claiming the ×3 or buying a track cannot re-arm a ring the player dismissed.
+
+Zero new copy, which at 21 locales is most of why it was an hour.
+
+⚠ **The whole feature — this item AND the countdown from item 1 — is gone, one
+day later, because a playtest measured it.** Five first-time players met the
+ring and it cost on three separate counts:
+
+- one tester watched the screen retry itself **while he was still reading it**;
+- two more tapped the ×3 AFTER the screen had already moved on, and reported
+  "no ad played" — the offer was gone, so the tap landed on the next stage. That
+  is the game's primary income, spent to save six seconds;
+- and a thumb that looks away for six seconds on a bus loses the offer the same
+  way, every time, with no way to tell that it happened.
+
+A button that presses itself cannot tell "this player has stalled" from "this
+player is reading", and the cost of guessing wrong turned out to be the one
+thing the screen exists to sell. The retention arithmetic that justified it —
+*a stranger who meets a full stop leaves* — was not wrong; the remedy was.
+
+What replaced it costs nothing when the guess is wrong: after **five** untouched
+seconds the forward button starts to **bounce**. `shouldAutoAdvance` and
+`AUTO_ADVANCE_THROUGH_STAGE` are deleted; `game/resultFlow.ts` now holds
+`RESULT_BOUNCE_DELAY_MS` and `shouldBounceGo({ onScreenMs, sawInput })`. The new
+signature is the argument in one line: the old rule needed the stage, the wallet
+and the state of the ×3 because it was **taking an action**, and this one needs
+none of them because it is only pointing. The bounce animates the button's face
+and depth plate, never its box — measured at 9 px of travel on the face and 0 px
+on the button and the row — so nothing moves under a thumb.
+
+### 20. Tell them how close they came — **SHIPPED**
+**Moves:** put-down resistance, APT, first session · **Effort:** 3 h · **Risk:** low
+
+A loss said "Stage 9" and stopped there — a full stop dressed as a statistic.
+The run knew how far it got all along (`wipeReward` is priced off it); the
+number simply never travelled to the screen.
+
+It does now: a thin rail filled to where the crowd fell, a ghost tick at the
+best any previous attempt on that stage managed, and the percentage said out
+loud — *81 % · BEST 74 %*, or *FURTHEST YET!* when it is a record. A near-miss
+is the strongest retry lever a runner has, and here it compounds with the retry
+relief (`ts_failed_stages`) that was already firing silently.
+
+The ledger is `ts_best_progress`, same lifecycle as the failure count: written
+only on a loss that was actually played, deleted on a clear, because the number
+describes an unfinished fight and a stage that has been beaten has none.
+
+⚠ **The scale is not `progress01`.** That hits 1 the instant the arena opens, so
+a crowd flattened by the boss's first swing would have printed 100 % over a
+wipe. `reachOf` is the rail the player watched — road progress to the arena,
+then the boss's health as the last fifth — so taking a boss to a sliver reads
+further than arriving at it, which is the distinction the whole readout exists
+to make.
 
 ---
 
@@ -476,3 +715,37 @@ Two traps worth keeping:
 1 → 4 → 2 → 3 → 5 (one week: the "one more run" loop is complete)
 → 17 (measure) → 6 → 9 → 7 (two weeks: the runs stop feeling identical)
 → 10 → 11 → 12 (the reasons to come back) → 13 – 16 (continuous polish).
+
+---
+
+## Where the list stands, 2026-09-12
+
+Read against the source tree, not against these headings — three of them were
+wrong before this pass.
+
+| | |
+| --- | --- |
+| **Shipped** | 1, 2, 3, 4, 6 (in another shape), 7, 8, 8b, 9, 11, 12, 13, 14, 15, 16, 17, 20 |
+| **Open, declined for now** | **5** (combo meter) and **10** (squad skins) |
+| **Built, then taken out** | 18 (share card), 19 (the self-closing result screen) |
+
+**5 and 10 are refusals, not backlog.** The combo meter adds a sixth number to a
+HUD that already carries squad, damage, fire rate, the challenge streak and four
+skills, and it is the one item on this list whose value the analytics from #17
+would settle first — so it waits for a number. Squad skins are cheap in code
+(`OUTFITS` and `outfitIndex` already bake per-outfit strips) and expensive in
+ART: every hero walk in this build is painted, so each skin is a generation, a
+slice, a compress and a re-roll when the model returns a different person.
+Price that as art, not as an afternoon.
+
+**Two of the eighteen are now "built, then taken out", and neither was a
+mistake of execution.** The share card (#18) worked exactly as designed and had
+nowhere to share to; the self-closing result screen (#19) worked exactly as
+designed and closed the screen on people who were reading it. Both were reversed
+by evidence rather than by taste — one by what devices actually offered, one by
+five first-time players — which is the only reason this list is worth keeping.
+
+**Item 6 never matched its own text and is not pending.** The weapon system
+shipped as `game/weapons.ts` — gatling and rocket, earned through the
+lever-and-armour puzzle and expiring with the stage — rather than as three
+crate-dropped weapons on a timer. The spec above is obsolete history.

@@ -27,15 +27,33 @@ import {
 } from '@/game/ladder'
 import WeaponChoice from '@/components/organisms/WeaponChoice.vue'
 import BossReward from '@/components/organisms/BossReward.vue'
-import { roundedOutlineFromTop } from '@/components/atoms/outlinePath'
 import {
-  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX, getScale
+  drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt,
+  worldToScreenX, worldToScreenY, getScale
 } from '@/use/useSurvivalArt'
+/**
+ * The same module again, as a namespace, for ONE optional export.
+ *
+ * The felled boss's screen-space box is a number only the renderer can know (it
+ * owns the projection and it owns which death frame is on screen), and the
+ * accessor that reports it is being added by the agent who owns that file — so
+ * this scene has to be able to compile, and to run, both before and after it
+ * lands. A named import of an export that does not exist yet is a build error,
+ * not a fallback, which is why this is a namespace probe rather than a second
+ * line in the import above. See `felledBossBoxNow` for the contract and the
+ * fallback position.
+ *
+ * Costs nothing in the bundle: this scene already imports `drawScene` from the
+ * same module, and `drawScene` reaches every painter in it, so there was never
+ * anything here for the tree-shaker to drop.
+ */
+import * as survivalArt from '@/use/useSurvivalArt'
 import { rebaseVfx, renderScaleTier, resetVfx } from '@/use/useVfx'
 import { FEED_ON, installPreviewSeam } from '@/game/previewFeed'
 import { resetSkillFx } from '@/use/useSkillFx'
 import { warmAudio, playFx } from '@/use/useGameAudio'
 import {
+  BOSS_FELLED_MS,
   CROWD_MAX_R, CROWD_SCREEN_Y, DECLINE_FREE_THROUGH_STAGE, DECLINE_MAX, LANE_HALF, UNIT_R
 } from '@/game/survival'
 
@@ -48,7 +66,13 @@ import {
 } from '@/keys'
 import useTowerEconomy from '@/use/useTowerEconomy'
 import { affordableCount, grantUpgrade } from '@/use/useUpgrades'
-import useSounds, { useMusic } from '@/use/useSound'
+import { track, exposeAnalytics } from '@/use/useAnalytics'
+import { isDebug } from '@/use/useMatch'
+import { RESULT_BOUNCE_DELAY_MS, shouldBounceGo } from '@/game/resultFlow'
+import { stagesToPendingMilestone } from '@/use/useSurvivalGame'
+import useSounds, {
+  useMusic, setMusicRate, squadMusicRate, MUSIC_WIPE_RATE, MUSIC_WIPE_MS
+} from '@/use/useSound'
 import { useScreenshake } from '@/use/useScreenshake'
 import { newTutorialClock, tickTutorial } from '@/use/useTutorialGate'
 import { frameStart, frameEnd, phaseStart, phaseEnd } from '@/use/usePerfProbe'
@@ -121,6 +145,20 @@ import GameIcon from '@/components/icons/GameIcon.vue'
 
 const { t } = useI18n()
 const { coins, addCoins } = useTowerEconomy()
+/**
+ * How many shop tracks the wallet can pay for right now.
+ *
+ * Declared HERE, at the top with the wallet it reads, rather than beside the
+ * shop badge that shows it. It used to be load-bearing that it came first: the
+ * auto-advance rule read it from a `watch` that evaluates the instant it is
+ * registered, so declaring it further down the file was a temporal-dead-zone
+ * crash that took the whole scene with it — and one that could never show up in
+ * jsdom, because no spec mounts this component. The countdown is gone (see "The
+ * forward button bounces" below) and nothing eager reads this any more, but the
+ * placement stays: three things still depend on it, and a constant that lives
+ * next to the wallet it is derived from cannot acquire that hazard again.
+ */
+const affordable = computed(() => affordableCount(coins.value))
 const { startBattleMusic, stopBattleMusic } = useMusic()
 const { playSound } = useSounds()
 const { shakeStyle } = useScreenshake()
@@ -168,6 +206,7 @@ const applyViewport = (): void => {
   const insets = FEED_ON ? { top: 0, bottom: 0 } : measureInsets()
   setViewport(cssW, cssH, insets.top, insets.bottom)
   hudBottomPx.value = insets.bottom
+  hudTopPx.value = insets.top
   // The deepest a survivor is ever drawn: the anchor row, plus a full-size
   // crowd's radius, plus one body. Sized off the MAXIMUM rather than the live
   // radius on purpose — a control that slid up the screen as the squad grew
@@ -488,6 +527,11 @@ const laneHalfPx = ref(0)
  */
 const squadFloorPx = ref(0)
 const hudBottomPx = ref(0)
+/** The bottom edge of the TOP strip — the stage label, the ladder chip, the
+ *  milestone star and the progress rail. Published for the same reason
+ *  `hudBottomPx` is: an overlay that has to sit clear of the HUD must clear the
+ *  HUD that is actually there, not a constant somebody guessed once. */
+const hudTopPx = ref(0)
 const steerHintDone = ref(false)
 const steerHintArmed = ref(false)
 let steerHintTimer: number | null = null
@@ -781,6 +825,54 @@ const attackAnswer = computed(() => {
   void hintTick.value
   return incomingWord() ?? 'away'
 })
+
+/**
+ * ─── One instruction at a time ──────────────────────────────────────────────
+ *
+ * The hint pill goes quiet while an attack is inbound.
+ *
+ * All five first-contact testers hit this, and one lost 38 of 41 survivors to
+ * it: at the very first boss the gaze attack raises "HOLD STILL" on the warning
+ * badge while the guard primer underneath says the shield is up and to MOVE.
+ * Two opposite commands, in the first minute, at the moment that matters — and
+ * a player given two verbs at once obeys neither in time.
+ *
+ * ─── Every warning, not only the contradicting one ───────────────────────────
+ *
+ * The narrow fix is to suppress only when `attackAnswer` is `'still'`, because
+ * that is the pair that literally contradicts. I went wider, and deliberately:
+ *
+ *   • THE BADGE IS THE ONLY INSTRUCTION IN THIS GAME WITH A DEADLINE. It is up
+ *     for the length of a telegraph — 0.3 s for an elite, about a second for the
+ *     boss — and acting on it late is the same as not acting. A teaching pill has
+ *     no deadline at all: every hint here retires on the thing it describes
+ *     happening, so one that waits a beat loses nothing.
+ *   • 'AWAY' AND 'TOWARD' COMPETE TOO, even though they do not contradict.
+ *     "Hold fire on the gate" and "shoot the levers" are both directives that
+ *     send the player somewhere other than the one patch of road that is about
+ *     to be safe. A pill that merely divides attention at a 0.3 s deadline is
+ *     the same bug with a smaller blast radius.
+ *   • A WORD-BY-WORD MATRIX WOULD ROT. The boss pool grows and its second verbs
+ *     already come in three flavours (see `incomingAnswer`); a rule keyed on
+ *     which answers happen to clash with which of eleven hint texts would need
+ *     re-deriving every time either list changes, in twenty-one languages. "The
+ *     urgent instruction owns the verb while it is up" needs re-deriving never.
+ *
+ * Read off the SAME 5 Hz tick as `attackWarning` and `attackAnswer`, which is
+ * the property that actually matters here: the badge and the pill cannot
+ * disagree about whether an attack is inbound, because they are looking at one
+ * sample of the world rather than two.
+ *
+ * ⚠️ This HIDES the pill; it must never RETIRE the hint. A lesson the player
+ * never got to read is still owed to them once the road is safe again, so
+ * nothing on this path touches `markHintDone` or `hintsDone`, and `activeHint`
+ * still resolves to the same hint underneath — `ControlHint`'s `suppressed` prop
+ * takes the pill down without unmounting it. The retirement watchers
+ * (`laneWarning`, `isChargingGate`, `damage`, `runFireRate`, `phase`) are all
+ * driven by the WORLD rather than by whether the pill was on screen, so a hint
+ * suppressed through its whole window is neither shown nor spent.
+ */
+const hintSuppressed = computed(() => attackWarning.value)
 // Retire it the moment the shield drops: the lesson has landed by then, and the
 // swing that follows is the part the player needs to be looking at. Persisted,
 // because a primer that reappears every boss is nagging rather than teaching.
@@ -831,6 +923,45 @@ const overlayUp = computed(() => showResult.value || showWeaponPick.value || sho
  * is Pug interpolation and a literal `#` in front of a mustache is a parse
  * error, not a hash sign.
  */
+// ─── The near-miss readout ──────────────────────────────────────────────────
+//
+// Whole percent, floored rather than rounded: a boss taken to a sliver must not
+// print "100 %" over a wipe, and 99 is the honest ceiling for a stage nobody
+// finished. Floor also keeps "you beat your best" strictly true — two attempts
+// a fraction apart cannot both read 74.
+//
+// The scale is `reach01`, not `progress01`: the road's own number hits 1 the
+// moment the arena opens, so every boss death would otherwise read as a
+// hundred percent. See `reachOf`.
+
+const pct01 = (v: number): number =>
+  Math.max(0, Math.min(99, Math.floor((Number.isFinite(v) ? v : 0) * 100)))
+
+const reachPct = computed(() => pct01(summary.value.reach01))
+const bestReachPct = computed(() => pct01(summary.value.bestReach01))
+
+/** A campaign loss the player actually played. Nothing to say about a clear (it
+ *  reached the end), an expedition (one attempt, nothing to beat) or an idle tab
+ *  — `bestProgress01` is only ever written for a run that was steered. */
+const showReach = computed(() =>
+  showResult.value && !summary.value.cleared && !summary.value.expedition
+)
+
+/** This run went further than every attempt before it — including the first
+ *  attempt, which has nothing behind it and is therefore always a best. */
+const isNewReach = computed(() => reachPct.value > bestReachPct.value)
+
+/** Draw the ghost tick only where it is still visible and still means
+ *  something: behind the fill it is invisible, at the far edges it is a mark
+ *  sitting on the rail's own cap. */
+const showReachMark = computed(() =>
+  bestReachPct.value > 2 && bestReachPct.value > reachPct.value
+)
+
+/** Stages left until the next milestone pays. Null on an expedition, which is
+ *  not on the campaign's counter at all. */
+const milestoneIn = computed(() => stagesToPendingMilestone(stage.value))
+
 const resultRank = computed<string>(() => {
   if (!leaderboardEnabled) return ''
   const rank = rankFor(bestStage.value)
@@ -1083,10 +1214,25 @@ const flowToNextStage = async (): Promise<void> => {
   summary.value = runSummary()
   triggerHappytime()
 
+  // The one stop the handover makes: the weapon choice, on the way into
+  // `WEAPON_PICK_STAGE`, for a player who has not chosen yet. The road waits
+  // (`overlayUp` gates the clock), the reveal goes up, and `onWeaponPicked`
+  // finishes what this function started. A player who already chose — a
+  // retry, a reload, a second career — goes straight through with the weapon
+  // `startStage` re-arms from the save.
+  //
+  // Read BEFORE the coins are banked, not after, because it decides where the
+  // payment can be SEEN: a full-screen card over the road means the crowd burst
+  // has to wait for `onWeaponPicked`. See `showCrowdCash`.
+  const picking = summary.value.stage === WEAPON_PICK_STAGE - 1 && readWeaponPick() === null
+
   // Everything `presentResult` banks, minus the screen. The music is
   // deliberately NOT stopped and not restarted: it has been playing since the
   // run began and the player never left the run.
-  void bankCoins()
+  //
+  // `'crowd'` is the whole of finding 6: this is the handover, the road is open,
+  // the survivors are on screen, and the coins have to be SEEN leaving them.
+  void bankCoins(picking ? 'deferred' : 'crowd')
   void reportRun(bestStage.value, summary.value.peakSquad)
   if (!onboarded.value) {
     onboarded.value = true
@@ -1095,13 +1241,7 @@ const flowToNextStage = async (): Promise<void> => {
 
   const gift = grantStageGift(summary.value.stage)
 
-  // The one stop the handover makes: the weapon choice, on the way into
-  // `WEAPON_PICK_STAGE`, for a player who has not chosen yet. The road waits
-  // (`overlayUp` gates the clock), the reveal goes up, and `onWeaponPicked`
-  // finishes what this function started. A player who already chose — a
-  // retry, a reload, a second career — goes straight through with the weapon
-  // `startStage` re-arms from the save.
-  if (summary.value.stage === WEAPON_PICK_STAGE - 1 && readWeaponPick() === null) {
+  if (picking) {
     showWeaponPick.value = true
     return
   }
@@ -1159,6 +1299,9 @@ const onWeaponPicked = (id: WeaponId): void => {
   void flushSaveNow()
   showWeaponPick.value = false
   completeHandover({ icon: id, label: t(`weapons.${id}`) })
+  // The picture `flowToNextStage` owed: the card is gone, the road is back, and
+  // the crowd the coins came from is on screen again. See `showCrowdCash`.
+  showDeferredCash()
 }
 
 /**
@@ -1178,7 +1321,9 @@ const onWeaponPicked = (id: WeaponId): void => {
 const presentBossReward = (): void => {
   summary.value = runSummary()
   triggerHappytime()
-  void bankCoins()
+  // Paid now, SHOWN when the card closes: the gift is about to cover the road.
+  // See `showCrowdCash`.
+  void bankCoins('deferred')
   void reportRun(bestStage.value, summary.value.peakSquad)
   if (!onboarded.value) {
     onboarded.value = true
@@ -1196,6 +1341,9 @@ const presentBossReward = (): void => {
 const onBossRewardDone = (): void => {
   showBossReward.value = false
   completeHandover({ icon: BOSS_REWARD_WEAPON, label: t(`weapons.${BOSS_REWARD_WEAPON}`) })
+  // The picture `presentBossReward` owed — see `onWeaponPicked` for the same
+  // two lines and the same reason.
+  showDeferredCash()
 }
 
 // ─── The rally ──────────────────────────────────────────────────────────────
@@ -1278,13 +1426,16 @@ const presentResult = async (): Promise<void> => {
   await maybeShowInterstitial()
 
   rewardClaimed.value = false
-  rewardWasOffered.value = canOfferReward.value
+  // `rewardOfferLive`, not `canOfferReward`: on a build where the perk is not
+  // ad-gated there is no button, so there is nothing for the player to decline.
+  // See `rewardOfferLive`.
+  rewardWasOffered.value = rewardOfferLive.value
   // Counted BEFORE the screen goes up, so the hint below reads the number that
   // includes this screen: it shows on the 1st, 2nd and 3rd, then stops.
   resultsSeen.value += 1
   setState(RESULTS_SEEN_KEY, resultsSeen.value)
   showResult.value = true
-  void bankCoins()
+  void bankCoins('card')
 
   // Fire-and-forget, and it MUST stay that way. The board is a decoration on a
   // game that works without it, so the result screen is already up before the
@@ -1329,6 +1480,48 @@ const presentResult = async (): Promise<void> => {
 
 const REWARD_MULTIPLIER = 3
 
+/**
+ * ─── Is there an offer to make at all? ──────────────────────────────────────
+ *
+ * `canOfferReward` answers "would this build let the player take the perk right
+ * now", which is not the same question. On a build with no ad provider — plain
+ * web, itch, local dev — `isRewardGated` is false, so `claimReward` grants the
+ * ×3 for FREE, and `canOfferReward` is therefore permanently true. The playtest
+ * caught what that looks like: a tester on the plain web build tapped a button
+ * wearing a film-frame glyph, got triple coins instantly, and no video ever
+ * played. His words were "misleading either way" — and he is right in both
+ * directions. Marked as an ad it lies about what just happened; unmarked it
+ * becomes a free ×3 button, which is not a rewarded placement, it is a
+ * difficulty setting labelled as one.
+ *
+ * So the offer is only made where there is genuinely something to trade: a real
+ * provider, gating the perk behind a real video. Everything else — no provider,
+ * the CrazyGames pre-release build, Wavedash — makes no offer, and the button is
+ * ABSENT rather than free.
+ *
+ * ─── What a non-gated build now pays ────────────────────────────────────────
+ *
+ * Exactly the run's own payout, and nothing else: `bankCoins` adds
+ * `summary.coins + summary.milestone` the moment the screen goes up, on every
+ * build, and that is the whole transaction. `rewardBonus` is never added because
+ * `onClaimReward` is unreachable, and no flag is left dangling either —
+ * `rewardClaimed` stays false (so the "claimed" line never shows in place of a
+ * button that never existed) and `rewardWasOffered` stays false, which is the
+ * load-bearing half: `recordDecline` reads it, so walking off an ad-free result
+ * screen is NOT a decline and does not lean the difficulty curve. Before this,
+ * an ad-free build recorded a decline on every result screen the player left
+ * without pressing a button they had no reason to press, and quietly made the
+ * road heavier for it.
+ *
+ * Deliberately NOT pushed down into `useAdGate.canOfferReward`: the two
+ * suppressed-build cases already live there as build-time constants, and the
+ * difference between them and this one is real. Those builds HAVE ad machinery
+ * and no inventory; this is a build with no ad machinery at all, where the perk
+ * is not "unavailable" but meaningless. `isRewardGated` is the honest name for
+ * that distinction and it is already exported.
+ */
+const rewardOfferLive = computed(() => isRewardGated && canOfferReward.value)
+
 /** Already claimed on THIS result screen — the button is one-shot per run. */
 const rewardClaimed = ref(false)
 /** Was the offer genuinely available while this screen was up? Only then does
@@ -1347,7 +1540,7 @@ const rewardWasOffered = ref(false)
 const rewardBonus = computed(() => summary.value.baseCoins * (REWARD_MULTIPLIER - 1))
 
 const showRewardButton = computed(() =>
-  showResult.value && !rewardClaimed.value && summary.value.coins > 0 && canOfferReward.value
+  showResult.value && !rewardClaimed.value && summary.value.coins > 0 && rewardOfferLive.value
 )
 
 /**
@@ -1380,6 +1573,12 @@ const recordDecline = (): void => {
 
 const onClaimReward = async (): Promise<void> => {
   if (rewardClaimed.value || adInFlight.value) return
+  // Belt and braces, on the same footing as `claimReward`'s own refusal for the
+  // suppressed builds: the button is not rendered when the perk is not gated, so
+  // a free ×3 must not be reachable by any other route into this handler either
+  // — a stale template, a keyboard activation on a button mid-teardown, the
+  // preview seam. `claimReward` would otherwise grant it outright.
+  if (!rewardOfferLive.value) return
   const granted = await claimReward(() => {
     rewardClaimed.value = true
     addCoins(rewardBonus.value)
@@ -1402,15 +1601,147 @@ const onClaimReward = async (): Promise<void> => {
 }
 
 // Inventory can land a beat after the screen does — a player who saw the button
-// at any point during the screen was genuinely offered the reward.
-watch(canOfferReward, (can) => {
-  if (can && showResult.value) rewardWasOffered.value = true
+// at any point during the screen was genuinely offered the reward. Watched
+// through `rewardOfferLive` so an ad-free build, where the underlying
+// `canOfferReward` is permanently true, never records an offer it did not make.
+watch(rewardOfferLive, (live) => {
+  if (live && showResult.value) rewardWasOffered.value = true
 })
 
-const bankCoins = async (): Promise<void> => {
-  const total = summary.value.coins
+/**
+ * ─── The crowd is cashed in, visibly ────────────────────────────────────────
+ *
+ * The handover's worst reading, and the one the playtest rated Major with all
+ * five testers seeing it: "Squad 101 → 3" at every stage start. One tester asked
+ * whether she had lost her progress. From where the player sits, a hundred people
+ * they spent forty seconds collecting are simply gone, and the three that open
+ * the next road are what is left of them — which is not what happened. Those
+ * hundred survivors were PAID FOR: `stageReward(stage, peakSquad)` prices the
+ * clear off the biggest crowd the run ever held, so the coins already in the
+ * wallet ARE the squad. Nothing about the transaction was wrong; it was invisible.
+ *
+ * So the payment is made where the player is looking. The coins burst FROM THE
+ * CROWD'S OWN POSITION ON THE ROAD and fly to the wallet badge, which is the
+ * whole sentence in one gesture: the squad became this number. The alternative —
+ * bursting from the result card, as a presented result screen does — cannot say
+ * it, because at a handover there is no card on screen: `bankCoins` read
+ * `rewardCoinRef`, which only exists inside the result overlay, so the
+ * continuous stages banked their coins with NO burst at all. The most important
+ * payment in the opening ninety seconds was the one nobody ever saw.
+ *
+ * The anchor is the honest source rather than a convenient one. `anchor()` is the
+ * crowd's world position and the renderer's own projection turns it into pixels,
+ * so the burst starts on the survivors wherever the camera has them — it is
+ * correct on every aspect ratio, and it stays correct across `advanceStage`,
+ * which re-bases the world under a crowd that never moves on screen.
+ *
+ * NOTHING IS PAID TWICE. This function's arithmetic is untouched: one `addCoins`
+ * of `summary.coins + summary.milestone`, exactly as before. The change is where
+ * the picture starts.
+ */
+const crowdCashRef = ref<HTMLElement | null>(null)
+const crowdCashStyle = ref<Record<string, string>>({ left: '50%', top: '50%' })
+
+/** Park the burst's origin on the crowd, in CSS px, as of right now. */
+const aimCrowdCash = (): void => {
+  const a = anchor()
+  crowdCashStyle.value = {
+    left: `${Math.round(worldToScreenX(a.x))}px`,
+    top: `${Math.round(worldToScreenY(a.y))}px`
+  }
+}
+
+/** How long the "N survivors cashed in" line rides over the crowd. Shorter than
+ *  the handover banner on purpose — it belongs to the stage that just ended, and
+ *  it must be gone before the banner names the one that is starting. */
+const CROWD_CASH_MS = 1400
+const crowdCashShown = ref(false)
+const crowdCashCount = ref(0)
+let crowdCashTimer: number | null = null
+
+/**
+ * The PICTURE of the payment: coins leaving the crowd for the wallet, and the
+ * line that names what they were. Pays nothing — `bankCoins` has already done
+ * that — so it is safe to call at whatever moment the road is actually visible.
+ *
+ * That separation is the whole reason this is its own function. Two handovers
+ * put a full-screen card up in the same breath as the clear: the first boss's
+ * launcher reveal, and the weapon choice on the way into `WEAPON_PICK_STAGE`.
+ * The coin VFX appends to `#app` at `z-index: 100` and `FReward` sits at
+ * `z-[100]` too, so a burst fired under one of those loses the tie on DOM order
+ * and rains OVER the card — coins materialising out of the middle of a gift,
+ * having started from a crowd nobody can see. Measured, in a browser, before
+ * this was split out. So those two pay on time and show it afterwards, when
+ * their card closes and the road is back.
+ *
+ * @param total     coins to throw — sizes the burst, nothing else.
+ * @param survivors the crowd being named, or 0 to throw the coins without a
+ *   caption. A wipe passes 0: the crowd really did die, and the consolation
+ *   coins are not a sale of anybody.
+ */
+const showCrowdCash = async (total: number, survivors: number): Promise<void> => {
+  // Aimed BEFORE the tick, so the anchor is the crowd's position now rather than
+  // one frame of drift later.
+  aimCrowdCash()
+  // "101 survivors" is the number the player watched all stage and the one the
+  // payout was priced against — the misreading being corrected is specifically
+  // that they were LOST, so the line says where they went.
+  if (survivors > 0) {
+    crowdCashCount.value = survivors
+    crowdCashShown.value = true
+    if (crowdCashTimer !== null) clearTimeout(crowdCashTimer)
+    crowdCashTimer = window.setTimeout(() => { crowdCashShown.value = false }, CROWD_CASH_MS)
+  }
+  await nextTick()
+  const el = crowdCashRef.value
+  if (!el || !coinBadgeEl.value) return
+  spawnCoinExplosion({
+    sourceEl: el,
+    targetEl: coinBadgeEl.value,
+    count: Math.min(40, 12 + Math.round(total / 6)),
+    // A wider throw from the crowd than from the result card: the burst has the
+    // whole road to open out into, and the point of it is that a CROWD turned
+    // into coins — a tight puff off a single point reads as one dropped purse.
+    burstRadius: 170
+  })
+}
+
+/** What the payment is SEEN as, decided by the call site. */
+type CoinSource =
+  /** The result screen's own coin line — the number the player is reading.
+   *  Coins leaving it for the wallet is `'crowd'` told with another subject. */
+  | 'card'
+  /** The survivors on the road, right now. The handover's whole point. */
+  | 'crowd'
+  /** Paid now, shown later by the caller — a full-screen card is about to own
+   *  the screen. See `showCrowdCash`. */
+  | 'deferred'
+
+const bankCoins = async (from: CoinSource): Promise<void> => {
+  // The milestone is banked in the same breath as the road's own payout — it is
+  // a second number on the screen, not a second transaction — but it is counted
+  // into the burst, so the chest landing is visibly bigger than an ordinary
+  // clear. `summary.milestone` is already guarded against paying twice.
+  const total = summary.value.coins + summary.value.milestone
   if (total <= 0) return
   addCoins(total)
+  // The sound is the receipt, and it plays on the PAYMENT even where the picture
+  // is deferred — a payment with no acknowledgement at all is the bug being
+  // fixed here, and a coin chime under a gift card is exactly right.
+  playFx('countUp', 0.5)
+
+  const survivors = summary.value.cleared ? summary.value.peakSquad : 0
+  if (from === 'crowd') {
+    void showCrowdCash(total, survivors)
+    return
+  }
+  if (from === 'deferred') {
+    // Held until the caller's card closes — and held as NUMBERS, because by then
+    // the summary they came from has been reset. See `owedCash`.
+    owedCash = { total, survivors }
+    return
+  }
+
   await nextTick()
   const el = rewardCoinRef.value
   if (el && coinBadgeEl.value) {
@@ -1420,24 +1751,259 @@ const bankCoins = async (): Promise<void> => {
       count: Math.min(40, 12 + Math.round(total / 6))
     })
   }
-  playFx('countUp', 0.5)
+}
+
+/**
+ * What a deferred payment owes, captured AT THE MOMENT IT WAS PAID.
+ *
+ * Not re-read from `summary` when the card closes, and that is load-bearing:
+ * `runSummary()` hands back the simulation's own summary OBJECT rather than a
+ * copy, so `summary.value` is a live view of it — and `completeHandover` calls
+ * `advanceStage`, which opens the next stage and resets those very fields. Read
+ * afterwards, the numbers are the new stage's zeros and the picture is simply
+ * never drawn. Measured in a browser: the card closed, the road came back, and
+ * nothing flew.
+ */
+let owedCash: { total: number; survivors: number } | null = null
+
+/** The picture the two card handovers owe, once their card has closed. */
+const showDeferredCash = (): void => {
+  const owed = owedCash
+  owedCash = null
+  if (!owed || owed.total <= 0) return
+  void showCrowdCash(owed.total, owed.survivors)
+}
+
+/**
+ * ─── The boss's death is a moment, not a transition ─────────────────────────
+ *
+ * A boss is the thing an entire stage was built to reach, and until now it was
+ * over in a single frame: the last hit landed and a screen slid over the top of
+ * the body. The player never saw the thing they earned. So a clear that came from
+ * a boss kill holds EVERYTHING back by `BOSS_FELLED_MS` — the result screen, the
+ * ad in front of it, the handover to the next road, the first boss's launcher
+ * reveal — and spends those two seconds on the kill instead: the body goes down
+ * on the canvas (the renderer animates the fall off its own clock, so a frozen
+ * simulation does not freeze it) with "Boss felled!" over it.
+ *
+ * ─── What the hold is careful about ─────────────────────────────────────────
+ *
+ * • THE PORTAL BRACKET closes at the kill, not at the end of the hold, and that
+ *   is correct rather than incidental: `phase` is already 'clear' for the whole
+ *   two seconds, so `isGameplayLive` reads false and `syncGameplayLifecycle`
+ *   sends its stop the moment the boss dies. A celebration is not gameplay, and
+ *   Poki grades that bracket. It also removes a hazard rather than adding one —
+ *   the handover's hand-made stop/start pair (`restartGameplayBracket`) exists
+ *   because a no-screen handover used to pass 'boss' → 'clear' → 'run' inside a
+ *   single tick, too fast for any watcher to see; two seconds is not that, so the
+ *   real stop and the real start are two ordinary edges two seconds apart, and
+ *   `restartGameplayBracket` correctly finds the bracket already closed and does
+ *   nothing.
+ * • AD ORDERING is untouched. The hold sits in front of `presentResult`, which
+ *   still requests and AWAITS the interstitial before the overlay is revealed —
+ *   so the order is kill → celebration → ad → result, and the celebration can no
+ *   more be guillotined by an ad than the result screen can.
+ * • THE CONTINUOUS STAGES keep their handover exactly as it was, two seconds
+ *   later. The whole argument for `CONTINUOUS_THROUGH_STAGE` is that clearing a
+ *   stage must not feel like an ENDING, and a beat spent watching the boss fall
+ *   is the opposite of an ending — it is the reward for the fight, with the road
+ *   still open underneath it.
+ * • THE FIRST BOSS'S REVEAL is held too. It was tempting to exempt it: stage 1 is
+ *   where a quarter of testers left, and the launcher card is the thing that
+ *   keeps them. But the card is the *answer* to the kill, and answering before
+ *   the player has seen what they did is the exact mistake this whole change is
+ *   about. Two seconds of "Boss felled!" and then a gift reads as a sequence; the
+ *   gift alone reads as a screen.
+ * • A WIPE NEVER HOLDS. There is no body to celebrate and the player has a
+ *   decision waiting, so a loss presents immediately, as before.
+ *
+ * The gate is `prev === 'boss'` rather than "the summary says cleared", because
+ * the question is what the player just watched, not how the stage was scored. A
+ * clear can only be reached out of the arena today, so the two agree — and if a
+ * clear ever arrives from somewhere else, it correctly gets no celebration
+ * instead of a label pointing at a body that is not there.
+ */
+
+/** Gap between the label's baseline box and the top of the body, CSS px. The
+ *  brief is "above the body and NOT overlapping it", so this is a hard floor
+ *  rather than a nudge. */
+const BOSS_FELLED_GAP_PX = 20
+
+/**
+ * The felled boss's box on screen, as the renderer sees it.
+ *
+ * ⚠️ CROSS-AGENT SEAM. `useSurvivalArt` owns the projection and owns which death
+ * frame is being drawn, so it is the only thing that can answer this; the
+ * accessor is being added there by the agent who owns that file. This scene must
+ * compile and run on both sides of that landing, so the export is PROBED rather
+ * than imported by name — a named import of an export that does not exist yet is
+ * a build failure, not a fallback.
+ *
+ * The contract asked for: `felledBossBox(): { x, y, w, h } | null`, in CSS
+ * pixels, `x`/`y` the TOP-LEFT of the drawn body's bounds, and `null` whenever no
+ * felled boss is on screen. Absent or null, the label falls back to the upper
+ * third of the canvas, which is where a boss arena puts the body on most aspect
+ * ratios anyway — so the failure mode is "slightly less precise", never "no
+ * celebration" and never "a label on top of the corpse".
+ */
+interface FelledBossBox { x: number; y: number; w: number; h: number }
+
+const felledBossBoxNow = (): FelledBossBox | null => {
+  const read = (survivalArt as { felledBossBox?: () => FelledBossBox | null }).felledBossBox
+  if (typeof read !== 'function') return null
+  try {
+    const box = read()
+    // A renderer that reports nonsense must not throw a label off the screen.
+    if (!box || !Number.isFinite(box.x) || !Number.isFinite(box.y)) return null
+    return box
+  } catch { return null }
+}
+
+const bossFelledShown = ref(false)
+/**
+ * Where the label sits: `y` is its BOTTOM edge and `x` the body's horizontal
+ * centre, both in CSS px from the top-left of the viewport. `null` is the
+ * fallback position.
+ *
+ * The `y` is monotone — only ever raised (numerically lowered), never pushed
+ * down. A boss COLLAPSES as it dies, so the body's top edge descends through the
+ * fall: the highest edge is the first sample, and keeping it means the label is
+ * placed once and stays there while the body crumples beneath it. Following the
+ * body down would be a title card that slides during the two seconds it exists
+ * to be read, and it would end the fall sitting on the corpse.
+ *
+ * The `x` travels with that same sample rather than being tracked separately, so
+ * the label can never be reading one frame horizontally and another vertically.
+ */
+const bossFelledAnchor = ref<{ x: number; y: number } | null>(null)
+let bossFelledTimer: number | null = null
+let bossFelledPoll: number | null = null
+
+const placeBossFelled = (): void => {
+  const box = felledBossBoxNow()
+  if (!box) return
+  const y = box.y - BOSS_FELLED_GAP_PX
+  const held = bossFelledAnchor.value
+  if (held !== null && y >= held.y) return
+  bossFelledAnchor.value = { x: box.x + box.w / 2, y }
+}
+
+const bossFelledStyle = computed<Record<string, string>>(() => {
+  const at = bossFelledAnchor.value
+  // No box to sit above — park it in the upper third, centred, which is roughly
+  // where the arena frames a boss on every ratio the game ships on.
+  if (at === null) return { left: '50%', bottom: '66%' }
+  return {
+    // Centred on the BODY, not on the screen. The arena is centred on the lane
+    // so the two are usually within a few pixels, but a boss that died at a rail
+    // is exactly the case a label pinned to 50 % gets wrong — and it is the case
+    // the player remembers, because they drove it there.
+    //
+    // Clamped to the middle three fifths of the viewport all the same: the label
+    // is centre-anchored (`translateX(-50%)`), so an anchor near an edge would
+    // hang half a word off the screen. Nothing the renderer can report about a
+    // boss's position justifies that, so the clamp costs nothing real.
+    left: `clamp(20vw, ${Math.round(at.x)}px, 80vw)`,
+    // `bottom` rather than `top`, because the requirement is about the label's
+    // BOTTOM edge: anchored this way the type can grow (a long translation, a
+    // bigger viewport) without ever growing down into the body.
+    //
+    // The `max()` is the other end of it, and it is the MEASURED HUD rather
+    // than a constant. A boss is framed near the top of the arena, so "above
+    // the body" is frequently above the stage label as well: at a fixed
+    // 4.75rem the words landed straight across the ladder chip and the squad
+    // readout — the label was clear of the corpse, which was the stated
+    // requirement, and illegible anyway, which was the point of it. `hudTopPx`
+    // is the same measurement the camera is framed with, so the two can never
+    // disagree about where the strip ends.
+    bottom: `calc(100% - max(${Math.round(at.y)}px, ${Math.round(hudTopPx.value)}px + 0.5rem))`
+  }
+})
+
+const endBossFelled = (): void => {
+  if (bossFelledTimer !== null) { clearTimeout(bossFelledTimer); bossFelledTimer = null }
+  if (bossFelledPoll !== null) { clearInterval(bossFelledPoll); bossFelledPoll = null }
+  bossFelledShown.value = false
+  bossFelledAnchor.value = null
+}
+
+/** The stage is over — the dispatch that used to sit inline in the watcher. */
+const presentClear = (s: ReturnType<typeof runSummary>): void => {
+  // The first boss hands over its launcher instead of a banner — see
+  // `presentBossReward`.
+  if (s.stage === BOSS_REWARD_STAGE && !s.expedition) {
+    presentBossReward()
+    return
+  }
+  // A wipe always presents: the player has a decision to make there (retry,
+  // and the x3 on the coins they just lost). A clear this early has none.
+  void (s.stage <= CONTINUOUS_THROUGH_STAGE ? flowToNextStage() : presentResult())
+}
+
+const holdOnFelledBoss = (s: ReturnType<typeof runSummary>): void => {
+  endBossFelled()
+  bossFelledShown.value = true
+  // Once now, then on a short poll for the whole window. The first read can
+  // legitimately come back null — the accessor may need a drawn death frame
+  // before it has a box — and `placeBossFelled` only ever RAISES the label, so
+  // polling cannot make it drift downward into the body.
+  placeBossFelled()
+  bossFelledPoll = window.setInterval(placeBossFelled, 100)
+  bossFelledTimer = window.setTimeout(() => {
+    endBossFelled()
+    // The player may have left 'clear' while the body was falling — the
+    // expedition chip is on the HUD and is not hidden during the celebration, so
+    // two taps there can open a whole new road. Presenting a result for a stage
+    // that is no longer in flight would strand them on a screen about the past.
+    if (phase.value !== 'clear') return
+    presentClear(s)
+  }, BOSS_FELLED_MS)
 }
 
 watch(phase, (p, prev) => {
+  // Anything that is not a live celebration takes the label down with it, and
+  // takes the pending dispatch with it too: whoever moved the phase off 'clear'
+  // now owns what happens next.
+  if (p !== 'clear') endBossFelled()
+
   if (p === 'clear' && prev !== p) {
     const s = runSummary()
-    // The first boss hands over its launcher instead of a banner — see
-    // `presentBossReward`.
-    if (s.stage === BOSS_REWARD_STAGE && !s.expedition) {
-      presentBossReward()
-      return
-    }
-    // A wipe always presents: the player has a decision to make there (retry,
-    // and the x3 on the coins they just lost). A clear this early has none.
-    void (s.stage <= CONTINUOUS_THROUGH_STAGE ? flowToNextStage() : presentResult())
+    if (prev === 'boss') holdOnFelledBoss(s)
+    else presentClear(s)
     return
   }
   if (p === 'wipe' && prev !== p) void presentResult()
+})
+
+// ─── The score follows the crowd ────────────────────────────────────────────
+//
+// Two rules, one property. The tempo tracks the squad (`squadMusicRate`), and a
+// wipe overrides it downward for two seconds — the only time the track is ever
+// slower than it started. See `useSound.ts` for why the curve is shallow and
+// why it saturates at 600.
+//
+// Driven off the refs rather than the frame loop: `squadCount` settles once per
+// tick whatever happened inside it, so a gate that spawns forty people costs one
+// assignment rather than forty. Muted or music-off is not a special case —
+// `setMusicRate` is a no-op with no element.
+
+let musicWipeTimer: number | null = null
+
+const followSquadTempo = (): void => {
+  if (musicWipeTimer !== null) return
+  setMusicRate(squadMusicRate(squadCount.value))
+}
+
+watch(squadCount, followSquadTempo)
+
+watch(phase, (p, prev) => {
+  if (p !== 'wipe' || prev === p) return
+  setMusicRate(MUSIC_WIPE_RATE)
+  if (musicWipeTimer !== null) clearTimeout(musicWipeTimer)
+  musicWipeTimer = window.setTimeout(() => {
+    musicWipeTimer = null
+    followSquadTempo()
+  }, MUSIC_WIPE_MS)
 })
 
 const beginStage = (next: boolean): void => {
@@ -1508,124 +2074,111 @@ const onStartExpedition = (): void => {
   startBattleMusic()
 }
 
-// ─── Auto-advance ───────────────────────────────────────────────────────────
+// ─── The forward button bounces; it does not press itself ───────────────────
 //
-// The result screen used to be a full stop: read it, decide, press a button.
-// A runner's whole retention model is that the next attempt starts before the
-// decision to stop is made, so the primary action now fires itself — a thin
-// ring filling around the button, and when it closes the road goes on. Any
-// touch anywhere cancels it (the player has taken over), and so does opening
-// the shop, an ad in flight, or the offer changing under them.
+// This screen used to count itself down. A thin gold ring traced the forward
+// button's own rounded edge and, six seconds in, the button fired — `onNext` on a
+// clear, `onRetry` on a wipe. The argument was retention arithmetic and it was a
+// good one: a runner's whole model is that the next attempt starts before the
+// decision to stop is made, and a full stop at twenty-five seconds is where
+// strangers leave.
 //
-// Six seconds rather than the roadmap's two and a half: the `×3` is the
-// game's income and sits one row above this button, and a player needs a real
-// beat to read it — and to reach for the shop — before the screen decides for
-// them. Four was measured as too quick to do either.
+// The first-contact playtest measured what it actually cost:
 //
-// And only through stage 5. The countdown exists for the stranger who has not
-// decided to stay yet and would otherwise leave at a full stop; a player on
-// stage 6 has decided, is spending coins between runs, and a screen that
-// closes itself under them is a screen that takes a decision away.
-
-const RESULT_AUTO_ADVANCE_MS = 6000
-/** The last stage whose result screen counts itself down. */
-const AUTO_ADVANCE_THROUGH_STAGE = 5
-/** 0..1 across the countdown. */
-const autoProgress = ref(0)
-/** The outline is up: the countdown is running and nobody has touched anything. */
-const autoArmed = ref(false)
-let autoTimer: number | null = null
-let autoStartedAt = 0
-
-// ─── The outline that traces the button ─────────────────────────────────────
+//   • one tester watched the screen RETRY ITSELF while he was still reading it —
+//     the game took an action he had not chosen and gave him no way to know why
+//     the road was moving;
+//   • two more tapped the ×3 after the screen had already advanced for them, and
+//     reported "no ad played". The offer was gone; the tap landed on the next
+//     stage. That is the game's primary income being spent to save six seconds;
+//   • and a thumb that looks away for six seconds on a bus loses the offer in
+//     exactly the same way, silently, every single time.
 //
-// The countdown is drawn IN FRONT of the button it will press, as a stroke
-// running clockwise from the top along the button's own rounded edge. The
-// button is a fluid-sized rounded square, so nothing about the shape is known
-// in CSS: the wrapper is measured, the face's own corner radius is read back
-// from the element that paints it, and the path is rebuilt from those numbers.
-// `pathLength="100"` on the path makes the dash offset a percentage whatever
-// the geometry is — see `outlinePath.ts`.
+// A countdown cannot tell "this player has stalled" from "this player is
+// reading", and it has to guess on every screen. So nothing presses a button for
+// the player any more. What is left is the cheap half of the same idea: after
+// five untouched seconds the forward button starts to BOUNCE. It answers the same
+// question — where do I go from here — and when the guess is wrong it costs
+// nothing at all, because the player was reading and a moving button is not a
+// deadline.
+//
+// The rule itself (the delay, and the latch that keeps the bounce down once the
+// player is driving) lives in `game/resultFlow.ts`, pure and specced, for the
+// same reason the countdown's rule did.
+//
+// ─── Why it is the button's FACE that moves and not the button ──────────────
+//
+// The animation is on `.f-button__body` + `.f-button__shadow` — the painted face
+// and its depth plate — and never on the `<button>` element. The brief is that
+// the bounce may not move the row it sits in or change the tap target, and those
+// are two different requirements with two different failure modes:
+//
+//   • THE ROW. Any `transform`/`translate` is out of flow, so nothing reflows
+//     either way. That half is free.
+//   • THE TAP TARGET. Hit testing follows boxes, and moving the `<button>` moves
+//     its box: at the top of a bounce, a thumb aimed at where the button was a
+//     moment ago lands on the overlay behind it. Moving only the face leaves the
+//     button's own box exactly where it was, and because the face is a DESCENDANT
+//     of the button, a tap on the risen face still resolves to the button. The
+//     effective target is therefore the union of the two — never smaller than the
+//     still button, which is the property that matters.
+//
+// FButton ships an `attention` prop that bounces the whole control, and it was
+// the obvious thing to reach for. It is not used here for exactly the reason
+// above, and because its 0.6 s alternate is a nag rather than a nudge on a screen
+// the player may be reading for half a minute.
 
-/** Stroke width, CSS px. Thick enough to read on a 44 px button. */
-const AUTO_STROKE = 3
-const goRef = ref<HTMLElement | null>(null)
-const goBox = ref({ w: 0, h: 0, r: 12 })
-let goObserver: ResizeObserver | null = null
+/** The bounce is running. */
+const goBounce = ref(false)
+/**
+ * The player has touched something since this screen appeared.
+ *
+ * Latched, and only cleared when the screen goes away. A tap means they are
+ * driving, and a prompt aimed at somebody who is already acting is the nagging
+ * half of the feature this replaced.
+ */
+const resultSawInput = ref(false)
+let goBounceTimer: number | null = null
+let resultShownAt = 0
 
-const measureGo = (): void => {
-  const el = goRef.value
-  if (!el) return
-  const body = el.querySelector<HTMLElement>('.f-button__body')
-  const r = body ? parseFloat(getComputedStyle(body).borderTopLeftRadius) : Number.NaN
-  goBox.value = {
-    w: el.offsetWidth, h: el.offsetHeight,
-    r: Number.isFinite(r) ? r : 12
-  }
+/** Any pointer or key while the result screen is up. Capture phase, so it is seen
+ *  whatever the tap lands on — including the buttons that end the screen. */
+const noteResultInput = (): void => {
+  resultSawInput.value = true
+  goBounce.value = false
+  if (goBounceTimer !== null) { clearTimeout(goBounceTimer); goBounceTimer = null }
 }
 
-const autoPath = computed(() => roundedOutlineFromTop(
-  { x: 0, y: 0, w: goBox.value.w, h: goBox.value.h, r: goBox.value.r },
-  AUTO_STROKE / 2 + 0.5
-))
-
-const cancelAutoAdvance = (): void => {
-  if (autoTimer !== null) {
-    clearInterval(autoTimer)
-    autoTimer = null
-  }
-  goObserver?.disconnect()
-  goObserver = null
-  autoArmed.value = false
-  autoProgress.value = 0
-  window.removeEventListener('pointerdown', cancelAutoAdvance, true)
-  window.removeEventListener('keydown', cancelAutoAdvance, true)
+const stopGoBounce = (): void => {
+  if (goBounceTimer !== null) { clearTimeout(goBounceTimer); goBounceTimer = null }
+  goBounce.value = false
+  resultSawInput.value = false
+  window.removeEventListener('pointerdown', noteResultInput, true)
+  window.removeEventListener('keydown', noteResultInput, true)
 }
 
-const startAutoAdvance = (): void => {
-  cancelAutoAdvance()
-  autoArmed.value = true
-  autoStartedAt = performance.now()
-  // The button mounts with the screen, one tick from now; measure it then and
-  // keep measuring it, because its size follows the viewport.
-  void nextTick().then(() => {
-    if (!autoArmed.value) return
-    measureGo()
-    if (typeof ResizeObserver !== 'undefined' && goRef.value) {
-      goObserver = new ResizeObserver(measureGo)
-      goObserver.observe(goRef.value)
-    }
-  })
-  // Capture phase, so a tap on any control cancels BEFORE the control acts —
-  // and a tap on the primary button itself simply becomes the action.
-  window.addEventListener('pointerdown', cancelAutoAdvance, true)
-  window.addEventListener('keydown', cancelAutoAdvance, true)
-  autoTimer = window.setInterval(() => {
-    // Hold rather than cancel while something else has the screen: a paused
-    // countdown that resumes reads as patience, a cancelled one as a bug.
-    if (adInFlight.value || isAnyModalOpen.value || isGamePaused.value) {
-      autoStartedAt = performance.now() - autoProgress.value * RESULT_AUTO_ADVANCE_MS
-      return
-    }
-    autoProgress.value = Math.min(1, (performance.now() - autoStartedAt) / RESULT_AUTO_ADVANCE_MS)
-    if (autoProgress.value < 1) return
-    const cleared = summary.value.cleared
-    cancelAutoAdvance()
-    if (cleared) onNext()
-    else onRetry()
-  }, 50)
+const armGoBounce = (): void => {
+  stopGoBounce()
+  resultShownAt = performance.now()
+  window.addEventListener('pointerdown', noteResultInput, true)
+  window.addEventListener('keydown', noteResultInput, true)
+  // ONE timeout, not an interval. The old countdown needed a 50 ms tick because
+  // it was drawing a ring and had to pause it while an ad or a modal owned the
+  // screen; a bounce has nothing to draw before it starts and nothing to hold —
+  // if the player spent those five seconds in the shop, they have touched the
+  // screen, so the latch has already refused it.
+  goBounceTimer = window.setTimeout(() => {
+    goBounceTimer = null
+    goBounce.value = shouldBounceGo({
+      onScreenMs: performance.now() - resultShownAt,
+      sawInput: resultSawInput.value
+    })
+  }, RESULT_BOUNCE_DELAY_MS)
 }
 
 watch(showResult, (up) => {
-  // `summary` is written before the screen goes up (`presentResult`), so the
-  // stage it names is the one this screen is about.
-  if (up && summary.value.stage <= AUTO_ADVANCE_THROUGH_STAGE) startAutoAdvance()
-  else cancelAutoAdvance()
-})
-// The shop, the options and the board all own the screen while they are up;
-// the ring waits, and a player who came back from the shop gets a fresh look.
-watch([showUpgrades, showOptions, showLeaderboard], (open) => {
-  if (open.some(Boolean)) cancelAutoAdvance()
+  if (up) armGoBounce()
+  else stopGoBounce()
 })
 
 /**
@@ -1641,6 +2194,15 @@ const onUpgradeFromResult = (): void => {
 }
 
 watch(showUpgrades, (open, wasOpen) => {
+  // One event per opening, whichever door it came through — the HUD chip, the
+  // result screen, the spotlight. What it is for is the question "did they ever
+  // find the shop?", which the Poki fit test could only guess at.
+  if (open && !wasOpen) {
+    track('shop_open', {
+      stage: stage.value, coins: coins.value,
+      affordable: affordable.value, onResult: showResult.value
+    })
+  }
   if (!open && wasOpen && showResult.value) {
     // The result screen is still up behind the shop — leave it there so the
     // player chooses their own moment to run again.
@@ -1664,7 +2226,6 @@ const resultsSeen = ref(Number(getState(RESULTS_SEEN_KEY, 0)) || 0)
 const showUpgradeHint = computed(() => showResult.value && resultsSeen.value <= 3)
 
 const shopSpotlightSeen = ref(getState<boolean>(SHOP_SPOTLIGHT_KEY, false) === true)
-const affordable = computed(() => affordableCount(coins.value))
 const showShopSpotlight = computed(() =>
   !shopSpotlightSeen.value && affordable.value > 0 && !showResult.value
 )
@@ -1774,6 +2335,9 @@ let insetTimer = 0
 
 onMounted(() => {
   setRallyPolicy(rallyPolicy)
+  // `window.__analytics()` on a device under test. The funnel is in memory and
+  // dies with the tab; this is the only way to read it back on a phone.
+  if (isDebug.value) exposeAnalytics()
   // DEV-only, and only under `?feed=` — the preview recorder's handle on the
   // run (`tools/preview-video`). Its two scene actions are the result screen's
   // own buttons, so a recorded clip ends on the road moving again rather than
@@ -1803,9 +2367,15 @@ onMounted(() => {
 
 onUnmounted(() => {
   setRallyPolicy(null)
-  cancelAutoAdvance()
+  // `stopGoBounce` also removes the two capture-phase window listeners, which is
+  // the one piece of teardown here that leaks into the whole document rather than
+  // merely into this component.
+  stopGoBounce()
+  endBossFelled()
   if (bannerTimer !== null) clearTimeout(bannerTimer)
+  if (crowdCashTimer !== null) clearTimeout(crowdCashTimer)
   if (guardianTimer !== null) clearTimeout(guardianTimer)
+  if (musicWipeTimer !== null) clearTimeout(musicWipeTimer)
   cancelAnimationFrame(rafId)
   window.removeEventListener('resize', resize)
   window.removeEventListener('orientationchange', onOrientationChange)
@@ -1834,13 +2404,20 @@ onUnmounted(() => {
     div.scene__hud
       div.scene__top(ref="topBarRef")
         div.scene__top-main
-          //- Three readouts are suppressed on an expedition, and all three for
-          //- the same reason: they are statements about the CAMPAIGN that would
-          //- be false on this road. `label` replaces "Stage 16" — a number that
-          //- is a rung on the difficulty curve, not a place the player has
-          //- reached; the streak chip would advertise a handicap the expedition
-          //- pins at 1; and the ladder chip would promise the unlock that comes
-          //- after a stage this run is not on.
+          //- Readouts that would be FALSE on an expedition are suppressed here,
+          //- all for the same reason: they are statements about the CAMPAIGN,
+          //- and this road is not on it. `label` replaces "Stage 16" — a number
+          //- that is a rung on the difficulty curve rather than a place the
+          //- player has reached; the ladder chip would promise the unlock that
+          //- comes after a stage this run is not on; and the milestone chip
+          //- would count down to a payout this road cannot pay.
+          //-
+          //- `challenge` is now one of those bindings with nowhere to land: the
+          //- streak chip was deleted with the rest of the stat row (the
+          //- playtest found nobody could name any of them, and four of five read
+          //- its flame as a droplet). The zero is kept rather than the binding
+          //- dropped, so that putting a streak readout back anywhere in that
+          //- component inherits the expedition rule instead of re-learning it.
           RunHud(
             :stage="stage"
             :label="isExpedition ? t('expedition.hud') : null"
@@ -1855,6 +2432,7 @@ onUnmounted(() => {
             :elite-hp="eliteHp01"
             :challenge="isExpedition ? 0 : challenge"
             :next-unlock="isExpedition ? null : hudNext"
+            :milestone-in="isExpedition ? null : milestoneIn"
             :beats="hudBeats"
           )
           //- Hung off the HUD's own box (`position: absolute; top: 100%`), so
@@ -1876,8 +2454,13 @@ onUnmounted(() => {
 
       //- Control primer, centred under the top bar — except the guard primer,
       //- which drops to mid-screen so it doesn't sit on the boss's shield.
+      //- `suppressed` rather than a narrower `activeHint`: the pill is TAKEN
+      //- DOWN while an attack is inbound, not un-chosen. A hint the player never
+      //- got to read is still owed to them once the road is safe — see
+      //- `hintSuppressed` for why it is every warning and not only the one that
+      //- literally contradicts.
       div.scene__hint(:class="{ 'scene__hint--low': activeHint === 'guard' }")
-        ControlHint(:hint="activeHint")
+        ControlHint(:hint="activeHint" :suppressed="hintSuppressed")
 
       //- First-run controls lightbox. Sits inside the HUD layer, which is
       //- already `pointer-events: none`, so the gesture it is teaching reaches
@@ -1911,9 +2494,39 @@ onUnmounted(() => {
       )
       SteerHint(:lane-half-px="laneHalfPx" :show="showSteerHint")
 
+      //- ── The crowd is cashed in ────────────────────────────────────────
+      //-
+      //- A 0×0 point parked on the crowd's own screen position, which is where
+      //- the coin burst starts at a handover — the whole point being that the
+      //- survivors BECAME the coins rather than vanishing. See `bankCoins`. The
+      //- chip is centred on the same point, so the burst's source rect and the
+      //- words naming it are one object rather than two things that have to be
+      //- kept in agreement.
+      div.scene__cash(ref="crowdCashRef" :style="crowdCashStyle")
+        Transition(name="cash")
+          div.scene__cash-chip(v-if="crowdCashShown")
+            IconCoin(class="scene__cash-coin")
+            span {{ t('flow.squadCashed', { n: crowdCashCount }) }}
+
+      //- ── "Boss felled!" ────────────────────────────────────────────────
+      //-
+      //- Two seconds over the body of the thing the whole stage was for, before
+      //- anything else is allowed to happen. Anchored by its BOTTOM edge to a
+      //- line above the boss's box so the type can grow in any language without
+      //- ever growing down onto the corpse — see `bossFelledStyle`.
+      div.boss-felled(v-if="bossFelledShown" :style="bossFelledStyle")
+        div.boss-felled__type
+          span.boss-felled__word {{ t('result.bossFelled') }}
+          //- A second copy of the same word, clipped to its own glyphs, carrying
+          //- a highlight that sweeps across once. Purely decorative, hence
+          //- `aria-hidden` — a screen reader must not announce the label twice.
+          span.boss-felled__shine(aria-hidden="true") {{ t('result.bossFelled') }}
+
       //- Centred under the squad, in the strip between the crowd and the bottom
-      //- bar — and back out at the right edge when a viewport has no such strip.
-      //- See `SkillBar.vue` for the whole argument.
+      //- bar, on EVERY viewport — the row used to jump out to the right edge
+      //- when that strip was too short, which is where it spent a whole
+      //- playtest on desktop, off the road entirely. It shrinks to the lane now
+      //- instead of moving off it. See `SkillBar.vue` for the whole argument.
       SkillBar(
         v-if="!overlayUp"
         :shield-live="shieldLive"
@@ -2011,6 +2624,32 @@ onUnmounted(() => {
           //- game went easy on them takes the win away from them.
           span.result__relief(v-else-if="summary.relieved") {{ t('result.rallied') }}
 
+        //- ── How close they came ───────────────────────────────────────────
+        //-
+        //- A loss used to end on "Stage 9" and nothing else, which is a full
+        //- stop dressed as a statistic. The road knew how far the run got all
+        //- along — `wipeReward` is priced off it — so the number simply travels
+        //- to the screen now: a rail filled to where the crowd fell, a ghost
+        //- tick at the best any previous attempt managed, and the percentage
+        //- said out loud.
+        //-
+        //- Only on a campaign LOSS. A clear reached the end by definition, and
+        //- an expedition is one attempt a day with nothing to beat.
+        div.result__reach(v-if="showReach")
+          div.result__reach-rail
+            div.result__reach-fill(:style="{ width: reachPct + '%' }")
+            //- The mark is only drawn when there is a previous attempt to
+            //- compare with, and never when this run has already passed it —
+            //- a tick buried under the fill reads as a bug, not as a record.
+            div.result__reach-mark(
+              v-if="showReachMark"
+              :style="{ left: bestReachPct + '%' }"
+            )
+          div.result__reach-line
+            span.result__reach-now {{ t('result.reach', { n: reachPct }) }}
+            span.result__reach-best(v-if="isNewReach") {{ t('result.newReach') }}
+            span.result__reach-prev(v-else-if="bestReachPct > 0") {{ t('result.bestReach', { n: bestReachPct }) }}
+
         //- ── Three chips on ONE line ───────────────────────────────────────
         //-
         //- This was three stacked blocks — a two-cell stats row with the words
@@ -2045,6 +2684,20 @@ onUnmounted(() => {
             //- "of N" to print, and the word that used to hold the slot is now
             //- said by the trophy.
             span.result__chip-of(v-if="playerTotal > 0") {{ t('result.rankOf', { n: playerTotal }) }}
+
+        //- ── The milestone ──────────────────────────────────────────────────
+        //-
+        //- ABOVE the coin line and named, because it is the only payout on this
+        //- screen the player was promised in advance: the HUD chip has been
+        //- counting down to it for two stages, and a lump that quietly folded
+        //- into the coin total would be a countdown that arrived at nothing.
+        //- The same star the chip wore, so the thing watched and the thing paid
+        //- are one object.
+        div.result__milestone(v-if="summary.milestone > 0")
+          GameIcon.result__milestone-icon(name="star")
+          span.result__milestone-text {{ t('result.milestone') }}
+          IconCoin(class="result__milestone-coin")
+          span.result__milestone-value +{{ summary.milestone }}
 
         div.result__coins(ref="rewardCoinRef")
           IconCoin(class="result__coin-icon")
@@ -2139,10 +2792,12 @@ onUnmounted(() => {
               :aria-label="t('result.upgrade')"
               @click="onUpgradeFromResult"
             )
-          //- The forward action, with the auto-advance ring closing around
-          //- it. The ring is decoration on a control that already has a name;
-          //- it never eats a tap.
-          div.result__go(ref="goRef")
+          //- The forward action. After five untouched seconds it starts to
+          //- bounce — see "The forward button bounces". The class goes on the
+          //- WRAPPER and the animation reaches the button's painted face
+          //- through it, so this element (and therefore the row, and therefore
+          //- every gutter in it) never moves.
+          div.result__go(:class="{ 'result__go--bounce': goBounce }")
             //- Out of an expedition the button is never a REPLAY, whichever way
             //- the run ended: the road is one attempt a day and there is
             //- nothing here to try again. Both outcomes lead the same way —
@@ -2160,22 +2815,6 @@ onUnmounted(() => {
               :aria-label="summary.expedition ? t('expedition.back') : (summary.cleared ? t('result.nextStage') : t('result.tryAgain'))"
               @click="summary.cleared ? onNext() : onRetry()"
             )
-            //- The countdown, IN FRONT of the button and tracing its own
-            //- rounded edge clockwise from the top. After the button in the
-            //- DOM so it paints over it; `pointer-events: none` so the tap
-            //- still lands on the control underneath.
-            svg.result__auto(
-              v-if="autoArmed && goBox.w > 0"
-              :viewBox="`0 0 ${goBox.w} ${goBox.h}`"
-              aria-hidden="true"
-            )
-              path.result__auto-track(:d="autoPath" pathLength="100")
-              path.result__auto-fill(
-                :d="autoPath"
-                pathLength="100"
-                stroke-dasharray="100"
-                :stroke-dashoffset="100 * (1 - autoProgress)"
-              )
 
     //- ── The weapon choice ─────────────────────────────────────────────────
     //- The one stop the opening stages make on purpose. See `flowToNextStage`.
@@ -2312,6 +2951,169 @@ onUnmounted(() => {
   50%
     opacity: 0.6
 
+// ─── The crowd cashed in ────────────────────────────────────────────────────
+//
+// A zero-size point parked on the crowd, positioned from the renderer's own
+// projection (see `aimCrowdCash`). Zero-size on purpose: `spawnCoinExplosion`
+// bursts from the CENTRE of its source element's rect, so a point is the only
+// shape that cannot introduce an offset between where the coins appear and where
+// the survivors are standing.
+.scene__cash
+  position: absolute
+  width: 0
+  height: 0
+  // In front of the canvas, behind every control. It has no interactive parts and
+  // the HUD layer is already `pointer-events: none`, but the chip is wide and it
+  // sits in the middle of the road — a stray hit target there would eat steering.
+  pointer-events: none
+
+// Centred on the point and lifted clear of the crowd's own heads, so the words
+// sit in the gap between the survivors and the road ahead rather than on top of
+// the thing they are about.
+.scene__cash-chip
+  position: absolute
+  left: 0
+  bottom: clamp(2.2rem, 9vmin, 3.6rem)
+  transform: translateX(-50%)
+  display: inline-flex
+  align-items: center
+  gap: 0.35em
+  white-space: nowrap
+  padding: 0.28em 0.7em
+  border: 2px solid rgba(255, 217, 60, 0.5)
+  border-radius: 999px
+  background-color: rgba(10, 16, 30, 0.82)
+  color: #ffd93c
+  font-weight: 900
+  text-transform: uppercase
+  font-size: clamp(0.62rem, 3vmin, 0.92rem)
+  text-shadow: 2px 2px 0 #000
+
+.scene__cash-chip .scene__cash-coin
+  flex: 0 0 auto
+  width: 1.15em
+  height: 1.15em
+  color: #ffd93c
+
+// Rises as it fades, which is the same gesture the coins themselves make.
+.cash-enter-active
+  transition: opacity 180ms ease-out, translate 180ms ease-out
+
+.cash-leave-active
+  transition: opacity 320ms ease-in, translate 320ms ease-in
+
+.cash-enter-from
+  opacity: 0
+  translate: 0 8px
+
+.cash-leave-to
+  opacity: 0
+  translate: 0 -14px
+
+// ─── "Boss felled!" ─────────────────────────────────────────────────────────
+//
+// The reward for the hardest thing in the stage, so it is typed like one: the
+// biggest display face on any in-run surface, in the blood red nothing else in
+// this game's HUD uses, cut out with the same hard black offset the result
+// screen's headline wears so the two read as one family.
+//
+// `vmin`, like the result screen, because the axis this label runs out of is the
+// short one — on a landscape phone a `vw`-keyed size would pick its maximum on
+// the axis with room to spare and spill off the axis that decides.
+.boss-felled
+  position: absolute
+  // `left: 50%` plus this is the horizontal centring; the vertical anchor is the
+  // inline `bottom` from `bossFelledStyle`, which is measured against the boss's
+  // own box every 100 ms while the body falls.
+  transform: translateX(-50%)
+  display: flex
+  justify-content: center
+  width: max-content
+  max-width: 94vw
+  pointer-events: none
+  z-index: 3
+
+// The scale-in, with a real overshoot: 0.6 → 1.08 → 1. A celebration that grows
+// straight to its final size reads as a label appearing; one that overshoots
+// reads as an impact, which is the thing being sold. `backwards` so the first
+// painted frame is already the small one rather than a full-size flash.
+.boss-felled__type
+  position: relative
+  display: inline-block
+  color: #ff3b30
+  font-weight: 900
+  text-transform: uppercase
+  letter-spacing: 0.02em
+  line-height: 1
+  text-align: center
+  font-size: clamp(1.5rem, 9vmin, 3.4rem)
+  // Two shadows doing two jobs: the hard offset is the game's display type, and
+  // the soft red bloom under it is what stops a dark-red word disappearing into
+  // the arena's own dark ground.
+  text-shadow: 4px 4px 0 #000, -2px -2px 0 #2b0000, 0 0 18px rgba(255, 59, 48, 0.65)
+  animation: boss-felled-pop 420ms cubic-bezier(0.22, 1.5, 0.4, 1) both
+
+@keyframes boss-felled-pop
+  0%
+    opacity: 0
+    scale: 0.6
+  60%
+    opacity: 1
+  100%
+    opacity: 1
+    scale: 1
+
+// The shimmer: the same word again, laid exactly over the first, with its fill
+// clipped to its own glyphs and a narrow highlight sweeping through once.
+//
+// A second copy rather than a gradient on the original, because the original
+// needs `color` for its fill and its text-shadows, and `background-clip: text`
+// requires a transparent fill — the two cannot live on one element. This copy has
+// no shadows at all, so it adds light and never a second outline.
+.boss-felled__shine
+  position: absolute
+  inset: 0
+  // Inherited from the type above, and it must NOT be. The shine is a second
+  // copy of the same word laid exactly over the first; with the family's black
+  // offset shadows on it too, every glyph was outlined twice a pixel apart and
+  // the whole label read as a smear rather than as bold type. Measured in a
+  // browser — it was the first thing wrong with this label.
+  text-shadow: none
+  background-image: linear-gradient(105deg, rgba(255, 255, 255, 0) 38%, rgba(255, 240, 210, 0.95) 50%, rgba(255, 255, 255, 0) 62%)
+  background-size: 280% 100%
+  background-repeat: no-repeat
+  -webkit-background-clip: text
+  background-clip: text
+  color: transparent
+  // Starts after the pop has landed: a shimmer during the scale-in is two
+  // animations competing for the same 400 ms and neither is legible.
+  animation: boss-felled-shine 900ms ease-in-out 380ms 1 both
+
+@keyframes boss-felled-shine
+  from
+    background-position: 180% 0
+  to
+    background-position: -80% 0
+
+// Reduced motion: the label still arrives — it is the reward, not an ornament —
+// but it arrives rather than lands. A fade with no scale and no sweep.
+@media (prefers-reduced-motion: reduce)
+  .boss-felled__type
+    animation: boss-felled-fade 300ms ease-out both
+
+  .boss-felled__shine
+    animation: none
+    // Left OUT of the paint entirely rather than parked mid-sweep, which would
+    // read as a stray white smear across the word.
+    opacity: 0
+
+@keyframes boss-felled-fade
+  from
+    opacity: 0
+  to
+    opacity: 1
+
+
 // ─── Result screen ──────────────────────────────────────────────────────────
 
 // The ribbon caption is TYPED BY THE RIBBON, not by this screen: `FReward`
@@ -2371,6 +3173,98 @@ onUnmounted(() => {
   text-transform: uppercase
   font-size: clamp(0.55rem, 2.6vmin, 0.8rem)
   text-shadow: 2px 2px 0 #000
+
+// ─── The near-miss rail ─────────────────────────────────────────────────────
+//
+// Reads as a piece of road, because that is what it is: the same dark plate the
+// HUD wears, filled left-to-right in the crowd's own green, with a pale tick
+// standing where the last attempt stopped. Deliberately thin — it sits between
+// the stage name and the stat chips and must not become the loudest thing on a
+// screen whose job is to start the next run.
+.result__reach
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 0.35em
+  width: min(100%, 22rem)
+
+.result__reach-rail
+  position: relative
+  width: 100%
+  height: clamp(6px, 1.6vmin, 10px)
+  border-radius: 999px
+  background: rgba(0, 0, 0, 0.55)
+  border: 1px solid rgba(0, 0, 0, 0.85)
+  overflow: hidden
+
+.result__reach-fill
+  position: absolute
+  inset: 0 auto 0 0
+  min-width: 2px
+  border-radius: 999px
+  background: linear-gradient(90deg, #4f8f3a, #7ad14f)
+
+// In front of the fill, and never wider than the tick it is meant to be: this
+// is a mark on a scale, not a second bar.
+.result__reach-mark
+  position: absolute
+  top: -1px
+  bottom: -1px
+  width: 2px
+  transform: translateX(-1px)
+  background: #ffffff
+  opacity: 0.75
+
+.result__reach-line
+  display: flex
+  align-items: baseline
+  gap: 0.6em
+  font-weight: 900
+  text-transform: uppercase
+  text-shadow: 2px 2px 0 #000
+  font-size: clamp(0.55rem, 2.6vmin, 0.8rem)
+
+.result__reach-now
+  color: #cfe9b8
+
+.result__reach-best
+  color: #ffd93c
+
+.result__reach-prev
+  color: rgba(255, 255, 255, 0.62)
+
+// ─── The milestone line ─────────────────────────────────────────────────────
+//
+// Gold on a gold-edged plate — the same vocabulary as the HUD chip it pays off
+// and as the `result__record` line, because all three are "something went right
+// that does not happen every stage".
+.result__milestone
+  display: flex
+  align-items: center
+  gap: 0.4em
+  padding: 0.3em 0.75em
+  border: 2px solid rgba(255, 217, 60, 0.5)
+  border-radius: 999px
+  background-color: rgba(120, 84, 8, 0.55)
+  color: #ffd93c
+  font-weight: 900
+  text-transform: uppercase
+  font-size: clamp(0.6rem, 2.8vmin, 0.88rem)
+  text-shadow: 2px 2px 0 #000
+
+.result__milestone-icon
+  width: 1.2em
+  height: 1.2em
+  flex: 0 0 auto
+
+.result__milestone-coin
+  width: 1.1em
+  height: 1.1em
+  flex: 0 0 auto
+
+.result__milestone-value
+  color: #fff
+  font-variant-numeric: tabular-nums
 
 // ─── The stat chips ─────────────────────────────────────────────────────────
 //
@@ -2600,48 +3494,82 @@ onUnmounted(() => {
 .result__share
   flex: 0 0 auto
 
-// ─── The auto-advance outline ───────────────────────────────────────────────
+// ─── The forward button's bounce ────────────────────────────────────────────
 //
-// Drawn ON the button, in front of it: an SVG the exact size of the wrapper
-// (whose box IS the button's box — the depth plate is absolute and overhangs
-// it), with a path that traces the face's rounded edge, built from the
-// measured size and the face's own corner radius. It used to be a circle
-// behind the button, which could never match a rounded square and read as a
-// ring somebody had left there.
+// Replaces the auto-advance outline that used to be drawn here — an SVG traced
+// along the button's own rounded edge, filling clockwise until the button fired
+// itself. Nothing fires itself any more (see "The forward button bounces"), so
+// all that is left is a hop that says "this is the way out".
+//
+// The animation is applied to the button's FACE and its depth plate, through
+// `:deep`, and never to the `<button>`: the wrapper and the button keep their
+// boxes, so the row cannot move and the tap target cannot shrink. A tap on the
+// risen face still hits the button, because the face is inside it.
 .result__go
   position: relative
   display: inline-flex
 
-// Sized EXPLICITLY. An inline SVG is a replaced element, and a replaced
-// element that is absolutely positioned with `width: auto` does not stretch to
-// its box the way a `div` does — it falls back to its intrinsic size, which a
-// viewBox-only SVG does not have. Measured: the ring existed, counted down,
-// and painted nothing.
-.result__go .result__auto
-  position: absolute
-  left: 0
-  top: 0
-  width: 100%
-  height: 100%
-  z-index: 2
-  pointer-events: none
-  overflow: visible
+// `translate`, not `transform`. The depth plate already carries
+// `transform: translateY(3px)` and the brawl variant carries a skew; the
+// individual transform properties compose with those instead of replacing them,
+// which is the same reason FButton's own `attention-bounce` keyframes are written
+// this way.
+//
+// Both halves get the identical animation so the face and the plate under it move
+// as one object. Animating only the face would peel the button off its own
+// shadow, which reads as a rendering bug rather than as a bounce.
+.result__go--bounce
+  :deep(.f-button__body),
+  :deep(.f-button__shadow)
+    animation: result-go-hop 1900ms cubic-bezier(0.3, 0, 0.3, 1) infinite
 
-.result__auto-track
-  fill: none
-  // A dark groove along the edge, so the timer reads as a track from its
-  // first frame rather than appearing out of nothing as the fill grows.
-  stroke: rgba(0, 0, 0, 0.45)
-  stroke-width: 3
+// Two hops and a long rest, rather than a continuous bob.
+//
+// A bob is a nag: it never stops asking, so after a few seconds the eye files it
+// as decoration and stops seeing it — which is the one thing this must not become
+// on a screen a player may sit on for half a minute. A double hop with a beat of
+// stillness after it keeps re-announcing itself, and the stillness is what makes
+// the movement read as a signal.
+//
+// The second hop is deliberately shorter than the first: a ball losing height. It
+// is the difference between something bouncing and something being jerked up and
+// down twice.
+@keyframes result-go-hop
+  0%, 8%
+    translate: 0 0
+  22%
+    translate: 0 -9px
+  36%
+    translate: 0 0
+  44%
+    translate: 0 -4px
+  52%, 100%
+    translate: 0 0
 
-.result__auto-fill
-  fill: none
-  stroke: #ffd93c
-  stroke-width: 3
-  stroke-linecap: round
-  stroke-linejoin: round
-  filter: drop-shadow(0 0 3px rgba(255, 217, 60, 0.8))
-  transition: stroke-dashoffset 60ms linear
+// ─── …and for a player who asked for no motion ──────────────────────────────
+//
+// The bounce is a pointer, so it cannot simply be dropped — a player with
+// `prefers-reduced-motion` is exactly as entitled to be told where the way out
+// is. It becomes a pulse of the button's OWN glow instead: no movement at all,
+// nothing that could be read as the screen doing something, and the light is on
+// the same object the hop would have lifted.
+//
+// On `.f-button__body`, whose `overflow: hidden` clips its children and not its
+// own box-shadow — so the halo is drawn outside the face exactly as intended.
+@media (prefers-reduced-motion: reduce)
+  .result__go--bounce
+    :deep(.f-button__body),
+    :deep(.f-button__shadow)
+      animation: none
+
+    :deep(.f-button__body)
+      animation: result-go-glow 2200ms ease-in-out infinite
+
+@keyframes result-go-glow
+  0%, 100%
+    box-shadow: 0 0 0 rgba(103, 224, 138, 0)
+  50%
+    box-shadow: 0 0 0 4px rgba(103, 224, 138, 0.45), 0 0 18px rgba(103, 224, 138, 0.55)
 
 // ─── Landscape phone ────────────────────────────────────────────────────────
 //

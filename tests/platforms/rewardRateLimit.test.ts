@@ -12,7 +12,7 @@ const loadGate = async (
   opts: { crazy?: boolean; fullRelease?: boolean; granted?: boolean; provider?: string } = {}
 ) => {
   vi.resetModules()
-  vi.doMock('@/use/useUser', () => ({ isCrazyWeb: opts.crazy ?? true }))
+  vi.doMock('@/use/useUser', () => ({ isCrazyWeb: opts.crazy ?? true, isWaveDash: false }))
   vi.doMock('@/use/useMatch', () => ({ isCrazyGamesFullRelease: opts.fullRelease ?? true }))
   const showRewardedAd = vi.fn(async () => opts.granted ?? true)
   vi.doMock('@/use/useAds', async () => {

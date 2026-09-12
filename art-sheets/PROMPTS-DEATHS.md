@@ -671,3 +671,135 @@ OUTPUT: one image, 1680 x 720 pixels (21:9, landscape). If your tool has an
 aspect-ratio control, set it to 21:9 — a square or 16:9 return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
 ```
+
+---
+
+The last block is the SQUAD's own fall, and it works the same way: the character
+model (`art-sheets/models/survivors.png`, the three survivors as the game shows
+them) first, then the layout. One sheet covers every outfit and both of the poses
+a fall is held on, so it is one generation for the whole crowd. The game plays the
+same fall, drawn, until it exists — see `SURVIVOR_FALLS`.
+
+## Survivors, down  (models/survivors.png + fall-survivors.png → images/heroes/fallen.webp)
+
+```text
+A SPRITE SHEET: 6 panels of the squad's own survivors going down.
+Two images come with this prompt, in this order:
+  IMAGE 1 — `models/survivors.png` — THE CHARACTERS: the three survivors, exactly as the
+     game shows them, left to right. Every panel is one of these three.
+  IMAGE 2 — `fall-survivors.png` — THE LAYOUT: the game's own rough placeholder
+     drawing of the fall. FOLLOW ITS POSES — where the head, pack, arms, legs and
+     boots are in each panel, how far over the body is, and where on the ground it
+     ends up — and take nothing else from it: not its limb lengths, shapes,
+     colours, details or style. Image 2 is a flat stand-in; image 1 is who these
+     people are.
+
+WHAT IT IS: The squad's own survivors — the same three hooded runners, stopped and going down. Same coat, same pack with the bedroll lashed across the top, same hood with its tie-tails, same heavy boots, same short hand-cannon.
+
+THE CHARACTERS — copy them from image 1:
+· They are seen from BEHIND and they have NO FACE in this game — it is never
+  drawn. A body lying face UP is a character that does not exist, and it is the
+  one way this sheet comes back unusable. Face DOWN, always: what the viewer sees
+  of a fallen survivor is the pack, the back of the hood and the soles of its
+  boots.
+· Their PROPORTIONS stay exactly as in image 1: the same small head against the
+  same big pack, the same limb lengths and thickness. Nobody gets taller, leaner
+  or more realistic on the way down.
+· The pack stays ON the back, shut, with the bedroll still lashed across it.
+  Nothing spills out of it and nobody carries anything new.
+
+THE LOOK — paint it the way image 1 is painted, never as a clean cartoon:
+· Heavy, scratchy near-black ink contours with dry-brush breaks, thick on the
+  shadow side.
+· Flat, gritty gouache-like paint inside the lines, with visible brushwork, grain
+  and rough cel-style shadow shapes. No smooth vector shading, no gradients, no
+  glossy highlights.
+· The same muted, desaturated colours as image 1, and the same key light from the
+  UPPER LEFT.
+
+THE GRID — 3 columns across, 2 rows down, read left to right along the top
+row, then the bottom row. These lines are for you to read; never write them, or
+any other words, in the image:
+· The COLUMNS are the three survivors, in image 1's order: column 1 teal,
+  column 2 amber, column 3 violet. A column is ONE person at two moments —
+  top and bottom of column 1 are the same individual in the same coat — and the
+  three coats never swap columns.
+· ROW 1, panels 1-3: CRASHED — it has run into something solid and is going down where it stands. Stopped dead: the knees buckle and the hips drop, the leg on the left folding under it and the other trailing, the body sagging down over them, both arms flung out and open, the head dropped and the hood tipped over. It is FALLING, not kneeling — nothing about it is balanced, and it is not standing, walking, crouching or taking a knee to fire. Keep it UPRIGHT and folding, exactly as image 2 has it: the game turns this picture over itself as it plays the fall, so a body already laid down here is a body that lands twice.
+· ROW 2, panels 4-6: FALLEN — the body, lying still on the road where it came down. Face DOWN on a shallow diagonal across the panel, head end to the panel's left and the boots to the right, the pack up toward the viewer, both arms spread out slack where they landed, the legs splayed apart, the SOLES of both boots turned up to the viewer, the hood's tie-tails spilled on the ground beside the head. Limp and completely still, and flatter than it is long, as anything lying on the ground is. Its hand-cannon lies dropped on the ground by one hand.
+· column 1 — a muted teal wool coat, slate trousers, an oiled brown pack, a bone-cream hood — the coat's teal is its identity in the crowd.
+· column 2 — a tarnished amber-brown leather coat, charcoal trousers, a dark pack, a grey-linen hood — the amber is its identity in the crowd.
+· column 3 — a dusk-violet cloak-coat, slate trousers, a brown pack, a pale blue-grey hood — the violet is its identity in the crowd.
+· All 6 are going down or already down. Not one of them stands, walks, runs,
+  fights, aims, sits up, kneels to fire or turns to look at the viewer.
+· Every body goes over toward the panel's left, the same way in all 6. The game
+  mirrors the picture itself for a body thrown the other way, so a mirrored panel
+  gives it two survivors falling into each other.
+
+FOR CHILDREN — this game is played by kids:
+· NO blood, gore, wounds, torn clothing, broken or severed parts, nothing red and
+  wet.
+· NO puddle, pool, splash or stain under or around them.
+· Defeat is the POSE and the slack limbs, nothing else. No "X" eyes (there are no
+  eyes to draw), no stars, no sweat drops, no cartoon symbols. It has to read as
+  "this one is down" the way a dropped bundle does.
+
+LAYOUT — the grid is cut blindly:
+· EXACTLY 6 panels: 3 across, 2 rows. Not 1, not 3, not 8, not
+  12 — do not add a row or a column. One big painting of a fallen survivor is
+  the wrong answer however well it is painted, and so is a square canvas.
+· Each panel is exactly 1/3 of the width and 1/2 of the height.
+· SIZE — measure it against the PANEL, not against the paper. A crumpled survivor
+  covers about two thirds of its panel's width and four fifths of its height; a fallen
+  one about four fifths of the width and half of the height — exactly as image 2
+  draws them. If yours reaches the edges of its panel it is about twice the size
+  it should be. The empty magenta around each body is not waste: it is the box the
+  game blits the panel into, and a body painted out into it is a body drawn too
+  big in play.
+· WHERE each body sits in its panel is not a composition choice. The bottom of
+  each panel is the road, at the same height as in image 2 — that is the line the
+  survivor's feet stood on and the line the game puts the picture back on. Do not
+  re-centre a body in its panel, do not tidy the arrangement, do not even out the
+  spacing.
+· Leave a clear band of flat magenta between neighbouring panels, at least a tenth
+  of a panel wide. Nothing — an arm, a boot, the gun, a shadow — may touch or
+  cross a panel edge. Two panels that run into each other cannot be cut apart.
+· NO panel borders, frames, lines, boxes or gutters, and NO text, titles, captions
+  or numbers anywhere. Do NOT draw a ground line, floor or horizon: one soft
+  contact shadow under each body, tight to it, and nothing else — no road, no
+  rubble, no scenery, no obstacle. The thing each one crashed into is drawn by the
+  game and must not be in the picture.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+BEFORE YOU CALL IT FINISHED:
+· 3 panels across, 2 down, 6 in all — no borders and no words.
+· Every panel is one of image 1's three survivors, in its own coat colour, with
+  its pack shut on its back, carrying nothing new.
+· Not one of them is face up, and not one of them is on its feet.
+· There is empty magenta above the bodies in the bottom row, and that space is NOT
+  room for another row.
+· The canvas is landscape, half again as wide as it is tall (3:2).
+· Every pixel that is not a survivor is flat, vivid #FF00FF — hold it against a
+  pure magenta swatch, not against your memory of one.
+
+OUTPUT: one image, 960 x 640 pixels (3:2, landscape). If your tool has an
+aspect-ratio control, set it to 3:2 — a square or 16:9 return crushes the grid and
+cannot be cut. No labels, captions, numbers or watermarks.
+```

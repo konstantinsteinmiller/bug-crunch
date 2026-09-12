@@ -28,6 +28,9 @@ export default {
     'best': 'สถิติ {n}',
     'boss': 'บอส',
     'miniboss': 'มินิบอส',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'ด่านที่เหลือถึงโบนัสถัดไป',
     'fireRate': 'อัตรา',
     'incoming': 'การโจมตีกำลังมา!',
     'dodge': 'หลบ',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น', 'desktop': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น' },
     'boss': { 'touch': 'อย่าอยู่ในวงแดง!', 'desktop': 'อย่าอยู่ในวงแดง!' },
     'lever': { 'touch': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ', 'desktop': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ' },
-    'guard': { 'touch': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!', 'desktop': 'โล่ขึ้นแล้ว — ยิงไม่เข้า รีบหลบ!' },
+    'guard': { 'touch': 'โล่ขึ้นแล้ว — ยิงยังไม่เข้า', 'desktop': 'โล่ขึ้นแล้ว — ยิงยังไม่เข้า' },
     'cage': { 'touch': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ', 'desktop': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ' },
     'shieldBox': { 'touch': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง', 'desktop': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': 'แลกผู้รอดชีวิต {n} คน',
     'unlocked': 'ปลดล็อกแล้ว!',
 
     'guardian': "เทวดาผู้พิทักษ์ช่วยคุณไว้!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'ผ่านด่าน!',
     'wipedOut': 'หน่วยถูกกวาดล้าง',
     'reachedStage': 'ด่าน {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'สถิติ {n}%',
+    'newReach': 'ไกลที่สุด!',
     'newRecord': 'สถิติใหม่!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'ล้มบอสได้!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'หมุดหมาย!',
     'rallied': 'ฮึดสู้อีกครั้ง',
     'peakSquad': 'หน่วยใหญ่สุด',
     'kills': 'สังหาร',
@@ -239,5 +260,12 @@ export default {
     'retry': 'ลองใหม่', 'dismiss': 'ปิด'
   },
   'loading': { 'tooLong': 'โหลดนานเกินไป? ลองปิดตัวบล็อกโฆษณาแล้วรีเฟรช', 'boo': 'บู๊!', 'laugh': 'ฮ่าฮ่าฮ่า!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'หมุนโทรศัพท์',
+    'body': 'Survivalist เล่นในแนวตั้ง'
+  },
   'license': { 'denied': 'ปฏิเสธการเข้าถึง: กรุณาซื้อไลเซนส์' }
 }

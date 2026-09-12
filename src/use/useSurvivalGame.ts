@@ -7,9 +7,11 @@ import {
   BULLET_LIFE_MS, BULLET_R, BULLET_SPEED, effectiveBulletRange,
   CHALLENGE_MAX, CHALLENGE_STEP,
   COIN_MAGNET_BASE, COIN_PULL_LEAD, CRATE_DAMAGE_GAIN,
+  isMilestone, MILESTONE_EVERY, milestoneReward, nextMilestone, reachOf,
   FOE_COIN_DROP_ELITE, FOE_COIN_DROP_PER_BOUNTY,
   BULWARK_FLOOR, BULWARK_R, BULWARK_SHARE, CAGE_R,
   CRATE_R, CRATE_RATE_GAIN, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H, DIVIDER_HALF_W,
+  type DeathCause, SURVIVOR_FALL_MS,
   FOE_BODY_HALF_H, FOE_BODY_HALF_W, FOE_COLLIDE_CD, FOE_COLLIDE_CORE, FOE_COLLIDE_IFRAMES_MS, FOE_COLLIDE_KILL_EVERY,
   CAGE_JOIN_MAX_S, CAGE_JOIN_SPEED,
   ELITE_DRAG_LEAD, ELITE_DRAG_MIN, ELITE_HOLD_MAX, ELITE_LUNGE, ELITE_SWEEP_CD, eliteDragFor,
@@ -177,8 +179,13 @@ import {
   EXPEDITION_PAYOUT, EXPEDITION_STAGE, expeditionDay, markExpeditionTaken
 } from '@/use/useDailyExpedition'
 import { flushSaveNow } from '@/use/useSaveStatus'
+// Aliased: `track` is already this module's private name for the current
+// stage's authored score (`track = buildTrack(...)`), and shadowing that with
+// an analytics call would be a genuinely nasty bug to read.
+import { track as sendAnalytics, dominantCause } from '@/use/useAnalytics'
 import {
-  BEST_SQUAD_KEY, BEST_STAGE_KEY, CHALLENGE_KEY, FAILED_STAGES_KEY,
+  BEST_PROGRESS_KEY, BEST_SQUAD_KEY, BEST_STAGE_KEY, CHALLENGE_KEY, FAILED_STAGES_KEY,
+  MILESTONES_KEY,
   REWARD_DECLINE_KEY, RUNS_KEY,
   STAGE_KEY, TOTAL_KILLS_KEY
 } from '@/keys'
@@ -1081,6 +1088,73 @@ const clearFailures = (n: number): void => {
   setStates({ [FAILED_STAGES_KEY]: next })
 }
 
+// ─── How far they have ever got ─────────────────────────────────────────────
+//
+// The other half of the failure ledger, and the half the player is allowed to
+// see. `FAILED_STAGES_KEY` counts losses so the game can quietly help; this
+// records the best of those losses so the result screen can say something true
+// and forward-looking about a run that ended — see `BEST_PROGRESS_KEY`.
+//
+// Same lifecycle as the failures, deliberately: written only on a loss, deleted
+// on a clear. A stage that has been beaten has no "best attempt" to report.
+
+const readBestProgress = (): FailMap => {
+  const raw = getState<FailMap>(BEST_PROGRESS_KEY, {})
+  return raw && typeof raw === 'object' ? raw : {}
+}
+
+/** The furthest this player has ever got on a stage they lost, 0..1. Zero when
+ *  they have never lost it — which is also how the scene knows to say nothing. */
+export const bestProgressOn = (n: number): number => {
+  const v = readBestProgress()[String(n)] ?? 0
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0
+}
+
+/** Record a loss's reach, if it beat the one before it. Returns the value the
+ *  run is being compared against — the PREVIOUS best, which is what the screen
+ *  has to show. */
+const recordProgress = (n: number, progress: number): number => {
+  const map = readBestProgress()
+  const prev = Number.isFinite(map[String(n)]) ? (map[String(n)] as number) : 0
+  const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0))
+  if (p > prev) setStates({ [BEST_PROGRESS_KEY]: { ...map, [String(n)]: p } })
+  return prev
+}
+
+// ─── The milestone ledger ───────────────────────────────────────────────────
+//
+// One monotonic number — the highest milestone stage already paid. See
+// `MILESTONES_KEY`, and `milestoneReward` in `game/survival.ts` for the price.
+
+const readMilestone = (): number => {
+  const v = Number(getState(MILESTONES_KEY, 0))
+  return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0
+}
+
+/** The milestone the HUD is counting down to: the next one this player has not
+ *  been paid for. Never behind them, even after a stage is replayed. */
+export const pendingMilestone = (stage: number): number =>
+  Math.max(nextMilestone(stage), readMilestone() + MILESTONE_EVERY)
+
+/** Stages left until the chip pays. Zero means "this stage, if you clear it". */
+export const stagesToPendingMilestone = (stage: number): number =>
+  Math.max(0, pendingMilestone(stage) - Math.max(1, Math.floor(stage)))
+
+/** Pay the milestone for a cleared stage, once. Returns the coins owed, or 0. */
+const claimMilestone = (n: number): number => {
+  if (!isMilestone(n) || n <= readMilestone()) return 0
+  setStates({ [MILESTONES_KEY]: n })
+  return milestoneReward(n)
+}
+
+const clearProgress = (n: number): void => {
+  const map = readBestProgress()
+  if (map[String(n)] === undefined) return
+  const next = { ...map }
+  delete next[String(n)]
+  setStates({ [BEST_PROGRESS_KEY]: next })
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 const resetWorld = (): void => {
@@ -1176,6 +1250,16 @@ const nextUnitSeed = (): number => {
   return (h >>> 8) / 16777216
 }
 
+/**
+ * How fast a dying body's sideways stagger bleeds off, per second.
+ *
+ * Seven puts ~95 % of the impulse behind the body inside the fall window and
+ * almost all of it before the crash pose lands, which is what makes "it fell
+ * where it was hit" true. Lower and the body skates; higher and the blow stops
+ * reading as a blow at all.
+ */
+const FALL_DRAG = 7
+
 const spawnUnit = (x: number, y: number, join = 0): void => {
   if (squadCount.value >= MAX_SQUAD) return
   units.push({
@@ -1188,6 +1272,7 @@ const spawnUnit = (x: number, y: number, join = 0): void => {
     phase: Math.random(),
     flash: 0,
     dying: 0,
+    cause: null,
     inv: 0,
     join
   })
@@ -1369,7 +1454,33 @@ export const startStage = (n?: number, seed?: number): void => {
   }
   if (!expedition) patch[STAGE_KEY] = target
   setStates(patch)
+
+  // ── The funnel's first event ──
+  //
+  // LAST in `startStage`, so everything it reports is settled: the crowd is
+  // standing, the autobalancer has resolved, and the save has been patched. An
+  // event sent from the middle of this function would describe a stage that did
+  // not exist yet. See `useAnalytics` for why the bracket cannot answer this.
+  sendAnalytics('stage_start', {
+    stage: target,
+    squad: start,
+    expedition,
+    relieved: reliefActive.value,
+    challenge: challenge.value
+  })
 }
+
+/**
+ * How long the stage has been running, for `durationMs`.
+ *
+ * The SIMULATION clock, not a wall clock. `clock` only advances inside `step`
+ * and scales with `timeScale`, so it measures time the player actually spent
+ * playing: an ad, a shop trip, a backgrounded tab and the slow-motion beat
+ * after a gate are all excluded, which is exactly what makes the number
+ * comparable between two sessions. `resetWorld` zeroes it at every
+ * `startStage`, so the elapsed time IS the clock.
+ */
+const stageDurationMs = (): number => Math.round(nowMs())
 
 /**
  * Take today's expedition.
@@ -1563,11 +1674,45 @@ export interface RunSummary {
   /** This was the daily expedition, not a campaign stage. The result screen
    *  reads it to name the run and to send both buttons back to the campaign. */
   expedition: boolean
+  /**
+   * How far down the ROAD the run got, 0..1 — the number `wipeReward` is priced
+   * off. Travels for the analytics; the screen reads `reach01` instead, because
+   * this one hits 1 the moment the arena opens.
+   */
+  progress01: number
+  /**
+   * How far the run got on the rail the player actually watched: road progress
+   * until the arena, then the boss's health. See `reachOf`.
+   *
+   * Always written, only SHOWN on a loss — a cleared stage reached the end by
+   * definition, and printing "100 %" under a win is noise.
+   */
+  reach01: number
+  /**
+   * The furthest any PREVIOUS attempt on this stage got, on the same scale, or
+   * 0 if this is the first loss here.
+   *
+   * The previous best rather than the new one, so the screen can say "you got
+   * further" while it is still true — by the time it renders, this run has
+   * already been folded into the ledger.
+   */
+  bestReach01: number
+  /**
+   * Coins this clear paid for crossing a milestone, or 0.
+   *
+   * Separate from `coins` rather than folded into it, because the two are
+   * different promises: `coins` is what the road paid, and this is what the
+   * COUNTDOWN paid — the thing the HUD chip has been pointing at for two
+   * stages. Adding them would make the number the player was promised
+   * disappear into a bigger one at the moment it arrived.
+   */
+  milestone: number
 }
 
 let summary: RunSummary = {
   stage: 1, cleared: false, squad: 0, peakSquad: 0, kills: 0, coins: 0,
-  baseCoins: 0, isRecord: false, relieved: false, expedition: false
+  baseCoins: 0, isRecord: false, relieved: false, expedition: false,
+  progress01: 0, reach01: 0, bestReach01: 0, milestone: 0
 }
 
 export const runSummary = (): RunSummary => summary
@@ -1604,6 +1749,28 @@ const finishRun = (cleared: boolean): void => {
   // the difficulty curve rather than a stage the player has reached — banking it
   // would post a career best for a road that is not part of the career.
   const record = !expedition && cleared && stage.value >= bestStage.value
+  // ── The near-miss number, banked before the screen reads it ──
+  //
+  // The ledger is written HERE rather than beside `recordFailure` below,
+  // because the screen has to be told what the run is being compared against —
+  // the PREVIOUS best, which stops existing the moment this run beats it. An
+  // expedition records nothing, for the same reason it records no failure: its
+  // stage number is a real campaign stage the player has not met yet.
+  // The rail the player watched, not the road the payout is priced off — see
+  // `reachOf`. Read BEFORE `phase` is written below, so `phase === 'boss'` still
+  // says whether the arena had opened.
+  const reach = cleared ? 1 : reachOf(progress01.value, phase.value === 'boss', bossHp01.value)
+  const prevBest = !cleared && !expedition && wasPlayed()
+    ? recordProgress(stage.value, reach)
+    : bestProgressOn(stage.value)
+  // ── The milestone, claimed exactly once ──
+  //
+  // Guarded on the LEDGER rather than on the stage number, so a stage replayed
+  // after a cloud restore, a `retryStage`, or an endless loop back through the
+  // same depth cannot pay twice. Never on an expedition: its stage number is a
+  // rung on the difficulty curve, and paying a milestone for it would hand the
+  // player a campaign reward for a road that is not in the campaign.
+  const milestone = cleared && !expedition ? claimMilestone(stage.value) : 0
   summary = {
     stage: stage.value,
     cleared,
@@ -1614,7 +1781,11 @@ const finishRun = (cleared: boolean): void => {
     baseCoins,
     isRecord: record,
     relieved: reliefActive.value,
-    expedition
+    expedition,
+    progress01: progress01.value,
+    reach01: reach,
+    bestReach01: prevBest,
+    milestone
   }
 
   const patch: Record<string, unknown> = {
@@ -1672,7 +1843,7 @@ const finishRun = (cleared: boolean): void => {
   // idle game.
   if (!expedition) {
     if (!cleared && wasPlayed()) recordFailure(stage.value)
-    else if (cleared) clearFailures(stage.value)
+    else if (cleared) { clearFailures(stage.value); clearProgress(stage.value) }
   }
 
   // Hard checkpoint → drain the whole save pipeline NOW rather than waiting out
@@ -1681,6 +1852,27 @@ const finishRun = (cleared: boolean): void => {
   // that kills the process) would otherwise beat the pipeline and come back to
   // the previous stage — the exact regression this call exists to prevent.
   void flushSaveNow()
+
+  // ── The event the portal bracket cannot send ──
+  //
+  // A clear and a wipe are different events rather than one with a flag,
+  // because they are read by different questions: `stage_end` measures how long
+  // a won stage takes, and `wipe` is the whole reason this module exists —
+  // WHERE the career ended and WHAT took it. `dominantCause` bills the loss to
+  // the system that took the most bodies, not the one that took the last.
+  const durationMs = stageDurationMs()
+  if (cleared) {
+    sendAnalytics('stage_end', {
+      stage: stage.value, peakSquad: peakSquad.value, kills: kills.value,
+      coins, durationMs, expedition
+    })
+  } else {
+    sendAnalytics('wipe', {
+      stage: stage.value, progress01: progress01.value,
+      cause: dominantCause(deaths), peakSquad: peakSquad.value,
+      played: wasPlayed(), durationMs, expedition
+    })
+  }
 
   phase.value = cleared ? 'clear' : 'wipe'
   pushFx({ kind: cleared ? 'stageClear' : 'wipe', x: anchorX, y: anchorY })
@@ -1750,6 +1942,9 @@ const streamTrack = (): void => {
             id: entityId++, bankId, x: leaf.x, halfW: leaf.halfW, y: e.y,
             op: leaf.op, value: leaf.value, charge: 0, hotFor: 999,
             used: false, dismissed: false, pop: 0,
+            // Face-down until the bank resolves. Rolled by the generator on at
+            // most one leaf of at most one bank a stage — see `MYSTERY_STAGE`.
+            mystery: leaf.mystery === true,
             // Authored on the leaf, 1 everywhere the road rolls its own doors.
             pumpMul: leaf.pumpMul ?? 1,
             ...(leaf.pumpCap !== undefined ? { pumpCap: leaf.pumpCap } : {})
@@ -2793,8 +2988,24 @@ const stepUnits = (dt: number): void => {
       }
       // Tumble out of the crowd rather than blinking away — a survivor that
       // vanishes reads as a rendering bug, one that falls over reads as a loss.
+      //
+      // ── Why `vx` is dragged and `vy` is not ──
+      //
+      // The sideways impulse is a STAGGER, not a slide. Undamped it ran for the
+      // whole window at up to 3.2 units a second, carrying a body about 1.3
+      // world units — a third of the lane's half-width — which fought the drawn
+      // fall on the one death the player reads most closely: a survivor that
+      // runs into a barricade is supposed to crumple AGAINST it, and instead it
+      // skated away from the thing that stopped it. Dragged, the body carries
+      // roughly a third of a unit and is planted by the time the crash pose
+      // lands (`survivorFallStep` cuts to it at 30 % of the window).
+      //
+      // `vy` keeps its constant fall instead, because it is not a stagger: it
+      // is the arc the body is thrown along, and the renderer's own drop is
+      // drawn on top of it.
       u.x += u.vx * dt
       u.y += u.vy * dt
+      u.vx -= u.vx * Math.min(1, FALL_DRAG * dt)
       u.vy -= 5 * dt
       continue
     }
@@ -2889,7 +3100,10 @@ const stepUnits = (dt: number): void => {
  * The balance harness reads it, and it is the shape the analytics events in the
  * retention roadmap will carry.
  */
-export type DeathCause = 'foe' | 'elite' | 'barricade' | 'crate' | 'divider' | 'trap' | 'slam'
+/** Re-exported: the vocabulary itself moved to `game/survival.ts`, because
+ *  `Unit` carries one and an entity in that module cannot import a type from
+ *  the module that steps it. Every existing call site keeps working. */
+export type { DeathCause }
 
 const emptyDeaths = (): Record<DeathCause, number> =>
   ({ foe: 0, elite: 0, barricade: 0, crate: 0, divider: 0, trap: 0, slam: 0 })
@@ -3668,7 +3882,10 @@ const killUnit = (u: Unit, dirX = 0, cause: DeathCause = 'foe'): void => {
       return
     }
   }
-  u.dying = 420
+  u.dying = SURVIVOR_FALL_MS
+  // Read ONLY by the renderer, to tell a fall from a crash — see `Unit.cause`.
+  // The loss itself is billed to `deaths` below; this is not a second tally.
+  u.cause = cause
   u.vx = dirX * 2.4 + (Math.random() - 0.5) * 1.6
   u.vy = 1.8 + Math.random() * 1.4
   squadCount.value = Math.max(0, squadCount.value - 1)
@@ -3872,6 +4089,16 @@ const hostilesInFight = (): boolean => {
  *     is a statue — solid, harmless, still there to be shot;
  *   • nothing bites, nothing swings, nothing lands. The incoming badge goes
  *     down (`incomingThreat`), because nothing is.
+ *
+ * ── The one exception: a round already in the air ──
+ *
+ * Bolts in flight are NOT frozen, and that is a correction to the paragraph
+ * above rather than a hole in it. A thrown object is not a hostile clock, and
+ * ice does not catch one; freezing it read as a bug — the round stops dead a
+ * metre from the crowd and resumes from exactly there when the nova expires,
+ * which defers the threat onto a moment the player has stopped reading rather
+ * than removing it. The gunner and the boss still stop dead, so a nova still
+ * ends the volley: it simply does not un-throw what was already thrown.
  */
 let frostLeft = 0
 /** The simulation clock at the cast — the pose every frozen body is drawn in. */
@@ -5119,6 +5346,22 @@ const stepGates = (dt: number): void => {
 
     if (g.used) continue
 
+    // ── A face-down door does not pump ──
+    //
+    // Fire raises a door's number, and a number the player cannot see cannot be
+    // raised in front of them: the crowd would be spending its one stream of
+    // fire on a promise, and the pump's whole contract is that you watch the
+    // thing you are investing in climb. It also closes the exploit — hosing the
+    // `?` to find out what it is worth by watching a tick it does not show.
+    // The door is a gamble taken on its position, not on its price.
+    //
+    // Expressed as a clause on the HOT test below rather than as a `continue`:
+    // the crossing check at the bottom of this loop is what resolves the bank,
+    // and skipping the rest of the iteration would leave a face-down leaf
+    // unable to claim the bank it belongs to. Today a sibling always claims it
+    // first — a mystery is never alone on a bank — so that bug would have sat
+    // invisible until the first rule change.
+
     // `sub` pumps on exactly the same clock as `add`, and that is the whole
     // idea: the crowd fires forward whether the player wants it to or not, so
     // sitting in front of a `-N` is a cost the player pays for not having aimed
@@ -5133,7 +5376,7 @@ const stepGates = (dt: number): void => {
     const scale = isScaleOp(g.op)
     // The op's own ceiling, or this door's lower one (stage 1's opener).
     const pumpCap = Math.min(gatePumpCap(g.op), g.pumpCap ?? Number.POSITIVE_INFINITY)
-    if (g.hotFor < 0.4) {
+    if (g.hotFor < 0.4 && !g.mystery) {
       // `firingAtGate` drives the "you are pumping something" feedback, so it is
       // set only for the doors that pay: a player making the mistake of hosing a
       // trap should not be told they are earning.
@@ -5224,6 +5467,16 @@ const claimBank = (bankId: number): void => {
   const leaves = gates.filter((g) => g.bankId === bankId && !g.used)
   if (leaves.length === 0) return
 
+  // ── The bank shows its hand ──
+  //
+  // Every face-down door in this bank turns over at the instant of commitment,
+  // the one taken and the ones dismissed alike. Turning over only the winner
+  // would leave the player unable to tell whether they had gambled well, and
+  // "what was the other one" is most of what makes the next `?` interesting.
+  // Before anything else in this function, so the payout and the dismissal
+  // events both describe doors that are now face-up.
+  for (const leaf of leaves) leaf.mystery = false
+
   let winner: Gate | null = null
   let best = -1
 
@@ -5295,6 +5548,10 @@ const claimBank = (bankId: number): void => {
     pushFx({
       kind: 'gatePass', x: winner.x, y: winner.y, op: winner.op, value: winner.value, gain: -toKill
     })
+    sendAnalytics('gate_pass', {
+      stage: stage.value, op: winner.op, value: winner.value,
+      gain: -toKill, leaves: leaves.length, squad: squadCount.value
+    })
     dismissLosers(leaves, winner)
     return
   }
@@ -5330,6 +5587,13 @@ const claimBank = (bankId: number): void => {
   }
   pushFx({
     kind: 'gatePass', x: winner.x, y: winner.y, op: winner.op, value: winner.value, gain: spawned
+  })
+  // The road's own funnel. `leaves` is what the player was offered and `value`
+  // is what the door was worth AFTER any pumping, so a bank read back later is
+  // the decision as it actually stood rather than as it was authored.
+  sendAnalytics('gate_pass', {
+    stage: stage.value, op: winner.op, value: winner.value,
+    gain: spawned, leaves: leaves.length, squad: squadCount.value
   })
   dismissLosers(leaves, winner)
 }
@@ -6473,9 +6737,21 @@ const stepFoes = (dt: number): void => {
   if (!anyElite) eliteHp01.value = 0
   // Stepped here rather than from `step` because a bolt is one elite's fight
   // carried on after it — a gunner that dies mid-flight leaves its round in the
-  // air, and the round is the only enemy projectile in the game. A frozen round
-  // hangs where it was.
-  if (frostLeft <= 0) stepBolts(dt)
+  // air.
+  //
+  // ── …and it keeps flying through a freeze ──
+  //
+  // A round that is ALREADY IN THE AIR is not a hostile clock, it is a thrown
+  // object, and ice does not catch one. Freezing it read as a bug rather than as
+  // power: the player casts the nova, the round stops dead a metre from the
+  // crowd, and then resumes from exactly there when the freeze runs out — which
+  // is a threat the freeze did not remove but merely deferred onto a moment the
+  // player is no longer paying attention to.
+  //
+  // What the freeze still stops is the GUNNER: no aiming, no reload, no new
+  // rounds (`stepFoes` returns early for a frozen body). So a nova still ends
+  // the volley — it just does not un-throw the one already thrown.
+  stepBolts(dt)
 }
 
 /**
@@ -7026,6 +7302,10 @@ const stepBoss = (dt: number): void => {
   // falls over at once — the corpse is not a hostile clock.
   if (frostLeft > 0 && !b.dead) {
     gazeLastX = anchorX
+    // …except its rounds already in the air, for the same reason a gunner's are
+    // not caught: a bolt in flight is a thrown object, not a clock. The boss
+    // itself stands still and starts no new one.
+    if (bossBolts.length > 0) stepBossBolts(dt)
     return
   }
   b.phase += dt

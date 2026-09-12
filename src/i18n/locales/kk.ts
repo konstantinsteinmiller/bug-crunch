@@ -28,6 +28,9 @@ export default {
     'best': 'Рекорд {n}',
     'boss': 'Бос',
     'miniboss': 'Мини-бос',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Келесі бонусқа дейінгі кезеңдер',
     'fireRate': 'Қарқын',
     'incoming': 'Шабуыл келеді!',
     'dodge': 'Жалтар',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Көк жәшік: бәрі жылдамырақ атады', 'desktop': 'Көк жәшік: бәрі жылдамырақ атады' },
     'boss': { 'touch': 'Қызыл шеңберден аулақ болыңыз!', 'desktop': 'Қызыл шеңберден аулақ болыңыз!' },
     'lever': { 'touch': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады', 'desktop': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады' },
-    'guard': { 'touch': 'Қалқан қосулы — оғың өтпейді. Қозғал!', 'desktop': 'Қалқан қосулы — оғың өтпейді. Қозғал!' },
+    'guard': { 'touch': 'Қалқан қосулы — оғың әзірге өтпейді', 'desktop': 'Қалқан қосулы — оғың әзірге өтпейді' },
     'cage': { 'touch': 'Торларды ат — тұтқындар отрядыңа қосылады', 'desktop': 'Торларды ат — тұтқындар отрядыңа қосылады' },
     'shieldBox': { 'touch': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады', 'desktop': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} аман қалған айырбасталды',
     'unlocked': 'Ашылды!',
 
     'guardian': "Күзетші періште сені құтқарды!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Кезең өтті!',
     'wipedOut': 'Жасақ жойылды',
     'reachedStage': '{n}-кезең',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n} %',
+    'bestReach': 'Рекорд {n} %',
+    'newReach': 'Ең алысы!',
     'newRecord': 'Жаңа рекорд!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Босс құлады!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Белес!',
     'rallied': 'Екінші тыныс',
     'peakSquad': 'Ең үлкен жасақ',
     'kills': 'Жойылған',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Қайталау', 'dismiss': 'жасыру'
   },
   'loading': { 'tooLong': 'Жүктеу тым ұзаққа созылды ма? Жарнама бөгегішін өшіріп, бетті жаңартыңыз.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Телефонды бұр',
+    'body': 'Survivalist тік режимде ойналады.'
+  },
   'license': { 'denied': 'Кіруге тыйым салынды: лицензия сатып алыңыз.' }
 }

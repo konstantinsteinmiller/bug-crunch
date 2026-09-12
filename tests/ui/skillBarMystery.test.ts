@@ -18,8 +18,10 @@ import { DECOY_GIFT_STAGE, FROST_GIFT_STAGE, SHIELD_GIFT_STAGE } from '@/game/la
  *                         skill behind it — shield, ice crystal, flare.
  *   IT PAYS OFF ONCE      the first time a slot fills, its button plays a
  *                         reveal — once, ever, and not on the next mount.
- *   IT FITS               the wide row under the squad shows every slot; the
- *                         tall fallback column shows only the NEXT one.
+ *   IT FITS               every slot is shown, on every viewport — the row is
+ *                         under the squad everywhere now, and it pays for the
+ *                         width by shrinking the buttons rather than by hiding
+ *                         the slots (`tests/game/skillBarFit.test.ts`).
  *
  * …and the free Frost Nova the stage-4 boss hands over is the fourth state:
  * a real button, badged, for exactly one press.
@@ -30,9 +32,13 @@ vi.mock('@/use/useSound', () => ({ default: () => ({ playSound: (...a: unknown[]
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
-/** jsdom has no layout, so the bar's one measurement — a button's height — is
- *  stubbed. Tall enough viewport plus a real button height puts it UNDER the
- *  squad; a zero height is the pre-layout state, which takes the fallback. */
+/** jsdom has no layout engine, so what a button measures is stubbed.
+ *
+ *  The bar no longer reads it — it places itself off the props the scene hands
+ *  it and sizes itself off the lane — but the two arguments are kept and still
+ *  passed, because they are the two states the OLD rule branched on (a real
+ *  button height, and the pre-layout zero) and a spec that says "both of these
+ *  now do the same thing" has to be able to produce both. */
 const layout = (buttonPx: number): void => {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
     x: 0, y: 0, width: buttonPx, height: buttonPx, top: 0, left: 0,
@@ -125,13 +131,25 @@ describe('a locked slot is not a control', () => {
   })
 })
 
-describe('the fallback column shows only what is next', () => {
-  it('keeps the tall layout to the grenade and the one slot the player is playing toward', async () => {
+describe('there is one layout, and every viewport gets it', () => {
+  // This block used to pin the opposite: `layout(0)` — the pre-measurement
+  // state, which the old clearance rule read as "no room under the squad" —
+  // answered with a column stacked up the right edge, trimmed to the grenade
+  // plus the ONE slot the player was playing toward, because four buttons tall
+  // reached the corner the incoming-attack badge lives in.
+  //
+  // The owner removed that branch: a desktop was taking the edge column in
+  // practice, and a skill button out beside the road drags the whole crowd into
+  // the right rail on its way to the cursor. There is no column to trim for any
+  // more, so the trimming is gone with it and the row carries all four slots
+  // whatever the bar has or has not measured.
+  it('shows every slot even in the state that used to take the edge column', async () => {
     layout(0)
     const w = await mountBar()
+    expect(w.classes(), 'a layout modifier survived the merge of the two layouts')
+      .not.toContain('skills--under')
     const locked = w.findAll('.skills__btn--locked')
-    expect(w.classes()).not.toContain('skills--under')
-    expect(locked.length, 'the column stacked every mystery up the edge').toBe(1)
+    expect(locked.length, 'a slot was hidden on a viewport that has room for it').toBe(3)
     expect(locked[0]!.attributes('aria-label')).toBe(`Unlocks at stage ${SHIELD_GIFT_STAGE}`)
   })
 })

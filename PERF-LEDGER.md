@@ -102,6 +102,52 @@ pnpm perf:play --stage 22 --a "perf=<thing>-legacy" --b ""
 
 ---
 
+## 2026-09-12 — the crowd: no per-body shadow, and a counting sort ✅ KEPT, UNMEASURED
+
+**Asked for directly.** The retention roadmap's item 16 proposed two things —
+bucket-sort the crowd by depth, and batch every survivor's shadow into one path.
+The owner asked for the sort as written and for the shadow to go **entirely**
+rather than be batched, which makes half of this a rendering decision and not
+only a performance one.
+
+**What went.** The per-survivor contact ellipse under every drawn body: a
+`beginPath` + `ellipse` + `fill` each, up to 190 of them a frame at `high`, plus
+a `fillStyle` assignment. About **570 canvas calls per frame** removed at the
+top tier, 210 at `min`.
+
+It was also the least visible thing in the loop. At crowd size the sprites
+overlap several times over, so most patches were drawn underneath the bodies in
+front of them — and the ones that showed never merged: two hundred separate
+pools read as two hundred people standing near each other, which is precisely
+what the pooled gradient under the whole formation (`drawUnits`, "the funnel,
+part 1") was added to replace. That sheet stays, carries the same compression
+term the patches were varying, and is one fill.
+
+**What changed.** `order.sort((a, b) => units[b].y - units[a].y)` → a counting
+sort into 16 depth bands over the crowd's own y extent, re-measured per frame.
+The comparison sort is O(n log n) through a JS closure — about **1 500 comparator
+calls** at 190 bodies, each two array index lookups and a subtract — against
+three linear walks. The formation is ~3.3 units deep at full squeeze, so a band
+is well under one body height and two sprites inside one band may overlap either
+way round without anybody being able to say which was wrong.
+
+**Not measured, and that is a deliberate admission.** There is no `perf=` variant
+behind it, so nothing here is a timing claim — only an arithmetic one. To price
+it properly, add a legacy variant in `perfVariants.ts` and run:
+
+```bash
+pnpm perf:play --stage 22 --a "perf=crowd-shadows-legacy" --b ""
+```
+
+**And the standing verdict still applies.** The A/A above puts the real game at
+`workP95 ≈ 4.4 ms` against a 16.7 ms budget at 4× CPU throttle, which is why
+this file's own rule says further renderer micro-optimization is unjustified.
+The case for this row is the tail that A/A does not sample — a 200+ crowd on a
+real low-end Android — plus the fact that the shadow removal was wanted for how
+it looks. Treat the sort as free insurance, not as a win anybody has shown.
+
+---
+
 ## 2026-09-06 — pool monsters and rounds ✅ KEPT (allocation), ❌ null-to-negative on time
 
 **Claim.** A late road fields packs of dozens with a summoner adding waves, and

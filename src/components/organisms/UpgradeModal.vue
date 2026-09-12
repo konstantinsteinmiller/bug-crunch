@@ -13,6 +13,7 @@ import {
 } from '@/use/useUpgrades'
 import { playFx } from '@/use/useGameAudio'
 import { stage } from '@/use/useSurvivalGame'
+import { track } from '@/use/useAnalytics'
 
 /**
  * The between-runs shop.
@@ -119,6 +120,10 @@ const buy = (row: Row): void => {
   }
   if (!spendCoins(row.cost)) return
   applyUpgrade(row.id)
+  // AFTER the spend and the apply, so the level reported is the one that was
+  // actually bought. `level` is the new level, which is what a funnel wants to
+  // read — "they reached 7", not "they were at 6".
+  track('upgrade_buy', { id: row.id, level: row.level + 1, cost: row.cost, coins: coins.value })
   version.value++
   playFx('damageUp')
 }

@@ -179,6 +179,7 @@ if (!CHECK) {
 }
 
 const count = (what) => base.filter((r) => r.what === what).length
-console.log(`\n${count('walk')} walks, ${count('still')} stills, ${count('death')} boss deaths`
+console.log(`\n${count('walk')} walks, ${count('still')} stills, ${count('death')} boss deaths,`
+  + ` ${count('fall')} squad fall`
   + (fits ? ' (the index\'s measured fits were read)' : ' (no sheet-index.json yet)'))
 if (CHECK && stale) process.exit(1)

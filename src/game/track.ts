@@ -112,6 +112,9 @@ export interface GateLeaf {
   /** A ceiling for this door alone, below `gatePumpCap`. The opener stops at a
    *  number that reads as a reward, not a glitch. */
   pumpCap?: number
+  /** Face-down: drawn as a `?` and un-pumpable until the bank resolves. The op
+   *  and value are ordinary and roll the ordinary way — see `Gate.mystery`. */
+  mystery?: boolean
 }
 
 export type TrackEvent =
@@ -1132,6 +1135,55 @@ export const PAIR_STAGE_LAST = 41
 export const pairChance = (stage: number): number =>
   stage < PAIR_STAGE || stage > PAIR_STAGE_LAST ? 0 : 0.10
 
+// ─── The face-down door ─────────────────────────────────────────────────────
+//
+// One leaf of a bank drawn as a `?`: the op and value under it are rolled the
+// ordinary way and paid the ordinary way, and the only thing that changes is
+// that the player cannot read them until the crowd commits.
+//
+// It answers a question the other three leaf types cannot. Every bank in this
+// game is arithmetic — two numbers, pick the bigger — and a player who has
+// learned the arithmetic is only executing it. A door with no number on it
+// cannot be executed, so the bank becomes a gamble the player chooses to take
+// or refuse, and the refusal is as real a decision as the acceptance: the known
+// leaf beside it is always still there.
+//
+// THE RULES THAT KEEP IT FAIR, and each of them is load-bearing:
+//
+//   1. NEVER ALONE. A mystery is only ever one leaf of a bank whose other
+//      leaves are face-up. A bank of two unknowns is a coin flip with no
+//      decision in it, which is the opposite of the point.
+//   2. NEVER ON A DILEMMA. When both doors already take something, the player
+//      is choosing which loss to eat; hiding one of them turns a hard choice
+//      into an unfair one.
+//   3. IT CANNOT BE PUMPED. Fire raises a door's number, and a number nobody
+//      can see cannot be raised in front of them — the crowd would be spending
+//      fire on a promise. See `stepGates`.
+//   4. NOT BEFORE THE ARITHMETIC IS LEARNED. It starts at `MYSTERY_STAGE`,
+//      well after `÷` and `×` have both been met, because a face-down door is
+//      only interesting to someone who knows what a face-up one is worth.
+//
+// Late enough that the four ops and the pump are all familiar, and one stage
+// after the locked pair so two novelties never land on the same road.
+
+export const MYSTERY_STAGE = 9
+
+/**
+ * Odds a rolled bank hides one of its leaves.
+ *
+ * Per bank, like `pairChance`, and tuned to the same feel: a stage rolls 5–13
+ * banks, so 0.08 lands roughly one mystery every two stages — often enough to
+ * be a thing the road does, rare enough that the player never stops reading
+ * numbers because they are expecting a `?`.
+ */
+export const mysteryChance = (stage: number): number =>
+  stage < MYSTERY_STAGE ? 0 : 0.08
+
+/** At most one bank per stage may be face-down. Two is a theme; the road's
+ *  theme is arithmetic. */
+export const maxMysteries = (stage: number): number =>
+  stage < MYSTERY_STAGE ? 0 : 1
+
 /** At most one per stage, ever. Two locked pairs on one road is not a rarity
  *  any more, it is the stage's texture. */
 export const maxPairs = (stage: number): number =>
@@ -1340,6 +1392,10 @@ interface Beat {
   mulThreeLeft: number
   /** Locked gate pairs the stage may still print. See `maxPairs`. */
   pairsLeft: number
+  /** Face-down leaves the stage may still print, and their own stream. See
+   *  `maxMysteries` — one bank a stage at most. */
+  mysteriesLeft: number
+  mysteryRng: () => number
   /**
    * A SEPARATE stream for the pair's own coin flips, and it has to be separate.
    *
@@ -1852,10 +1908,33 @@ const bank = (b: Beat, y: number, ...specs: LeafSpec[]): void => {
   b.trailGoodX = xs[bestI] ?? 0
   b.trailBadX = xs[worstI] ?? 0
 
+  // ── Does one of these doors go face-down? ──
+  //
+  // Decided here, where the whole bank is known, because every rule the feature
+  // has is about the bank rather than the leaf: it needs a second, readable
+  // offer to be measured against, and it must not land on a bank where both
+  // doors already take something. See `MYSTERY_STAGE`.
+  //
+  // The leaf chosen is the WORST one — the door the arithmetic says to refuse.
+  // Hiding the best offer would only ever punish a player for reading well; a
+  // hidden bad door is a real question, because the number they cannot see is
+  // the one they would have walked away from, and now they have to decide
+  // whether to trust that reading without it.
+  const mysteryI = offers.length > 1
+    && b.mysteriesLeft > 0
+    && !isDilemma(offers)
+    && b.mysteryRng() < mysteryChance(b.stage)
+    ? worstI
+    : -1
+  if (mysteryI >= 0) b.mysteriesLeft--
+
   b.events.push({
     kind: 'gates',
     y: r2(y),
-    leaves: offers.map((s, i) => ({ x: xs[i] ?? 0, halfW, op: s.op, value: s.value })),
+    leaves: offers.map((s, i) => ({
+      x: xs[i] ?? 0, halfW, op: s.op, value: s.value,
+      ...(i === mysteryI ? { mystery: true } : {})
+    })),
     dividers: triple ? [-GATE3_DIVIDER_X, GATE3_DIVIDER_X] : [0]
   })
 
@@ -5353,6 +5432,12 @@ export const buildTrack = (stage: number, seed: number = stage): Track => {
     mulLeft: mulLeaves(stage),
     mulThreeLeft: mulThrees(stage),
     pairsLeft: maxPairs(stage),
+    mysteriesLeft: maxMysteries(stage),
+    // A FOURTH private stream, for the same reason the pair and prize streams
+    // are private: a roll drawn from `rng` would advance the main stream on
+    // every bank of every stage from 9 on, and re-roll the entire campaign
+    // downstream of a feature that touches one leaf. See `Beat.pairRng`.
+    mysteryRng: mulberry32(Math.imul(seed, 0x2545f491) ^ 0x94d049bb),
     // Seeded off the same number as `rng`, with a different constant so the two
     // streams do not march in step.
     pairRng: mulberry32(Math.imul(seed, 0x27d4eb2f) ^ 0xc2b2ae35),

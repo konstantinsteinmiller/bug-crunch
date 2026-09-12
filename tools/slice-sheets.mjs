@@ -576,7 +576,16 @@ try {
     }
     if (!fresh.ok) console.warn(`\n  ! ${basename(file)} — ${fresh.why.split('\n')[0]} Slicing anyway (--stale-ok).`)
     if (fresh.warn) console.warn(`  ! ${fresh.warn}`)
-    if (fresh.rev) receiptNext[basename(file)] = { sheet: sheet.id, rev: fresh.rev, painting: fresh.own ?? revOf(file), at: new Date().toISOString() }
+    // Held, not written: the receipt records what was actually CUT, and this
+    // painting can still be refused below (a re-composed grid, a shape that
+    // cannot be corrected, painted-on rules). Writing it here recorded a cut
+    // that never happened — and worse, when one run is pointed at a folder of
+    // paintings with `--sheet`, it recorded EVERY refused painting against that
+    // sheet's reference, so the next status report called 62 healthy sprites
+    // stale. It is committed beside the first file this sheet writes.
+    const receiptLine = fresh.rev
+      ? { sheet: sheet.id, rev: fresh.rev, painting: fresh.own ?? revOf(file), at: new Date().toISOString() }
+      : null
 
     // The sheet may come back at a different resolution than it left at, which
     // is fine and expected. What is NOT fine is a different SHAPE: that means
@@ -1940,7 +1949,12 @@ try {
         mkdirSync(dirname(full), { recursive: true })
         writeFileSync(full, bytes)
         console.log(`  ✓ ${r.id.padEnd(26)} ${shown}`)
+        if (receiptLine) receiptNext[basename(file)] = receiptLine
         if (sheet.artKind === 'monster') cutWalks.add(sheet.id)
+        // A re-cut SURVIVOR walk changes the squad's combined model the same
+        // way, and the fall sheet is painted from it. One entry for the three
+        // of them, because it is one image (`art-models.survivorModelSource`).
+        else if (sheet.artKind === 'hero' && sheet.id !== 'fallen') cutWalks.add('survivors')
       }
       written++
 

@@ -28,6 +28,9 @@ export default {
     'best': 'सर्वश्रेष्ठ {n}',
     'boss': 'बॉस',
     'miniboss': 'मिनी बॉस',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'अगले बोनस तक के चरण',
     'fireRate': 'दर',
     'incoming': 'हमला आ रहा है!',
     'dodge': 'बचें',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'नीले बक्से: सब तेज़ी से गोली चलाएँगे', 'desktop': 'नीले बक्से: सब तेज़ी से गोली चलाएँगे' },
     'boss': { 'touch': 'लाल घेरे से दूर रहें!', 'desktop': 'लाल घेरे से दूर रहें!' },
     'lever': { 'touch': 'सड़क के किनारों पर दोनों लीवर पर गोली मारो — वे हथियार बॉक्स खोलते हैं', 'desktop': 'सड़क के किनारों पर दोनों लीवर पर गोली मारो — वे हथियार बॉक्स खोलते हैं' },
-    'guard': { 'touch': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!', 'desktop': 'ढाल सक्रिय — आपकी गोलियाँ बेअसर हैं. हटो!' },
+    'guard': { 'touch': 'ढाल सक्रिय — आपकी गोलियाँ अभी बेअसर हैं', 'desktop': 'ढाल सक्रिय — आपकी गोलियाँ अभी बेअसर हैं' },
     'cage': { 'touch': 'पिंजरों पर गोली चलाओ — कैदी आपकी टोली में शामिल होंगे', 'desktop': 'पिंजरों पर गोली चलाओ — कैदी आपकी टोली में शामिल होंगे' },
     'shieldBox': { 'touch': 'ढाल बॉक्स — यह इंतज़ार करता है, फिर एक बड़ा वार रोकता है', 'desktop': 'ढाल बॉक्स — यह इंतज़ार करता है, फिर एक बड़ा वार रोकता है' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} बचे हुए भुनाए गए',
     'unlocked': 'अनलॉक!',
 
     'guardian': "एक अभिभावक देवदूत ने आपको बचाया!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'चरण पूरा!',
     'wipedOut': 'दस्ता खत्म',
     'reachedStage': 'चरण {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'सर्वश्रेष्ठ {n}%',
+    'newReach': 'अब तक सबसे दूर!',
     'newRecord': 'नया रिकॉर्ड!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'बॉस गिरा!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'पड़ाव!',
     'rallied': 'नया जोश',
     'peakSquad': 'सबसे बड़ा दस्ता',
     'kills': 'मारे गए',
@@ -239,5 +260,12 @@ export default {
     'retry': 'फिर कोशिश करें', 'dismiss': 'हटाएँ'
   },
   'loading': { 'tooLong': 'लोड होने में बहुत समय लग रहा है? ऐड-ब्लॉकर बंद करें और रीफ़्रेश करें।', 'boo': 'बू!', 'laugh': 'हाहाहा!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'अपना फ़ोन घुमाएँ',
+    'body': 'Survivalist पोर्ट्रेट में खेली जाती है.'
+  },
   'license': { 'denied': 'पहुँच अस्वीकृत: कृपया लाइसेंस खरीदें।' }
 }

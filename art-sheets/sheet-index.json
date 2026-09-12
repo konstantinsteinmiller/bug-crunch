@@ -1807,6 +1807,32 @@
       "tight": false,
       "maxEdge": 352,
       "target": "images/deaths/rattlejack.webp"
+    },
+    {
+      "id": "fallen",
+      "file": "fall-survivors.png",
+      "width": 960,
+      "height": 640,
+      "cols": 3,
+      "rows": 2,
+      "frames": 6,
+      "kind": "hero",
+      "panel": {
+        "w": 320,
+        "h": 320
+      },
+      "fit": {
+        "h": 0.7875,
+        "w": 0.81875,
+        "bottom": 0.99375,
+        "cx": 0.5890625
+      },
+      "faces": "back",
+      "anchor": "feet",
+      "tight": false,
+      "maxEdge": 192,
+      "target": "images/heroes/fallen.webp",
+      "falls": true
     }
   ]
 }

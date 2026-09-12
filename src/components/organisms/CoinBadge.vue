@@ -2,18 +2,33 @@
 import { ref } from 'vue'
 import IconCoin from '@/components/icons/IconCoin.vue'
 import useTowerEconomy from '@/use/useTowerEconomy'
+import { registerQaAdTap } from '@/use/useQaAdTrigger'
 
 const { coins } = useTowerEconomy()
 
 // Exposed so siblings (e.g. TreasureChest) can target the badge for fly-to VFX.
 const rootEl = ref<HTMLElement | null>(null)
 defineExpose({ rootEl })
+
+// The badge is a readout with nothing to press, which is exactly what makes it
+// the right host for the hidden QA ad trigger — thirty taps inside thirty
+// seconds request an interstitial, and nothing here says so. See
+// `useQaAdTrigger`. No state, no feedback, no cost on a normal tap.
+//
+// Free of any gameplay consequence: `.scene__wallet` already sets
+// `pointer-events: auto`, so taps on the badge were being swallowed by the HUD
+// long before this listener existed and never reached the canvas that steers
+// the crowd.
+const onTap = (): void => {
+  registerQaAdTap()
+}
 </script>
 
 <template lang="pug">
   div.coin-badge.relative.flex.items-center.gap-2.rounded-full.font-bold(
     ref="rootEl"
     class="pl-1 pr-3 py-1 text-sm sm:text-base"
+    @click="onTap"
   )
     div.coin-badge__icon.flex.items-center.justify-center.rounded-full(
       class="w-7 h-7 sm:w-8 sm:h-8"

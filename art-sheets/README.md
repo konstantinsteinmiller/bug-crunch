@@ -69,6 +69,44 @@ wounds or liquid (the game paints its own violet pool under the body); defeat is
 the pose and the lights going out. `pnpm art:export -- --deaths` writes only
 these (plus the index).
 
+**The squad going down** — `fall-survivors.png`, ONE sheet for the whole crowd.
+A 3 × 2 grid of 320 px panels (960 × 640, **3:2**): the hero walk panel's box
+exactly, so a fallen survivor is blitted through the same box a running one is.
+The columns are the three outfits in `OUTFITS` order and the rows are the two
+poses a fall is held on — the body crumpling against whatever stopped it, and
+the body lying face down on the road. It lands as one six-panel strip at
+`public/images/heroes/fallen.webp`, and the renderer reads the panel it needs
+with `downPanelIndex(outfit, pose)`.
+
+One sheet rather than one per outfit because the three survivors are the same
+person in three coats: three separate rolls came back, on the boss deaths, as
+three creatures that fell differently. Two poses rather than a boss's eight
+because the owner asked for one and the second is the impact — a cut straight
+from a standing body to a lying one has nothing in it for the eye to read as a
+landing. The reference is the game's own drawn fall
+(`heroSprites.drawSurvivorDown`, `monsterKit`'s "Dying" one size down), which is
+also what the crowd plays until the painting exists, and the survivors' painted
+walks go with it as the character model (`models/survivors.png`). It is written
+for children on the same terms as the deaths, plus one rule of its own: the
+survivor is drawn only from BEHIND and has no face anywhere in the game, so a
+body lying face UP is a character that does not exist.
+
+Its reference is written by `node tools/export-falls.mjs`, not by the bench —
+see **Regenerating**.
+
+The painting on disk came back with the panel rules drawn on (a comic strip),
+which the slicer refuses by default and which `--drop-borders` paints out, so
+this one sheet is cut with:
+
+```
+node tools/slice-sheets.mjs --sheet fallen --drop-borders
+```
+
+`--sheet` forces that sheet for **every** painting in `painted/`, so run it on
+its own and expect the other seventy-odd to be refused — they are, loudly, and
+nothing is written for them. Re-roll it without the rules and the flag goes
+away.
+
 **Every death goes out with a CHARACTER MODEL** — `models/<design>.png`, one
 frame of the creature's walk exactly as the game shows it (cut from the sliced
 painted strip in `public/images/monsters/`, or from the drawn walk while that is
@@ -298,7 +336,20 @@ pnpm art:models                            # only the character models the death
 pnpm dev                                   # port 2050
 open http://localhost:2050/#/art-sheets    # click "Export all sheets" (or "Export boss deaths")
 pnpm art:export                            # or headless, in a private Chrome (-- --deaths)
+node tools/export-falls.mjs                # the squad's fall sheet — AFTER any art:export
+node tools/export-falls.mjs --check        # CI: exit 1 if it is missing from the index
 ```
+
+**`export-falls` runs after `art:export`, always.** The bench renders the walks,
+the stills and the boss deaths from the manifest and knows a painter for each;
+it does not know one for a survivor lying down, so it neither draws that sheet
+nor writes its entry — and because it rewrites `sheet-index.json` wholesale, a
+full export DROPS the entry until `export-falls` puts it back. The slicer cuts
+what the index describes and nothing else, so the symptom is a fall sheet that
+silently stops being cut. `tools/export-falls.mjs`'s header carries the two
+lines `ArtSheets.vue` would need to make the tool unnecessary; until they land,
+`node tools/export-falls.mjs --check` and `tests/game/survivorFallSheet.test.ts`
+are what say so out loud.
 
 `art:export` only when the **drawing** changed — it re-renders the references
 and re-measures the fits. `art:prompts` after anything else, including after

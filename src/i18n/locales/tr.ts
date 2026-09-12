@@ -28,6 +28,9 @@ export default {
     'best': 'Rekor {n}',
     'boss': 'Patron',
     'miniboss': 'Mini Patron',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Sonraki bonusa kalan bölüm',
     'fireRate': 'Hız',
     'incoming': 'Saldırı geliyor!',
     'dodge': 'Kaç',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Mavi sandık: herkes daha hızlı ateş eder', 'desktop': 'Mavi sandık: herkes daha hızlı ateş eder' },
     'boss': { 'touch': 'Kırmızı halkanın dışında kal!', 'desktop': 'Kırmızı halkanın dışında kal!' },
     'lever': { 'touch': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar', 'desktop': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar' },
-    'guard': { 'touch': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!', 'desktop': 'Kalkan açık — ateşin işe yaramıyor. KAÇ!' },
+    'guard': { 'touch': 'Kalkan açık — atışların henüz işlemiyor', 'desktop': 'Kalkan açık — atışların henüz işlemiyor' },
     'cage': { 'touch': 'Kafeslere ateş et — tutsaklar takımına katılır', 'desktop': 'Kafeslere ateş et — tutsaklar takımına katılır' },
     'shieldBox': { 'touch': 'Kalkan sandığı — bekler, sonra bir büyük darbeyi engeller', 'desktop': 'Kalkan sandığı — bekler, sonra bir büyük darbeyi engeller' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} hayatta kalan bozduruldu',
     'unlocked': 'Açıldı!',
 
     'guardian': "Bir koruyucu melek seni kurtardı!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Bölüm tamamlandı!',
     'wipedOut': 'Ekip yok edildi',
     'reachedStage': 'Bölüm {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '%{n}',
+    'bestReach': 'Rekor %{n}',
+    'newReach': 'En uzağı!',
     'newRecord': 'Yeni rekor!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Patron devrildi!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Dönüm noktası!',
     'rallied': 'İkinci nefes',
     'peakSquad': 'En büyük ekip',
     'kills': 'Öldürme',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Yeniden dene', 'dismiss': 'kapat'
   },
   'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.', 'boo': 'Bö!', 'laugh': 'Hahaha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Telefonu çevir',
+    'body': 'Survivalist dikey oynanır.'
+  },
   'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' }
 }

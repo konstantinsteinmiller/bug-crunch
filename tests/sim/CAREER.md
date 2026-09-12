@@ -31,6 +31,14 @@ Nothing is modelled; every number came out of `useSurvivalGame.step()`.
 
 ---
 
+> ⚠ **SUPERSEDED, 2026-09-12.** The answer below was true when it was measured
+> and is false now. The whole study was re-run after the retune landed — see
+> *Re-measured, 2026-09-12* at the end of `REPORT.md`. In one line: a player who
+> never opens the shop walls at **stage 6–8** instead of finishing the campaign,
+> and three of `average`'s four purchasing strategies now fail. Everything in
+> this file is the diagnosis that produced that change, and it is worth keeping
+> for exactly that reason — but do not quote its numbers as current.
+
 ## The answer, first
 
 **Yes, it is too easy — and not by a little.** Every scripted player who touches

@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { isCrazyWeb } from '@/use/useUser'
+import { isCrazyWeb, isWaveDash } from '@/use/useUser'
 import { isCrazyGamesFullRelease } from '@/use/useMatch'
 import { adProviderName, isRewardedReady, showRewardedAd } from '@/use/useAds'
 
@@ -22,6 +22,8 @@ import { adProviderName, isRewardedReady, showRewardedAd } from '@/use/useAds'
  *   • any real provider  → gated, the video plays.
  *   • CG PRE-release     → NOT gated, and nothing is OFFERED either. See
  *                          `isCrazyPreRelease` below.
+ *   • Wavedash           → same: no SDK, so nothing is offered. See
+ *                          `isWavedashNoAds` below.
  *   • noop (local dev,
  *     plain web, itch…)  → not gated, perks are free.
  */
@@ -47,6 +49,35 @@ export const isRewardGated =
  * folds the whole branch away on every other build.
  */
 const isCrazyPreRelease = isCrazyWeb && !isCrazyGamesFullRelease
+
+/**
+ * The Wavedash build — `VITE_APP_WAVEDASH=true`.
+ *
+ * Wavedash has no ad SDK wired at all: the platform module declares
+ * `hasAds: false` and `resolveAdProvider` falls through to the noop provider.
+ * That lands the build in the same trap the CG pre-release sits in, one step
+ * further along: `isRewardGated` reads the noop provider as "this build has no
+ * videos, so the perk is simply free", which is the right answer for local dev
+ * and itch and the wrong one for a portal. The result screen rendered a button
+ * marked with a film frame and paid the ×3 out on the tap — a reviewer sees the
+ * game hand over triple its run income for a click, with no video anywhere.
+ *
+ * So on Wavedash the offer is not made: `canOfferReward` is false, the result
+ * screen never renders the button, `rewardWasOffered` stays false (so leaving
+ * the screen is not recorded as a decline — the player declined nothing), the
+ * auto-advance countdown is never held back by a pending reward, and
+ * `claimReward` refuses outright. Build-time constant, so Rollup folds the
+ * branch away on every other build.
+ *
+ * When Wavedash ships an ad SDK, wire a real provider in `resolveAdProvider`
+ * and delete this constant — `isRewardGated` then resolves to `true` on its
+ * own and the button comes back with a video behind it.
+ */
+const isWavedashNoAds = isWaveDash
+
+/** Builds that must not OFFER a rewarded perk at all — no button, and no free
+ *  grant standing in for the video that cannot play. */
+const isRewardOfferSuppressed = isCrazyPreRelease || isWavedashNoAds
 
 // ─── Rewarded rate limit ────────────────────────────────────────────────────
 //
@@ -117,9 +148,10 @@ export const __resetRewardWindow = (): void => {
  * is not a limit.
  */
 export const claimReward = async (grant: () => void): Promise<boolean> => {
-  // Belt and braces: the button is not rendered on a CG pre-release build, but a
-  // free ×3 must not be reachable by any other route either.
-  if (isCrazyPreRelease) return false
+  // Belt and braces: the button is not rendered on a build with the offer
+  // suppressed (CG pre-release, Wavedash), but a free ×3 must not be reachable
+  // by any other route either.
+  if (isRewardOfferSuppressed) return false
   if (!isRewardGated) {
     grant()
     return true
@@ -143,15 +175,15 @@ export const adInFlight = ref(false)
 /**
  * Can this perk be offered right now?
  *
- * On a CG pre-release build: never — there is no inventory to offer against.
- * On an ungated build: always. On a gated build: only when the provider
- * actually has a rewarded ad ready AND the player has rewarded allowance left
- * in the current window. Offering a button that then fails reads as the game
- * being broken, which is exactly as true for a rate-limited refusal as for a
- * no-fill.
+ * On a CG pre-release or Wavedash build: never — there is no inventory to offer
+ * against. On an ungated build: always. On a gated build: only when the
+ * provider actually has a rewarded ad ready AND the player has rewarded
+ * allowance left in the current window. Offering a button that then fails reads
+ * as the game being broken, which is exactly as true for a rate-limited refusal
+ * as for a no-fill.
  */
 export const canOfferReward = computed(
-  () => !isCrazyPreRelease && (!isRewardGated || (isRewardedReady.value && !isRewardRateLimited()))
+  () => !isRewardOfferSuppressed && (!isRewardGated || (isRewardedReady.value && !isRewardRateLimited()))
 )
 
 // ─── Interstitial pacing ────────────────────────────────────────────────────

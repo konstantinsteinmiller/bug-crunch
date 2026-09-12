@@ -318,11 +318,41 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
   // context where a thin limb survives — so do NOT promote them onto a gold
   // button without thickening them first.
 
-  // Two figures and the shoulder of a third: a crowd, not a person. The heads
-  // are wound the other way from the bodies, but they never overlap them, so
-  // nothing cancels.
+  // A CROWD, not a person: three head-and-shoulder silhouettes, the front one
+  // biggest and lowest, the two behind it smaller and higher, with a gutter of
+  // empty plate between every pair of shapes.
+  //
+  // It used to be two figures and the shoulder of a third, and it read as "a
+  // person": four of five first-time players could not say what the chip it
+  // fronts was counting. That is the same finding that deleted the other three
+  // stat chips, and this is the half of the fix that had to be drawn rather
+  // than removed — see `RunHud.vue`.
+  //
+  // Every gutter is at least 1.4 units wide, and that number is the whole trick.
+  // The HUD chip draws this at 14–20 px, where one unit is well under a physical
+  // pixel: the 0.6-unit gap the old drawing left between its front body and its
+  // back shoulder closed completely at that size and fused the two into one
+  // blob, which is exactly how a crowd glyph ends up reading as a single torso.
+  // Under about a pixel at 16 px it is not a gap, it is a smudge.
+  //
+  // Nothing overlaps anything, so unlike the old glyph there is no winding to
+  // reason about — nonzero cannot cancel a shape against one it never touches,
+  // whichever way round each was drawn. The weight is held close to the drawing
+  // it replaces (the two figures behind are thin crescents, and the lead figure
+  // is a shade smaller than the old one) because this glyph also fronts a shop
+  // row in `UpgradeModal.vue` beside `bolt`, `rate` and `range` — the note above
+  // about redrawing the five together is why the other four are untouched.
   'squad': [
-    'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 19c0-3 2.7-5 6-5s6 2 6 5v1H2v-1Zm12.6-4.6c2.6.5 4.4 2.3 4.4 4.6v1h-3v-1c0-1.6-.5-3-1.4-4.1Z'
+    // The front figure: head, then shoulders that reach 1.6 units lower than the
+    // pair behind it. That overhang is the only depth cue a flat fill can carry.
+    'M12 6.5a3.1 3.1 0 1 1 0 6.2 3.1 3.1 0 0 1 0-6.2Z',
+    'M6.4 22v-.9c0-3.2 2.5-5.3 5.6-5.3s5.6 2.1 5.6 5.3v.9Z',
+    // …and the two behind it, mirrored about the middle so the glyph balances in
+    // a chip that has nothing else left in it to lean against.
+    'M4.3 4.3a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 0 1 0-4.6Z',
+    'M6.3 13.9c-2.6.7-4.3 2.6-4.3 5.2v1.3h3v-1.3c0-1.9.5-3.5 1.3-4.7Z',
+    'M19.7 4.3a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 0 1 0-4.6Z',
+    'M17.7 13.9c2.6.7 4.3 2.6 4.3 5.2v1.3h-3v-1.3c0-1.9-.5-3.5-1.3-4.7Z'
   ],
   // Damage. One polygon, no holes — the classic bolt reads at any size.
   'bolt': [

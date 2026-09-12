@@ -28,6 +28,9 @@ export default {
     'best': '최고 {n}',
     'boss': '보스',
     'miniboss': '중간 보스',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': '다음 보너스까지 남은 스테이지',
     'fireRate': '연사',
     'incoming': '공격이 온다!',
     'dodge': '회피',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': '파란 상자: 모두 더 빨리 사격', 'desktop': '파란 상자: 모두 더 빨리 사격' },
     'boss': { 'touch': '붉은 원에서 벗어나세요!', 'desktop': '붉은 원에서 벗어나세요!' },
     'lever': { 'touch': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다', 'desktop': '길 양쪽 레버를 둘 다 쏴라 — 무기 상자가 열린다' },
-    'guard': { 'touch': '실드 전개 — 공격이 통하지 않는다. 피해!', 'desktop': '실드 전개 — 공격이 통하지 않는다. 피해!' },
+    'guard': { 'touch': '실드 전개 — 아직 공격이 통하지 않는다', 'desktop': '실드 전개 — 아직 공격이 통하지 않는다' },
     'cage': { 'touch': '우리를 쏴라 — 갇힌 이들이 부대에 합류한다', 'desktop': '우리를 쏴라 — 갇힌 이들이 부대에 합류한다' },
     'shieldBox': { 'touch': '실드 상자 — 대기하다 큰 공격 한 번을 막아준다', 'desktop': '실드 상자 — 대기하다 큰 공격 한 번을 막아준다' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '생존자 {n}명 환산',
     'unlocked': '해금!',
 
     'guardian': "수호천사가 당신을 구했습니다!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': '스테이지 클리어!',
     'wipedOut': '부대 전멸',
     'reachedStage': '스테이지 {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': '최고 {n}%',
+    'newReach': '최고 기록!',
     'newRecord': '신기록!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': '보스 격파!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': '마일스톤!',
     'rallied': '기사회생',
     'peakSquad': '최대 부대',
     'kills': '처치',
@@ -239,5 +260,12 @@ export default {
     'retry': '다시 시도', 'dismiss': '닫기'
   },
   'loading': { 'tooLong': '로딩이 너무 오래 걸리나요? 광고 차단기를 끄고 새로고침하세요.', 'boo': '왁!', 'laugh': '하하하!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': '휴대폰을 돌리세요',
+    'body': 'Survivalist는 세로로 플레이합니다.'
+  },
   'license': { 'denied': '접근이 거부되었습니다: 라이선스를 구매해 주세요.' }
 }

@@ -17,6 +17,13 @@ The study is excluded from the default suite (it runs 500 full games). The fast
 regression that guards the conclusions — `tests/sim/balance.test.ts` — is in the
 default suite and takes ~4 s.
 
+> ⚠ **Read the last section first.** Everything between here and
+> *Re-measured, 2026-09-12* was generated on **8 September** and is the history
+> that led to the current numbers, not the current numbers. The whole study was
+> re-run on 12 September after five features landed; the headline is that a
+> player who never opens the shop now walls at stage 6–8 instead of finishing the
+> campaign.
+
 > **Stages 1–5 no longer have an authored boss bar.** They size it against the
 > run that reaches the arena — see [Adaptive difficulty, stages 1–5](#adaptive-difficulty-stages-15)
 > at the end of this file. Every boss-HP number in the sections below is the
@@ -590,3 +597,171 @@ The fight alone, at the two ends of the ladder that a road cannot deliver:
 * **The autobalancer now multiplies the clock rather than the bar** on these
   stages — Hard is a longer climax, a stuck player gets a shorter one — clamped
   to `[2.0, 7.5]` seconds because `challengeFactor` alone reaches ×12.7.
+
+---
+
+# Re-measured, 2026-09-12 — the whole study, after the retention pass
+
+Everything above is history. It was last generated on **8 September**, and since
+then the game has taken on the boss attack set, rescue cages, the bulwark
+pickup, two late skills and their cooldowns, the gate pump, and the retention
+pass of 12 September (milestone payouts, a face-down gate leaf, the near-miss
+readout, a crowd renderer without per-body shadows). The roadmap's standing rule
+is to re-run the career study after any balance change; this is that re-run, at
+`SIM_SAMPLES=20`, and it is the section to read first.
+
+```bash
+SIM_STUDY=1 SIM_OUT=out.md npx vitest run tests/sim/study.test.ts --reporter=dot
+```
+
+## A harness bug it found before it measured anything
+
+`RunResult.banked` read `runSummary().coins` and nothing else. The milestone
+lump is a **separate field** on the summary — deliberately, so the result screen
+can name the thing the HUD chip had been counting down to rather than letting it
+vanish into a bigger number — and the scene's `bankCoins` adds the two together.
+The harness did not, so the first re-run under-reported every career's income by
+one lump every five stages and would have mis-priced the whole upgrade ladder.
+Fixed (`banked` now sums both, with `milestone` broken out beside it), and the
+study re-run from scratch. **Every number below is from the corrected harness.**
+
+The general trap is worth stating: a payout split across two fields for UI
+reasons has to be re-joined in the harness, or the simulation is measuring a
+different economy from the one the player is in.
+
+## The headline: the campaign is no longer free
+
+`CAREER.md`'s answer — *"every scripted player who touches the screen at all
+clears all thirty stages, on every purchasing strategy, including never buying
+anything"* — is **no longer true**, and that was the point of everything that
+landed between the two runs.
+
+| policy | with no shop at all | best strategy | where the others wall |
+| --- | --- | --- | --- |
+| `optimal` | **stage 8** | 30 (`cheapest`, `balanced`, `value`, `scavenge4`) | single-track builds: 12–28 |
+| `good` | **stage 6** | 30 (same four) | single-track builds: 6–24 |
+| `average` | **stage 6** | 30, but ONLY on `value` | `cheapest` 17, `balanced` 20, `scavenge4` 6 |
+| `trail` | 6 | 20 (`balanced`) | 15–20 |
+| `careless` | 2 | 2 | stage 1–2 |
+
+Read the first column twice. A player who never opens the shop used to finish
+the game holding 23 373 unspent coins; they now wall at **stage 6–8**. The shop
+has stopped being optional, which is what makes every other number in this file
+mean something.
+
+The second thing to read is `average`'s row. Three of its four purchasing
+strategies now fail for a mid-skill player and only `value` carries them to 30 —
+at **71 attempts** against `optimal`'s 38. That is a real difficulty gradient
+where there used to be one attempt per stage for everybody.
+
+## Clear rate, stages 1–5, 20 seeds a cell
+
+| stage | optimal | good | average | careless | trail |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 100% | 100% | 100% | 100% | 100% |
+| 2 | 100% | 100% | 100% | 70% | 100% |
+| 3 | 100% | 100% | 100% | 0% | 0% |
+| 4 | 100% | 100% | 100% | 0% | 0% |
+| 5 | 100% | 100% | 100% | 0% | 0% |
+
+The opening five are a tutorial a competent player does not fail and a careless
+one stops clearing at stage 3 — the shape the adaptive pass was aiming for.
+`careless` clearing stage 1 and most of stage 2 is deliberate: the floor is "a
+player who never steers still sees the first boss die".
+
+## The boss fight, now that it is priced against the run
+
+The adaptive bar (stages 1–5) means boss HP is no longer a constant — it is the
+firepower that walked into the arena times the seconds that run has earned.
+
+| stage | policy | boss hp | DPS at boss | TTK | boss survived |
+| --- | --- | --- | --- | --- | --- |
+| 1 | optimal | 2 015 | 686 | **4.0 s** | 0% |
+| 1 | average | 1 151 | 309 | 5.7 s | 0% |
+| 1 | careless | 391 | 69 | 6.4 s | 0% |
+| 2 | optimal | 13 329 | 2 565 | **4.9 s** | 0% |
+| 2 | average | 1 304 | 145 | 5.6 s | 0% |
+| 3 | optimal | 5 424 | 2 088 | **6.0 s** | 0% |
+| 3 | average | 1 646 | 372 | 8.4 s | 0% |
+| 4 | optimal | 2 324 | 630 | **8.0 s** | 0% |
+| 4 | average | 798 | 196 | 10.7 s | 0% |
+| 5 | optimal | 10 432 | 4 176 | **5.9 s** | 0% |
+| 5 | average | 1 050 | 246 | 8.3 s | 0% |
+
+Against the old table — 3.0 s for `optimal` on stage 2 and 20.2 s for `average`
+on stage 5 — the spread has closed from 17 seconds to about five, and a boss
+worth 13 329 HP against a 285-strong crowd still falls in under five seconds.
+Stage 4 is the long one at 8–10.7 s, for the reason this file has recorded
+twice: it is the first road carrying boulders and barricades, and the crowd that
+reaches its arena is the smallest of the five.
+
+**Reaction latency is no longer the wall it was.** The old table had clear rate
+at 100 % for a 150 ms thumb and 0 % at 250 ms. It is now 100 % at every latency
+out to 400 ms, with no slams connecting below 400 ms:
+
+| latency | clear rate | slams that connected | boss TTK |
+| --- | --- | --- | --- |
+| 0–300 ms | 100% | 0% | 5.0–5.3 s |
+| 400 ms | 100% | 5% | 5.3 s |
+
+That is stage 2 with competent routing, and it says the slam no longer decides
+an early stage. Deeper in it does: the budget-matched probe at stage 12 has
+**27–34 % of ~254 slams connecting** on every build tested.
+
+## The retry relief, measured where it matters
+
+| case | failures | hp mult | clear |
+| --- | --- | --- | --- |
+| stage 5, `trail` (dies on the road) | 0 | 1.00 | **0%** |
+| stage 5, `trail` | 1 | 0.80 | **100%** |
+| stage 13, `trail` (dies to the boss) | 0 | 1.00 | 0% |
+| stage 13, `trail` | 1 | 0.80 | 0% |
+| stage 13, `trail` | 2 | 0.72 | **100%** |
+| stage 1, `careless` (dies to slams) | 0–4 | 1.00 → 0.62 | 100% throughout |
+
+One failure is enough to turn a road-death into a clear; a boss-death takes two.
+The old complaint — "14 of 15 simulated retries moved the clear rate by exactly
+0 %" — is answered, and the slam share is why.
+
+Its cousin, the **challenge streak**, is the one number this run says may now be
+too strong at depth. Stage 18, build `s8 p9 r7`:
+
+| streak | hp mult | boss hp | `good` clears |
+| --- | --- | --- | --- |
+| 0 | 1.00 | 144 803 | 100% |
+| 3 | 1.39 | 51 388 | 50% |
+| 6 | 1.78 | 65 807 | **0%** |
+| 9+ | 2.17–2.56 | 80 225–94 643 | **0%** |
+
+A six-stage clear streak is not rare for a player who has learned the game, and
+it currently turns stage 18 into a wall for `good`. Flagged rather than acted on:
+the probe holds the build fixed, while a real streak of six also means six
+stages of income the table does not model. The honest next step is a career run
+that reports the streak at the moment of each wall.
+
+## What the retention pass did NOT move
+
+Stated because it is the useful half of a re-run.
+
+* **Gate payouts, the pillar tax, the crate economy and the miniboss are
+  unchanged**, to the number. The face-down leaf is a presentation of a rolled
+  door — the op and value under it are ordinary and are paid the ordinary way —
+  so it moves no arithmetic, and the scripted policies read through it anyway.
+* **The milestone lump does not show up as an easier campaign.** `optimal +
+  value` still reaches 30 in 38 attempts. It arrives as a smoother wallet rather
+  than a shorter career, which is what a payout priced at one good stage's income
+  is supposed to do.
+* **The renderer changes are invisible here by construction** — the harness
+  never draws.
+
+## What the study still cannot see
+
+Unchanged from `CAREER.md`, plus two this pass added:
+
+* **No policy ever presses a skill.** The grenade, the shield, the frost nova and
+  the decoy flare are invisible to every number in this file, which is why the
+  90 s / 75 s cooldown re-pricing could not be judged here.
+* **No policy ever refuses a gamble.** The face-down leaf is a decision about
+  information, and the policies have perfect information — they read the op and
+  value under the `?`. Whether a human takes it, and whether taking it is
+  correct, is a playtest question this harness is structurally unable to answer.

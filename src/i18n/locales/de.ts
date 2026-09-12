@@ -28,6 +28,9 @@ export default {
     'best': 'Rekord {n}',
     'boss': 'Boss',
     'miniboss': 'Miniboss',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Level bis zum nächsten Bonus',
     'fireRate': 'Rate',
     'incoming': 'Angriff!',
     'dodge': 'Ausweichen',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Blaue Kisten: alle schießen schneller', 'desktop': 'Blaue Kisten: alle schießen schneller' },
     'boss': { 'touch': 'Bleib aus dem roten Ring!', 'desktop': 'Bleib aus dem roten Ring!' },
     'lever': { 'touch': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste', 'desktop': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste' },
-    'guard': { 'touch': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!', 'desktop': 'Schild oben — deine Schüsse bringen nichts. BEWEG DICH!' },
+    'guard': { 'touch': 'Schild oben — deine Schüsse wirken noch nicht', 'desktop': 'Schild oben — deine Schüsse wirken noch nicht' },
     'cage': { 'touch': 'Schieß auf Käfige — die Gefangenen schließen sich an', 'desktop': 'Schieß auf Käfige — die Gefangenen schließen sich an' },
     'shieldBox': { 'touch': 'Schildkiste — sie wartet und blockt einen großen Treffer', 'desktop': 'Schildkiste — sie wartet und blockt einen großen Treffer' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} Überlebende eingelöst',
     'unlocked': 'Freigeschaltet!',
 
     'guardian': "Ein Schutzengel hat dich gerettet!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Level geschafft!',
     'wipedOut': 'Trupp ausgelöscht',
     'reachedStage': 'Level {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n} %',
+    'bestReach': 'Beste {n} %',
+    'newReach': 'So weit wie nie!',
     'newRecord': 'Neuer Rekord!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Boss gefallen!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Meilenstein!',
     'rallied': 'Zweiter Atem',
     'peakSquad': 'Größter Trupp',
     'kills': 'Kills',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Erneut versuchen', 'dismiss': 'ausblenden'
   },
   'loading': { 'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.', 'boo': 'Buh!', 'laugh': 'Hahaha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Dreh dein Handy',
+    'body': 'Survivalist spielt im Hochformat.'
+  },
   'license': { 'denied': 'Zugriff verweigert: Bitte erwerbe eine Lizenz.' }
 }

@@ -28,6 +28,9 @@ export default {
     'best': 'Рекорд {n}',
     'boss': 'Босс',
     'miniboss': 'Мини-босс',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Этапов до следующего бонуса',
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Уклонись',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Синие ящики: все стреляют быстрее', 'desktop': 'Синие ящики: все стреляют быстрее' },
     'boss': { 'touch': 'Не стойте в красном круге!', 'desktop': 'Не стойте в красном круге!' },
     'lever': { 'touch': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием', 'desktop': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием' },
-    'guard': { 'touch': 'Щит поднят — выстрелы бесполезны. УХОДИ!', 'desktop': 'Щит поднят — выстрелы бесполезны. УХОДИ!' },
+    'guard': { 'touch': 'Щит поднят — выстрелы пока не пробивают', 'desktop': 'Щит поднят — выстрелы пока не пробивают' },
     'cage': { 'touch': 'Стреляй по клеткам — пленные вступят в отряд', 'desktop': 'Стреляй по клеткам — пленные вступят в отряд' },
     'shieldBox': { 'touch': 'Ящик щита — ждёт и блокирует один сильный удар', 'desktop': 'Ящик щита — ждёт и блокирует один сильный удар' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} выживших обменяно',
     'unlocked': 'Открыто!',
 
     'guardian': "Ангел-хранитель спас тебя!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Этап пройден!',
     'wipedOut': 'Отряд уничтожен',
     'reachedStage': 'Этап {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n} %',
+    'bestReach': 'Рекорд {n} %',
+    'newReach': 'Твой рекорд!',
     'newRecord': 'Новый рекорд!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Босс повержен!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Рубеж!',
     'rallied': 'Второе дыхание',
     'peakSquad': 'Макс. отряд',
     'kills': 'Убийства',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Повторить', 'dismiss': 'скрыть'
   },
   'loading': { 'tooLong': 'Загрузка слишком долгая? Отключите блокировщик рекламы и обновите страницу.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Поверни телефон',
+    'body': 'Survivalist играется вертикально.'
+  },
   'license': { 'denied': 'Доступ запрещён: приобретите лицензию.' }
 }

@@ -66,6 +66,40 @@ export const modelSources = (root, index) => {
 }
 
 /**
+ * The squad's own model — the three survivors in ONE image, side by side.
+ *
+ * One image for the three of them because the fall sheet is one sheet for the
+ * three of them (`artSheet.SURVIVOR_FALLS`): its columns ARE these figures in
+ * this order, so the model is also the column key. Three separate attachments
+ * would leave the painter to decide which column is whom, and it decided wrong.
+ *
+ * The order is the index's, which is the manifest's, which is `OUTFITS`' — the
+ * one the renderer reads a painted panel back out in (`downPanelIndex`).
+ *
+ * `falls` marks the fall sheet's own entry, which is a hero-kind sheet and not a
+ * survivor: it is written by `tools/export-falls.mjs` and nothing else sets it.
+ */
+export const survivorModelSource = (root, index) => {
+  const parts = (index.walks ?? [])
+    .filter((w) => w.kind === 'hero' && !w.falls)
+    .map((w) => ({
+      id: w.id,
+      strip: w.target ? join(root, 'public', w.target) : null,
+      reference: w.file ? join(root, 'art-sheets', w.file) : null,
+      aspect: w.panel ? w.panel.w / w.panel.h : 1,
+      panel: w.panel ?? null
+    }))
+  return parts.length === 0 ? null : {
+    design: SURVIVOR_MODEL,
+    file: join(root, 'art-sheets', modelRel(SURVIVOR_MODEL)),
+    parts
+  }
+}
+
+/** The design name the squad's combined model answers to. */
+export const SURVIVOR_MODEL = 'survivors'
+
+/**
  * One model image: frame 0 of the painted strip, or panel 1 of the drawn
  * walk, scaled to `MODEL_H` and laid flat on magenta. Null when neither exists.
  */
@@ -101,6 +135,40 @@ export const buildModel = async (sharp, src) => {
 }
 
 /**
+ * The three survivors composited into one model: each built exactly as a boss's
+ * is (`buildModel`), then laid out left to right on the same magenta ground with
+ * one figure's worth of gap between them.
+ *
+ * Nothing is scaled here beyond what `buildModel` already did — the three are
+ * the same height because they are the same character, and a model that made one
+ * of them bigger would be read as three different people.
+ */
+export const buildSurvivorModel = async (sharp, src) => {
+  const figures = []
+  for (const part of src.parts) {
+    const built = await buildModel(sharp, part)
+    if (!built) return null
+    const { width, height } = await sharp(built.png).metadata()
+    figures.push({ ...built, width, height })
+  }
+  const gap = Math.round(MODEL_H * 0.04)
+  const height = Math.max(...figures.map((f) => f.height))
+  let width = gap
+  const layers = []
+  for (const f of figures) {
+    layers.push({ input: f.png, left: width, top: Math.round((height - f.height) / 2) })
+    width += f.width + gap
+  }
+  const png = await sharp({
+    create: { width, height, channels: 3, background: MAGENTA }
+  }).composite(layers).png({ compressionLevel: 9 }).toBuffer()
+  // Named for the operator's benefit: which of the three came from paint and
+  // which from the drawing is exactly what decides whether the fall sheet comes
+  // back as the survivors the player has been watching.
+  return { png, from: figures.map((f) => f.from).join(' + ') }
+}
+
+/**
  * Write (or with `check`, only compare) the models. `only` limits it to some
  * designs — the slicer passes the walks it just cut. Returns one line per model.
  */
@@ -110,9 +178,12 @@ export const writeModels = async ({ root = ROOT, check = false, only = null, log
   const index = JSON.parse(readFileSync(indexFile, 'utf-8'))
   const { default: sharp } = await import('sharp')
   const out = []
-  for (const src of modelSources(root, index)) {
+  const survivors = survivorModelSource(root, index)
+  for (const src of [...modelSources(root, index), ...(survivors ? [survivors] : [])]) {
     if (only && !only.includes(src.design)) continue
-    const built = await buildModel(sharp, src)
+    const built = src.parts
+      ? await buildSurvivorModel(sharp, src)
+      : await buildModel(sharp, src)
     const rel = relative(root, src.file).split('\\').join('/')
     if (!built) {
       out.push({ design: src.design, file: src.file, state: 'missing' })
@@ -120,7 +191,10 @@ export const writeModels = async ({ root = ROOT, check = false, only = null, log
       continue
     }
     const current = existsSync(src.file) ? readFileSync(src.file) : null
-    const fromRel = relative(root, built.from).split('\\').join('/')
+    // A combined model names all of its sources (`buildSurvivorModel`), so the
+    // line is built per source rather than over the whole string.
+    const fromRel = built.from.split(' + ')
+      .map((f) => relative(root, f).split('\\').join('/')).join(' + ')
     if (current?.equals(built.png)) {
       out.push({ design: src.design, file: src.file, state: 'same', from: built.from })
       log(`  = ${rel}  unchanged (from ${fromRel})`)

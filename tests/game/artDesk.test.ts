@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
-  BOSS_DEATHS, STILLS, WALKS, promptBody, promptDocs, promptForDeath, promptForStill,
-  promptForWalk
+  BOSS_DEATHS, STILLS, SURVIVOR_FALLS, WALKS, promptBody, promptDocs, promptForDeath,
+  promptForFall, promptForStill, promptForWalk
 } from '@/game/artSheet'
 // The desk's own parser — the code that decides what the queue sends.
 import { parsePromptDoc } from '../../tools/art-desk/jobs.mjs'
@@ -26,7 +26,9 @@ const builders = [
   ...STILLS.map((s) => ({ ref: `${s.file}.png`, target: s.target, text: promptForStill(s), also: [] as string[] })),
   // A death goes out with its character model beside the layout — the desk
   // must attach it, or the painter paints a creature nobody has met.
-  ...BOSS_DEATHS.map((d) => ({ ref: `${d.file}.png`, target: d.target, text: promptForDeath(d), also: [d.model] }))
+  ...BOSS_DEATHS.map((d) => ({ ref: `${d.file}.png`, target: d.target, text: promptForDeath(d), also: [d.model] })),
+  // …and so does the squad's own fall, for the same reason and on the same terms.
+  ...SURVIVOR_FALLS.map((f) => ({ ref: `${f.file}.png`, target: f.target, text: promptForFall(f), also: [f.model] }))
 ]
 
 describe('the prompt documents are the desk\'s wire format', () => {

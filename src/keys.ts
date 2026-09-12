@@ -50,6 +50,30 @@ export const STAGE_KEY = 'ts_stage'
 export const FAILED_STAGES_KEY = 'ts_failed_stages'
 
 /**
+ * How far the player has ever got on a stage they lost, as `{ [stage]: 0..1 }`.
+ *
+ * The result screen's near-miss line reads it: a wipe that says only "reached
+ * stage 9" is an ending, and the same wipe next to "81 % — your best here is
+ * 74 %" is an attempt that got further than the last one. A runner's retry rate
+ * lives on that difference.
+ *
+ * Only LOSSES are recorded, and a clear deletes the stage's entry — the same
+ * lifecycle as `FAILED_STAGES_KEY`, and for the same reason: the number exists
+ * to describe an unfinished fight, and a stage that has been beaten has none.
+ */
+export const BEST_PROGRESS_KEY = 'ts_best_progress'
+
+/**
+ * The highest milestone stage already paid out (see `milestoneReward`).
+ *
+ * One number rather than a set: milestones are reached in order and a stage the
+ * player has cleared cannot be un-cleared, so "the highest one paid" is the
+ * whole of the state — and a monotonic number is the one shape that cannot pay
+ * twice no matter which of two saves wins a cloud merge.
+ */
+export const MILESTONES_KEY = 'ts_milestones'
+
+/**
  * The autobalancer's handicap: how many stages the player has cleared in a row.
  *
  * Every clear makes the next stage a little harder; a single loss resets it to

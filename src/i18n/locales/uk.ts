@@ -28,6 +28,9 @@ export default {
     'best': 'Рекорд {n}',
     'boss': 'Бос',
     'miniboss': 'Міні-бос',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Етапів до наступного бонусу',
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Ухилися',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Сині ящики: усі стріляють швидше', 'desktop': 'Сині ящики: усі стріляють швидше' },
     'boss': { 'touch': 'Не стійте в червоному колі!', 'desktop': 'Не стійте в червоному колі!' },
     'lever': { 'touch': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю', 'desktop': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю' },
-    'guard': { 'touch': 'Щит піднято — постріли марні. ТІКАЙ!', 'desktop': 'Щит піднято — постріли марні. ТІКАЙ!' },
+    'guard': { 'touch': 'Щит піднято — постріли поки не пробивають', 'desktop': 'Щит піднято — постріли поки не пробивають' },
     'cage': { 'touch': 'Стріляй по клітках — полонені приєднаються до загону', 'desktop': 'Стріляй по клітках — полонені приєднаються до загону' },
     'shieldBox': { 'touch': 'Ящик щита — чекає й блокує один сильний удар', 'desktop': 'Ящик щита — чекає й блокує один сильний удар' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} вцілілих обміняно',
     'unlocked': 'Відкрито!',
 
     'guardian': "Ангел-охоронець врятував тебе!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Етап пройдено!',
     'wipedOut': 'Загін знищено',
     'reachedStage': 'Етап {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n} %',
+    'bestReach': 'Рекорд {n} %',
+    'newReach': 'Твій рекорд!',
     'newRecord': 'Новий рекорд!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Бос повалений!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Рубіж!',
     'rallied': 'Друге дихання',
     'peakSquad': 'Найбільший загін',
     'kills': 'Убивства',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Повторити', 'dismiss': 'сховати'
   },
   'loading': { 'tooLong': 'Завантаження триває надто довго? Вимкніть блокувальник реклами та оновіть сторінку.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Поверни телефон',
+    'body': 'Survivalist грається вертикально.'
+  },
   'license': { 'denied': 'Доступ заборонено: придбайте ліцензію.' }
 }

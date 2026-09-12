@@ -28,6 +28,9 @@ export default {
     'best': '最高 {n}',
     'boss': 'ボス',
     'miniboss': '中ボス',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': '次のボーナスまでのステージ数',
     'fireRate': '連射',
     'incoming': '攻撃が来る！',
     'dodge': '回避',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': '青い箱：全員の連射が速くなる', 'desktop': '青い箱：全員の連射が速くなる' },
     'boss': { 'touch': '赤い輪から離れろ！', 'desktop': '赤い輪から離れろ！' },
     'lever': { 'touch': '道の両端のレバーを両方撃て — 武器箱が開く', 'desktop': '道の両端のレバーを両方撃て — 武器箱が開く' },
-    'guard': { 'touch': 'シールド展開中 — 攻撃は効かない。動け！', 'desktop': 'シールド展開中 — 攻撃は効かない。動け！' },
+    'guard': { 'touch': 'シールド展開中 — まだ攻撃は効かない', 'desktop': 'シールド展開中 — まだ攻撃は効かない' },
     'cage': { 'touch': '檻を撃て — 囚人が仲間になる', 'desktop': '檻を撃て — 囚人が仲間になる' },
     'shieldBox': { 'touch': 'シールド箱 — 待機して大きな一撃を1回防ぐ', 'desktop': 'シールド箱 — 待機して大きな一撃を1回防ぐ' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '生存者 {n} 人を換金',
     'unlocked': '解放！',
 
     'guardian': "守護天使が救ってくれた！",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'ステージクリア！',
     'wipedOut': '部隊全滅',
     'reachedStage': 'ステージ {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': '最高 {n}%',
+    'newReach': '自己ベスト！',
     'newRecord': '新記録！',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'ボス撃破！',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'マイルストーン！',
     'rallied': '巻き返し',
     'peakSquad': '最大部隊',
     'kills': '撃破数',
@@ -239,5 +260,12 @@ export default {
     'retry': '再試行', 'dismiss': '閉じる'
   },
   'loading': { 'tooLong': '読み込みが長すぎますか？ 広告ブロッカーを無効にして再読み込みしてください。', 'boo': 'わっ！', 'laugh': 'あははは！' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'スマホを回して',
+    'body': 'Survivalist は縦向きでプレイします。'
+  },
   'license': { 'denied': 'アクセスが拒否されました：ライセンスをご購入ください。' }
 }

@@ -28,6 +28,9 @@ export default {
     'best': 'Kỷ lục {n}',
     'boss': 'Trùm',
     'miniboss': 'Trùm nhỏ',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Số màn đến phần thưởng tiếp theo',
     'fireRate': 'Tốc độ',
     'incoming': 'Sắp bị tấn công!',
     'dodge': 'Né',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Thùng xanh dương: cả đội bắn nhanh hơn', 'desktop': 'Thùng xanh dương: cả đội bắn nhanh hơn' },
     'boss': { 'touch': 'Tránh xa vòng tròn đỏ!', 'desktop': 'Tránh xa vòng tròn đỏ!' },
     'lever': { 'touch': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí', 'desktop': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí' },
-    'guard': { 'touch': 'Khiên bật — bắn vô ích. TRÁNH RA!', 'desktop': 'Khiên bật — bắn vô ích. TRÁNH RA!' },
+    'guard': { 'touch': 'Khiên bật — đạn chưa xuyên được', 'desktop': 'Khiên bật — đạn chưa xuyên được' },
     'cage': { 'touch': 'Bắn vào lồng — tù nhân sẽ gia nhập đội', 'desktop': 'Bắn vào lồng — tù nhân sẽ gia nhập đội' },
     'shieldBox': { 'touch': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn', 'desktop': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': 'Quy đổi {n} người sống sót',
     'unlocked': 'Đã mở khóa!',
 
     'guardian': "Thiên thần hộ mệnh đã cứu bạn!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Qua màn!',
     'wipedOut': 'Đội bị xóa sổ',
     'reachedStage': 'Màn {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'Kỷ lục {n}%',
+    'newReach': 'Xa nhất từ trước!',
     'newRecord': 'Kỷ lục mới!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Hạ gục trùm!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Cột mốc!',
     'rallied': 'Hồi sức',
     'peakSquad': 'Đội đông nhất',
     'kills': 'Tiêu diệt',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Thử lại', 'dismiss': 'bỏ qua'
   },
   'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.', 'boo': 'Hù!', 'laugh': 'Ha ha ha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Xoay điện thoại',
+    'body': 'Survivalist chơi ở chế độ dọc.'
+  },
   'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' }
 }

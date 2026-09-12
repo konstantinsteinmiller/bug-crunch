@@ -44,6 +44,9 @@ export default {
     'best': 'Best {n}',
     'boss': 'Boss',
     'miniboss': 'Miniboss',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Stages to the next bonus',
     // Live fire-rate chip. It sits in a HUD pill next to a number, so every
     // locale keeps this to ~6 characters.
     'fireRate': 'Rate',
@@ -144,9 +147,17 @@ export default {
     },
     // Fires the first time the boss shields. Without it the phase reads as a
     // broken hitbox — the player IS still shooting, and it IS doing nothing.
+    // ── A FACT, not a command ──
+    //
+    // This read "Shield up — your fire does nothing. MOVE!" and the playtest
+    // caught it contradicting the incoming-attack badge in the same frame: the
+    // badge said HOLD STILL while this said MOVE, at the very first boss, in the
+    // first minute. One tester lost 38 of 41 survivors there. The badge owns the
+    // verb now; this pill only says what is true. Keep every translation a
+    // statement — no imperative.
     'guard': {
-      'touch': 'Shield up — your fire does nothing. MOVE!',
-      'desktop': 'Shield up — your fire does nothing. MOVE!'
+      'touch': 'Shield up — your shots can’t hurt it yet',
+      'desktop': 'Shield up — your shots can’t hurt it yet'
     },
     // The rescue cage, shown once ever, while one is still ahead of the crowd.
     // The word that has to survive translation is FREE/JOIN: at a glance a cage
@@ -167,6 +178,10 @@ export default {
 
   // ─── Result / stage summary ───────────────────────────────────────────────
   'flow': {
+    // The handover, which used to read as LOSING the squad: five testers saw
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+    'squadCashed': '{n} survivors cashed in',
     'unlocked': 'Unlocked!',
     // ─── The second wind ──────────────────────────────────────────────────
     //
@@ -225,7 +240,17 @@ export default {
     'stageClear': 'Stage Clear!',
     'wipedOut': 'Squad Wiped Out',
     'reachedStage': 'Stage {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'Best {n}%',
+    'newReach': 'Furthest yet!',
     'newRecord': 'New record!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Boss felled!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Milestone!',
     // Badge for a retried stage whose enemies came back weakened.
     'rallied': 'Second wind',
     'peakSquad': 'Biggest squad',
@@ -440,6 +465,13 @@ export default {
     // of the English letters.
     'boo': 'Boo!',
     'laugh': 'Hahaha!'
+  },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Turn your phone',
+    'body': 'Survivalist plays in portrait.'
   },
   'license': {
     'denied': 'Access Denied: Please purchase a license.'

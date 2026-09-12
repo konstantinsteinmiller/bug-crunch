@@ -28,6 +28,9 @@ export default {
     'best': 'Record {n}',
     'boss': 'Baas',
     'miniboss': 'Minibaas',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Levels tot de volgende bonus',
     'fireRate': 'Tempo',
     'incoming': 'Aanval!',
     'dodge': 'Ontwijk',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Blauwe kisten: iedereen schiet sneller', 'desktop': 'Blauwe kisten: iedereen schiet sneller' },
     'boss': { 'touch': 'Blijf uit de rode ring!', 'desktop': 'Blijf uit de rode ring!' },
     'lever': { 'touch': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist', 'desktop': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist' },
-    'guard': { 'touch': 'Schild op — je schoten doen niets. WEGWEZEN!', 'desktop': 'Schild op — je schoten doen niets. WEGWEZEN!' },
+    'guard': { 'touch': 'Schild op — je schoten raken hem nog niet', 'desktop': 'Schild op — je schoten raken hem nog niet' },
     'cage': { 'touch': 'Schiet op kooien — de gevangenen sluiten zich aan', 'desktop': 'Schiet op kooien — de gevangenen sluiten zich aan' },
     'shieldBox': { 'touch': 'Schildkist — wacht en blokkeert één grote klap', 'desktop': 'Schildkist — wacht en blokkeert één grote klap' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} overlevenden verzilverd',
     'unlocked': 'Vrijgespeeld!',
 
     'guardian': "Een beschermengel heeft je gered!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Level gehaald!',
     'wipedOut': 'Team weggevaagd',
     'reachedStage': 'Level {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'Record {n}%',
+    'newReach': 'Nog nooit zo ver!',
     'newRecord': 'Nieuw record!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Baas geveld!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Mijlpaal!',
     'rallied': 'Tweede adem',
     'peakSquad': 'Grootste team',
     'kills': 'Kills',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Opnieuw', 'dismiss': 'sluiten'
   },
   'loading': { 'tooLong': 'Duurt het laden te lang? Schakel je adblocker uit en ververs.', 'boo': 'Boe!', 'laugh': 'Hahaha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Draai je telefoon',
+    'body': 'Survivalist speel je staand.'
+  },
   'license': { 'denied': 'Toegang geweigerd: koop een licentie.' }
 }

@@ -154,10 +154,18 @@ export interface RunResult {
   coins: number
   /**
    * Coins this stage actually paid into the wallet — `runSummary().coins`, so
-   * the clear/wipe bonus and the scavenge multiplier are both already in it.
+   * the clear/wipe bonus and the scavenge multiplier are both already in it,
+   * PLUS the milestone lump on every fifth clear (`runSummary().milestone`).
    * `coins` above is the raw pickup tally; THIS is the number a career banks.
+   *
+   * The milestone is a separate field on the summary so the result screen can
+   * name it, and `bankCoins` in the scene adds the two together — so a harness
+   * that read `coins` alone would under-report a career's income by one lump
+   * every five stages and quietly mis-price the whole upgrade ladder.
    */
   banked: number
+  /** The milestone half of `banked`, broken out. 0 on four stages in five. */
+  milestone: number
 
   /** The autobalancer's inputs, read at `startStage`. */
   challengeAtStart: number
@@ -449,7 +457,8 @@ export const playOne = (graph: Graph, o: RunOptions): RunResult => {
     coins: game.runCoins.value,
     // `runSummary()` is only rewritten by `finishRun`, so on a TIMEOUT it still
     // holds the previous run's payout. A run that never resolved never paid.
-    banked: timedOut ? 0 : game.runSummary().coins,
+    banked: timedOut ? 0 : game.runSummary().coins + game.runSummary().milestone,
+    milestone: timedOut ? 0 : game.runSummary().milestone,
 
     challengeAtStart,
     failuresAtStart,

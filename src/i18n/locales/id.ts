@@ -28,6 +28,9 @@ export default {
     'best': 'Rekor {n}',
     'boss': 'Bos',
     'miniboss': 'Mini Bos',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Tahap menuju bonus berikutnya',
     'fireRate': 'Laju',
     'incoming': 'Serangan datang!',
     'dodge': 'Hindari',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Peti biru: semua menembak lebih cepat', 'desktop': 'Peti biru: semua menembak lebih cepat' },
     'boss': { 'touch': 'Jauhi lingkaran merah!', 'desktop': 'Jauhi lingkaran merah!' },
     'lever': { 'touch': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata', 'desktop': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata' },
-    'guard': { 'touch': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!', 'desktop': 'Perisai aktif — tembakanmu tak berguna. MINGGIR!' },
+    'guard': { 'touch': 'Perisai aktif — tembakanmu belum melukainya', 'desktop': 'Perisai aktif — tembakanmu belum melukainya' },
     'cage': { 'touch': 'Tembak kandang — tawanannya bergabung ke pasukanmu', 'desktop': 'Tembak kandang — tawanannya bergabung ke pasukanmu' },
     'shieldBox': { 'touch': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar', 'desktop': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} penyintas diuangkan',
     'unlocked': 'Terbuka!',
 
     'guardian': "Malaikat pelindung menyelamatkanmu!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Tahap selesai!',
     'wipedOut': 'Regu habis',
     'reachedStage': 'Tahap {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'Rekor {n}%',
+    'newReach': 'Terjauh sejauh ini!',
     'newRecord': 'Rekor baru!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Bos tumbang!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Pencapaian!',
     'rallied': 'Napas kedua',
     'peakSquad': 'Regu terbesar',
     'kills': 'Bunuh',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Coba lagi', 'dismiss': 'tutup'
   },
   'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.', 'boo': 'Dor!', 'laugh': 'Hahaha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Putar ponselmu',
+    'body': 'Survivalist dimainkan tegak.'
+  },
   'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' }
 }

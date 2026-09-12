@@ -1,5 +1,5 @@
 <template lang="pug">
-  div.skills(ref="barRef" :class="{ 'skills--under': under }" :style="barStyle")
+  div.skills(:style="barStyle")
     template(v-for="s in visible" :key="s.key")
       //- A slot the player does not own yet: a mystery, not a dead button. It
       //- answers a press with a shake and a hint and nothing else — see
@@ -57,9 +57,7 @@ import {
   SKILL_SLOTS, claimReveal, revealKey, skillCharge, skillReady, skillReadyIn, slotState,
   type SkillId
 } from '@/use/useSkills'
-import {
-  SKILL_ROW_HUD_GAP_PX, skillRowFitsUnderSquad
-} from '@/components/game/skillBarPlacement'
+import { SKILL_ROW_HUD_GAP_PX } from '@/components/game/skillBarPlacement'
 
 /**
  * ─── The skill bar ──────────────────────────────────────────────────────────
@@ -84,11 +82,12 @@ import {
  *
  * ─── So it sits under the squad ─────────────────────────────────────────────
  *
- * Centred on the road, low, in the band between the deepest a survivor is ever
- * drawn (`squadFloorPx`) and the top of the bottom HUD strip (`hudBottomPx`).
- * The camera already keeps the crowd out of that strip — `setViewport` is given
- * the HUD's measured height precisely so the squad is never framed underneath
- * it — which makes this the one piece of screen the crowd cannot reach.
+ * Centred on the road, low, aimed at the band between the deepest a survivor is
+ * ever drawn and the top of the bottom HUD strip (`hudBottomPx`). The camera
+ * already keeps the crowd out of that strip — `setViewport` is given the HUD's
+ * measured height precisely so the squad is never framed underneath it — which
+ * makes this the one piece of screen the crowd cannot reach. The band is the
+ * ARGUMENT, not a test the row runs any more; see the section after next.
  *
  * Two things fall out of it, and both are the point:
  *
@@ -99,14 +98,45 @@ import {
  *     as low as the strip allows rather than centred in it, because every pixel
  *     of that gap is bought from the same budget.
  *
- * ─── …unless the screen has no such band ────────────────────────────────────
+ * ─── On every viewport, including the ones with no band ─────────────────────
  *
- * A landscape phone has none: measured at 844x390, the crowd's own footprint
- * ends 3 px above the HUD strip, and a row placed there would sit on the squad.
- * So the placement is CONDITIONAL — it takes the band when the band clears a
- * full-size crowd, and otherwise falls back to the old right-edge column, which
- * is out beside the road where a crowd never is. Portrait phones and desktops
- * measure 48 px and 18 px of clearance respectively and take the band.
+ * This used to be CONDITIONAL: the row took the band when the band cleared a
+ * full-size crowd (`skillRowFitsUnderSquad`) and fell back to the right-edge
+ * column when it did not. The measurements said a desktop had 18 px of
+ * clearance and therefore took the band — and on a real desktop window, which
+ * is shorter than the one that was measured, it did not: the bar was out at the
+ * right rail for the whole of a playtest, dragging every crowd that reached for
+ * it into the wall, which is the exact failure the move was made to fix. A rule
+ * that is right in the measurement and wrong on the machine is worse than no
+ * rule, because nobody looks at it again.
+ *
+ * So there is now ONE placement and no branch: under the squad, centred on the
+ * road, everywhere. The price was going to be paid on a landscape phone, where
+ * the band is about 3 px tall and the row would overlap the back ranks of a big
+ * crowd — a readability cost on the ONE viewport where the crowd is drawn
+ * smallest, against a steering cost on every desktop, and the owner called it.
+ *
+ * That bill never arrives, as it turns out: a phone in landscape is now covered
+ * by the rotate-your-phone lock (`PortraitLock.vue`), so the viewport this was
+ * the worst case for is not a viewport the game renders in any more. The two
+ * changes landed in the same pass and the note is left standing because the
+ * reasoning still decides the question for any short viewport the lock does not
+ * catch — a small window on a desktop, say.
+ *
+ * ─── …and it is sized to the road, not to the screen ────────────────────────
+ *
+ * A row of four is wider than the lane on any window short enough to zoom the
+ * camera out (the scale fits the lane's width OR the usable height, whichever
+ * is smaller — see `setViewport`), and a control that overhangs the road it is
+ * centred on stops reading as part of the road. So the buttons are capped by
+ * the lane's own width: `--skill-fit` is the widest a button may be if four of
+ * them and their gaps are to fit between the rails, and the CSS takes the
+ * smaller of that and the size it would otherwise have been.
+ *
+ * The floor under it is a FINGER, not a design preference. A touch viewport
+ * never shrinks below ~42 px of button, even where that overhangs the lane —
+ * a control too small to hit is not a smaller control, it is a broken one. A
+ * mouse is allowed to go smaller, and does.
  *
  * `pointerdown` rather than `click`, and stopped: the canvas underneath treats
  * a pointer as steering, and a skill press must not also throw the crowd
@@ -126,20 +156,27 @@ interface Props {
   frostLive?: boolean
   decoyLive?: boolean
   /**
-   * Half the road's width in CSS pixels, measured by the scene.
+   * Half the road's width in CSS pixels, measured by the scene through the
+   * renderer's own projection.
    *
-   * On a desktop viewport the road is a narrow strip down the middle with a lot
-   * of empty page either side, so the bar is parked just OUTSIDE the right rail
-   * rather than out at the window edge: a mouse reaching for a skill should not
-   * have to cross the whole margin. On a phone the road fills the screen, there
-   * is no margin to sit in, and the bar stays at the edge.
-   *
-   * Only used by the fallback layout; the placement under the squad is centred
-   * on the road, which is the middle of the viewport on every aspect ratio.
+   * It is what the buttons are SIZED against (see `barStyle`): the row is
+   * centred on the road, and a row wider than the road it is centred on reads
+   * as UI that has escaped the game. It is not what the row is positioned
+   * against — the road is the middle of the viewport at every aspect ratio, so
+   * centring needs no measurement at all and is right on the first frame.
    */
   laneHalfPx: number
-  /** The lowest pixel a survivor can ever be drawn at — the scene measures it
-   *  off the camera, for a FULL-SIZE crowd. */
+  /**
+   * The lowest pixel a survivor can ever be drawn at — the scene measures it off
+   * the camera, for a FULL-SIZE crowd.
+   *
+   * Accepted and no longer read. It was the input to the clearance test that
+   * chose between two layouts; there is one layout now. The prop stays because
+   * `GameScene.vue` measures this for the camera anyway and binds it here, and
+   * because the day someone wants to fade the row when the crowd reaches it,
+   * this is the number they will want. Do not drop it without editing the scene
+   * in the same commit.
+   */
   squadFloorPx: number
   /** Height of the bottom HUD strip in CSS pixels, safe-area included: what
    *  the row sits on top of. */
@@ -147,66 +184,42 @@ interface Props {
 }
 const props = defineProps<Props>()
 
-const barRef = ref<HTMLElement | null>(null)
-/** One button's height, and the viewport's, both re-read on resize.
+/**
+ * The stylesheet's own ceiling for the gap between two buttons, in pixels.
  *
- * A BUTTON rather than the bar: the fallback stacks two of them and the
- * placement lays them in a row, so measuring the container would feed the
- * layout's own height back into the choice between the two layouts and pin it
- * to whichever it started in. A button is the same size in both. */
-const btnPx = ref(0)
-const viewPx = ref(0)
-
-const measure = (): void => {
-  if (typeof window === 'undefined') return
-  viewPx.value = window.innerHeight
-  const first = barRef.value?.firstElementChild
-  btnPx.value = first ? first.getBoundingClientRect().height : 0
-}
-
-onMounted(() => {
-  measure()
-  window.addEventListener('resize', measure)
-})
-onUnmounted(() => {
-  if (typeof window !== 'undefined') window.removeEventListener('resize', measure)
-})
-
-/** Is there room under the squad? See `skillBarPlacement.ts` for the rule and
- *  the measurements behind it. */
-const under = computed(() => skillRowFitsUnderSquad({
-  viewportPx: viewPx.value,
-  hudBottomPx: props.hudBottomPx,
-  squadFloorPx: props.squadFloorPx,
-  buttonPx: btnPx.value
-}))
+ * The gap is a `clamp`, so on a narrow screen it is smaller than this and the
+ * arithmetic below over-subtracts — which is the safe direction to be wrong in:
+ * a row that came out a hair narrower than the lane still sits on the road, and
+ * one that came out a hair wider does not. Change it with the `--skill-gap`
+ * declaration in the stylesheet or the two stop agreeing.
+ */
+const ROW_GAP_MAX_PX = 9
 
 /**
- * Where the bar sits horizontally, in the fallback.
+ * The two things this component cannot know without the scene: where the bottom
+ * strip ends, and how wide the road is.
  *
- * `null` on a narrow screen — the stylesheet's edge anchoring is correct there.
- * On a wide one it is pinned a short gap right of the rail.
+ * Both are handed over as measurements and both have an honest "not yet" value
+ * of 0, so both are guarded — a row placed against an unmeasured strip lands on
+ * top of the mute and settings buttons, and a row sized against an unmeasured
+ * lane is four buttons a pixel wide. In both cases the stylesheet's own value is
+ * the right thing to leave alone for the tick it takes the scene to measure.
  */
-const rightOffset = computed(() => {
-  if (typeof window === 'undefined') return null
-  const margin = (window.innerWidth - props.laneHalfPx * 2) / 2
-  // Only when there is genuinely room beside the road for a button plus a gap.
-  if (margin < 92) return null
-  return `${Math.max(8, margin - 74)}px`
-})
-
 const barStyle = computed(() => {
-  // Centred on the road and parked on the HUD strip. `left`/`transform` beat
-  // the stylesheet's edge anchoring, and `right: auto` releases it.
-  if (under.value) {
-    return {
-      left: '50%',
-      right: 'auto',
-      bottom: `${Math.round(props.hudBottomPx + SKILL_ROW_HUD_GAP_PX)}px`,
-      transform: 'translateX(-50%)'
-    }
+  const style: Record<string, string> = {}
+  if (props.hudBottomPx > 0) {
+    style.bottom = `${Math.round(props.hudBottomPx + SKILL_ROW_HUD_GAP_PX)}px`
   }
-  return rightOffset.value ? { right: rightOffset.value } : {}
+  if (props.laneHalfPx > 0) {
+    // Sized off the SLOT COUNT rather than the visible count: the row holds four
+    // slots from the first frame of a save's life (locked ones are mysteries,
+    // not gaps), and sizing off what is currently a button would resize the
+    // three beside it on the frame a skill is bought — mid-run, under the
+    // player's thumb.
+    const room = props.laneHalfPx * 2 - (SKILL_SLOTS.length - 1) * ROW_GAP_MAX_PX
+    style['--skill-fit'] = `${Math.max(1, Math.round(room / SKILL_SLOTS.length))}px`
+  }
+  return style
 })
 
 /**
@@ -220,59 +233,50 @@ const barStyle = computed(() => {
  * it is a promise with a question mark on it, and the day it fills is the
  * payoff (`claimReveal`). See `SKILL_SLOTS` for the four of them.
  *
- * ── …except where there is no room for them ──
+ * ── …and all of them, now ──
  *
- * The fallback column (a landscape phone, where the band under the squad does
- * not exist) is stacked up the right edge, and four buttons tall it reaches the
- * corner the incoming-attack badge lives in. So that layout shows only the NEXT
- * locked slot — the one the player is actually playing toward — and the row
- * under the squad, which is wide rather than tall, shows them all.
+ * The trimming that used to live here — show only the NEXT locked slot — was
+ * the fallback column's problem: stacked up the right edge, four buttons tall,
+ * it reached the corner the incoming-attack badge lives in. There is no column
+ * any more (see the placement note at the top), and a row is wide rather than
+ * tall, so every slot is shown on every viewport and the width is paid for by
+ * shrinking the buttons instead.
  */
 /** Reveal keys (`revealKey`) whose reveal is playing right now. Declared ahead
- *  of `visible` because the re-measure watch below reads `visible` during setup. */
+ *  of `visible`, which reads it. */
 const revealing = ref<string[]>([])
 
-const visible = computed(() => {
-  const all = SKILL_SLOTS.map((slot, i) => {
-    const state = slotState(slot)
-    const usable = state !== 'locked'
-    const id = slot.id
-    const name = slot.labelKey ? t(slot.labelKey) : ''
-    const label = state === 'owned'
-      ? name
-      : state === 'trial'
-        ? t('skills.trialLabel', { name })
-        : slot.unlockStage !== null
-          ? t('skills.unlocksAt', { n: slot.unlockStage })
-          : t('skills.locked')
-    const live = (id === 'shield' && props.shieldLive) ||
-      (id === 'frost' && !!props.frostLive) ||
-      (id === 'decoy' && !!props.decoyLive)
-    return {
-      key: id ?? `slot-${i}`,
-      id,
-      state,
-      icon: slot.icon,
-      art: slot.art ?? '',
-      label,
-      // Staggered so a row of them never shimmers in lockstep.
-      shineS: 3.2 + i * 0.55,
-      ready: usable && id !== null ? skillReady(id) : false,
-      charge: usable && id !== null ? skillCharge(id) : 0,
-      leftMs: usable && id !== null ? skillReadyIn(id) : 0,
-      live,
-      reveal: id !== null && usable && revealing.value.includes(revealKey(id, state))
-    }
-  })
-  if (under.value) return all
-  const next = all.findIndex((s) => s.state === 'locked')
-  return all.filter((s, i) => s.state !== 'locked' || i === next)
-})
-
-// A skill bought mid-run adds a button, and the first one to appear is what
-// `measure` reads its size from — so the count is a re-measure trigger as much
-// as a resize is.
-watch(() => visible.value.length, () => { void nextTick(measure) })
+const visible = computed(() => SKILL_SLOTS.map((slot, i) => {
+  const state = slotState(slot)
+  const usable = state !== 'locked'
+  const id = slot.id
+  const name = slot.labelKey ? t(slot.labelKey) : ''
+  const label = state === 'owned'
+    ? name
+    : state === 'trial'
+      ? t('skills.trialLabel', { name })
+      : slot.unlockStage !== null
+        ? t('skills.unlocksAt', { n: slot.unlockStage })
+        : t('skills.locked')
+  const live = (id === 'shield' && props.shieldLive) ||
+    (id === 'frost' && !!props.frostLive) ||
+    (id === 'decoy' && !!props.decoyLive)
+  return {
+    key: id ?? `slot-${i}`,
+    id,
+    state,
+    icon: slot.icon,
+    art: slot.art ?? '',
+    label,
+    // Staggered so a row of them never shimmers in lockstep.
+    shineS: 3.2 + i * 0.55,
+    ready: usable && id !== null ? skillReady(id) : false,
+    charge: usable && id !== null ? skillCharge(id) : 0,
+    leftMs: usable && id !== null ? skillReadyIn(id) : 0,
+    live,
+    reveal: id !== null && usable && revealing.value.includes(revealKey(id, state))
+  }
+}))
 
 const onUse = (id: SkillId | null): void => {
   if (id === null || !skillReady(id)) return
@@ -328,29 +332,55 @@ onUnmounted(() => { if (nudgeTimer) clearTimeout(nudgeTimer) })
 <style scoped lang="sass">
 .skills
   position: absolute
-  right: calc(clamp(0.35rem, 2vw, 0.7rem) + env(safe-area-inset-right, 0px))
-  // Clear of the bottom bar, which owns the corners.
+  // ─── The row's own geometry, in one place ─────────────────────────────────
+  //
+  // `--skill-fit` is the widest a button may be if the whole row is to fit
+  // between the rails; the inline style writes it from the measured lane (see
+  // `barStyle`), and this is what it is worth before the scene has one — no cap
+  // at all, which is what a bar with no idea how wide the road is should assume.
+  //
+  // `--skill-floor` is the other end of the same argument, and it is the one
+  // that must not be tuned away: a button smaller than this is not a smaller
+  // button, it is one a finger cannot hit. See the coarse-pointer block below.
+  --skill-gap: clamp(0.3rem, 1.7vw, 0.55rem)
+  --skill-fit: 3.25rem
+  --skill-floor: 2.1rem
+  --skill-btn: clamp(var(--skill-floor), min(12vw, var(--skill-fit)), 3.25rem)
+  // Centred on the road. The road is the middle of the viewport at every aspect
+  // ratio, so this costs no measurement and is right on the very first frame —
+  // which is the whole reason the horizontal half of the placement is here and
+  // the vertical half is in `barStyle`.
+  left: 50%
+  transform: translateX(-50%)
+  // Parked on the bottom bar, which owns the corners. Replaced by the strip's
+  // MEASURED height the moment the scene has one; until then this errs high,
+  // because the failure mode on the other side is a row of buttons sitting on
+  // top of mute and settings.
   bottom: calc(clamp(4.6rem, 17vw, 6.2rem) + env(safe-area-inset-bottom, 0px))
   display: flex
-  flex-direction: column
-  gap: clamp(0.4rem, 2.2vw, 0.7rem)
+  flex-direction: row
+  align-items: center
+  gap: var(--skill-gap)
   // The HUD layer is pointer-events: none; the buttons opt back in. Note that
-  // the CONTAINER stays transparent to the canvas in both layouts, so the gap
-  // between the two buttons is still road the player can steer through.
+  // the CONTAINER stays transparent to the canvas, so the gaps between the
+  // buttons are still road the player can steer through.
   pointer-events: none
   z-index: 30
 
-// Under the squad: a row, because the band it sits in is short and the road is
-// wide. The inline style carries the position — see `barStyle`.
-.skills--under
-  flex-direction: row
-  align-items: center
+// A finger, not a preference. 2.6rem is ~42 px, which is the floor even where
+// the lane is narrower than the row — a landscape phone zooms the camera out far
+// enough that four buttons cannot fit between its rails at ANY usable size, and
+// the right answer there is a row that overhangs the road, not four targets that
+// miss. A mouse has no such floor and is allowed to go down to 2.1rem.
+@media (pointer: coarse)
+  .skills
+    --skill-floor: 2.6rem
 
 .skills__btn
   position: relative
   pointer-events: auto
-  width: clamp(2.9rem, 13vw, 3.6rem)
-  height: clamp(2.9rem, 13vw, 3.6rem)
+  width: var(--skill-btn)
+  height: var(--skill-btn)
   padding: 0
   border: none
   border-radius: 50%
@@ -459,10 +489,14 @@ img.skills__icon
 // ─── Locked slots ───────────────────────────────────────────────────────────
 //
 // Smaller than an owned button, so the row reads as "yours" and "not yet" at a
-// glance, and transparent — the mystery disc is its own background.
+// glance, and transparent — the mystery disc is its own background. A fraction
+// of the owned size rather than its own clamp, so the two shrink together when
+// the lane makes them: the ratio is the thing that carries the meaning, and a
+// locked slot that stayed put while its neighbours shrank would eventually be
+// the biggest button in the row.
 .skills__btn--locked
-  width: clamp(2.35rem, 10.5vw, 2.9rem)
-  height: clamp(2.35rem, 10.5vw, 2.9rem)
+  width: calc(var(--skill-btn) * 0.82)
+  height: calc(var(--skill-btn) * 0.82)
   background-color: transparent
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45)
   cursor: help
@@ -486,13 +520,6 @@ img.skills__icon
   pointer-events: none
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5)
   animation: skill-hint 1.8s ease-out forwards
-
-// The fallback column hugs the right edge, so its hint hangs to the LEFT of the
-// button instead of centring above it and running off the screen.
-.skills:not(.skills--under) .skills__hint
-  left: auto
-  right: 0
-  transform: none
 
 // ─── The reveal ─────────────────────────────────────────────────────────────
 //

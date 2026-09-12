@@ -1,60 +1,32 @@
 /**
- * ─── Where the skill row goes ───────────────────────────────────────────────
+ * ─── Where the skill row sits ───────────────────────────────────────────────
  *
- * The rule `SkillBar.vue` places itself with, pulled out of the component so it
- * can be measured without a layout engine — jsdom has none, and the decision
- * this makes is exactly the kind that goes quietly wrong on one device.
+ * One number, kept in its own module because `SkillBar.vue` and the spec that
+ * pins the gap both need it and neither should own it.
  *
- * The geometry it reasons about, all in CSS pixels:
+ * ─── What used to be here ───────────────────────────────────────────────────
  *
- *      0 ┌──────────────────┐
- *        │   road, crowd    │
- *        │        ▓▓        │ ← the anchor row, at `CROWD_SCREEN_Y`
- *        │       ▓▓▓▓       │
- *        ├──────────────────┤ ← `squadFloorPx`: a FULL-SIZE crowd's last body
- *        │   [ ● ]  [ ● ]   │ ← the row, parked on the strip below it
- *        ├──────────────────┤ ← `viewportPx - hudBottomPx`
- *        │  mute   settings │   the bottom HUD strip
- *        └──────────────────┘
+ * A rule — `skillRowFitsUnderSquad` / `skillRowTopPx` — that measured the
+ * viewport and CHOSE between two layouts: the row parked on the bottom strip
+ * under the squad when there was room for it, and a column out at the right
+ * edge of the screen when there was not. The reasoning was sound and the
+ * measurement was correct; a landscape phone really does put a full-size
+ * crowd's last body about three pixels above the HUD strip, so the fallback
+ * fired exactly where it was designed to.
  *
- * The row is pushed as LOW as the strip allows rather than centred in the band,
- * because the whole point of moving it under the squad is to be far from where
- * a steering cursor lives — every pixel of that gap is bought from the same
- * budget, and the strip below is UI rather than road.
+ * It is gone because the fallback was wrong on the one viewport it mattered
+ * most on. On a desktop the column landed beside the road — off the play
+ * surface, in the far corner of a wide screen, nowhere near the thing the
+ * player is watching — and the owner asked for the row to sit under the squad
+ * on every viewport, shrunk to the lane, the way it already did on a phone.
+ * Two layouts also meant two sets of positions to reason about for every
+ * feature that has to avoid the buttons.
+ *
+ * So there is one layout now, and it needs no measurement to choose: the row is
+ * centred on the lane in the stylesheet and parked on the bottom strip, and it
+ * shrinks to fit the lane rather than moving off it. `SkillBar.vue` carries the
+ * whole of that argument, including the cost accepted on a landscape phone.
  */
 
-/** Gap between the row and the HUD strip beneath it. */
+/** Gap between the row and the HUD strip beneath it, CSS pixels. */
 export const SKILL_ROW_HUD_GAP_PX = 10
-
-export interface SkillRowSpace {
-  /** Viewport height. */
-  viewportPx: number
-  /** Height of the bottom HUD strip, safe-area padding included. */
-  hudBottomPx: number
-  /** The lowest pixel a survivor can ever be drawn at — the crowd's anchor row
-   *  plus a full-size crowd's radius plus one body. */
-  squadFloorPx: number
-  /** One button's height. The row is one button tall. */
-  buttonPx: number
-}
-
-/** Top edge of the row once it is parked on the HUD strip. */
-export const skillRowTopPx = (s: SkillRowSpace): number =>
-  s.viewportPx - s.hudBottomPx - SKILL_ROW_HUD_GAP_PX - s.buttonPx
-
-/**
- * Is there room under the squad for it?
- *
- * The test is the promise the placement makes: the row's TOP edge clears the
- * crowd's floor. Anything less would draw the buttons over the back ranks of a
- * big squad — a control sitting on the one thing it was moved to be far from —
- * so a viewport that cannot pay for it (a landscape phone: measured at
- * 844x390 the crowd's footprint ends 3 px above the strip) keeps the old
- * right-edge column instead, out beside the road where no crowd ever goes.
- *
- * The zero guards are the pre-measurement state: a component that has not been
- * laid out yet, or a scene that has not sized the camera. Both mean "not known
- * to be safe", and the fallback is the safe answer.
- */
-export const skillRowFitsUnderSquad = (s: SkillRowSpace): boolean =>
-  s.buttonPx > 0 && s.squadFloorPx > 0 && skillRowTopPx(s) >= s.squadFloorPx

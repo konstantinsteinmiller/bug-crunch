@@ -86,6 +86,50 @@ export const setMusicRate = (rate: number): void => {
 }
 
 /**
+ * ─── The tempo follows the crowd ────────────────────────────────────────────
+ *
+ * A hundred and eighty people running is not the same scene as nine, and until
+ * now the score did not know the difference — `setMusicRate` had been written,
+ * clamped and documented here for months with no caller anywhere in the repo.
+ *
+ * The curve is deliberately shallow and deliberately SATURATING. `+18 %` at the
+ * top is about a tone and a half of pitch on a looping track: felt as the run
+ * tightening, never heard as a broken tape. It rises LINEARLY to that ceiling
+ * at 600 survivors — a very good stage rather than an unreachable one (the hard
+ * cap is `MAX_SQUAD`, 4000), because the effect has to be arriving while the
+ * crowd is still growing rather than long since pinned at the top.
+ *
+ * Note the shape: `RANGE × min(1, n / FULL)`, not `min(RANGE, n / FULL)`. The
+ * second is the obvious spelling and it is wrong — it saturates at 108
+ * survivors, which most runs pass in the first two stages, so the tempo would
+ * be pinned at maximum for nine tenths of a career and the feature would be a
+ * constant rather than a signal.
+ *
+ * And it is a function of the crowd ON SCREEN, not of the stage number: losing
+ * two thirds of a squad to a `÷3` drops the tempo with it, which is the half of
+ * this that a stage-indexed version could never do.
+ */
+export const MUSIC_RATE_RANGE = 0.18
+export const MUSIC_RATE_FULL_SQUAD = 600
+
+/** Playback rate for a crowd of `squad`. Pure, clamped, total. */
+export const squadMusicRate = (squad: number): number => {
+  const n = Number.isFinite(squad) ? Math.max(0, squad) : 0
+  return 1 + MUSIC_RATE_RANGE * Math.min(1, n / MUSIC_RATE_FULL_SQUAD)
+}
+
+/**
+ * What the track does when the run ends badly.
+ *
+ * A hard drop below 1.0 rather than a fade: the crowd is gone, and a score that
+ * keeps its tempo through a wipe is the single most common way a game tells the
+ * player it did not notice. Held for `MUSIC_WIPE_MS`, which outlasts the wipe
+ * effect and lands under the result screen.
+ */
+export const MUSIC_WIPE_RATE = 0.85
+export const MUSIC_WIPE_MS = 2000
+
+/**
  * Back-compat: drive tempo from a 0..1 intensity. Retained for any caller that
  * still thinks in "intensity"; maps onto a gentle 1.0×–1.15× rate band.
  */

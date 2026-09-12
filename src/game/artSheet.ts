@@ -1,5 +1,7 @@
 import { MONSTERS } from '@/game/monsters'
-import { OUTFITS } from '@/game/heroSprites'
+import {
+  DOWN_ART_ID, DOWN_FALL_SIDE, DOWN_POSES, OUTFITS, type DownPose
+} from '@/game/heroSprites'
 import { DEATH_FRAME_ASPECT, MONSTER_FRAME_H, deathFallSide } from '@/game/monsterSprites'
 import { bossDesigns } from '@/game/foes'
 import { HERO_PX } from '@/game/heroSprites'
@@ -234,6 +236,253 @@ export const HERO_WALKS: WalkSpec[] = OUTFITS.map((o) =>
     OUTFIT_COLOUR[o.id] ?? '', 'back', HERO_PANEL_H, HERO_PX))
 
 export const WALKS: WalkSpec[] = [...MONSTER_WALKS, ...HERO_WALKS]
+
+// ─── The squad going down ───────────────────────────────────────────────────
+//
+// One sheet for the whole squad's death: three outfits ACROSS by the two poses
+// a fall is held on DOWN (`heroSprites.DOWN_POSES`) — the body crumpling against
+// whatever stopped it, and the body lying on the road.
+//
+// One sheet and not one per outfit, which is how the walks are done, because the
+// three survivors are the SAME person in three coats and a fall is a pose rather
+// than a cycle. Three separate rolls came back, on the boss deaths, as three
+// creatures that fell differently; here the three bodies are in one picture and
+// a painter cannot make them disagree. It is also one roll instead of three, and
+// six panels of one small figure is well inside what a painter holds together —
+// the deaths' eight was not.
+//
+// TWO poses, not a boss's eight. The owner asked for one ("1 frame is enough —
+// after the unit got killed it immediately transitions to dead state"), and the
+// second is the IMPACT, which is what the eye needs to read a landing and is the
+// answer to the other half of the ask: a survivor that runs into a barricade
+// crumples against it.
+//
+// THE REFERENCE IS THE POSE. It is the game's own drawn fall
+// (`heroSprites.drawSurvivorDown`, the same frames the crowd plays until a
+// painting exists), and the survivors' own PAINTED walk goes with it as the
+// character model — the biggest lesson from the boss deaths, which came back as
+// other creatures entirely until the model image was attached first.
+
+/** Outfits across. The panel order the renderer reads is `downPanelIndex`. */
+export const FALL_COLS = OUTFITS.length
+/** Held poses down. */
+export const FALL_ROWS = DOWN_POSES.length
+export const FALL_FRAMES = FALL_COLS * FALL_ROWS
+
+/**
+ * One panel, px: the hero walk panel's box exactly — square, same size, same
+ * feet line. A fallen survivor is blitted through the same box a running one is
+ * (`HERO_FOOT_R`, `HERO_HEIGHT_R`), so the painting has to be that box or the
+ * body lands somewhere the feet never were. 3 x 320 by 2 x 320 is 960 x 640,
+ * exactly 3:2 — a ratio every image tool offers, which the 3:1 of a single row
+ * of three would not have been.
+ */
+export const FALL_PANEL = HERO_PANEL_H
+
+/**
+ * How much of a panel each pose fills, in words a painter can check. Measured
+ * off the exported reference — `pnpm art:falls` prints the same fractions it
+ * writes into `sheet-index.json` as the `fit`.
+ *
+ * They are in the prompt because "small in its panel" is not a judgement and
+ * "four fifths of the width" is: every part of this pipeline that came back at
+ * twice its size came back from a prompt with an adjective where these are.
+ */
+const FALL_SPAN: Readonly<Record<DownPose, { w: string; h: string }>> = {
+  crash: { w: 'two thirds', h: 'four fifths' },
+  fallen: { w: 'four fifths', h: 'half' }
+}
+
+/** What each pose IS, for the painter — the words for the drawing in that row. */
+const FALL_POSES: Readonly<Record<DownPose, string>> = {
+  crash: 'CRASHED — it has run into something solid and is going down where it'
+    + ' stands. Stopped dead: the knees buckle and the hips drop, the leg on the left'
+    + ' folding under it and the other trailing, the body sagging down over them, both'
+    + ' arms flung out and open, the head dropped and the hood tipped over. It is'
+    + ' FALLING, not kneeling — nothing about it is balanced, and it is not standing,'
+    + ' walking, crouching or taking a knee to fire. Keep it UPRIGHT and folding,'
+    + ' exactly as image 2 has it: the game turns this picture over itself as it plays'
+    + ' the fall, so a body already laid down here is a body that lands twice.',
+  fallen: 'FALLEN — the body, lying still on the road where it came down. Face DOWN'
+    + ' on a shallow diagonal across the panel, head end to the panel\'s left and the'
+    + ' boots to the right, the pack up toward the viewer, both arms spread out slack'
+    + ' where they landed, the legs splayed apart, the SOLES of both boots turned up'
+    + ' to the viewer, the hood\'s tie-tails spilled on the ground beside the head.'
+    + ' Limp and completely still, and flatter than it is long, as anything lying on'
+    + ' the ground is. Its hand-cannon lies dropped on the ground by one hand.'
+}
+
+export interface FallSpec {
+  /** The probe kind, and so the folder: the squad's own. */
+  kind: 'hero'
+  /** The id under it. One sheet covers every outfit, so not an outfit id. */
+  id: string
+  file: string
+  target: string
+  name: string
+  blurb: string
+  /** The poses, top row first — the sheet's rows. */
+  poses: readonly DownPose[]
+  cols: number
+  rows: number
+  frames: number
+  panelW: number
+  panelH: number
+  w: number
+  h: number
+  maxEdge: number
+  faces: WalkSpec['faces']
+  /**
+   * The CHARACTER MODEL attached as the FIRST image, relative to `art-sheets/`:
+   * the three survivors as the game shows them, written by
+   * `tools/art-models.mjs`. See `DeathSpec.model` — same lesson, same fix.
+   */
+  model: string
+}
+
+export const SURVIVOR_FALLS: FallSpec[] = [{
+  kind: 'hero',
+  id: DOWN_ART_ID,
+  file: 'fall-survivors',
+  target: `${ART_FOLDERS.hero}/${DOWN_ART_ID}.webp`,
+  name: 'Survivors, down',
+  blurb: 'The squad\'s own survivors — the same three hooded runners, stopped and'
+    + ' going down. Same coat, same pack with the bedroll lashed across the top, same'
+    + ' hood with its tie-tails, same heavy boots, same short hand-cannon.',
+  poses: DOWN_POSES,
+  cols: FALL_COLS,
+  rows: FALL_ROWS,
+  frames: FALL_FRAMES,
+  panelW: FALL_PANEL,
+  panelH: FALL_PANEL,
+  w: FALL_COLS * FALL_PANEL,
+  h: FALL_ROWS * FALL_PANEL,
+  // The walk's cap: same survivor, same scale, same payload decision.
+  maxEdge: HERO_PX * 2,
+  faces: 'back',
+  model: 'models/survivors.png'
+}]
+
+/**
+ * A ready-to-paste prompt for the squad's fall.
+ *
+ * Written from `promptForDeath`'s shape, because it is the same job one size
+ * down and the same three things go wrong: it comes back as somebody else (so
+ * the character model is image 1 and the layout image 2), it comes back as a
+ * tidy grid of figures on their feet (so every clause says they are going down),
+ * and it comes back with something a child should not see. It adds the
+ * survivor's own trap: this character has no FRONT.
+ */
+export const promptForFall = (f: FallSpec): string => {
+  // `<` rather than `=== 1`: the side is a fixed constant, and a comparison
+  // against the value it is not is a type error rather than a question.
+  const SIDE: 'left' | 'right' = DOWN_FALL_SIDE < 0 ? 'left' : 'right'
+  const cols = OUTFITS.map((o) => o.id)
+  return [
+    `# ${f.id} — ${f.name}  (${f.target})`,
+    '',
+    `A SPRITE SHEET: ${f.frames} panels of the squad's own survivors going down.`,
+    'Two images come with this prompt, in this order:',
+    `  IMAGE 1 — \`${f.model}\` — THE CHARACTERS: the three survivors, exactly as the`,
+    '     game shows them, left to right. Every panel is one of these three.',
+    `  IMAGE 2 — \`${f.file}.png\` — THE LAYOUT: the game's own rough placeholder`,
+    '     drawing of the fall. FOLLOW ITS POSES — where the head, pack, arms, legs and',
+    '     boots are in each panel, how far over the body is, and where on the ground it',
+    '     ends up — and take nothing else from it: not its limb lengths, shapes,',
+    '     colours, details or style. Image 2 is a flat stand-in; image 1 is who these',
+    '     people are.',
+    '',
+    `WHAT IT IS: ${f.blurb}`,
+    '',
+    'THE CHARACTERS — copy them from image 1:',
+    '· They are seen from BEHIND and they have NO FACE in this game — it is never',
+    '  drawn. A body lying face UP is a character that does not exist, and it is the',
+    '  one way this sheet comes back unusable. Face DOWN, always: what the viewer sees',
+    '  of a fallen survivor is the pack, the back of the hood and the soles of its',
+    '  boots.',
+    '· Their PROPORTIONS stay exactly as in image 1: the same small head against the',
+    '  same big pack, the same limb lengths and thickness. Nobody gets taller, leaner',
+    '  or more realistic on the way down.',
+    '· The pack stays ON the back, shut, with the bedroll still lashed across it.',
+    '  Nothing spills out of it and nobody carries anything new.',
+    '',
+    'THE LOOK — paint it the way image 1 is painted, never as a clean cartoon:',
+    '· Heavy, scratchy near-black ink contours with dry-brush breaks, thick on the',
+    '  shadow side.',
+    '· Flat, gritty gouache-like paint inside the lines, with visible brushwork, grain',
+    '  and rough cel-style shadow shapes. No smooth vector shading, no gradients, no',
+    '  glossy highlights.',
+    '· The same muted, desaturated colours as image 1, and the same key light from the',
+    '  UPPER LEFT.',
+    '',
+    `THE GRID — ${f.cols} columns across, ${f.rows} rows down, read left to right along the top`,
+    'row, then the bottom row. These lines are for you to read; never write them, or',
+    'any other words, in the image:',
+    `· The COLUMNS are the three survivors, in image 1's order: column 1 ${cols[0] ?? ''},`,
+    `  column 2 ${cols[1] ?? ''}, column 3 ${cols[2] ?? ''}. A column is ONE person at two moments —`,
+    '  top and bottom of column 1 are the same individual in the same coat — and the',
+    '  three coats never swap columns.',
+    ...f.poses.map((pose, r) =>
+      `· ROW ${r + 1}, panels ${r * f.cols + 1}-${r * f.cols + f.cols}: ${FALL_POSES[pose]}`),
+    ...OUTFITS.map((o, i) => `· column ${i + 1} — ${OUTFIT_COLOUR[o.id] ?? ''}`),
+    `· All ${f.frames} are going down or already down. Not one of them stands, walks, runs,`,
+    '  fights, aims, sits up, kneels to fire or turns to look at the viewer.',
+    `· Every body goes over toward the panel's ${SIDE}, the same way in all ${f.frames}. The game`,
+    '  mirrors the picture itself for a body thrown the other way, so a mirrored panel',
+    '  gives it two survivors falling into each other.',
+    '',
+    'FOR CHILDREN — this game is played by kids:',
+    '· NO blood, gore, wounds, torn clothing, broken or severed parts, nothing red and',
+    '  wet.',
+    '· NO puddle, pool, splash or stain under or around them.',
+    '· Defeat is the POSE and the slack limbs, nothing else. No "X" eyes (there are no',
+    '  eyes to draw), no stars, no sweat drops, no cartoon symbols. It has to read as',
+    '  "this one is down" the way a dropped bundle does.',
+    '',
+    'LAYOUT — the grid is cut blindly:',
+    `· EXACTLY ${f.frames} panels: ${f.cols} across, ${f.rows} rows. Not 1, not ${f.cols}, not ${f.frames + 2}, not`,
+    `  ${f.frames * 2} — do not add a row or a column. One big painting of a fallen survivor is`,
+    '  the wrong answer however well it is painted, and so is a square canvas.',
+    `· Each panel is exactly 1/${f.cols} of the width and 1/${f.rows} of the height.`,
+    '· SIZE — measure it against the PANEL, not against the paper. A crumpled survivor',
+    `  covers about ${FALL_SPAN.crash.w} of its panel's width and ${FALL_SPAN.crash.h} of its height; a fallen`,
+    `  one about ${FALL_SPAN.fallen.w} of the width and ${FALL_SPAN.fallen.h} of the height — exactly as image 2`,
+    '  draws them. If yours reaches the edges of its panel it is about twice the size',
+    '  it should be. The empty magenta around each body is not waste: it is the box the',
+    '  game blits the panel into, and a body painted out into it is a body drawn too',
+    '  big in play.',
+    '· WHERE each body sits in its panel is not a composition choice. The bottom of',
+    '  each panel is the road, at the same height as in image 2 — that is the line the',
+    '  survivor\'s feet stood on and the line the game puts the picture back on. Do not',
+    '  re-centre a body in its panel, do not tidy the arrangement, do not even out the',
+    '  spacing.',
+    '· Leave a clear band of flat magenta between neighbouring panels, at least a tenth',
+    '  of a panel wide. Nothing — an arm, a boot, the gun, a shadow — may touch or',
+    '  cross a panel edge. Two panels that run into each other cannot be cut apart.',
+    '· NO panel borders, frames, lines, boxes or gutters, and NO text, titles, captions',
+    '  or numbers anywhere. Do NOT draw a ground line, floor or horizon: one soft',
+    '  contact shadow under each body, tight to it, and nothing else — no road, no',
+    '  rubble, no scenery, no obstacle. The thing each one crashed into is drawn by the',
+    '  game and must not be in the picture.',
+    '',
+    BACKGROUND_RULE,
+    '',
+    'BEFORE YOU CALL IT FINISHED:',
+    `· ${f.cols} panels across, ${f.rows} down, ${f.frames} in all — no borders and no words.`,
+    '· Every panel is one of image 1\'s three survivors, in its own coat colour, with',
+    '  its pack shut on its back, carrying nothing new.',
+    '· Not one of them is face up, and not one of them is on its feet.',
+    '· There is empty magenta above the bodies in the bottom row, and that space is NOT',
+    '  room for another row.',
+    `· The canvas is landscape, half again as wide as it is tall (${f.cols}:${f.rows}).`,
+    '· Every pixel that is not a survivor is flat, vivid #FF00FF — hold it against a',
+    '  pure magenta swatch, not against your memory of one.',
+    '',
+    `OUTPUT: one image, ${f.w} x ${f.h} pixels (3:2, landscape). If your tool has an`,
+    'aspect-ratio control, set it to 3:2 — a square or 16:9 return crushes the grid and',
+    'cannot be cut. No labels, captions, numbers or watermarks.'
+  ].join('\n')
+}
 
 // ─── Boss deaths ────────────────────────────────────────────────────────────
 //
@@ -1610,6 +1859,16 @@ export const promptDocs = (_fits?: Record<string, Fit>): Record<string, string> 
     'Each heading names both images, and the Art Desk attaches both, in order.',
     '',
     BOSS_DEATHS.map((d) => promptBlock(`${d.name} — death`, d.file, d.target, promptForDeath(d), [d.model])).join('\n\n---\n\n'),
+    '',
+    '---',
+    '',
+    'The last block is the SQUAD\'s own fall, and it works the same way: the character',
+    'model (`art-sheets/models/survivors.png`, the three survivors as the game shows',
+    'them) first, then the layout. One sheet covers every outfit and both of the poses',
+    'a fall is held on, so it is one generation for the whole crowd. The game plays the',
+    'same fall, drawn, until it exists — see `SURVIVOR_FALLS`.',
+    '',
+    SURVIVOR_FALLS.map((f) => promptBlock(f.name, f.file, f.target, promptForFall(f), [f.model])).join('\n\n---\n\n'),
     ''
   ].join('\n')
 })
@@ -1618,10 +1877,11 @@ export const promptDocs = (_fits?: Record<string, Fit>): Record<string, string> 
  * Every painted sheet as the status report reads it: the reference file's
  * stem, the document its prompt block is in, and where the slice lands.
  */
-export const sheetRows = (): Array<{ what: 'walk' | 'still' | 'death'; id: string; title: string; stem: string; doc: string; target: string }> => [
+export const sheetRows = (): Array<{ what: 'walk' | 'still' | 'death' | 'fall'; id: string; title: string; stem: string; doc: string; target: string }> => [
   ...WALKS.map((w) => ({ what: 'walk' as const, id: w.id, title: w.name, stem: w.file, doc: 'PROMPTS-WALKS.md', target: w.target })),
   ...STILLS.map((s) => ({ what: 'still' as const, id: s.id, title: s.name, stem: s.file, doc: 'PROMPTS-STILLS.md', target: s.target })),
-  ...BOSS_DEATHS.map((d) => ({ what: 'death' as const, id: d.id, title: `${d.name} — death`, stem: d.file, doc: 'PROMPTS-DEATHS.md', target: d.target }))
+  ...BOSS_DEATHS.map((d) => ({ what: 'death' as const, id: d.id, title: `${d.name} — death`, stem: d.file, doc: 'PROMPTS-DEATHS.md', target: d.target })),
+  ...SURVIVOR_FALLS.map((f) => ({ what: 'fall' as const, id: f.id, title: f.name, stem: f.file, doc: 'PROMPTS-DEATHS.md', target: f.target }))
 ]
 
 // ─── Consistency with the runtime catalogue ─────────────────────────────────

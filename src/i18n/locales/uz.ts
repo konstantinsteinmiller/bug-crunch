@@ -28,6 +28,9 @@ export default {
     'best': 'Rekord {n}',
     'boss': 'Bos',
     'miniboss': 'Mini bos',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'Keyingi bonusgacha bosqichlar',
     'fireRate': 'Tezlik',
     'incoming': 'Hujum kelmoqda!',
     'dodge': 'Chetlan',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'Ko‘k sandiq: hamma tezroq otadi', 'desktop': 'Ko‘k sandiq: hamma tezroq otadi' },
     'boss': { 'touch': 'Qizil doiradan uzoqroq turing!', 'desktop': 'Qizil doiradan uzoqroq turing!' },
     'lever': { 'touch': 'Yo‘l chetidagi IKKALA richagni ham ot — ular qurol sandig‘ini ochadi', 'desktop': 'Yo‘l chetidagi IKKALA richagni ham ot — ular qurol sandig‘ini ochadi' },
-    'guard': { 'touch': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!', 'desktop': 'Qalqon yoqilgan — o‘qlaring o‘tmaydi. QOCH!' },
+    'guard': { 'touch': 'Qalqon yoqilgan — o‘qlaring hozircha o‘tmaydi', 'desktop': 'Qalqon yoqilgan — o‘qlaring hozircha o‘tmaydi' },
     'cage': { 'touch': 'Qafaslarni otib och — mahbuslar otryadingga qo‘shiladi', 'desktop': 'Qafaslarni otib och — mahbuslar otryadingga qo‘shiladi' },
     'shieldBox': { 'touch': 'Qalqon quti — kutadi va bitta kuchli zarbani to‘xtatadi', 'desktop': 'Qalqon quti — kutadi va bitta kuchli zarbani to‘xtatadi' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': '{n} omon qolgan naqdlandi',
     'unlocked': 'Ochildi!',
 
     'guardian': "Qo'riqchi farishta seni qutqardi!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'Bosqich tugadi!',
     'wipedOut': 'Guruh yo‘q qilindi',
     'reachedStage': '{n}-bosqich',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}%',
+    'bestReach': 'Rekord {n}%',
+    'newReach': 'Eng uzoq!',
     'newRecord': 'Yangi rekord!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'Boss quladi!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'Bosqich!',
     'rallied': 'Ikkinchi nafas',
     'peakSquad': 'Eng katta guruh',
     'kills': 'Yo‘q qilingan',
@@ -239,5 +260,12 @@ export default {
     'retry': 'Qayta urinish', 'dismiss': 'yashirish'
   },
   'loading': { 'tooLong': 'Yuklash juda uzoq davom etyaptimi? Reklama bloklagichni o‘chirib, sahifani yangilang.', 'boo': 'Bu!', 'laugh': 'Hahaha!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'Telefonni burang',
+    'body': 'Survivalist tik holatda o‘ynaladi.'
+  },
   'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' }
 }

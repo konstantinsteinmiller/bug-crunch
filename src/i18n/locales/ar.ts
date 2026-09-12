@@ -28,6 +28,9 @@ export default {
     'best': 'الأفضل {n}',
     'boss': 'الزعيم',
     'miniboss': 'زعيم صغير',
+    // Screen-reader label for the star chip that counts down to the
+    // next milestone payout. The chip itself is a glyph and a digit.
+    'toMilestone': 'المراحل حتى المكافأة التالية',
     'fireRate': 'معدل',
     'incoming': 'هجوم قادم!',
     'dodge': 'تفادَ',
@@ -59,13 +62,21 @@ export default {
     'rate': { 'touch': 'الصناديق الزرقاء: الجميع يطلق أسرع', 'desktop': 'الصناديق الزرقاء: الجميع يطلق أسرع' },
     'boss': { 'touch': 'ابتعد عن الدائرة الحمراء!', 'desktop': 'ابتعد عن الدائرة الحمراء!' },
     'lever': { 'touch': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح', 'desktop': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح' },
-    'guard': { 'touch': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!', 'desktop': 'الدرع مرفوع — نيرانك بلا فائدة. تحرّك!' },
+    'guard': { 'touch': 'الدرع مرفوع — نيرانك لا تؤذيه بعد', 'desktop': 'الدرع مرفوع — نيرانك لا تؤذيه بعد' },
     'cage': { 'touch': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك', 'desktop': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك' },
     'shieldBox': { 'touch': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة', 'desktop': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة' }
   },
 
   'flow': {
 
+
+    // The handover, which used to read as LOSING the squad: five testers saw
+
+    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
+
+    // is cashed into coins on screen now, and this names it. {n} = survivors.
+
+    'squadCashed': 'تم صرف {n} ناجيًا',
     'unlocked': 'تم الفتح!',
 
     'guardian': "أنقذك ملاك حارس!",
@@ -102,7 +113,17 @@ export default {
     'stageClear': 'اجتزت المرحلة!',
     'wipedOut': 'أُبيد الفريق',
     'reachedStage': 'المرحلة {n}',
+    // The near-miss readout under a wipe: how far this attempt got,
+    // and the best any previous attempt on this stage managed.
+    'reach': '{n}٪',
+    'bestReach': 'الأفضل {n}٪',
+    'newReach': 'أبعد من أي وقت!',
     'newRecord': 'رقم قياسي جديد!',
+    // The two seconds after a boss goes down, above its body. The kill is
+    // what the whole stage was for, so this is sold as a reward.
+    'bossFelled': 'سقط الزعيم!',
+    // The every-fifth-stage lump the HUD chip counts down to.
+    'milestone': 'إنجاز!',
     'rallied': 'نفَس ثانٍ',
     'peakSquad': 'أكبر فريق',
     'kills': 'القتلى',
@@ -239,5 +260,12 @@ export default {
     'retry': 'إعادة المحاولة', 'dismiss': 'إخفاء'
   },
   'loading': { 'tooLong': 'التحميل يستغرق وقتاً طويلاً؟ عطّل مانع الإعلانات ثم أعد التحميل.', 'boo': 'بو!', 'laugh': 'هاهاها!' },
+  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
+  // fills about a fifth of a wide frame, which is what put the HUD and the
+  // attack badge out at the edges where testers never looked.
+  'portrait': {
+    'title': 'أدر هاتفك',
+    'body': 'لعبة Survivalist تُلعب عموديًا.'
+  },
   'license': { 'denied': 'تم رفض الوصول: يرجى شراء ترخيص.' }
 }

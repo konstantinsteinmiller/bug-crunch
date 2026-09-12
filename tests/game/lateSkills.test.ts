@@ -9,7 +9,9 @@
  *   FROST   everything hostile stops where it stands — bodies, fuses, the boss's
  *           body and every one of its clocks — for `FROST_S`, nothing it does
  *           in that time costs a survivor, frozen things are brittle, and the
- *           world picks up exactly where it left off.
+ *           world picks up exactly where it left off. The ONE exception is a
+ *           round already in the air: a thrown object is not a clock, and ice
+ *           does not catch one.
  *   DECOY   the flare lands on the far rail and lights; ordinary bodies go to
  *           it, the boss's aimed swings come down on it, its eye watches it —
  *           and it ends in a burst that pays for what it gathered.
@@ -125,6 +127,46 @@ describe('Frost Nova', () => {
     expect(f.x, 'a frozen body slid').toBe(x)
     expect(f.y, 'a frozen body walked').toBe(y)
     expect(f.phase, 'a frozen body kept its walk cycle going').toBe(phase)
+  })
+
+  it('does NOT catch a round already in the air, though it stops the gunner', async () => {
+    // The one thing a freeze deliberately does not stop. A thrown object is not
+    // a hostile clock, and ice does not catch one — freezing it read as a bug
+    // rather than as power: the round stops dead a metre from the crowd and
+    // then resumes from exactly there when the nova expires, which does not
+    // remove the threat, it defers it onto a moment the player has stopped
+    // reading. The GUNNER still stands still and starts no new round, so a nova
+    // still ends the volley; it simply does not un-throw what was thrown.
+    const { game, template } = await road()
+    // Inside `ELITE_DRAG_LEAD` and at its own standoff, with `hold` open, which
+    // is the whole of `stepGunner`'s engagement test.
+    const gunner = place(game, template, 0.2, 5, {
+      elite: true, kind: 'gunner', scale: 1.4, hold: 99
+    })
+
+    // Let it fire once, for real, rather than pushing a round onto the list —
+    // the claim is about the path the game actually takes.
+    for (let i = 0; i < ticksFor(14) && game.getBolts().length === 0; i++) {
+      strip(game, [gunner])
+      game.step(STEP_MS)
+    }
+    const bolt = game.getBolts()[0]
+    expect(bolt, 'the gunner never fired, so this spec measured nothing').toBeTruthy()
+
+    const y0 = bolt!.y
+    expect(game.castFrostNova()).toBe(true)
+    const fired = game.getBolts().length
+
+    for (let i = 0; i < ticksFor(0.5); i++) {
+      strip(game, [gunner])
+      game.step(STEP_MS)
+    }
+
+    expect(game.frostActive(), 'the freeze should still be running').toBe(true)
+    // The round travelled. `dy` is -1 at the muzzle, so it comes DOWN the road.
+    expect(bolt!.y, 'a round in the air was frozen').toBeLessThan(y0)
+    // …and the gunner, which IS a clock, started nothing new.
+    expect(game.getBolts().length, 'a frozen gunner fired again').toBeLessThanOrEqual(fired)
   })
 
   it('lets the crowd walk through an ordinary body, which shatters, and costs nobody', async () => {
