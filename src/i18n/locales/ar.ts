@@ -31,8 +31,11 @@ export default {
     'fireRate': 'معدل',
     'incoming': 'هجوم قادم!',
     'dodge': 'تفادَ',
+    'getIn': 'ادخل',
+    'holdStill': 'اثبت',
     'milestone': '{n} مقاتل!',
     'weaponActive': '{name} جاهز',
+    'weaponsActive': '{a} + {b} جاهزان',
     'weaponLocked': '{name} مقفل — تمت إصابة {n} من {total} رافعات',
     'weaponGift': '{name} في الأمام — مجاني، بلا روافع',
     'weaponFree': 'مجاني'
@@ -90,6 +93,10 @@ export default {
       'a': "ضعف معدل الإطلاق",
       'b': "يشحن البوابات أسرع"
     }
+  },
+  'bossReward': {
+    'title': "هزمت الزعيم!",
+    'subtitle': "هدية للمرحلة {n}. واصل الركض!"
   },
   'result': {
     'stageClear': 'اجتزت المرحلة!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'قنبلة',
 
-    'shield': 'درع'
+    'shield': 'درع',
 
+    'locked': 'مقفل',
+
+    'unlocksAt': 'يُفتح في المرحلة {n}',
+
+    'frost': 'نوفا الصقيع',
+
+    'decoy': 'شعلة الخداع',
+
+    'trialLabel': '{name} · تجربة مجانية',
+
+    'trialTag': 'تجربة مجانية!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

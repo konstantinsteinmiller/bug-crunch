@@ -40,6 +40,30 @@ resource, so the flag stays off in every `.env.<platform>` until the art is in.
 | `public/images/monsters/<design>.webp` | each of the 13 designs in `monsters.ts` | Played from the same clock as the bake, so the swap is seamless mid-stride. Authored facing as the bake does; the field mirrors by travel. Frame count is read off the strip's shape. |
 | `public/images/heroes/<outfit>.webp` | the survivor, ×3 (`teal`, `amber`, `violet`) | Seen from BEHIND; the outfit's coat colour is its identity in the crowd. |
 
+## Boss deaths (strips: 8 panels, played once, last panel held as the corpse)
+
+**All seven are painted, sliced and live** (2026-09-12). Each was generated from
+two images — `art-sheets/models/<design>.png` (one frame of its painted walk) and
+`art-sheets/death-<design>.png` (the game's own drawn fall) — with its identity
+in words in `DEATH_IDENTITY`. Re-rolls: compare the return with the model, and
+salvage a mirrored or ruled one with `--mirror` / `--drop-borders` rather than
+spending another generation. Where a strip is missing the game plays the same
+fall, drawn and baked (`monsterDeathFrame`).
+
+| Path | Subject | Notes |
+| --- | --- | --- |
+| `public/images/deaths/grumpling.webp` | stage 1's boss | upright: flails, buckles, goes over onto its back, arms and legs spread |
+| `public/images/deaths/bonecap.webp` | stage 2's boss | upright; the cap bangs on the ground, the spore light goes out |
+| `public/images/deaths/snaggletusk.webp` | the boar | SIDE-ON: rears, drops to its knees, keels over onto its flank, legs out stiff |
+| `public/images/deaths/thornwick.webp` | the treant | upright; falls like a felled tree, boughs spread; the longest body lying down |
+| `public/images/deaths/marrowknight.webp` | the summoner's body | upright; the greatsword tips over and lies beside it |
+| `public/images/deaths/cinderhound.webp` | the hound | SIDE-ON; the fire gutters to embers, the tail drops limp |
+| `public/images/deaths/rattlejack.webp` | the scrap skeleton | upright; the shortsword spins out of its hand, the pot-lid stays strapped on |
+
+21:9 sheets of 420 × 360 panels (the walk panel's height, wider). Fetched when
+the stage is 80 % run, never on the splash. No blood, wounds or liquid in any of
+them — the game paints its own violet pool under the body.
+
 ## Stills
 
 | Path | Subject | Stays live over it |

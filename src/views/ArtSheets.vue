@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import {
-  WALKS, STILLS, promptForWalk, promptForStill, GATE_POST, GATE_REF_POST_W,
+  WALKS, STILLS, GATE_POST, GATE_REF_POST_W,
   framesOf, colsOf, rowsOf,
-  type WalkSpec, type StillSpec
+  BOSS_DEATHS, promptDocs,
+  type WalkSpec, type StillSpec, type DeathSpec
 } from '@/game/artSheet'
-import { paintMonsterFrame } from '@/game/monsterSprites'
+import { paintMonsterDeathFrame, paintMonsterFrame } from '@/game/monsterSprites'
 import { paintSurvivorFrame, OUTFITS } from '@/game/heroSprites'
 import { paintSmokeRef } from '@/use/useVfx'
 import {
@@ -175,6 +176,51 @@ const renderWalkAlpha = (walk: WalkSpec): HTMLCanvasElement => {
     ctx.restore()
   }
   return cv
+}
+
+// ─── Deaths ─────────────────────────────────────────────────────────────────
+
+/**
+ * A boss's death LAYOUT on a transparent canvas.
+ *
+ * The game cannot draw a creature falling — only standing — so this is the
+ * standing drawing, through the bake's own painter, placed panel by panel as
+ * `DEATH_POSES` says: squashed, rolled about its feet toward the side it falls
+ * to, re-centred in the panel and rested ON the ground line. It carries size,
+ * place and direction, which is all the prompt takes from it; the pose itself
+ * is the painter's (see `promptForDeath`).
+ *
+ * Resting on the line is computed, not guessed: the standing box's corners are
+ * put through the same squash and roll, and the panel is shifted until the
+ * lowest one sits on the feet line — so a wide boar and a tall treant both lie
+ * on the ground rather than half under it.
+ */
+const renderDeathAlpha = (d: DeathSpec): HTMLCanvasElement => {
+  const cv = document.createElement('canvas')
+  cv.width = d.w
+  cv.height = d.h
+  const ctx = cv.getContext('2d')!
+  for (let i = 0; i < d.frames; i++) {
+    ctx.save()
+    ctx.translate((i % d.cols) * d.panelW, Math.floor(i / d.cols) * d.panelH)
+    ctx.beginPath()
+    ctx.rect(0, 0, d.panelW, d.panelH)
+    ctx.clip()
+    // The drawn fall itself, through the bake's own death painter — the same
+    // frames the game plays until a painting arrives.
+    paintMonsterDeathFrame(ctx, d.design, i, d.frames, d.panelW, d.panelH)
+    ctx.restore()
+  }
+  return cv
+}
+
+const renderDeath = (d: DeathSpec): HTMLCanvasElement => {
+  const alpha = renderDeathAlpha(d)
+  // The union of all eight, like a walk's: the slicer registers the return's
+  // union onto it, standing height and lying length together.
+  const fit = fitOf(alpha, d.cols, d.rows, d.panelW, d.panelH)
+  if (fit) fits.set(`death/${d.id}`, fit)
+  return onGround(alpha, 'magenta')
 }
 
 // ─── Stills ─────────────────────────────────────────────────────────────────
@@ -423,6 +469,14 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       ctx.translate(cx, cy)
       paintUiIcon(ctx, s.id as UiIconId, S, REF)
       break
+    case 'ui/warn-away':
+    case 'ui/warn-into':
+    case 'ui/warn-still':
+      // The alarm, at the size the badge shows it: the plate fills the frame,
+      // which is what the prompt promises the painter.
+      ctx.translate(cx, cy)
+      paintUiIcon(ctx, s.id as UiIconId, S * 0.98, REF)
+      break
     case 'ui/weapon-card-rocket':
     case 'ui/weapon-card-gatling':
       // The weapon choice's cards: the weapon's own glyph, turned to point to
@@ -611,6 +665,26 @@ const buildIndex = () => ({
       maxEdge: s.maxEdge,
       target: s.target,
       ...(s.extra ? { extra: s.extra } : {})
+    })),
+    // A death is a walk to the slicer — a feet-anchored grid of one creature,
+    // registered by the union of its panels — with wider panels and its own
+    // `death-` id, so it can never be mistaken for the walk of the same design.
+    ...BOSS_DEATHS.map((d) => ({
+      id: d.id,
+      file: `${d.file}.png`,
+      width: d.w,
+      height: d.h,
+      cols: d.cols,
+      rows: d.rows,
+      frames: d.frames,
+      kind: d.kind,
+      panel: { w: d.panelW, h: d.panelH },
+      ...(fits.has(`death/${d.id}`) ? { fit: fits.get(`death/${d.id}`) } : {}),
+      faces: d.faces,
+      anchor: 'feet',
+      tight: false,
+      maxEdge: d.maxEdge,
+      target: d.target
     }))
   ]
 })
@@ -640,82 +714,94 @@ const preview = async (): Promise<void> => {
   const key = renderKey(stills, 160, 8)
   out.push({ id: 'stills', title: 'Every still', url: key.toDataURL('image/png'),
     dims: `${STILLS.length} stills` })
+  for (const d of BOSS_DEATHS.slice(0, 2)) {
+    const cv = renderDeath(d)
+    out.push({ id: d.id, title: `${d.name} — death (layout)`, url: cv.toDataURL('image/png'),
+      dims: `${cv.width}x${cv.height} · ${d.cols}x${d.rows} panels` })
+  }
   previews.value = out
 }
 
-const exportAll = async (): Promise<void> => {
+/**
+ * Write the sheets.
+ *
+ * `deaths` writes the boss deaths and nothing else of the cast — the references,
+ * their key and their prompts — so adding a sheet kind does not re-stamp fifty
+ * reference files that did not change. The INDEX is still written whole, which
+ * is why every other sheet is still rendered (in memory only): the slicer reads
+ * one index, and an index with holes in it would forget how to cut the walks.
+ */
+const exportSheets = async (scope: 'all' | 'deaths'): Promise<void> => {
   busy.value = true
+  const every = scope === 'all'
+  let written = 0
+  const put = async (name: string, payload: { dataUrl?: string; text?: string }): Promise<void> => {
+    await save(name, payload)
+    written++
+  }
   try {
     await document.fonts?.ready
     fits.clear()
     const walkKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
     for (const walk of WALKS) {
-      status.value = `rendering ${walk.file}`
+      status.value = `${every ? 'rendering' : 'measuring'} ${walk.file}`
       await tick()
       const cv = renderWalk(walk)
-      await save(`${walk.file}.png`, { dataUrl: cv.toDataURL('image/png') })
+      if (!every) continue
+      await put(`${walk.file}.png`, { dataUrl: cv.toDataURL('image/png') })
       const first = document.createElement('canvas')
       first.width = walk.panelW
       first.height = walk.panelH
       first.getContext('2d')!.drawImage(cv, 0, 0, walk.panelW, walk.panelH, 0, 0, walk.panelW, walk.panelH)
       walkKeys.push({ title: walk.name, sub: walk.target, cv: first })
     }
-    await save('key-walks.png', { dataUrl: renderKey(walkKeys, 192, 8).toDataURL('image/png') })
+    if (every) await put('key-walks.png', { dataUrl: renderKey(walkKeys, 192, 8).toDataURL('image/png') })
 
     const stillKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
     for (const s of STILLS) {
-      status.value = `rendering ${s.file}`
+      status.value = `${every ? 'rendering' : 'measuring'} ${s.file}`
       await tick()
       const cv = renderStill(s)
-      await save(`${s.file}.png`, { dataUrl: cv.toDataURL('image/png') })
+      if (!every) continue
+      await put(`${s.file}.png`, { dataUrl: cv.toDataURL('image/png') })
       stillKeys.push({ title: s.name, sub: s.target, cv })
     }
-    await save('key-stills.png', { dataUrl: renderKey(stillKeys, 192, 8).toDataURL('image/png') })
+    if (every) await put('key-stills.png', { dataUrl: renderKey(stillKeys, 192, 8).toDataURL('image/png') })
 
-    await save('PROMPTS-WALKS.md', {
-      text: [
-        '# Walk-cycle prompts — one design per generation',
-        '',
-        'Generated from the manifest — do not hand-edit, re-export instead.',
-        '',
-        'Attach `art-sheets/walk-<id>.png` and paste the matching block beside it.',
-        'Each is a grid of panels showing ONE subject through ONE cycle, and the',
-        'whole job is that it comes back as one subject and not eight.',
-        '',
-        'Drop results in `art-sheets/painted/`, keeping the `walk-<id>` in the name,',
-        'then run `pnpm slice-sheets`. The slicer cuts the grid by proportion, so an',
-        'off-size return is fine as long as the panels are where the grid says.',
-        '',
-        WALKS.map((w) => promptForWalk(w)).join('\n\n---\n\n'),
-        ''
-      ].join('\n')
-    })
-    await save('PROMPTS-STILLS.md', {
-      text: [
-        '# Still prompts — one object per generation',
-        '',
-        'Generated from the manifest — do not hand-edit, re-export instead.',
-        '',
-        'Attach `art-sheets/still-<kind>-<id>.png` and paste the matching block',
-        'beside it. There is no grid to preserve here, which is the whole point.',
-        '',
-        'Drop results in `art-sheets/painted/`, keeping the `still-<kind>-<id>` in',
-        'the name, then run `pnpm slice-sheets`. Every return is measured against',
-        'its reference and normalised onto it.',
-        '',
-        STILLS.map((s) => promptForStill(s)).join('\n\n---\n\n'),
-        ''
-      ].join('\n')
-    })
+    const deathKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
+    for (const d of BOSS_DEATHS) {
+      status.value = `rendering ${d.file}`
+      await tick()
+      const cv = renderDeath(d)
+      await put(`${d.file}.png`, { dataUrl: cv.toDataURL('image/png') })
+      // The key shows the LAST panel — the body the game keeps on screen.
+      const last = document.createElement('canvas')
+      last.width = d.panelW
+      last.height = d.panelH
+      last.getContext('2d')!.drawImage(cv, (d.cols - 1) * d.panelW, (d.rows - 1) * d.panelH,
+        d.panelW, d.panelH, 0, 0, d.panelW, d.panelH)
+      deathKeys.push({ title: d.name, sub: d.target, cv: last })
+    }
+    await put('key-deaths.png', { dataUrl: renderKey(deathKeys, 192, 8).toDataURL('image/png') })
 
-    await save('sheet-index.json', { text: JSON.stringify(buildIndex(), null, 2) + '\n' })
-    status.value = `wrote ${WALKS.length + STILLS.length + 5} files to art-sheets/`
+    // The text is the manifest's (`promptDocs`), so this route and
+    // `pnpm art:prompts` write byte-identical documents.
+    const docs = promptDocs()
+    await put('PROMPTS-DEATHS.md', { text: docs['PROMPTS-DEATHS.md']! })
+    if (every) await put('PROMPTS-WALKS.md', { text: docs['PROMPTS-WALKS.md']! })
+    if (every) await put('PROMPTS-STILLS.md', { text: docs['PROMPTS-STILLS.md']! })
+
+    await put('sheet-index.json', { text: JSON.stringify(buildIndex(), null, 2) + '\n' })
+    status.value = `wrote ${written} files to art-sheets/`
   } catch (e) {
     status.value = `FAILED — ${(e as Error).message}`
   } finally {
     busy.value = false
   }
 }
+
+const exportAll = (): Promise<void> => exportSheets('all')
+const exportDeaths = (): Promise<void> => exportSheets('deaths')
 
 onMounted(preview)
 </script>
@@ -729,6 +815,7 @@ onMounted(preview)
         |  the painting is registered against. Export writes into #[code art-sheets/].
       .bar
         button(:disabled="busy" @click="exportAll") {{ busy ? 'Exporting…' : 'Export all sheets' }}
+        button.ghost(:disabled="busy" @click="exportDeaths") Export boss deaths
         button.ghost(:disabled="busy" @click="preview") Re-render preview
         span.status {{ status }}
 

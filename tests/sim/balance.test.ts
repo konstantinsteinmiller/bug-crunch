@@ -345,7 +345,17 @@ describe('the autobalancer', () => {
     // of the squad every 1.5 s), an unupgraded `good` run at stage 10 no longer
     // does. That is the difficulty change working, not the relief failing, but
     // it silently turned this assertion into a comparison against zero.
-    const seeds = [1000]
+    //
+    // …and it needs a run that reaches it WITHOUT a road weapon. From stage 6
+    // the boss's melt floor is priced off the crowd's real firepower, weapon
+    // included, so a run that solved the lever puzzle meets a boss several times
+    // tankier than one that did not — measured when Squad started paying in
+    // doors: seed 1000 went 11 249 → 10 441 → 10 021 → 41 858, the last attempt
+    // carrying the stage's rocket, while every weapon-free attempt kept softening
+    // (8 599 at four failures). That is the floor doing its job on a stronger
+    // run, not the relief failing, so each failure count is measured on the
+    // first seed whose run arrived empty-handed.
+    const seeds = [1000, 1001, 1002, 1003]
     // Sized to a player who has reached stage 10, for the same reason the
     // streak probe is: since positive gates were re-priced down, a crowd is
     // built out of the shop as much as out of the doors, and a four-level build
@@ -353,10 +363,14 @@ describe('the autobalancer', () => {
     const levels = { squad: 15, power: 11, rate: 12 }
     const hp: number[] = []
     for (const failures of [0, 1, 2, 3]) {
-      const rs = await probeStage({ stage: 10, policy: good, levels, seeds, failures })
-      expect(rs[0]!.bossHp, `the stage-10 probe never reached the boss at ${failures} failures`)
+      let bossHp = 0
+      for (const seed of seeds) {
+        const [r] = await probeStage({ stage: 10, policy: good, levels, seeds: [seed], failures })
+        if (r!.bossHp > 0 && r!.weapon === null) { bossHp = r!.bossHp; break }
+      }
+      expect(bossHp, `no weapon-free stage-10 probe reached the boss at ${failures} failures`)
         .toBeGreaterThan(0)
-      hp.push(rs[0]!.bossHp)
+      hp.push(bossHp)
     }
     for (let i = 1; i < hp.length; i++) {
       expect(hp[i]!, `failure ${i} did not soften stage 10 (${hp.join(' → ')})`).toBeLessThan(hp[i - 1]!)

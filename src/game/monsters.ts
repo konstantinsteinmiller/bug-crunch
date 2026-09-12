@@ -6,7 +6,10 @@ import {
   INK, SHADOW_DIR, LINE, SHADE, paint, breathe, blink, eye, socket, horn,
   boneHand, boneLimb, groundShadow, SPORE_LIGHT, SOUL_LIGHT,
   gait, footStep, bodyBob, swing, weightShift, hipDrop, limb, clawFoot, spines,
-  contourPoints, pivot
+  contourPoints, pivot,
+  dyingAt, deathBeats, deathArm, deathLeg, deathLoll, deathLid, deathShadow,
+  fallOntoBack, fallOntoFlank, deathFlankFoot, deathHandAngle, deathSpan, UPRIGHT_FALL,
+  type DeathBeats
 } from '@/game/monsterKit'
 import { drawDustmoth, drawSkewer, drawGloomcrow } from '@/game/monstersAir'
 
@@ -72,18 +75,30 @@ export interface MonsterDef {
 // ─── 1 · Grumpling ──────────────────────────────────────────────────────────
 
 const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
+  // Dying instead of walking — see "Dying" in `monsterKit`. The body is the
+  // same body; only the joint targets and one transform over it change.
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   // Short legs take short, fast steps.
   const g = gait(t, 880)
-  const b = breathe(t, 1.1, 0.01) * S + bodyBob(g, 0.011) * S
+  // Dying, the whole upper body sinks with the knees.
+  const b = D ? deathLeg(D, 1, S).hipDrop : breathe(t, 1.1, 0.01) * S + bodyBob(g, 0.011) * S
   // Weight shifts onto whichever foot is down. Seen from the front that lean
   // is most of what sells the walk.
-  const sway = Math.sin(t / 1400) * 0.02 * S + weightShift(g + 0.5, 0.016) * S
+  const sway = D ? 0 : Math.sin(t / 1400) * 0.02 * S + weightShift(g + 0.5, 0.016) * S
   // Ears are light and hinged: they arrive late. The lag is the DIFFERENCE
   // between the body's bob now and where it was a moment ago, which is what
-  // secondary motion actually is.
-  const earLag = (bodyBob(g - 0.12, 0.011) - bodyBob(g, 0.011)) * S * 2.4
+  // secondary motion actually is. Dying, they whip up at the blow and flop on
+  // the bounce.
+  const earLag = D
+    ? (0.08 * D.bounce - 0.07 * D.recoil) * S
+    : (bodyBob(g - 0.12, 0.011) - bodyBob(g, 0.011)) * S * 2.4
 
-  groundShadow(ctx, S, 0.44)
+  if (D) deathShadow(ctx, S, D, 0.44)
+  else groundShadow(ctx, S, 0.44)
+  ctx.save()
+  // The middle of this body is low: most of it is head, and the head is high.
+  if (D) fallOntoBack(ctx, S, D, UPRIGHT_FALL, 0.3)
 
   const TONES = tones('#6ea63f')
   const BELLY = tones('#dcd484', 0.85)
@@ -94,8 +109,8 @@ const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
     // A front view foreshortens fore/aft travel almost to nothing, so the step
     // is mostly lift. A big horizontal stride here just swings the feet past
     // each other.
-    const st = footStep(g + ph, 0.13 * S, 0.12 * S)
-    const hip: Pt = [sway + side * 0.15 * S, 0.7 * S + b + hipDrop(g + ph, 0.013) * S]
+    const st: Pt = D ? deathLeg(D, side, S).foot : footStep(g + ph, 0.13 * S, 0.12 * S)
+    const hip: Pt = [sway + side * 0.15 * S, 0.7 * S + b + (D ? 0 : hipDrop(g + ph, 0.013) * S)]
     const foot: Pt = [side * 0.12 * S + st[0], 0.92 * S + st[1]]
     // Knees bulge outward — `-side` — which is bowed, and is most of why this
     // one walks like a toddler rather than like a soldier.
@@ -136,11 +151,18 @@ const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
     // Counter-swing: the arm opposes the leg on its own side. Arms and legs
     // moving together is the classic broken-walk tell.
     const aw = swing(g + (side > 0 ? 0.5 : 0) + 0.7, 0.055) * S
-    const arm: Pt[] = [
-      [sx, 0.52 * S + b],
-      [sx + side * 0.13 * S + aw, 0.66 * S + b + droop * S * 0.2],
-      [sx + side * 0.09 * S + aw * 1.7, 0.82 * S + b + droop * S * 0.3]
-    ]
+    const A = D ? deathArm(D, side, 0.4 * S) : null
+    const arm: Pt[] = A
+      ? [
+        [sx, 0.52 * S + b],
+        [sx + A.elbow[0], 0.52 * S + b + A.elbow[1]],
+        [sx + A.hand[0], 0.52 * S + b + A.hand[1]]
+      ]
+      : [
+        [sx, 0.52 * S + b],
+        [sx + side * 0.13 * S + aw, 0.66 * S + b + droop * S * 0.2],
+        [sx + side * 0.09 * S + aw * 1.7, 0.82 * S + b + droop * S * 0.3]
+      ]
     stroke(ctx, arm, 0.128 * S, 0.09 * S, INK, 50 + side)
     stroke(ctx, arm, 0.105 * S, 0.07 * S, TONES.base, 50 + side)
     const hand = blob(arm[2]![0], arm[2]![1] + 0.03 * S, 0.075 * S, 0.07 * S, 52 + side, 0.14)
@@ -148,8 +170,15 @@ const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   }
 
   // ── Head: the whole character. Huge, tilted, top-heavy ──
-  const hy = 0.06 * S + b * 1.6
+  const hy = 0.06 * S + b * (D ? 1 : 1.6)
   const hx = sway * 1.4
+  // Dying, it lolls on its neck — rolled about where it meets the body, for the
+  // rest of the drawing (the save at the top is restored at the bottom).
+  if (D) {
+    ctx.translate(hx, hy + 0.34 * S)
+    ctx.rotate(deathLoll(D, UPRIGHT_FALL))
+    ctx.translate(-hx, -(hy + 0.34 * S))
+  }
   const head = egg(hx, hy, 0.46 * S, 0.42 * S, 0.86, 20, 0.055)
 
   // Ears: enormous, and deliberately mismatched — one perked, one folded.
@@ -198,7 +227,7 @@ const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   occlude(ctx, head, 0.94, 1.06, 0.045 * S, 'rgba(28,20,24,0.7)', 28)
 
   // ── Face ──
-  const bl = blink(t, 300)
+  const bl = D ? deathLid(D) : blink(t, 300)
   // Deliberately mismatched: a big staring eye and a mean squint.
   eye(ctx, hx - 0.15 * S, hy - 0.02 * S, 0.145 * S, {
     iris: '#ffcf3f', glow: '#ffd76a', pupil: 0.42, lid: bl, brow: 0.42, seed: 70
@@ -243,18 +272,28 @@ const drawGrumpling = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
 
   // A single crooked tooth wart / mole for character.
   fillShape(ctx, blob(hx + 0.3 * S, hy - 0.16 * S, 0.026 * S, 0.022 * S, 90, 0.2), TONES.deep)
+  ctx.restore()
 }
 
 // ─── 2 · Bonecap ────────────────────────────────────────────────────────────
 
 const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   const g = gait(t, 1300)
-  const b = breathe(t, 0.7, 0.008) * S + bodyBob(g, 0.018) * S
-  const sway = Math.sin(t / 2100) * 0.025 * S + weightShift(g + 0.5, 0.024) * S
+  const b = D ? deathLeg(D, 1, S).hipDrop : breathe(t, 0.7, 0.008) * S + bodyBob(g, 0.018) * S
+  const sway = D ? 0 : Math.sin(t / 2100) * 0.025 * S + weightShift(g + 0.5, 0.024) * S
   // The cap is heavy and sits on a neck: it lags the body and overshoots.
-  const capLag = (bodyBob(g - 0.14, 0.018) - bodyBob(g, 0.018)) * S * 2.6
+  // Dying, it is jolted up off the skull by the blow and bangs back down on the
+  // bounce.
+  const capLag = D
+    ? (0.06 * D.bounce - 0.09 * D.recoil) * S
+    : (bodyBob(g - 0.14, 0.018) - bodyBob(g, 0.018)) * S * 2.6
 
-  groundShadow(ctx, S, 0.4, 1.0, 0.24)
+  if (D) deathShadow(ctx, S, D, 0.4, UPRIGHT_FALL, 1.0, 0.24)
+  else groundShadow(ctx, S, 0.4, 1.0, 0.24)
+  ctx.save()
+  if (D) fallOntoBack(ctx, S, D, UPRIGHT_FALL, 0.14)
 
   const BONE = tones('#efe6d0', 1.05)
   const CAP = tones('#8e5bb5')
@@ -266,8 +305,8 @@ const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
   // leaving the anatomy out.
   for (const side of [-1, 1] as const) {
     const ph = side > 0 ? 0.5 : 0
-    const st = footStep(g + ph, 0.12 * S, 0.1 * S)
-    const hip: Pt = [sway + side * 0.09 * S, 0.58 * S + b + hipDrop(g + ph, 0.014) * S]
+    const st = D ? deathLeg(D, side, S).foot : footStep(g + ph, 0.12 * S, 0.1 * S)
+    const hip: Pt = [sway + side * 0.09 * S, 0.58 * S + b + (D ? 0 : hipDrop(g + ph, 0.014) * S)]
     const foot: Pt = [side * 0.085 * S + st[0], 0.96 * S + st[1]]
     limb(ctx, hip, foot, 0.21 * S, 0.21 * S, -side, BONE, 100 + side * 4,
       { width: 0.05 * S, taper: 0.82, outline: 0.019 * S, joint: 0.72 })
@@ -309,19 +348,37 @@ const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
   for (const side of [-1, 1] as const) {
     const droop = side === 1 ? 0.06 : -0.02
     const aw = swing(g + (side > 0 ? 0.5 : 0) + 0.7, 0.05) * S
-    const wrist: Pt = [sway + side * 0.3 * S + aw * 1.4, 0.78 * S + b]
+    const shoulder: Pt = [sway + side * 0.2 * S, 0.26 * S + b]
+    const A = D ? deathArm(D, side, 0.56 * S) : null
+    const wrist: Pt = A
+      ? [shoulder[0] + A.hand[0], shoulder[1] + A.hand[1]]
+      : [sway + side * 0.3 * S + aw * 1.4, 0.78 * S + b]
     boneLimb(ctx,
-      [sway + side * 0.2 * S, 0.26 * S + b],
-      [sway + side * 0.38 * S + aw, 0.5 * S + b + droop * S],
+      shoulder,
+      A ? [shoulder[0] + A.elbow[0], shoulder[1] + A.elbow[1]]
+        : [sway + side * 0.38 * S + aw, 0.5 * S + b + droop * S],
       wrist,
       0.042 * S, BONE, 130 + side * 3)
-    boneHand(ctx, wrist[0], wrist[1] + 0.05 * S, 0.15 * S, side > 0 ? 1.35 : 1.75,
-      BONE, 134 + side * 3, side > 0 ? 0.18 : 0.05)
+    if (A) {
+      // The fingers carry on along the forearm, and fall open.
+      const ha = deathHandAngle(A)
+      boneHand(ctx, wrist[0] + Math.cos(ha) * 0.04 * S, wrist[1] + Math.sin(ha) * 0.04 * S,
+        0.15 * S, ha, BONE, 134 + side * 3, 0.18 * (1 - A.open))
+    } else {
+      boneHand(ctx, wrist[0], wrist[1] + 0.05 * S, 0.15 * S, side > 0 ? 1.35 : 1.75,
+        BONE, 134 + side * 3, side > 0 ? 0.18 : 0.05)
+    }
   }
 
   // ── Skull ──
-  const hy = -0.16 * S + b * 1.5
+  const hy = -0.16 * S + b * (D ? 1 : 1.5)
   const hx = sway * 1.3
+  // Dying, skull and cap loll together on the neck, for the rest of the drawing.
+  if (D) {
+    ctx.translate(hx, hy + 0.3 * S)
+    ctx.rotate(deathLoll(D))
+    ctx.translate(-hx, -(hy + 0.3 * S))
+  }
   const skull = egg(hx, hy, 0.3 * S, 0.31 * S, 0.78, 140, 0.05)
   cel(ctx, skull, BONE, {
     // The cap overhangs, so the skull is in its shadow from above — the
@@ -354,8 +411,10 @@ const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
 
   // Sockets: hollow, with a spore-light burning deep inside. The ramp is the
   // cast's shared one — only the hue says "fungus" rather than "soul".
-  socket(ctx, hx - 0.115 * S, hy + 0.02 * S, 0.098 * S, SPORE_LIGHT, 150, 0.38, blink(t, 1200))
-  socket(ctx, hx + 0.12 * S, hy + 0.02 * S, 0.085 * S, SPORE_LIGHT, 154, 0.38, blink(t, 1200))
+  // Dying, the light in them goes out.
+  const sl = D ? deathLid(D) : blink(t, 1200)
+  socket(ctx, hx - 0.115 * S, hy + 0.02 * S, 0.098 * S, SPORE_LIGHT, 150, 0.38, sl)
+  socket(ctx, hx + 0.12 * S, hy + 0.02 * S, 0.085 * S, SPORE_LIGHT, 154, 0.38, sl)
 
   // Nasal cavity — a small inverted heart, the classic skull read.
   fillShape(ctx, rough([
@@ -407,17 +466,20 @@ const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
   }
 
   // ── Drifting spores ──
+  // Dying, a last puff of them bursts from the cap with the blow and drifts
+  // off, and none come after.
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
   for (let i = 0; i < 9; i++) {
-    const ph = (t / 2600 + i * 0.37) % 1
-    const sx = hx + (noise2(i * 2.3, 1, 190) - 0.5) * 1.1 * S
+    const ph = D ? 0.2 + 0.8 * D.k : (t / 2600 + i * 0.37) % 1
+    const sx = hx + (noise2(i * 2.3, 1, 190) - 0.5) * (D ? 1.1 + 1.2 * D.k : 1.1) * S
     const sy = capY + 0.2 * S - ph * 0.9 * S
     const r = (0.012 + noise2(i, 3, 191) * 0.012) * S
-    ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.75
+    ctx.globalAlpha = D ? (1 - D.k) * 0.8 : Math.sin(ph * Math.PI) * 0.75
     ctx.fillStyle = '#c9ff6a'
     ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill()
   }
+  ctx.restore()
   ctx.restore()
 }
 
@@ -426,11 +488,18 @@ const drawBonecap = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
 const drawSnaggletusk = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
   // A four-beat walk: each foot lands a quarter-cycle after the last, so the
   // body dips four times per cycle rather than twice.
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   const g = gait(t, 1350)
-  const b = breathe(t, 1.4, 0.012) * S + bodyBob(g * 2, 0.012) * S
-  const huff = Math.max(0, Math.sin(t / 1100)) ** 3
+  const b = D ? 0 : breathe(t, 1.4, 0.012) * S + bodyBob(g * 2, 0.012) * S
+  // Dying: one last snort knocked out of it by the blow, then nothing.
+  const huff = D ? D.recoil : Math.max(0, Math.sin(t / 1100)) ** 3
 
-  groundShadow(ctx, S, 0.62, 1.0, 0.3)
+  if (D) deathShadow(ctx, S, D, 0.62, 0, 1.0, 0.3)
+  else groundShadow(ctx, S, 0.62, 1.0, 0.3)
+  ctx.save()
+  // Drawn head-left: it rears, pitches onto its knees and keels over on its flank.
+  if (D) fallOntoFlank(ctx, S, D, -1, 0.45, 0.33)
 
   const HIDE = tones('#8f6340', 1.05)
   const TUSK = tones('#f2e7cc', 0.95)
@@ -451,8 +520,15 @@ const drawSnaggletusk = (ctx: CanvasRenderingContext2D, S: number, t: number): v
     hipX: number, hipY: number, footX: number, phase: number,
     bend: number, w: number, tone: CelTones, sd: number, hw: number, bone = 0.2
   ): void => {
-    const st = footStep(g + phase, 0.16 * S, 0.055 * S)
-    const foot: Pt = [footX + st[0], 1.0 * S + st[1]]
+    // Dying: folding as the knees go, then thrown out stiff along the ground.
+    let foot: Pt
+    if (D) {
+      foot = deathFlankFoot(D, [hipX, hipY], [footX, 1.0 * S], 2 * bone * S, hipX < 0, -1,
+        tone === HIDE_FAR ? -0.22 : 0)
+    } else {
+      const st = footStep(g + phase, 0.16 * S, 0.055 * S)
+      foot = [footX + st[0], 1.0 * S + st[1]]
+    }
     limb(ctx, [hipX, hipY], foot, bone * S, bone * S, bend, tone, sd,
       { width: w, taper: 0.66, joint: 0.42 })
     const hoof = blob(foot[0], foot[1], hw, hw * 0.6, sd + 1, 0.12)
@@ -502,6 +578,13 @@ const drawSnaggletusk = (ctx: CanvasRenderingContext2D, S: number, t: number): v
 
   const hy = 0.22 * S + b * 1.2
   const hx = -0.44 * S
+  // Dying, the head is flung up with the rear and then dropped, snout to the
+  // road — about the neck, for the rest of the drawing.
+  if (D) {
+    ctx.translate(hx + 0.3 * S, hy - 0.06 * S)
+    ctx.rotate(0.18 * D.recoil - 0.3 * D.lifeless)
+    ctx.translate(-(hx + 0.3 * S), -(hy - 0.06 * S))
+  }
 
   // ── A torn ear, tucked behind the skull ──
   const ear = rough([
@@ -599,13 +682,14 @@ const drawSnaggletusk = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   ], 0.012 * S, 276)
   fillShape(ctx, browRidge, 'rgba(38,22,14,0.55)')
 
-  const bl = blink(t, 900)
+  const bl = D ? deathLid(D) : blink(t, 900)
   eye(ctx, hx - 0.11 * S, hy + 0.0 * S, 0.058 * S, {
     iris: '#ff6a2a', glow: '#ff8a3a', pupil: 0.5, lid: bl, brow: 0.8, seed: 280, sclera: '#f7e6cf'
   })
   eye(ctx, hx + 0.09 * S, hy - 0.04 * S, 0.048 * S, {
     iris: '#e05a22', glow: '#ff8a3a', pupil: 0.5, lid: Math.max(0.15, bl), brow: 0.62, seed: 284, sclera: '#d9c3aa'
   })
+  ctx.restore()
 }
 
 // ─── 4 · Wispling ───────────────────────────────────────────────────────────
@@ -752,16 +836,65 @@ const drawWispling = (ctx: CanvasRenderingContext2D, S: number, t: number): void
 // ─── 5 · Marrow Knight ──────────────────────────────────────────────────────
 
 const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   // Heavy and unhurried: a long cycle with a shallow bob. Rank is pace.
   const g = gait(t, 1700)
-  const b = breathe(t, 0.55, 0.006) * S + bodyBob(g, 0.022) * S
-  const sway = Math.sin(t / 2600) * 0.012 * S + weightShift(g + 0.5, 0.03) * S
+  const b = D ? deathLeg(D, 1, S).hipDrop : breathe(t, 0.55, 0.006) * S + bodyBob(g, 0.022) * S
+  const sway = D ? 0 : Math.sin(t / 2600) * 0.012 * S + weightShift(g + 0.5, 0.03) * S
 
-  groundShadow(ctx, S, 0.46, 1.04, 0.34)
+  if (D) deathShadow(ctx, S, D, 0.46, UPRIGHT_FALL, 1.04, 0.34)
+  else groundShadow(ctx, S, 0.46, 1.04, 0.34)
 
   const BONE = tones('#e6d9bd', 1.05)
   const IRON = tones('#525a66', 1.1)
   const CAPE = tones('#a3261f')
+
+  // ── Greatsword, planted point-down: the pose reads "waiting", not "charging" ──
+  const swx = sway + 0.44 * S
+  const sword = (): void => {
+    const blade = rough([
+      [swx - 0.052 * S, 0.08 * S], [swx + 0.052 * S, 0.08 * S],
+      [swx + 0.036 * S, 0.78 * S], [swx, 1.02 * S], [swx - 0.036 * S, 0.78 * S]
+    ], 0.007 * S, 440)
+    cel(ctx, blade, tones('#96a1ae', 1.15), {
+      shade: terminator(blade, 0, 0.0, 0.02, 441),
+      lit: terminator(blade, Math.PI, 0.62, 0.02, 442)
+    })
+    ink(ctx, blade, { width: 0.024 * S, color: INK, seed: 443, breakUp: 0.32 })
+    const guard = rough([
+      [swx - 0.16 * S, 0.0 * S], [swx + 0.16 * S, 0.0 * S],
+      [swx + 0.125 * S, 0.09 * S], [swx - 0.125 * S, 0.09 * S]
+    ], 0.007 * S, 444)
+    cel(ctx, guard, tones('#c09a45'), {
+      shade: terminator(guard, SHADOW_DIR, 0.06, 0.1, 444),
+      lit: terminator(guard, SHADOW_DIR + Math.PI, 0.62, 0.08, 445)
+    })
+    ink(ctx, guard, { width: 0.026 * S, color: INK, seed: 445 })
+    stroke(ctx, [[swx, -0.02 * S], [swx, -0.22 * S]], 0.05 * S, 0.044 * S, '#3a2a1c', 446)
+    const pommel = blob(swx, -0.25 * S, 0.045 * S, 0.042 * S, 447, 0.15)
+    cel(ctx, pommel, tones('#c09a45'), { shade: terminator(pommel, SHADOW_DIR, 0.05, 0.14, 447) })
+    ink(ctx, pommel, { width: 0.02 * S, color: INK, seed: 448 })
+  }
+  // Dying, the blow knocks the sword out of its hand: it tips over on its point
+  // the OTHER way from the body and lands flat on the ground beside it, with a
+  // clang-bounce of its own. Drawn first, and outside the body's fall, because
+  // it is no longer part of the body.
+  if (D) {
+    const drop = deathSpan(D.k, 0.06, 0.46)
+    const lie = drop * drop * (1 - 0.1 * Math.sin(Math.PI * deathSpan(D.k, 0.46, 0.62)))
+    // Over backwards as much as sideways — lying up the road behind where it
+    // stood, foreshortened — and its point skids out from under it as it goes.
+    ctx.save()
+    ctx.translate(swx + UPRIGHT_FALL * 0.14 * S * lie, 1.02 * S)
+    ctx.scale(1, 1 - 0.55 * lie)
+    ctx.rotate(-UPRIGHT_FALL * 0.8 * lie)
+    ctx.translate(-swx, -1.02 * S)
+    sword()
+    ctx.restore()
+  }
+  ctx.save()
+  if (D) fallOntoBack(ctx, S, D, UPRIGHT_FALL, 0.16)
 
   // ── Cape ──
   // Narrower at the shoulders than at the hem, and TORN — a rectangle of red
@@ -804,9 +937,9 @@ const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): 
   // fixed coordinates, so the armour travels with the leg instead of the leg
   // sliding through the armour.
   for (const [lx, ph, sd] of [[-0.15, 0.0, 410], [0.16, 0.5, 414]] as const) {
-    const st = footStep(g + ph, 0.13 * S, 0.085 * S)
+    const st = D ? deathLeg(D, lx < 0 ? -1 : 1, S).foot : footStep(g + ph, 0.13 * S, 0.085 * S)
     const foot: Pt = [lx * S * 0.72 + st[0], 0.99 * S + st[1]]
-    const knee = limb(ctx, [sway + lx * S, 0.46 * S + b + hipDrop(g + ph, 0.015) * S], foot,
+    const knee = limb(ctx, [sway + lx * S, 0.46 * S + b + (D ? 0 : hipDrop(g + ph, 0.015) * S)], foot,
       0.285 * S, 0.285 * S, lx < 0 ? 1 : -1, BONE, sd,
       { width: 0.072 * S, taper: 0.76, outline: 0.026 * S, joint: 0.62 })
     const gx = knee[0] * 0.42 + foot[0] * 0.58
@@ -914,42 +1047,24 @@ const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): 
   // Drawn AFTER the pauldrons: a forearm emerging from under a shoulder plate
   // reads as an arm, whereas one drawn behind it reads as a floating fist.
   const arm = (sx: number, hand: Pt, angle: number, grip: number, sd: number): void => {
+    const shoulder: Pt = [sway + sx * S, 0.08 * S + b]
+    // Dying, both arms are the death's: the hands empty, thrown out and dropped.
+    const A = D ? deathArm(D, sx < 0 ? -1 : 1, 0.36 * S) : null
+    const wrist: Pt = A ? [shoulder[0] + A.hand[0], shoulder[1] + A.hand[1]] : hand
     boneLimb(ctx,
-      [sway + sx * S, 0.08 * S + b],
-      [sway + sx * S * 1.18, 0.26 * S + b],
-      hand,
+      shoulder,
+      A ? [shoulder[0] + A.elbow[0], shoulder[1] + A.elbow[1]] : [sway + sx * S * 1.18, 0.26 * S + b],
+      wrist,
       0.046 * S, BONE, sd)
-    boneHand(ctx, hand[0], hand[1], 0.16 * S, angle, BONE, sd + 6, grip)
+    boneHand(ctx, wrist[0], wrist[1], 0.16 * S, A ? deathHandAngle(A) : angle, BONE, sd + 6,
+      A ? 0.2 * (1 - A.open) : grip)
   }
   // Off hand open and relaxed; sword hand closed. Armour stops at the wrist —
   // bare bone at the extremities is what keeps this a skeleton in plate rather
   // than a suit of armour with lights in it.
   arm(-0.3, [sway - 0.34 * S, 0.42 * S + b], 1.45, 0.12, 460)
 
-  // ── Greatsword, planted point-down: the pose reads "waiting", not "charging" ──
-  const swx = sway + 0.44 * S
-  const blade = rough([
-    [swx - 0.052 * S, 0.08 * S], [swx + 0.052 * S, 0.08 * S],
-    [swx + 0.036 * S, 0.78 * S], [swx, 1.02 * S], [swx - 0.036 * S, 0.78 * S]
-  ], 0.007 * S, 440)
-  cel(ctx, blade, tones('#96a1ae', 1.15), {
-    shade: terminator(blade, 0, 0.0, 0.02, 441),
-    lit: terminator(blade, Math.PI, 0.62, 0.02, 442)
-  })
-  ink(ctx, blade, { width: 0.024 * S, color: INK, seed: 443, breakUp: 0.32 })
-  const guard = rough([
-    [swx - 0.16 * S, 0.0 * S], [swx + 0.16 * S, 0.0 * S],
-    [swx + 0.125 * S, 0.09 * S], [swx - 0.125 * S, 0.09 * S]
-  ], 0.007 * S, 444)
-  cel(ctx, guard, tones('#c09a45'), {
-    shade: terminator(guard, SHADOW_DIR, 0.06, 0.1, 444),
-    lit: terminator(guard, SHADOW_DIR + Math.PI, 0.62, 0.08, 445)
-  })
-  ink(ctx, guard, { width: 0.026 * S, color: INK, seed: 445 })
-  stroke(ctx, [[swx, -0.02 * S], [swx, -0.22 * S]], 0.05 * S, 0.044 * S, '#3a2a1c', 446)
-  const pommel = blob(swx, -0.25 * S, 0.045 * S, 0.042 * S, 447, 0.15)
-  cel(ctx, pommel, tones('#c09a45'), { shade: terminator(pommel, SHADOW_DIR, 0.05, 0.14, 447) })
-  ink(ctx, pommel, { width: 0.02 * S, color: INK, seed: 448 })
+  if (!D) sword()
 
   // Sword hand last, closing over the grip.
   arm(0.32, [swx - 0.01 * S, -0.09 * S], -1.62, 0.92, 464)
@@ -958,8 +1073,13 @@ const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): 
   // The helm is a BAND, not a hood. Covering the cranium while leaving the face
   // bare is what keeps this a skeleton wearing armour rather than an anonymous
   // silhouette with two lights in it.
-  const hy = -0.34 * S + b * 1.4
+  const hy = -0.34 * S + b * (D ? 1 : 1.4)
   const hx = sway
+  if (D) {
+    ctx.translate(hx, hy + 0.3 * S)
+    ctx.rotate(deathLoll(D))
+    ctx.translate(-hx, -(hy + 0.3 * S))
+  }
   const skull = egg(hx, hy, 0.215 * S, 0.235 * S, 0.82, 450, 0.05)
   cel(ctx, skull, BONE, {
     shade: terminator(skull, SHADOW_DIR, 0.16, 0.13, 451),
@@ -1013,11 +1133,15 @@ const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): 
   horn(ctx, hx + 0.22 * S, hy - 0.17 * S, 0.19 * S, 0.048 * S, -0.6, 0.55, tones('#8b96a4', 1.1), 484)
 
   // ── Socket flames: the cast's shared socket, with a lick rising out of it ──
+  // Dying, the flames gutter out.
+  const out = D ? deathLid(D) : 0
   for (const [ex, er, sd] of [[-0.098, 0.05, 490], [0.1, 0.045, 494]] as const) {
     const sy2 = hy - 0.06 * S
-    socket(ctx, hx + ex * S, sy2, er * S, SOUL_LIGHT, sd, 0.34)
+    socket(ctx, hx + ex * S, sy2, er * S, SOUL_LIGHT, sd, 0.34, out)
+    if (out >= 0.98) continue
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 1 - out
     const fl = 0.5 + Math.sin(t / 180 + sd) * 0.5
     fillShape(ctx, [
       [hx + ex * S - 0.018 * S, sy2],
@@ -1026,6 +1150,7 @@ const drawMarrowKnight = (ctx: CanvasRenderingContext2D, S: number, t: number): 
     ], 'rgba(190,244,255,0.9)')
     ctx.restore()
   }
+  ctx.restore()
 }
 
 
@@ -1164,10 +1289,18 @@ const drawNibbler = (ctx: CanvasRenderingContext2D, S: number, t: number): void 
 const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
   // A trot, not a walk: diagonal pairs land together, so the cycle has two
   // beats instead of four. It is the gait of something covering ground.
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   const g = gait(t, 620)
-  const b = breathe(t, 1.7, 0.008) * S + bodyBob(g, 0.016) * S
+  const b = D ? 0 : breathe(t, 1.7, 0.008) * S + bodyBob(g, 0.016) * S
+  // Dying, its fire goes out: the licks sink to embers as the light goes.
+  const ember = D ? 1 - 0.85 * D.lifeless : 1
 
-  groundShadow(ctx, S, 0.5, 1.02, 0.3)
+  if (D) deathShadow(ctx, S, D, 0.5, 0, 1.02, 0.3)
+  else groundShadow(ctx, S, 0.5, 1.02, 0.3)
+  ctx.save()
+  // Drawn head-left: it rears, pitches onto its knees and keels over on its flank.
+  if (D) fallOntoFlank(ctx, S, D, -1, 0.26, 0.46)
 
   // Charcoal, not brown: it must not be mistaken for Snaggletusk at a glance.
   const HIDE = tones('#4a4048', 1.15)
@@ -1184,7 +1317,7 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
    * are the same height.
    */
   const flame = (x: number, y: number, h: number, w: number, phase: number): void => {
-    const f = 0.62 + Math.sin(t / 140 + phase) * 0.38
+    const f = (0.62 + Math.sin(t / 140 + phase) * 0.38) * ember
     const lean = Math.sin(t / 380 + phase) * 0.35
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
@@ -1215,8 +1348,14 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
     hip: Pt, footX: number, phase: number, bend: number,
     w: number, tone: CelTones, sd: number
   ): void => {
-    const st = footStep(g + phase, 0.17 * S, 0.09 * S)
-    const foot: Pt = [footX + st[0], 1.0 * S + st[1]]
+    // Dying: folding as the knees go, then thrown out stiff along the ground.
+    let foot: Pt
+    if (D) {
+      foot = deathFlankFoot(D, hip, [footX, 1.0 * S], 0.73 * S, hip[0] < 0, -1, tone === DARK ? -0.24 : 0)
+    } else {
+      const st = footStep(g + phase, 0.17 * S, 0.09 * S)
+      foot = [footX + st[0], 1.0 * S + st[1]]
+    }
     limb(ctx, hip, foot, 0.365 * S, 0.365 * S, bend, tone, sd,
       { width: w * S, taper: 0.62, joint: 0.42 })
     const paw = blob(foot[0], foot[1], w * 0.72 * S, w * 0.42 * S, sd + 20, 0.14)
@@ -1256,6 +1395,7 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   // ── Cracks: molten seams that follow the form, with the glow bleeding out ──
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = 0.25 + 0.75 * ember
   for (const [cx, cy, dx, dy, sd] of [
     [0.3, 0.14, 0.06, 0.14, 730], [0.06, 0.28, 0.07, 0.07, 732]
   ] as const) {
@@ -1273,11 +1413,13 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   ctx.restore()
 
   // ── Tail: a thin whip that ends in fire ──
-  const wag = Math.sin(t / 620) * 0.07 * S
-  stroke(ctx, [
-    [0.5 * S, 0.12 * S + b], [0.68 * S, -0.06 * S + wag], [0.74 * S, -0.32 * S + wag * 1.6]
-  ], 0.05 * S, 0.012 * S, HIDE.shade, 740)
-  flame(0.74 * S, -0.3 * S + wag * 1.6, 0.3, 0.04, 1.8)
+  // Dying, it lashes up with the blow and then drops limp along the ground.
+  const wag = D ? -0.1 * D.recoil * S : Math.sin(t / 620) * 0.07 * S
+  const limp = D ? D.lifeless : 0
+  const tailMid: Pt = [(0.68 + 0.08 * limp) * S, (-0.06 + 0.26 * limp) * S + wag]
+  const tailTip: Pt = [(0.74 + 0.22 * limp) * S, (-0.32 + 0.62 * limp) * S + wag * 1.6]
+  stroke(ctx, [[0.5 * S, 0.12 * S + b], tailMid, tailTip], 0.05 * S, 0.012 * S, HIDE.shade, 740)
+  flame(tailTip[0], tailTip[1] + 0.02 * S, 0.3, 0.04, 1.8)
 
   // ── Neck: a wedge running DOWN and forward off a high shoulder. Carrying the
   // head below the withers is the whole difference between a dog standing and
@@ -1295,6 +1437,17 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   // ── Near legs, over the body ──
   leg([-0.26 * S, 0.3 * S + b], -0.32 * S, 0.0, -1, 0.125, HIDE, 750)
   leg([0.34 * S, 0.28 * S + b], 0.36 * S, 0.5, 1, 0.13, HIDE, 756)
+
+  // Dying, the head is flung up with the rear and then dropped, muzzle to the
+  // road — turned about the top of the neck, for the head's own parts.
+  const headTurn = D ? 0.2 * D.recoil - 0.32 * D.lifeless : 0
+  const nape: Pt = [hx + 0.2 * S, hy]
+  ctx.save()
+  if (headTurn !== 0) {
+    ctx.translate(nape[0], nape[1])
+    ctx.rotate(headTurn)
+    ctx.translate(-nape[0], -nape[1])
+  }
 
   // ── Head: a long narrow wedge with the muzzle clearly its own form ──
   const skull = rough([
@@ -1344,13 +1497,14 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
     paint(ctx, S, ear, DARK, sd + 1, { line: LINE.fine, deep: false })
   }
 
-  const bl = blink(t, 400)
+  const bl = D ? deathLid(D) : blink(t, 400)
   eye(ctx, hx - 0.05 * S, hy - 0.02 * S, 0.048 * S, {
     iris: '#ffb020', glow: '#ff8c18', pupil: 0.32, lid: bl, brow: 0.9, seed: 780, sclera: '#f6d8a8'
   })
   eye(ctx, hx + 0.11 * S, hy - 0.06 * S, 0.04 * S, {
     iris: '#ffb020', glow: '#ff8c18', pupil: 0.32, lid: bl, brow: 0.75, seed: 784, sclera: '#dcbe96'
   })
+  ctx.restore()
 
   // ── Mane: a dense run of overlapping licks along the neck's top edge, which
   // is a DIAGONAL. Anchoring fire to the true topline is what makes it look
@@ -1363,7 +1517,12 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   // The ranges matter as much as the anchoring: `torso` is authored top-edge
   // first, so its spine runs u 0…0.33 — sampling 0.6…0.86 walked the BELLY,
   // which is how the licks ended up in the middle of the animal.
-  const mane = contourPoints(skull, 0.03, 0.3, 3)
+  // The skull's own licks turn with the head (drawn above, under its turn).
+  const turned = contourPoints(skull, 0.03, 0.3, 3).map(({ p, n }) => headTurn === 0 ? { p, n } : {
+    p: pivot([[p[0] - nape[0], p[1] - nape[1]]], nape[0], nape[1], headTurn)[0]!,
+    n: pivot([n], 0, 0, headTurn)[0]!
+  })
+  const mane = turned
     .concat(contourPoints(neck, 0.82, 0.99, 2))
     .concat(contourPoints(torso, 0.0, 0.33, 10))
   mane.forEach(({ p, n }, i) => {
@@ -1381,7 +1540,9 @@ const drawCinderhound = (ctx: CanvasRenderingContext2D, S: number, t: number): v
   // sells that faster than the edge it catches.
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = ember
   occlude(ctx, torso, 0.05, 0.2, 0.014 * S, 'rgba(255,150,60,0.22)', 795)
+  ctx.restore()
   ctx.restore()
 }
 
@@ -1501,9 +1662,14 @@ const drawBlorp = (ctx: CanvasRenderingContext2D, S: number, t: number): void =>
 const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
   // Very slow, and it leans into each step. A tree that walks should look like
   // it is deciding to.
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   const g = gait(t, 3200)
-  const b = bodyBob(g, 0.019) * S
-  const creak = Math.sin(t / 2400) * 0.018 * S + weightShift(g + 0.5, 0.05) * S
+  const b = D ? deathLeg(D, 1, S).hipDrop : bodyBob(g, 0.019) * S
+  const creak = D ? 0 : Math.sin(t / 2400) * 0.018 * S + weightShift(g + 0.5, 0.05) * S
+  // Dying, the canopy thrashes when it hits the ground. (Not thrown up by the
+  // blow as well: the crown already fills the top of its frame.)
+  const whip = D ? -0.1 * D.bounce * S : 0
 
   const BARK = tones('#6d4f37', 1.05)
   const BARK_D = tones('#4a3423', 1.05)
@@ -1512,7 +1678,13 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   const MOSS = tones('#6f8f3c', 0.9)
   const BERRY = tones('#b83a44')
 
-  groundShadow(ctx, S, 0.52, 1.03, 0.3)
+  // The middle of a tree is high — its crown is most of it — and it lies a
+  // little further up the road than the rest, because its boughs reach so far.
+  const lying = 0.8
+  if (D) deathShadow(ctx, S, D, 0.52, UPRIGHT_FALL, 1.03, 0.3, lying)
+  else groundShadow(ctx, S, 0.52, 1.03, 0.3)
+  ctx.save()
+  if (D) fallOntoBack(ctx, S, D, UPRIGHT_FALL, -0.08, lying)
 
   // ── Vocabulary ──
 
@@ -1590,9 +1762,9 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
 
   // Two of the roots take the weight and walk.
   for (const [rx, ph, sd] of [[-0.28, 0.0, 912], [0.26, 0.5, 918]] as const) {
-    const st = footStep(g + ph, 0.13 * S, 0.075 * S)
+    const st = D ? deathLeg(D, rx < 0 ? -1 : 1, S).foot : footStep(g + ph, 0.13 * S, 0.075 * S)
     const foot: Pt = [rx * S * 0.95 + st[0], 1.0 * S + st[1]]
-    limb(ctx, [rx * S * 0.4, 0.54 * S + b + hipDrop(g + ph, 0.016) * S], foot,
+    limb(ctx, [rx * S * 0.4, 0.54 * S + b + (D ? 0 : hipDrop(g + ph, 0.016) * S)], foot,
       0.255 * S, 0.255 * S, rx < 0 ? 1 : -1,
       BARK, sd, { width: 0.115 * S, taper: 0.55, joint: 0.52 })
     clawFoot(ctx, foot[0], foot[1] + 0.02 * S, 0.16 * S, rx < 0 ? Math.PI : 0,
@@ -1677,7 +1849,28 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
     lag: number
   }
 
-  const branch = (joints: Pt[], w: number, tone: CelTones, sd: number, twigs: Twig[]): void => {
+  /**
+   * A branch that is an ARM, while dying: turned about its root so it points
+   * where `deathArm` puts an arm — flung up, windmilling, spread on the ground.
+   * The wood is rigid, so the whole branch turns and its twigs with it.
+   */
+  const dyingArm = (joints: Pt[], side: -1 | 1): { joints: Pt[]; turn: number } => {
+    if (!D) return { joints, turn: 0 }
+    const root = joints[0]!
+    const tip = joints[joints.length - 1]!
+    const A = deathArm(D, side, 1)
+    const d = Math.atan2(A.hand[1], A.hand[0]) - Math.atan2(tip[1] - root[1], tip[0] - root[0])
+    // The short way round: each branch only ever swings through its own side.
+    const turn = Math.atan2(Math.sin(d), Math.cos(d))
+    return {
+      joints: pivot(joints.map(([x, y]) => [x - root[0], y - root[1]] as Pt), root[0], root[1], turn),
+      turn
+    }
+  }
+
+  const branch = (
+    joints: Pt[], w: number, tone: CelTones, sd: number, twigs: Twig[], turn = 0
+  ): void => {
     wood(joints, w, w * 0.22, tone, sd)
     const last = joints[joints.length - 1]!
     twigs.forEach((tw, i) => {
@@ -1687,15 +1880,16 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
       // backdrop rather than as part of the creature.
       const k = tw.len / S
       const amp = 0.05 + k * 0.22
-      const sx = swing(g - tw.lag, amp) * S
-      const sy = bodyBob(g - tw.lag, amp * 0.7) * S * 1.4
+      const sx = D ? 0 : swing(g - tw.lag, amp) * S
+      const sy = D ? -whip * (1 + k * 2) : bodyBob(g - tw.lag, amp * 0.7) * S * 1.4
+      const a = tw.a + turn
       const end: Pt = [
-        last[0] + Math.cos(tw.a + 0.16) * tw.len + sx,
-        last[1] + Math.sin(tw.a + 0.16) * tw.len + sy
+        last[0] + Math.cos(a + 0.16) * tw.len + sx,
+        last[1] + Math.sin(a + 0.16) * tw.len + sy
       ]
       const mid: Pt = [
-        last[0] + Math.cos(tw.a) * tw.len * 0.52 + sx * 0.35,
-        last[1] + Math.sin(tw.a) * tw.len * 0.52 + sy * 0.35
+        last[0] + Math.cos(a) * tw.len * 0.52 + sx * 0.35,
+        last[1] + Math.sin(a) * tw.len * 0.52 + sy * 0.35
       ]
       // The twig is drawn to the cluster's own centre, so the two can never
       // drift apart no matter how hard the canopy is swinging.
@@ -1705,25 +1899,27 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   }
 
   // High left arm, raised.
-  branch([
+  const armL = dyingArm([
     [trunkX(0.7) - 0.1 * S, trunkY(0.7)],
     [-0.42 * S + creak, -0.5 * S + b],
     [-0.62 * S + creak, -0.78 * S + b]
-  ], 0.115 * S, BARK, 940, [
+  ], -1)
+  branch(armL.joints, 0.115 * S, BARK, 940, [
     { a: -1.9, len: 0.26 * S, r: 0.18 * S, lag: 0.1 },
     { a: -1.15, len: 0.2 * S, r: 0.13 * S, lag: 0.17 },
     { a: -2.7, len: 0.22 * S, r: 0.14 * S, lag: 0.13 }
-  ])
+  ], armL.turn)
 
   // Low right arm, reaching out.
-  branch([
+  const armR = dyingArm([
     [trunkX(0.48) + 0.1 * S, trunkY(0.48)],
     [0.42 * S + creak * 0.6, -0.04 * S + b],
     [0.66 * S + creak * 0.6, -0.14 * S + b]
-  ], 0.1 * S, BARK_D, 950, [
+  ], 1)
+  branch(armR.joints, 0.1 * S, BARK_D, 950, [
     { a: -0.85, len: 0.24 * S, r: 0.16 * S, lag: 0.12 },
     { a: 0.3, len: 0.18 * S, r: 0.11 * S, lag: 0.2 }
-  ])
+  ], armR.turn)
 
   // Crown, straight up out of the top.
   branch([
@@ -1735,10 +1931,20 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
     { a: -2.35, len: 0.16 * S, r: 0.11 * S, lag: 0.15 }
   ])
 
-  thorn(-0.34 * S + creak, -0.44 * S + b, -2.3, 0.13 * S, 970)
-  thorn(-0.56 * S + creak, -0.7 * S + b, -2.0, 0.1 * S, 971)
-  thorn(0.36 * S + creak * 0.6, -0.02 * S + b, -1.2, 0.11 * S, 972)
-  thorn(0.6 * S + creak * 0.6, -0.14 * S + b, -1.5, 0.09 * S, 973)
+  // The thorns ride their branches.
+  const onArm = (arm: { joints: Pt[]; turn: number }, p: Pt): Pt => {
+    const root = arm.joints[0]!
+    return arm.turn === 0 ? p : pivot([[p[0] - root[0], p[1] - root[1]]], root[0], root[1], arm.turn)[0]!
+  }
+  for (const [arm, x, y, a, len, sd] of [
+    [armL, -0.34 * S + creak, -0.44 * S + b, -2.3, 0.13, 970],
+    [armL, -0.56 * S + creak, -0.7 * S + b, -2.0, 0.1, 971],
+    [armR, 0.36 * S + creak * 0.6, -0.02 * S + b, -1.2, 0.11, 972],
+    [armR, 0.6 * S + creak * 0.6, -0.14 * S + b, -1.5, 0.09, 973]
+  ] as const) {
+    const p = onArm(arm, [x, y])
+    thorn(p[0], p[1], a + arm.turn, len * S, sd)
+  }
 
   // ── Face: a knot hollow under a heavy bark brow ──
   const fy = -0.34 * S + b
@@ -1774,7 +1980,7 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   occlude(ctx, knot, 0.02, 0.4, 0.026 * S, 'rgba(186,148,96,0.75)', 982)
   ink(ctx, knot, { width: LINE.fine * S, color: 'rgba(22,12,6,0.85)', seed: 983, breakUp: 0.3 })
 
-  const bl = blink(t, 2600)
+  const bl = D ? deathLid(D) : blink(t, 2600)
   eye(ctx, fx - 0.075 * S, fy - 0.01 * S, 0.055 * S, {
     iris: '#ffb43a', glow: '#ff9a2a', pupil: 0.38, lid: bl, seed: 984, sclera: 'none'
   })
@@ -1797,16 +2003,18 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
   }
 
   // ── Drifting pollen ──
+  // Dying, shaken out of the canopy in one last cloud that thins away.
   ctx.save()
   ctx.globalCompositeOperation = 'lighter'
   for (let i = 0; i < 8; i++) {
-    const ph = (t / 3400 + i * 0.29) % 1
-    const px = (noise2(i * 2.7, 2, 992) - 0.5) * 1.7 * S
+    const ph = D ? 0.25 + 0.6 * D.k : (t / 3400 + i * 0.29) % 1
+    const px = (noise2(i * 2.7, 2, 992) - 0.5) * (D ? 1.7 + 1.1 * D.k : 1.7) * S
     const py = 0.5 * S - ph * 1.4 * S
-    ctx.globalAlpha = Math.sin(ph * Math.PI) * 0.5
+    ctx.globalAlpha = D ? (1 - D.k) * 0.6 : Math.sin(ph * Math.PI) * 0.5
     ctx.fillStyle = '#e8d47a'
     ctx.beginPath(); ctx.arc(px, py, (0.008 + noise2(i, 5, 993) * 0.01) * S, 0, Math.PI * 2); ctx.fill()
   }
+  ctx.restore()
   ctx.restore()
 }
 
@@ -1815,23 +2023,60 @@ const drawThornwick = (ctx: CanvasRenderingContext2D, S: number, t: number): voi
 const drawRattlejack = (ctx: CanvasRenderingContext2D, S: number, t: number): void => {
   // Light bones, short legs, no dignity: the quickest cycle in the cast, with
   // the biggest bob relative to its height.
+  const dk = dyingAt()
+  const D: DeathBeats | null = dk === null ? null : deathBeats(dk)
   const g = gait(t, 760)
-  const b = breathe(t, 1.5, 0.008) * S + bodyBob(g, 0.024) * S
-  const jig = weightShift(g + 0.5, 0.03) * S
-  // The skull is on a loose neck and swings a beat behind everything else.
-  const skullLag = (bodyBob(g - 0.13, 0.024) - bodyBob(g, 0.024)) * S * 2.4
+  const b = D ? deathLeg(D, 1, S).hipDrop : breathe(t, 1.5, 0.008) * S + bodyBob(g, 0.024) * S
+  const jig = D ? 0 : weightShift(g + 0.5, 0.03) * S
+  // The skull is on a loose neck and swings a beat behind everything else —
+  // dying, snapped back by the blow and rattled on the bounce.
+  const skullLag = D
+    ? (0.05 * D.bounce - 0.06 * D.recoil) * S
+    : (bodyBob(g - 0.13, 0.024) - bodyBob(g, 0.024)) * S * 2.4
 
-  groundShadow(ctx, S, 0.38, 1.02, 0.3)
+  if (D) deathShadow(ctx, S, D, 0.38, UPRIGHT_FALL, 1.02, 0.3)
+  else groundShadow(ctx, S, 0.38, 1.02, 0.3)
 
   const BONE = tones('#e3d6bb', 1.05)
   const IRON = tones('#5c6472', 1.1)
   const WOOD = tones('#8a5f36')
 
+  // The shortsword, from its grip: blade up.
+  const shortsword = (gx: number, gy: number): void => {
+    const sword = rough([
+      [gx - 0.035 * S, gy - 0.06 * S], [gx + 0.035 * S, gy - 0.06 * S],
+      [gx + 0.028 * S, gy - 0.5 * S], [gx, gy - 0.62 * S], [gx - 0.03 * S, gy - 0.5 * S]
+    ], 0.006 * S, 1064)
+    paint(ctx, S, sword, tones('#9aa5b2', 1.1), 1065, { line: LINE.fine, amp: 0.03, breakUp: 0.3 })
+    const cross = rough([
+      [gx - 0.1 * S, gy - 0.08 * S], [gx + 0.1 * S, gy - 0.08 * S],
+      [gx + 0.08 * S, gy - 0.02 * S], [gx - 0.08 * S, gy - 0.02 * S]
+    ], 0.005 * S, 1068)
+    paint(ctx, S, cross, IRON, 1069, { line: LINE.hair, deep: false })
+    stroke(ctx, [[gx, gy - 0.02 * S], [gx, gy + 0.1 * S]], 0.032 * S, 0.028 * S, '#3d2a1a', 1070)
+  }
+  // Dying, it flies out of the hand at the blow, turns over once in the air and
+  // lands flat on the ground on the far side from the body.
+  if (D) {
+    const u = deathSpan(D.k, 0.02, 0.4)
+    const land = deathSpan(D.k, 0.4, 0.56)
+    const x = (0.47 + 0.03 * u) * S
+    const y = (-0.28 + 1.12 * u) * S - Math.sin(Math.PI * u) * 0.34 * S - Math.sin(Math.PI * land) * 0.05 * S
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.scale(1, 1 - 0.45 * u * u)
+    ctx.rotate((1.72 + Math.PI * 2) * u)
+    shortsword(0, 0)
+    ctx.restore()
+  }
+  ctx.save()
+  if (D) fallOntoBack(ctx, S, D, UPRIGHT_FALL, 0.2)
+
   // ── Legs ──
   for (const [lx, ph, sd] of [[-0.14, 0.0, 1000], [0.15, 0.5, 1006]] as const) {
-    const st = footStep(g + ph, 0.14 * S, 0.11 * S)
+    const st = D ? deathLeg(D, lx < 0 ? -1 : 1, S).foot : footStep(g + ph, 0.14 * S, 0.11 * S)
     const foot: Pt = [lx * S * 0.72 + st[0], 0.98 * S + st[1]]
-    limb(ctx, [lx * S + jig * 0.4, 0.48 * S + b + hipDrop(g + ph, 0.016) * S], foot,
+    limb(ctx, [lx * S + jig * 0.4, 0.48 * S + b + (D ? 0 : hipDrop(g + ph, 0.016) * S)], foot,
       0.272 * S, 0.272 * S, lx < 0 ? 1 : -1, BONE, sd,
       { width: 0.04 * S, taper: 0.85, outline: 0.016 * S, joint: 0.72 })
     const sole = rough([
@@ -1872,52 +2117,66 @@ const drawRattlejack = (ctx: CanvasRenderingContext2D, S: number, t: number): vo
   stroke(ctx, [[jig, -0.02 * S + b], [jig * 0.8, 0.4 * S + b]], 0.05 * S, 0.038 * S, BONE.shade, 1030)
 
   // ── Left arm: a pot-lid shield strapped to it ──
-  const armSw = swing(g + 0.7, 0.05) * S
+  const armSw = D ? 0 : swing(g + 0.7, 0.05) * S
+  const lShoulder: Pt = [-0.17 * S + jig, 0.02 * S + b]
+  const LA = D ? deathArm(D, -1, 0.4 * S) : null
+  const lWrist: Pt = LA
+    ? [lShoulder[0] + LA.hand[0], lShoulder[1] + LA.hand[1]]
+    : [-0.4 * S + armSw, 0.36 * S + b]
   boneLimb(ctx,
-    [-0.17 * S + jig, 0.02 * S + b],
-    [-0.34 * S + armSw, 0.16 * S + b],
-    [-0.4 * S + armSw, 0.36 * S + b],
+    lShoulder,
+    LA ? [lShoulder[0] + LA.elbow[0], lShoulder[1] + LA.elbow[1]] : [-0.34 * S + armSw, 0.16 * S + b],
+    lWrist,
     0.036 * S, BONE, 1040)
-  const shield = blob(-0.48 * S + armSw, 0.34 * S + b, 0.23 * S, 0.25 * S, 1044, 0.06)
+  // Strapped to the forearm, so it goes where the wrist goes.
+  const cx = lWrist[0] - 0.08 * S
+  const cy = lWrist[1] - 0.02 * S
+  const shield = blob(cx, cy, 0.23 * S, 0.25 * S, 1044, 0.06)
   paint(ctx, S, shield, WOOD, 1045, { line: LINE.mid, breakUp: 0.24 })
   for (let i = 0; i < 3; i++) {
     stroke(ctx, [
-      [-0.68 * S + armSw, (0.2 + i * 0.11) * S + b], [-0.28 * S + armSw, (0.18 + i * 0.11) * S + b]
+      [cx - 0.2 * S, cy + (i * 0.11 - 0.14) * S], [cx + 0.2 * S, cy + (i * 0.11 - 0.16) * S]
     ], 0.008 * S, 0.014 * S, 'rgba(48,28,12,0.45)', 1046 + i)
   }
-  const boss = blob(-0.48 * S + armSw, 0.33 * S + b, 0.07 * S, 0.072 * S, 1050, 0.12)
+  const boss = blob(cx, cy - 0.01 * S, 0.07 * S, 0.072 * S, 1050, 0.12)
   paint(ctx, S, boss, IRON, 1051, { line: LINE.fine })
   // A bite taken out of the rim, so it reads as scavenged.
   ctx.save()
   ctx.globalCompositeOperation = 'destination-out'
-  fillShape(ctx, blob(-0.6 * S + armSw, 0.16 * S + b, 0.06 * S, 0.055 * S, 1052, 0.24), '#000')
+  fillShape(ctx, blob(cx - 0.12 * S, cy - 0.18 * S, 0.06 * S, 0.055 * S, 1052, 0.24), '#000')
   ctx.restore()
-  boneHand(ctx, -0.4 * S + armSw, 0.36 * S + b, 0.13 * S, 1.5, BONE, 1054, 0.75)
+  boneHand(ctx, lWrist[0], lWrist[1], 0.13 * S, LA ? deathHandAngle(LA) : 1.5, BONE, 1054,
+    LA ? 0.75 * (1 - LA.open) : 0.75)
 
   // ── Right arm: shortsword up ──
-  const swSw = swing(g + 0.2, 0.04) * S
-  boneLimb(ctx,
-    [0.17 * S + jig, 0.0 * S + b],
-    [0.38 * S + swSw, -0.06 * S + b],
-    [0.46 * S + swSw, -0.24 * S + b],
-    0.036 * S, BONE, 1060)
-  const grip: Pt = [0.47 * S + swSw, -0.28 * S + b]
-  const sword = rough([
-    [grip[0] - 0.035 * S, -0.34 * S + b], [grip[0] + 0.035 * S, -0.34 * S + b],
-    [grip[0] + 0.028 * S, -0.78 * S + b], [grip[0], -0.9 * S + b], [grip[0] - 0.03 * S, -0.78 * S + b]
-  ], 0.006 * S, 1064)
-  paint(ctx, S, sword, tones('#9aa5b2', 1.1), 1065, { line: LINE.fine, amp: 0.03, breakUp: 0.3 })
-  const cross = rough([
-    [grip[0] - 0.1 * S, -0.36 * S + b], [grip[0] + 0.1 * S, -0.36 * S + b],
-    [grip[0] + 0.08 * S, -0.3 * S + b], [grip[0] - 0.08 * S, -0.3 * S + b]
-  ], 0.005 * S, 1068)
-  paint(ctx, S, cross, IRON, 1069, { line: LINE.hair, deep: false })
-  stroke(ctx, [[grip[0], -0.3 * S + b], [grip[0], -0.18 * S + b]], 0.032 * S, 0.028 * S, '#3d2a1a', 1070)
-  boneHand(ctx, grip[0], grip[1], 0.12 * S, -1.9, BONE, 1072, 0.85)
+  const swSw = D ? 0 : swing(g + 0.2, 0.04) * S
+  const rShoulder: Pt = [0.17 * S + jig, 0.0 * S + b]
+  const RA = D ? deathArm(D, 1, 0.42 * S) : null
+  if (RA) {
+    // Empty: the sword went with the blow (drawn above, on its own).
+    const wrist: Pt = [rShoulder[0] + RA.hand[0], rShoulder[1] + RA.hand[1]]
+    boneLimb(ctx, rShoulder, [rShoulder[0] + RA.elbow[0], rShoulder[1] + RA.elbow[1]], wrist,
+      0.036 * S, BONE, 1060)
+    boneHand(ctx, wrist[0], wrist[1], 0.12 * S, deathHandAngle(RA), BONE, 1072, 0.2 * (1 - RA.open))
+  } else {
+    boneLimb(ctx,
+      rShoulder,
+      [0.38 * S + swSw, -0.06 * S + b],
+      [0.46 * S + swSw, -0.24 * S + b],
+      0.036 * S, BONE, 1060)
+    const grip: Pt = [0.47 * S + swSw, -0.28 * S + b]
+    shortsword(grip[0], grip[1])
+    boneHand(ctx, grip[0], grip[1], 0.12 * S, -1.9, BONE, 1072, 0.85)
+  }
 
   // ── Skull, cocked to one side ──
   const hy = -0.28 * S + b * 0.7 + skullLag
   const hx = jig * 0.6 - skullLag * 0.4
+  if (D) {
+    ctx.translate(hx, hy + 0.26 * S)
+    ctx.rotate(deathLoll(D))
+    ctx.translate(-hx, -(hy + 0.26 * S))
+  }
   const skull = egg(hx, hy, 0.19 * S, 0.2 * S, 0.82, 1080, 0.05)
   paint(ctx, S, skull, BONE, 1081, { line: LINE.mid, breakUp: 0.3 })
   stroke(ctx, [[hx - 0.16 * S, hy + 0.02 * S], [hx - 0.08 * S, hy + 0.06 * S]], 0.005 * S, 0.017 * S, 'rgba(110,94,70,0.7)', 1082)
@@ -1937,8 +2196,9 @@ const drawRattlejack = (ctx: CanvasRenderingContext2D, S: number, t: number): vo
     stroke(ctx, [[tx, hy + 0.13 * S], [tx, hy + 0.23 * S]], 0.011 * S, 0.009 * S, 'rgba(110,94,70,0.65)', 1088 + i)
   }
 
-  socket(ctx, hx - 0.075 * S, hy - 0.03 * S, 0.045 * S, SOUL_LIGHT, 1094, 0.36, blink(t, 2100))
-  socket(ctx, hx + 0.08 * S, hy - 0.04 * S, 0.04 * S, SOUL_LIGHT, 1098, 0.36, blink(t, 2100))
+  const sl = D ? deathLid(D) : blink(t, 2100)
+  socket(ctx, hx - 0.075 * S, hy - 0.03 * S, 0.045 * S, SOUL_LIGHT, 1094, 0.36, sl)
+  socket(ctx, hx + 0.08 * S, hy - 0.04 * S, 0.04 * S, SOUL_LIGHT, 1098, 0.36, sl)
 
   // ── Cooking-pot helm, dented and worn at an angle ──
   const pot = rough([
@@ -1959,6 +2219,7 @@ const drawRattlejack = (ctx: CanvasRenderingContext2D, S: number, t: number): vo
   stroke(ctx, [
     [hx - 0.06 * S, hy - 0.3 * S], [hx + 0.0 * S, hy - 0.42 * S], [hx + 0.08 * S, hy - 0.3 * S]
   ], 0.016 * S, 0.016 * S, IRON.shade, 1105)
+  ctx.restore()
 }
 
 // ─── Registry ───────────────────────────────────────────────────────────────

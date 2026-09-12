@@ -165,7 +165,8 @@ stays true at depth:
 
 | knob | used to stop at | now |
 | --- | --- | --- |
-| `gateAddBase` | linear forever → overran `MAX_SQUAD` by stage 86 | logarithmic knee past stage 30: 24 → 33 → 41 → 55 at stage 300 |
+| `gateAddBase` | linear forever → overran `MAX_SQUAD` by stage 86 | logarithmic knee past stage 30, every step past stage 14 trimmed a tenth (`GATE_GROWTH_TRIM`): 23 at stage 30 → 31 at 40 → 38 at 60 → 46 at 100 → 58 at 300 |
+| `gatePumpStep` | +1 a tick per 15-stage band, forever | +0.9 a band, floored: +2 from stage 17, +3 from 34, +4 from 50 (was 15 / 30 / 45) |
 | `packSize` | 16, reached at stage 19 | linear to 22, then log toward a **screen** limit of 34 |
 | `beatGap` | flat 7 from stage 30 — every deep stage beat-for-beat identical | keeps closing toward 5.2 (6.0 at stage 100) |
 | `maxTriples` / `mulLeaves` / `mulThrees` | flat from stages 22 / 6 / 8 | grow with the number of banks a stage actually has, so the *ratio* holds |
@@ -175,8 +176,15 @@ stays true at depth:
 
 The honest limit, stated rather than hidden: no finite `MAX_SQUAD` survives an
 unbounded sum. The theoretical best-case additive total first crosses 4 000
-around **stage 240** — roughly three hours of unbroken play, and a figure that
-ignores attrition, so a real run never approaches it.
+around **stage 280** — hours of unbroken play, and a figure that ignores
+attrition, so a real run never approaches it.
+
+The multipliers are a different story, and an open one: past stage 60 the
+multiplier budget (`mulLeaves`, `mulThrees`) puts four to eight `×N` doors on a
+road, and a perfect run pins `MAX_SQUAD` at roughly 55–65 % of every stage from
+61 to 130, trim or no trim. The trim was measured not to move that point; a
+generator-side ceiling on late multipliers was, and is the next lever if the
+late roads still run out of decisions.
 
 ## Progression
 
@@ -194,8 +202,20 @@ ignores attrition, so a real run never approaches it.
   that cannot move. The endless tail is priced *gentler* than the authored head
   (×1.16 a level against ×1.38–1.55): continuing the authored slope would put
   level 21 tens of stages away, and "endless" would mean "locked".
+* **Squad is priced in doors.** A level starts the run a sixth of the stage's
+  own `+N` door ahead (`squadPerLevel`: +1 on stages 1–6, +2 from 7, +5 at 40,
+  +8 at 100) — one survivor a level was nothing once a stage-40 door paid 40–50.
+  Its second half, a share of every `+N` door's payout, adds a tenth less each
+  level in whole percents (4, 4, 3, 3, 3, 2 … %) and stops at **+37 %** from
+  level 20; the old flat +4 % a level had doors paying 2.2× at level 30.
 * **The gift ladder (stages 1–4):** the opening stages hand over without a
-  result screen (through stage 3) and each banner names the NEXT gift. Stage 2's
+  result screen (through stage 3) and each banner names the NEXT gift. The
+  stage-1 boss **drops a launcher on the spot** — a one-card reveal that closes
+  itself within three seconds, at half the launcher's damage, re-armed on every
+  attempt at stage 2 (`BOSS_REWARD_STAGE`; a quarter of playtesters quit at the
+  first kill). Stage 2's free gatling box then ADDS to it rather than replacing
+  it: gatling as the main gun, the half-power launcher still firing beside it
+  (`sideWeapon`), both on the badge. Stage 2's
   clear opens a two-card reveal — **launcher or gatling, the player's own for
   stage 3** (`WEAPON_PICK_STAGE`); stage 3's clear hands over the **shield**;
   from stage 4 a weapon is on the road every other stage (`WEAPON_STAGE`). The
@@ -207,6 +227,11 @@ ignores attrition, so a real run never approaches it.
   when the player beats their own posted record — the board is a decoration on a
   game that works perfectly without it, and every failure path ends in "no rank
   shown".
+* **The road goes on:** a cleared stage never reloads the level. The next road
+  opens under the crowd — same column, the survivors it keeps standing where
+  they stood (the rest fall back in a puff: every stage still opens on the
+  shop's squad), and the boss they killed lying a few steps ahead. A retry
+  reopens on that same ground; a fresh page load starts clean.
 * **Persistence:** one `tower_state` blob, one localStorage key, mirrored to
   whichever platform cloud the build targets. The stage number alone rebuilds
   the layout, so a reload resumes exactly where the player was.
@@ -222,7 +247,10 @@ tone cuts.
 * Survivors are drawn **from behind** (pack, shoulders, bobbing hood) — the only
   angle a vertical runner ever shows, and the only one that reads at 30 px.
 * Monsters come from the 13-design cast in `monsters.ts`, baked by
-  `monsterSprites.ts`.
+  `monsterSprites.ts`. A boss's death is drawn by the same rigs, not by turning
+  a walk frame over: it staggers with its arms flailing, buckles, and goes down
+  onto its back with its limbs spread (a side-on beast onto its flank, legs out
+  stiff) — the fall the painted death strips are painted over.
 * The lane never changes hue; only the sky does, one palette per stage, so the
   thing the player reads every frame keeps its contrast.
 

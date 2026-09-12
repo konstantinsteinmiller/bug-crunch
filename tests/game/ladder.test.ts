@@ -7,7 +7,9 @@
 // one, never one already passed.
 
 import { describe, expect, it } from 'vitest'
-import { SHIELD_GIFT_STAGE, nextUnlock, nextWeaponStage, stagesAway } from '@/game/ladder'
+import {
+  DECOY_GIFT_STAGE, FROST_GIFT_STAGE, SHIELD_GIFT_STAGE, nextUnlock, nextWeaponStage, stagesAway
+} from '@/game/ladder'
 import {
   WEAPON_EVERY, WEAPON_PICK_STAGE, WEAPON_STAGE, stageHasWeapon, weaponForStage
 } from '@/game/weapons'
@@ -36,9 +38,28 @@ describe('the ladder', () => {
     expect(shield.icon).toBe('shield')
   })
 
+  it('promises the two late skills when they open before (or with) the next box', () => {
+    // Frost Nova on 7, between the boxes on 6 and 8 — so stage 6 says frost.
+    expect(nextUnlock(6)).toEqual({ atStage: FROST_GIFT_STAGE, icon: 'snowflake', kind: 'skill', skill: 'frost' })
+    // The flare on 10 shares its stage with a box, and a skill for good beats a
+    // loaner for one road — so 8 and 9 both say flare.
+    for (const s of [8, 9]) {
+      expect(nextUnlock(s), `stage ${s}`).toEqual({ atStage: DECOY_GIFT_STAGE, icon: 'flare', kind: 'skill', skill: 'decoy' })
+    }
+    // …and a box that comes first keeps the chip: 4 and 5 are playing toward 6.
+    expect(nextUnlock(4)!.kind).toBe('weapon')
+    expect(nextUnlock(5)!.kind).toBe('weapon')
+    expect(nextUnlock(7)!.kind).toBe('weapon')
+  })
+
   it('names the NEXT box and the weapon it holds, from stage 4 on', () => {
     for (let s = 4; s <= 60; s++) {
       const u = nextUnlock(s)!
+      // The late skills take the chip on the stages that are playing toward them.
+      if (u.kind === 'skill') {
+        expect(s, `stage ${s}`).toBeLessThan(DECOY_GIFT_STAGE)
+        continue
+      }
       expect(u.kind, `stage ${s}`).toBe('weapon')
       // Strictly after the current stage: the promise is never the road the
       // player is already on.

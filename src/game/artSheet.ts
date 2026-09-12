@@ -1,10 +1,13 @@
 import { MONSTERS } from '@/game/monsters'
 import { OUTFITS } from '@/game/heroSprites'
-import { MONSTER_FRAME_H } from '@/game/monsterSprites'
+import { DEATH_FRAME_ASPECT, MONSTER_FRAME_H, deathFallSide } from '@/game/monsterSprites'
+import { bossDesigns } from '@/game/foes'
 import { HERO_PX } from '@/game/heroSprites'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { ART_CATALOGUE } from '@/game/artCatalogue'
-import { GATE_FRAME, ROCKET_BOX } from '@/use/useSurvivalArt'
+// From the pure module, not the renderer: this manifest must load under plain
+// Node for `pnpm art:prompts` (see `tools/ts-resolve.mjs`).
+import { GATE_FRAME, ROCKET_BOX } from '@/game/artBoxes'
 import { BANNER } from '@/game/uiArt'
 
 /**
@@ -232,6 +235,157 @@ export const HERO_WALKS: WalkSpec[] = OUTFITS.map((o) =>
 
 export const WALKS: WalkSpec[] = [...MONSTER_WALKS, ...HERO_WALKS]
 
+// ─── Boss deaths ────────────────────────────────────────────────────────────
+//
+// The one animation in the game that is NOT a loop: eight panels from the
+// killing blow to the body lying still, played once across the boss's death
+// beat, the last panel held as the corpse the next stage opens beside.
+//
+// A fall is joints — knees that buckle, arms that flail and drop, a head that
+// lolls — and the first version of this sheet had none: its reference was the
+// walk frame rolled over like a plank, which a player read, correctly, as a
+// standing creature turned on its side. So the death is DRAWN now, by the same
+// rigs that walk (`monsterKit`'s "Dying"): the blow, the stagger, the knees
+// going, the fall onto its back (or, side-on, onto its flank) and the body
+// lying spread out on the ground.
+//
+// THE REFERENCE IS THE ANIMATION. The painter follows its poses panel by panel
+// and paints over them as the finished creature, with the creature's own
+// PAINTED walk attached as the identity reference — the painted death has to be
+// the same painted creature, or the swap at the kill is a costume change. The
+// same drawing is baked as the game's own death until the painting exists
+// (`monsterSprites.monsterDeathFrame`), so both tell one fall.
+
+/** Panels in a death. The walk's count and grid, for the walk's reasons. */
+export const DEATH_FRAMES = 8
+export const DEATH_COLS = 4
+export const DEATH_ROWS = DEATH_FRAMES / DEATH_COLS
+
+/**
+ * One panel, px: the monster walk panel's height, so the creature is the same
+ * size to the pixel, and `DEATH_FRAME_ASPECT` as wide — room for a body lying
+ * down. 4 x 420 by 2 x 360 is 1680 x 720, exactly 21:9.
+ */
+export const DEATH_PANEL_H = MONSTER_PANEL_H
+export const DEATH_PANEL_W = Math.round(DEATH_PANEL_H * DEATH_FRAME_ASPECT)
+
+/**
+ * How a body goes down depends on how it is drawn (`monsterKit`'s "Dying").
+ *
+ *   UPRIGHT  drawn front-on and standing tall — a biped, a treant. It goes
+ *            over onto its BACK and lies on a diagonal across the panel, head
+ *            to the panel's left, arms and legs spread out on the ground.
+ *   SIDE     drawn side-on and long — a boar, a hound. It rears, drops onto
+ *            its knees and keels over onto its far FLANK, lying low along the
+ *            ground with its legs stretched out stiff.
+ */
+export type DeathStance = 'upright' | 'side'
+
+/**
+ * What each panel IS, for the painter — the words for the pose the layout
+ * draws there. The timing is `monsterKit.deathBeats` at eight evenly spaced
+ * moments, so a line that stops matching its panel is a line to fix here.
+ *
+ * Plain lowercase on purpose: written as ALL-CAPS headings ("THE BLOW
+ * LANDS.") they came back painted into the panels as captions. And nothing
+ * here mentions a weapon — "anything it was holding flies out of its hand"
+ * got a sword and a shield painted into a boss that never had either. What a
+ * boss holds is its own line (`DEATH_IDENTITY`).
+ */
+const UPRIGHT_POSES: readonly string[] = [
+  'the blow lands — still on its feet, jolted up onto its toes, arms flung up and out with the hands open, head snapped back, eyes wide and blazing',
+  'it staggers — the knees buckle and it sags onto one foot, arms windmilling for balance (one up, one down), the head starting to loll',
+  'the knees go — sunk low on bent knees, rocking back the other way, the arms still flailing',
+  'falling — going over backwards and sideways toward the panel\'s left, the feet kicked out from under it, arms thrown wide, the light in its eyes dimming',
+  'impact — it lands flat on its back on a diagonal across the panel, head toward the left, flattened against the ground, arms and legs slapping down spread wide',
+  'a small bounce — still lying the same way round as panel 5, the whole body jolted up just a finger\'s width off the ground by the impact (it does not jump or stand), arms and legs flopping up, the eyes closing',
+  'settling — lying the same way round again, the limbs going slack where they fell: one arm flung out past the shoulder, the other down along its side, the legs splayed in a V, the head rolled onto one cheek',
+  'fallen — the same body in the same place as panel 7, lying still on its back, spread out and limp, head still to the left, eyes shut and every inner light out. It has NOT turned round or rolled over between the two panels: this panel is panel 7 gone quiet. The game holds it on screen as the body, so it must read as "defeated" at a glance, even small'
+]
+
+const SIDE_POSES: readonly string[] = [
+  'the blow lands — it rears up onto its hind legs, head flung up in a last snort, eyes blazing',
+  'it staggers — back down, the front legs buckling and folding under it, the head swinging low',
+  'the front knees give — chest and chin pitching down toward the dirt, the hind legs folding too',
+  'it keels over — the whole body going over onto its far flank, the legs kicking out',
+  'impact — it lands on its side, low and flat along the ground, the legs thrown out straight and stiff: front legs forward, hind legs back',
+  'a small bounce — still lying the same way round as panel 5, the body jolted up just a finger\'s width off the ground by the impact, the legs kicking',
+  'settling — lying on its flank along the ground, legs stretched out, the head flat on the dirt, the eyes closing, whatever burned in it guttering out',
+  'fallen — the same body in the same place as panel 7, lying still on its flank with its legs stretched out stiff, facing the same way, eyes shut and every inner light out. It has NOT turned round or rolled over between the two panels: this panel is panel 7 gone quiet. The game holds it on screen as the body, so it must read as "defeated" at a glance, even small'
+]
+
+export const DEATH_POSES: Readonly<Record<DeathStance, readonly string[]>> = {
+  upright: UPRIGHT_POSES,
+  side: SIDE_POSES
+}
+
+export interface DeathSpec {
+  kind: 'death'
+  /** The sheet's own id — `death-<design>`, never the bare design, which the
+   *  walk of the same creature already answers to. */
+  id: string
+  /** The boss DESIGN whose death this is. */
+  design: string
+  file: string
+  target: string
+  name: string
+  blurb: string
+  colour: string
+  faces: WalkSpec['faces']
+  /** How it goes down — see `DeathStance`. Side-on designs are the side ones. */
+  stance: DeathStance
+  /** The panel side its head ends up on, as authored — see `deathFallSide`. */
+  fall: -1 | 1
+  cols: number
+  rows: number
+  frames: number
+  panelW: number
+  panelH: number
+  w: number
+  h: number
+  maxEdge: number
+  /** The walk sheet it borrows its look from. */
+  walkFile: string
+  /**
+   * The CHARACTER MODEL attached as the second image, relative to
+   * `art-sheets/`: one frame of the creature's walk as the game shows it,
+   * written by `tools/art-models.mjs`. Without it the painter paints a new
+   * creature from the words — the first painted death came back as somebody
+   * else entirely — so the prompt document names it in the job's heading and
+   * the Art Desk attaches it with the layout.
+   */
+  model: string
+}
+
+/** Every boss body, dying. The roster is `foes.ts`'s, so a new boss gets one. */
+export const BOSS_DEATHS: DeathSpec[] = bossDesigns().map((design) => {
+  const walk = MONSTER_WALKS.find((w) => w.id === design)
+  return {
+    kind: 'death',
+    id: `death-${design}`,
+    design,
+    file: `death-${design}`,
+    target: `${ART_FOLDERS.death}/${design}.webp`,
+    name: walk?.name ?? design,
+    blurb: walk?.blurb ?? '',
+    colour: walk?.colour ?? '',
+    faces: walk?.faces ?? 'front',
+    stance: walk?.faces === 'left' || walk?.faces === 'right' ? 'side' : 'upright',
+    fall: deathFallSide(design),
+    cols: DEATH_COLS,
+    rows: DEATH_ROWS,
+    frames: DEATH_FRAMES,
+    panelW: DEATH_PANEL_W,
+    panelH: DEATH_PANEL_H,
+    w: DEATH_COLS * DEATH_PANEL_W,
+    h: DEATH_ROWS * DEATH_PANEL_H,
+    // The walk's cap: same creature, same scale, same payload decision.
+    maxEdge: walk?.maxEdge ?? MONSTER_FRAME_H * 2,
+    walkFile: walk?.file ?? `walk-${design}`,
+    model: `models/${design}.png`
+  }
+})
+
 // ─── Stills ─────────────────────────────────────────────────────────────────
 
 /** Edge of a square still's reference, px. */
@@ -400,6 +554,16 @@ const still = (
   bg: 'magenta',
   ...o
 })
+
+/**
+ * The alarm's shared description.
+ *
+ * One head and one tail around a single colour clause, so the three states are
+ * written once and cannot drift apart between edits — the set reads as one
+ * object in three colours or it does not read at all.
+ */
+const WARN_BLURB_HEAD = 'The incoming-attack alarm: a heavy hazard sign, an upward-pointing triangle of battered iron plate with a thick dark bevelled rim, chipped paint and a few scratches, and a bold near-black exclamation mark punched through the middle of it — a tapering bar above a round dot. A sign bolted to a battlefield, not a tidy interface decal.'
+const WARN_BLURB_TAIL = 'THE PLATE IS THE ONE HOT ACCENT OF THIS IMAGE: paint it at full strength, the brightest thing in the frame, bright enough to name the colour instantly at a glance. The style rule about desaturated low-key colour applies to the iron rim, the grime and the shadows — NOT to the plate. A plate that has gone grey, brown, black or muddy is a failed image; only the RIM, the bang and the shadows are dark. One of a SET OF THREE identical signs that differ in NOTHING but that colour: the same triangle, the same rim, the same bang, the same wear in the same places. Bold shape and a hard silhouette, no fine detail — it is caught in the corner of the eye while the player is dodging — and the same layout as the reference: apex at the top, wide flat base, filling the frame edge to edge with magenta only in the two upper corners.'
 
 const GATE_BLURB = 'A gate FRAME for a magical doorway, seen straight on: two THIN, tall posts, one at each side of the frame, joined by a thin lintel or arch across the top; the whole MIDDLE IS OPEN — flat magenta — because the game paints the glowing curtain, the flowing chevrons and the number plate inside the opening. The posts stand on the road; leave a little magenta under and over them exactly as the reference does.'
 
@@ -700,6 +864,28 @@ export const STILLS: StillSpec[] = [
   still('ui', 'skill-shield', 'The shield skill',
     'The shield skill\'s button icon: a heater shield of cold steel with a heavy near-black rim and a raised iron boss, a cold blue witch-light glowing in its centre band — the same cold blue as the dome it raises over the crowd. Bold and simple, read at 24 px on a round button; the same silhouette as the reference.',
     { maxEdge: 128 }),
+  // ── The incoming-attack alarm ──
+  //
+  // THREE signs that differ only in the colour of the plate. The flat SVG they
+  // replace was tinted by `currentColor`, which a painting cannot be, and the
+  // colour is not decoration: amber is "move", the cold blue is the same blue
+  // as the ward the badge is telling the player to stand IN, and the violet is
+  // the boss's own gaze. So each state is its own drawable — and the prompts
+  // share a head and a tail, because three signs painted in three sessions
+  // have to come back as one object in three colours.
+  //
+  // Read in PERIPHERAL VISION at a tenth of the screen's width while the
+  // player's eyes are on the crowd: silhouette first, no fine detail.
+  still('ui', 'warn-away', "Alarm — dodge",
+    `${WARN_BLURB_HEAD} Its plate is painted a bright WARNING AMBER-ORANGE (about #FFB32E) — a hazard lamp, hot and saturated. ${WARN_BLURB_TAIL}`,
+    { maxEdge: 256 }),
+  still('ui', 'warn-into', "Alarm — get in",
+    `${WARN_BLURB_HEAD} Its plate is painted a bright COLD SOUL-BLUE (about #6ECBFF) — a witch-light, luminous and saturated, not steel and not grey. ${WARN_BLURB_TAIL}`,
+    { maxEdge: 256 }),
+  still('ui', 'warn-still', "Alarm — hold still",
+    `${WARN_BLURB_HEAD} Its plate is painted a strong MID-TONE AMETHYST PURPLE — unmistakably PURPLE at a glance, saturated like a gemstone (midtone about #A855F7, its lit edge about #C77DFF, its shadow a deeper purple about #6B21A8). Two failed attempts to avoid: a plate so dark it reads as black or ash, and a plate so pale it reads as white or lavender. The purple is the plate only — the rim, the bang and the shadows stay near-black. ${WARN_BLURB_TAIL}`,
+    { maxEdge: 256 }),
+
   // The weapon choice. Two cards, seen ONCE, at about a hundred pixels each:
   // the one screen in the game that is allowed a little more detail than a
   // button icon, because it is a prize being presented rather than a control
@@ -939,6 +1125,179 @@ export const promptForWalk = (w: WalkSpec): string => {
   ].join('\n')
 }
 
+/**
+ * Who each boss IS, for whoever paints its death — written from its PAINTED
+ * walk (`art-sheets/models/<design>.png`), not from the drawing, because the
+ * painting is what the player has been looking at all fight. `looks` is the
+ * character in words, proportions first; `holds` is the only gear it has.
+ *
+ * Words AND the picture, because an image model weighs a prompt's words over
+ * its images. The first painted deaths came back as other creatures — a lanky
+ * goblin with a loincloth and a mace for the round-headed imp, a tall ragged
+ * skeleton with a sword and a shield for the mushroom-capped one — with the
+ * character image attached: the words said "gremlin-imp" and "skeleton" and
+ * "anything it was holding flies out of its hand", and nothing said how big the
+ * head is or that it carries nothing. Repaint a walk and its line goes stale
+ * with it: look at the new model and rewrite the line.
+ */
+export const DEATH_IDENTITY: Readonly<Record<string, {
+  looks: string
+  holds?: string
+  marks?: string
+  /**
+   * How THIS body falls, when the shared panel lines do not fit it. They are
+   * written for something with knees, hips and hands, and a creature built
+   * otherwise gets rebuilt to match them: the treant came back as a lanky
+   * wooden man with thighs and a waist, because the words said its knees
+   * buckled and its legs splayed.
+   */
+  body?: string
+}>> = {
+  grumpling: {
+    looks: 'An imp with SUPER-DEFORMED, chibi BODY PROPORTIONS — but painted grim and gritty, never cute. Its big round head is as tall as its whole body and legs together (half of its height) and wider than its shoulders. Two BIG angular ears — flat, straight-edged flaps like cut card, not rounded or pointed — stick out sideways and a little up from the top of the head, each about half as long as the head is wide, grey-green outside and dull red-brown inside. A heavy scowling brow over small ember-orange pupils sunk in dark eye hollows (not big glowing eyes), a small snub nose, and a WIDE grin of needle fangs stretched right across the lower face. Under the head a SMALL pear-shaped body, narrower than the head, with a pale belly patch. Thick stubby tube arms, the same thickness all the way down, ending in round knob fists with no fingers or claws; very short stubby legs, shorter than the arms. Mottled dark MOSSY-GREEN skin, going grey only at the limbs.',
+    marks: 'the scratched hash-mark scar high on its brow, one eye sunk in a darker ring than the other, dark speckles on the scalp, the dull red-brown inside of both ears, the pale belly patch, and the mottled grey-green skin'
+  },
+  bonecap: {
+    looks: 'A small, bow-legged skeleton wearing a HUGE pale toadstool cap: a smooth dome, wider than the skeleton\'s shoulders by half and about a third of its height, sitting over the skull like an umbrella down to the eye sockets. Stylised and chunky, never anatomical: a big round skull with a wide grinning jaw, a short narrow ribcage, thin bone arms that hang to its knees, knobbly bow legs, big bony feet. Dull green light glows inside the eye sockets and between the ribs. Old ivory bone with a green-grey tinge.',
+    marks: 'the dark brown spots scattered over the pale cap, the green glow in both eye sockets and between the ribs, the wide grinning jaw, and the bare ivory bone — no flesh, no clothes'
+  },
+  snaggletusk: {
+    looks: 'A STYLISED, blocky boar-beast — cartoon-chunky, never a realistic wild boar, and never furry or shaggy. Its huge slab of a head is half of the whole animal: a broad flat snout with a dark iron ring through it, two curved white tusks sweeping up from the lower jaw, two small close-set orange eyes in a dark mask-like patch, and one small pointed ear on top. Behind the head a barrel body, hunched high at the shoulder, with a short ridge of stiff black bristle spikes along the neck and back, and pale scar scratches on the flank. Four SHORT thick legs with pale bone-coloured hooves. Charcoal-brown hide, darker at the head.',
+    marks: 'the iron ring through the snout, the two white curved tusks, the small orange eyes in their dark patch, the short black bristle ridge, the pale scars on its flank and the pale hooves'
+  },
+  thornwick: {
+    looks: 'A short, stumpy DEAD TREE that walks, stylised and chunky: a thick gnarled dark-brown trunk standing on two splayed root feet, with a hollow knot in the trunk holding a pale green-white glow and a small dark face inside it. One arm is a bare branching limb; the other is a long curling thorny whip covered in black spikes. A crown of bare branching twigs on top. It has NO leaves, no foliage, no berries, no bark texture painted as fur. It is NOT a man made of wood: no shoulders, no waist, no hips, no thighs, no knees, no hands with fingers — the trunk runs straight from the crown down into the roots, and the two arms are branches growing out of it.',
+    body: 'It falls the way a tree is felled: the whole trunk tips over stiffly in one piece and slams down, roots lifting off the ground. It has no knees to buckle and no hands to catch itself — what flails is the branch arm and the thorn whip, and they end up flung out on the ground on either side of the fallen trunk.',
+    marks: 'the glowing pale green-white hollow face in the trunk, the long curling thorn-whip arm, the crown of bare twigs, the splayed root feet and the cracked dark bark'
+  },
+  marrowknight: {
+    looks: 'A SHORT, STOCKY skeleton knight seen front-on — chunky proportions, big head and armour on small legs, never a tall realistic knight. A dark iron helmet with two curved horns over a pale skull, with bright ice-blue flames burning in both eye sockets. Dark iron plate on its shoulders (big rounded pauldrons, one spiked) with a bare pale ribcage showing at the chest, a brown leather tabard hanging from its waist, a dark cloak behind, bare bone arms and legs, iron boots.',
+    holds: 'a straight greatsword, as long as it is tall, held point-down at its side',
+    marks: 'the two curved horns on the helmet, the ice-blue flames in both eye sockets, the bare ribcage between the plates, the brown tabard and the cloak behind it'
+  },
+  cinderhound: {
+    looks: 'A gaunt grey hound seen side-on, stylised and lean: a long narrow head with bared teeth and one pale staring eye, ears swept back, a thin neck, a deep narrow chest with the ribs showing through cracked grey hide, a bony back, long thin legs, and a thin tail. A mane of ORANGE FLAME burns along its shoulders and back, ember-orange cracks glow between its ribs, and the tip of its tail burns and trails smoke. Charcoal-grey hide, no fur detail.',
+    marks: 'the burning orange mane along its back, the glowing ember cracks over its ribs, the burning smoking tail-tip, the pale staring eye and the cracked grey hide'
+  },
+  rattlejack: {
+    looks: 'A skinny, rickety skeleton seen front-on, stylised and knobbly: a bare pale skull under a dented rusty iron COOKING POT worn as a helmet (a plain bucket shape, no visor), one eye socket glowing red and the other dark, a narrow ribcage, thin bone arms and legs with knobbly joints, and a torn dark-red rag hanging from its hips.',
+    holds: 'a rusty meat cleaver raised in one hand, and a round wooden shield with a pale skull painted on it strapped to the other arm',
+    marks: 'the rusty cooking-pot helmet, the single red-glowing eye socket, the torn red rag at its hips, the rusty cleaver and the round wooden shield'
+  }
+}
+
+/**
+ * A ready-to-paste prompt for one boss's death.
+ *
+ * Written against, in the order they cost re-rolls:
+ *
+ *   1. ANOTHER CREATURE. The death is swapped in at the kill over the painted
+ *      walk the player has watched all fight. So the character comes FIRST —
+ *      image 1, the model, then its identity in words with the proportions
+ *      spelled out — and the layout second, as poses and nothing else. Short:
+ *      at ten thousand characters the words drowned the picture.
+ *   2. INVENTED GEAR. A prompt that mentions a weapon gets one painted in. Only
+ *      a boss whose model holds something is told about it (`holds`); the rest
+ *      are told they carry nothing.
+ *   3. A COMIC PAGE. Panel lines written as ALL-CAPS headings came back as
+ *      captions, with borders drawn round them. The lines are plain, marked as
+ *      not-for-the-image, and borders and words are refused outright (and by
+ *      the slicer, which will not cut a return with painted panel edges).
+ *   4. GORE. The game is played by children: defeat is the pose and the light
+ *      going out, and the game paints its own (magic, violet) pool.
+ */
+export const promptForDeath = (d: DeathSpec): string => {
+  const SIDE = d.fall === 1 ? 'right' : 'left'
+  const n = d.frames
+  const side = d.stance === 'side'
+  const who = DEATH_IDENTITY[d.design]
+  const poses = DEATH_POSES[d.stance]
+  return [
+    `# ${d.id} — ${d.name}, defeated  (${d.target})`,
+    '',
+    `A SPRITE SHEET: ${n} panels of THIS creature dying. Two images come with this prompt, in this order:`,
+    `  IMAGE 1 — \`${d.model}\` — THE CHARACTER: one frame of this exact creature,`,
+    '     exactly as the game shows it. Every panel shows this individual.',
+    `  IMAGE 2 — \`${d.file}.png\` — THE ANIMATION: the game's own rough placeholder`,
+    '     drawing of the death. FOLLOW ITS POSES — where the head, arms, legs and body',
+    '     are in each panel, and where the body ends up lying — and take nothing else',
+    '     from it: not its limb lengths, shapes, colours, details or style. Image 2 is',
+    '     a flat stand-in; image 1 is the creature.',
+    '',
+    'THE CHARACTER — copy it from image 1 into every panel:',
+    `· ${who?.looks ?? `${d.name}: ${d.blurb}`}`,
+    ...(who?.marks
+      ? [`· Its MARKS, the ones the player knows it by — keep every one, in every panel that shows that side: ${who.marks}.`]
+      : []),
+    who?.holds
+      ? `· It holds ${who.holds}, and that is all the gear it has. Add nothing else.`
+      : '· It wears and carries NOTHING: no clothes, loincloth, rags, belt, weapon or shield. Add none.',
+    '· Its PROPORTIONS stay exactly as in image 1 in every panel: the head the same size',
+    '  against the body, the limbs the same length and thickness. It does not grow taller,',
+    '  leaner or more realistic while it flails, falls and lies spread out.',
+    '· The same face, colours and markings as image 1.',
+    '',
+    'THE LOOK — paint it the way image 1 is painted, never as a clean cartoon:',
+    '· Heavy, scratchy near-black ink contours with dry-brush breaks, thick on the shadow side.',
+    '· Flat, gritty gouache-like paint inside the lines, with visible brushwork, grain and',
+    '  rough cel-style shadow shapes. No smooth vector shading, no gradients, no glossy highlights.',
+    '· The same muted, desaturated colours as image 1; its one hot accent stays as small as it is there.',
+    '· Menacing and worn, not cute — it is the same grim creature the player has been fighting.',
+    '',
+    `THE ANIMATION — ${d.cols} across and ${d.rows} rows, read left to right along the top row, then the bottom row.`,
+    'These lines are for you to read. Never write them, or any other words, in the image:',
+    ...poses.map((p, i) => `· panel ${i + 1}: ${p}.`),
+    ...(side
+      ? [
+        `· FACING: image 1 faces ${facing(d.faces)}, and so does every one of the ${n} panels — head at the ${facing(d.faces)} end, rump at the other, in all of them. Never mirror it. It stays side-on all the way down and keels over onto its far flank, its legs stiff, never tucked under it.`,
+        `· NOT A WALK. It is dying in all ${n} panels: it never walks, trots, charges or stands square on all fours. Panel 1 rears, 2-4 collapse, and from panel 5 it is ON THE GROUND — the body flat along the dirt and the head down in the dirt with it, not held up.`
+      ]
+      : [`· From panel 5 on it lies on its BACK on a diagonal across the panel, head to the ${SIDE}, arms and legs spread out on the ground — flatter than it is long, as anything lying on the ground is.`]),
+    ...(who?.body ? [`· HOW THIS ONE FALLS, where the panels above describe a body it does not have: ${who.body}`] : []),
+    ...(who?.holds
+      ? ['· Anything in its hand flies loose at the blow and lies on the ground beside it from panel 5 on; anything strapped on stays on.']
+      : []),
+    '',
+    'FOR CHILDREN — this game is played by kids:',
+    '· NO blood, gore, wounds, broken or severed parts, or anything red and wet.',
+    '· NO puddle, pool, splash or liquid under or around it — the game paints its own.',
+    '· The defeat is the pose, the slack limbs and the light going out of its eyes. No "X"',
+    '  eyes, stars, sweat drops or other cartoon symbols.',
+    '',
+    'LAYOUT — the grid is cut blindly:',
+    `· EXACTLY ${n} panels: ${d.cols} across, ${d.rows} rows. Not 1, not ${d.cols}, not ${n + 4}, not ${n * 2} — do not add a row. One big painting is the wrong answer.`,
+    `· Each panel is exactly 1/${d.cols} of the width and 1/${d.rows} of the height. The creature sits where image 2 puts it, at the size image 2 draws it — no bigger.`,
+    '· Leave a clear band of flat magenta between neighbouring panels, at least a tenth of',
+    '  a panel wide. Nothing — a limb, a tail, a tusk, a weapon, a shadow — may touch or',
+    '  cross a panel edge. Two panels that run into each other cannot be cut apart, and',
+    '  the whole sheet is thrown away.',
+    '· NO panel borders, frames, lines, boxes or gutters between the panels, and NO text,',
+    '  titles, captions or numbers anywhere. Between two creatures there is nothing but the',
+    '  same flat magenta as everywhere else.',
+    '· In panels 1-3 the feet are at the height image 2 puts them; from panel 5 on the body lies',
+    '  where image 2 lays it. Do NOT draw a ground line, floor, horizon or any line under it.',
+    '· One soft contact shadow under the body, and nothing else behind it — no scenery.',
+    '',
+    BACKGROUND_RULE,
+    '',
+    'BEFORE YOU CALL IT FINISHED:',
+    `· ${n} panels, ${d.cols} across and ${d.rows} down, with no borders and no words.`,
+    '· Every panel is the creature of image 1 — its proportions, face and colours — carrying nothing new.',
+    ...(who?.marks ? [`· Its marks are all there: ${who.marks}.`] : []),
+    ...(side
+      ? [`· Every panel faces ${facing(d.faces)}: its head is at the ${facing(d.faces)} end of its panel in all ${n}. None is mirrored.`]
+      : []),
+    side
+      ? `· Panel 8: lying still on its flank, legs out stiff, eyes shut — facing ${facing(d.faces)} like every other panel, and lying exactly as panel 7 lies.`
+      : '· Panel 8: lying still on its back, spread out, eyes shut — head to the left, lying exactly as panel 7 lies. Panels 7 and 8 are not mirror images of each other.',
+    '· Everything that is not the creature is flat, vivid #FF00FF.',
+    '',
+    `OUTPUT: one image, ${d.w} x ${d.h} pixels (21:9, landscape). If your tool has an`,
+    'aspect-ratio control, set it to 21:9 — a square or 16:9 return crushes the grid',
+    'and cannot be cut. No labels, captions, numbers or watermarks.'
+  ].join('\n')
+}
+
 /** The SHEET's pixels — a still is one panel, a cycle is its whole grid. */
 export const sheetW = (s: StillSpec): number => s.w * colsOf(s)
 export const sheetH = (s: StillSpec): number => s.h * rowsOf(s)
@@ -1153,6 +1512,117 @@ ${shapeOf(s)} sheet of ${colsOf(s)} x ${rowsOf(s)} panels.`
     '· No frame, border, card, label, caption, arrow, annotation or drop shadow.'
   ].join('\n')
 }
+
+// ─── The prompt documents ───────────────────────────────────────────────────
+
+/** A sheet's measured placement, as the bench records it in the index. */
+export interface Fit { h: number; w: number; bottom: number; cx: number }
+
+/**
+ * A prompt as a document BLOCK: a heading that names the reference and the
+ * target in its last parenthesis, then the prompt in a fenced `text` block.
+ *
+ * That shape is a contract with two readers. A markdown preview gives a fenced
+ * block a copy button, so a whole prompt is one click. And the Art Desk
+ * (`tools/art-desk`) ties each block to its image by the `(<ref>.png → <target>)`
+ * parenthesis and sends the fenced text verbatim — so the builder's own heading
+ * line (`# id — name  (target)`) is lifted out and the rest goes in unchanged.
+ * `tests/game/artDesk.test.ts` holds every block byte-identical to its builder.
+ */
+export const promptBody = (prompt: string): string => {
+  const lines = prompt.split('\n')
+  return (lines[0]?.startsWith('# ') ? lines.slice(lines[1] === '' ? 2 : 1) : lines).join('\n')
+}
+
+/**
+ * One job in a prompt document. `first` are images the painter must be given
+ * BEFORE the reference, relative to `art-sheets/` — the heading lists every
+ * image in the order it is attached, the reference last
+ * (`(models/x.png + ref.png → target)`), so the Art Desk attaches them all
+ * rather than trusting an operator to read the prompt and remember.
+ */
+const promptBlock = (title: string, stem: string, target: string, prompt: string, first: string[] = []): string =>
+  [`## ${title}  (${[...first, `${stem}.png`].join(' + ')} → ${target})`, '', '```text', promptBody(prompt), '```'].join('\n')
+
+/**
+ * Every `PROMPTS-*.md`, text and all — the ONE place the documents are written.
+ *
+ * Two routes render these and they must agree byte for byte: the bench
+ * (`/#/art-sheets` → export), and `pnpm art:prompts`, which loads this module
+ * under plain Node (so nothing it imports may reach the renderer — see
+ * `artBoxes.ts` and `tools/ts-resolve.mjs`). `fits` is the contract's measured
+ * placement; this project's SIZE clauses are stated from the manifest's own
+ * numbers, so it is accepted and not yet read.
+ */
+export const promptDocs = (_fits?: Record<string, Fit>): Record<string, string> => ({
+  'PROMPTS-WALKS.md': [
+    '# Walk-cycle prompts — one design per generation',
+    '',
+    'Generated from the manifest — do not hand-edit, re-export instead.',
+    '',
+    'Attach `art-sheets/walk-<id>.png` and paste the matching block beside it.',
+    'Each is a grid of panels showing ONE subject through ONE cycle, and the',
+    'whole job is that it comes back as one subject and not eight.',
+    '',
+    'Drop results in `art-sheets/painted/`, keeping the `walk-<id>` in the name,',
+    'then run `pnpm slice-sheets`. The slicer cuts the grid by proportion, so an',
+    'off-size return is fine as long as the panels are where the grid says.',
+    'Each prompt is a fenced block — the preview\'s copy button takes all of it —',
+    'and `pnpm art:desk` can run the whole loop from these blocks.',
+    '',
+    WALKS.map((w) => promptBlock(w.name, w.file, w.target, promptForWalk(w))).join('\n\n---\n\n'),
+    ''
+  ].join('\n'),
+  'PROMPTS-STILLS.md': [
+    '# Still prompts — one object per generation',
+    '',
+    'Generated from the manifest — do not hand-edit, re-export instead.',
+    '',
+    'Attach `art-sheets/still-<kind>-<id>.png` and paste the matching block',
+    'beside it. There is no grid to preserve here, which is the whole point.',
+    '',
+    'Drop results in `art-sheets/painted/`, keeping the `still-<kind>-<id>` in',
+    'the name, then run `pnpm slice-sheets`. Every return is measured against',
+    'its reference and normalised onto it.',
+    'Each prompt is a fenced block — the preview\'s copy button takes all of it —',
+    'and `pnpm art:desk` can run the whole loop from these blocks.',
+    '',
+    STILLS.map((s) => promptBlock(s.name, s.file, s.target, promptForStill(s))).join('\n\n---\n\n'),
+    ''
+  ].join('\n'),
+  'PROMPTS-DEATHS.md': [
+    '# Boss death prompts — one boss per generation',
+    '',
+    'Generated from the manifest — do not hand-edit, re-export instead.',
+    '',
+    'Attach TWO images with each block, in this order: `art-sheets/models/<design>.png`',
+    '(the character — one frame of its walk as the game shows it, cut by',
+    '`pnpm art:models`) and then `art-sheets/death-<design>.png` (the animation). The',
+    'layout is the game\'s own drawing of the fall — the blow, the stagger, the knees',
+    'going, the body on its back (or flank) with its limbs spread — and the prompt',
+    'asks for exactly that fall, painted as exactly that creature. Without the model a',
+    'painter invents a new creature from the words, and the swap at the kill shows it.',
+    '',
+    'Drop results in `art-sheets/painted/`, keeping the `death-<design>` in the',
+    'name, then run `pnpm slice-sheets`. The game asks for a death strip when a',
+    'stage is 80 % run and plays the same fall, drawn, until one exists.',
+    'Each prompt is a fenced block — the preview\'s copy button takes all of it.',
+    'Each heading names both images, and the Art Desk attaches both, in order.',
+    '',
+    BOSS_DEATHS.map((d) => promptBlock(`${d.name} — death`, d.file, d.target, promptForDeath(d), [d.model])).join('\n\n---\n\n'),
+    ''
+  ].join('\n')
+})
+
+/**
+ * Every painted sheet as the status report reads it: the reference file's
+ * stem, the document its prompt block is in, and where the slice lands.
+ */
+export const sheetRows = (): Array<{ what: 'walk' | 'still' | 'death'; id: string; title: string; stem: string; doc: string; target: string }> => [
+  ...WALKS.map((w) => ({ what: 'walk' as const, id: w.id, title: w.name, stem: w.file, doc: 'PROMPTS-WALKS.md', target: w.target })),
+  ...STILLS.map((s) => ({ what: 'still' as const, id: s.id, title: s.name, stem: s.file, doc: 'PROMPTS-STILLS.md', target: s.target })),
+  ...BOSS_DEATHS.map((d) => ({ what: 'death' as const, id: d.id, title: `${d.name} — death`, stem: d.file, doc: 'PROMPTS-DEATHS.md', target: d.target }))
+]
 
 // ─── Consistency with the runtime catalogue ─────────────────────────────────
 

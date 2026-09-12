@@ -5,6 +5,7 @@ import { UPGRADES_KEY } from '@/keys'
 import { RANGE_PER_LEVEL } from '@/game/survival'
 import { WEAPONS, type WeaponId } from '@/game/weapons'
 import { BASE_DAMAGE, BASE_FIRE_RATE, START_SQUAD } from '@/game/survival'
+import { gateAddBase } from '@/game/track'
 
 /**
  * ─── Meta upgrades ──────────────────────────────────────────────────────────
@@ -50,8 +51,68 @@ export interface UpgradeDef {
   maxLevel: number
   /** Cost of moving from `level` to `level + 1`. */
   cost: (level: number) => number
-  /** The value this track produces at a given level, for the shop's readout. */
-  valueAt: (level: number) => number
+  /**
+   * The value this track produces at a given level, for the shop's readout.
+   * `stage` is the stage the readout is for; only Squad reads it, because only
+   * Squad's number depends on how deep the road is (see `squadPerLevel`).
+   */
+  valueAt: (level: number, stage?: number) => number
+}
+
+/**
+ * ─── What one Squad level puts on the start line ────────────────────────────
+ *
+ * It used to be one survivor, on every stage. At stage 40 a single door pays
+ * 40–50, so a level of Squad was worth a fiftieth of one bank: bought, and never
+ * seen again. A starting-squad track in a game where the crowd is built by the
+ * doors only means something if it is priced in DOORS.
+ *
+ * So a level is a sixth of the stage's own `+N` door, never less than one
+ * survivor: +1 for stages 1–6, +2 from stage 7, +5 at stage 40, +6 at 60 and +8
+ * at 100. Six levels start the run a full door ahead, on any stage, which is a
+ * sentence a player can check against the road.
+ *
+ * A divisor rather than a `1 / 6` share on purpose: `15 * (1 / 6)` is not
+ * exactly 2.5 in floating point, and a readout that rounds the wrong way on one
+ * stage is a bug report nobody can reproduce.
+ */
+export const SQUAD_LEVELS_PER_DOOR = 6
+
+/** Survivors one Squad level adds to the start of `stage`. */
+export const squadPerLevel = (stage: number): number =>
+  Math.max(1, Math.round(gateAddBase(Math.max(1, stage)) / SQUAD_LEVELS_PER_DOOR))
+
+/**
+ * ─── What one Squad level adds to every door ────────────────────────────────
+ *
+ * Was a flat +4 % a level with no ceiling, and that was the part of the track
+ * that broke the deep game: at level 30 every `+N` door paid 2.2x what it
+ * printed, and even with the doors trimmed (`GATE_GROWTH_TRIM`) a perfect
+ * level-30 run pinned `MAX_SQUAD` with most of a stage-60+ road still ahead.
+ *
+ * Now each level adds a tenth less than the one before, in whole percents:
+ * 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, then 1 % a level up to level 20, where the
+ * step rounds to nothing and the bonus stops at +37 %. Levels past 20 still buy
+ * starting survivors (`squadPerLevel`), which keep growing with the stage.
+ */
+export const GATE_PAYOUT_FIRST_PCT = 4
+export const GATE_PAYOUT_DECAY = 0.9
+
+/** Whole percent the `level`-th Squad level adds to every `+N` door. */
+export const gatePayoutStepPct = (level: number): number =>
+  level < 1 ? 0 : Math.round(GATE_PAYOUT_FIRST_PCT * GATE_PAYOUT_DECAY ** (level - 1))
+
+/** Multiplier on every `+N` door's payout at a given Squad level, 1.0 at 0. */
+export const gatePayoutBonusAt = (level: number): number => {
+  let pct = 0
+  for (let k = 1; k <= level; k++) {
+    const step = gatePayoutStepPct(k)
+    // The steps only ever shrink, so the first zero is the last one that matters
+    // — and the track is endless, so a save at level 400 must not loop 400 times.
+    if (step <= 0) break
+    pct += step
+  }
+  return 1 + pct / 100
 }
 
 export type UpgradeId =
@@ -116,8 +177,10 @@ const endlessCost = (base: number, ratio: number, authored: number) =>
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
   squad: {
     id: 'squad',
-    // Endless: every level is one more starting survivor AND a bigger share of
-    // what every `+N` door pays (`gatePayoutBonus`), and neither has a ceiling.
+    // Endless: every level is a sixth of a door's worth of starting survivors
+    // (`squadPerLevel`), which grows with the stage and has no ceiling, AND a
+    // share of what every `+N` door pays (`gatePayoutBonusAt`), which shrinks a
+    // level and stops at +37 %.
     maxLevel: Number.POSITIVE_INFINITY,
     /**
      * Was the most expensive track in the shop and the weakest by a distance:
@@ -130,7 +193,8 @@ export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
      * squad is built on the road rather than in the shop.
      */
     cost: endlessCost(70, 1.38, 16),
-    valueAt: (l) => START_SQUAD + l
+    /** The crowd a run opens with on `stage` — the number the shop shows. */
+    valueAt: (l, stage = 1) => START_SQUAD + l * squadPerLevel(stage)
   },
   power: {
     id: 'power',
@@ -358,7 +422,15 @@ watch(towerState, refresh, { deep: false })
 // These are the ONLY things the simulation reads. It never sees a level or a
 // price, which keeps the balance of a run separate from the balance of the shop.
 
-export const startSquad = computed(() => UPGRADES.squad.valueAt(levels.value.squad))
+/**
+ * The crowd a run opens with on `stage`, before any retry relief.
+ *
+ * A function of the stage rather than a computed, because a Squad level is
+ * priced in the stage's own doors (`squadPerLevel`). It still reads `levels`,
+ * so a watcher that calls it re-runs on a purchase or a cloud hydrate.
+ */
+export const startSquadAt = (stage: number): number =>
+  UPGRADES.squad.valueAt(levels.value.squad, stage)
 export const unitDamage = computed(() => UPGRADES.power.valueAt(levels.value.power))
 export const fireRate = computed(() => BASE_FIRE_RATE * (1 + levels.value.rate * 0.07))
 export const coinMultiplier = computed(() => 1 + levels.value.scavenge * 0.08)
@@ -390,14 +462,15 @@ export const coinMagnetBonus = computed(() => levels.value.scavenge * 0.34)
 export const rangeBonus = computed(() => levels.value.range * RANGE_PER_LEVEL)
 
 /**
- * How much MORE every `+N` gate pays, per level of the Squad track.
+ * How much MORE every `+N` gate pays, from the Squad track.
  *
  * The one structural change in this re-pricing. A starting-squad bonus is worth
  * almost nothing by stage 20 because the crowd is built by the doors, not by
  * the shop — so the track now buys a share of what the doors give, which is the
- * only currency that keeps its value all campaign.
+ * only currency that keeps its value all campaign. Each level's share is smaller
+ * than the last and the total stops at +37 % — see `gatePayoutBonusAt`.
  */
-export const gatePayoutBonus = computed(() => 1 + levels.value.squad * 0.04)
+export const gatePayoutBonus = computed(() => gatePayoutBonusAt(levels.value.squad))
 
 /**
  * Damage multiplier a weapon carries from the shop, 1.0 at level 0.
@@ -488,7 +561,7 @@ export const affordableCount = (coins: number): number =>
 
 export const useUpgrades = () => ({
   levels,
-  startSquad,
+  startSquadAt,
   unitDamage,
   fireRate,
   coinMultiplier,

@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tezlik',
     'incoming': 'Hujum kelmoqda!',
     'dodge': 'Chetlan',
+    'getIn': 'Ichiga',
+    'holdStill': 'Qimirlama',
     'milestone': '{n} jangchi!',
     'weaponActive': '{name} tayyor',
+    'weaponsActive': '{a} + {b} tayyor',
     'weaponLocked': '{name} qulflangan — {total} tadan {n} ta richag otildi',
     'weaponGift': '{name} oldinda — bepul, richaglarsiz',
     'weaponFree': 'BEPUL'
@@ -90,6 +93,10 @@ export default {
       'a': "Ikki barobar tez otish",
       'b': "Darvozalarni tezroq to'ldiradi"
     }
+  },
+  'bossReward': {
+    'title': "Bos yengildi!",
+    'subtitle': "{n}-bosqich uchun sovg'a. Yugurishda davom et!"
   },
   'result': {
     'stageClear': 'Bosqich tugadi!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granata',
 
-    'shield': 'Qalqon'
+    'shield': 'Qalqon',
 
+    'locked': 'Yopiq',
+
+    'unlocksAt': '{n}-bosqichda ochiladi',
+
+    'frost': 'Muz novasi',
+
+    'decoy': 'Aldamchi mashʼal',
+
+    'trialLabel': '{name} · bepul',
+
+    'trialTag': 'Bepul sinab koʻr!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

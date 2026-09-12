@@ -82,4 +82,13 @@ export const stripCacheSize = (): number => cache.size
 // The flag can be turned off at run time and a strip can decode long after the
 // first miss, so the slices are dropped whenever the art layer changes rather
 // than being trusted for the life of the page.
-onArtChanged(() => { cache.clear() })
+//
+// SCOPED: a decode names its own `kind/id`, which is exactly this cache's key,
+// so one arrival drops one strip. Dropping all of them re-sliced every monster,
+// hero and death strip on screen — up to 32 canvases each — once per painting,
+// and the paintings arrive one after another through the opening stage.
+// `null` (a flag flip, a refresh) still means everything.
+onArtChanged((change) => {
+  if (!change) cache.clear()
+  else cache.delete(`${change.kind}/${change.id}`)
+})

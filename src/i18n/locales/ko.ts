@@ -31,8 +31,11 @@ export default {
     'fireRate': '연사',
     'incoming': '공격이 온다!',
     'dodge': '회피',
+    'getIn': '안으로',
+    'holdStill': '멈춰',
     'milestone': '{n}명 돌파!',
     'weaponActive': '{name} 준비 완료',
+    'weaponsActive': '{a} + {b} 준비 완료',
     'weaponLocked': '{name} 잠김 — 레버 {total}개 중 {n}개 파괴',
     'weaponGift': '{name} 전방 — 무료, 레버 없음',
     'weaponFree': '무료'
@@ -90,6 +93,10 @@ export default {
       'a': "연사 속도 2배",
       'b': "게이트를 더 빨리 키움"
     }
+  },
+  'bossReward': {
+    'title': "보스 격파!",
+    'subtitle': "스테이지 {n}용 선물. 계속 달리세요!"
   },
   'result': {
     'stageClear': '스테이지 클리어!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': '수류탄',
 
-    'shield': '방패'
+    'shield': '방패',
 
+    'locked': '잠김',
+
+    'unlocksAt': '{n}스테이지에서 해금',
+
+    'frost': '프로스트 노바',
+
+    'decoy': '미끼 조명탄',
+
+    'trialLabel': '{name} · 무료 체험',
+
+    'trialTag': '무료 체험!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import GameIcon from '@/components/icons/GameIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import type { ArtKind } from '@/game/art'
@@ -25,7 +25,7 @@ const props = defineProps<{
   fallback: GameIconName
 }>()
 
-const painted = useArtImage(props.kind, props.id)
+const painted = useArtImage(props.kind, () => props.id)
 
 /**
  * The canvas-drawn stand-in, resolved after mount.
@@ -38,13 +38,16 @@ const painted = useArtImage(props.kind, props.id)
  * the drawing did not exist at all.
  */
 const drawn = ref<string | null>(null)
-onMounted(async () => {
+const resolveDrawn = async (): Promise<void> => {
   if (props.kind !== 'ui') return
   try {
     const { drawnUiMark } = await import('@/game/uiArt')
     drawn.value = drawnUiMark(props.id)
   } catch { /* no drawing — the glyph is the floor */ }
-})
+}
+onMounted(resolveDrawn)
+// …and again when the id changes under a mounted icon — see `useArtImage`.
+watch(() => props.id, () => { drawn.value = null; void resolveDrawn() })
 
 const src = computed<string | null>(() => painted.value ?? drawn.value)
 </script>

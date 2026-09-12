@@ -31,8 +31,11 @@ export default {
     'fireRate': '射速',
     'incoming': '攻击来袭！',
     'dodge': '闪避',
+    'getIn': '进圈',
+    'holdStill': '别动',
     'milestone': '{n} 人集结！',
     'weaponActive': '{name} 就绪',
+    'weaponsActive': '{a} + {b} 就绪',
     'weaponLocked': '{name} 未解锁 — 已击中 {n}/{total} 个拉杆',
     'weaponGift': '{name} 就在前方 — 免费，无需拉杆',
     'weaponFree': '免费'
@@ -90,6 +93,10 @@ export default {
       'a': "两倍射速",
       'b': "更快充能闸门"
     }
+  },
+  'bossReward': {
+    'title': "首领已击败！",
+    'subtitle': "第 {n} 关的礼物。继续前进！"
   },
   'result': {
     'stageClear': '通关！',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': '手雷',
 
-    'shield': '护盾'
+    'shield': '护盾',
 
+    'locked': '未解锁',
+
+    'unlocksAt': '第{n}关解锁',
+
+    'frost': '冰霜新星',
+
+    'decoy': '诱饵信号弹',
+
+    'trialLabel': '{name} · 免费试用',
+
+    'trialTag': '免费试用！',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

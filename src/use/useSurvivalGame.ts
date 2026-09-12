@@ -11,7 +11,8 @@ import {
   BULWARK_FLOOR, BULWARK_R, BULWARK_SHARE, CAGE_R,
   CRATE_R, CRATE_RATE_GAIN, CROWD_MAX_R, CROWD_SQUASH, DIVIDER_H, DIVIDER_HALF_W,
   FOE_BODY_HALF_H, FOE_BODY_HALF_W, FOE_COLLIDE_CD, FOE_COLLIDE_CORE, FOE_COLLIDE_IFRAMES_MS, FOE_COLLIDE_KILL_EVERY,
-  ELITE_DRAG_LEAD, ELITE_HOLD_MAX, ELITE_LUNGE, ELITE_SWEEP_CD, eliteDragFor,
+  CAGE_JOIN_MAX_S, CAGE_JOIN_SPEED,
+  ELITE_DRAG_LEAD, ELITE_DRAG_MIN, ELITE_HOLD_MAX, ELITE_LUNGE, ELITE_SWEEP_CD, eliteDragFor,
   ELITE_SWEEP_FRACTION, ELITE_SWEEP_REACH, ELITE_TELEGRAPH, FOE_REACH, FUNNEL_LEAD,
   PASSAGE_FIT_MARGIN,
   BOSS_MIN_KILL, bossMinKill, SLAM_FRACTION_MAX, SLAM_MAX_FRACTION, SWEEP_FRACTION_MAX, endlessPressure,
@@ -32,11 +33,12 @@ import {
 } from '@/game/survival'
 import { arenaKit, bossDesign, bossHpScale, foeDef, foeHpScale } from '@/game/foes'
 import {
+  BOSS_REWARD_DAMAGE_MUL, BOSS_REWARD_STAGE, BOSS_REWARD_WEAPON,
   GUARD_H, LEVER_R, ROCKET_SPLASH_SHARE, STONE_H, WEAPONS, WEAPON_BOX_R, WEAPON_PICK_STAGE,
   WEAPON_REVEAL_S, isWeaponId, weaponStreams,
   type Guard, type Lever, type Stone, type WeaponBox, type WeaponId
 } from '@/game/weapons'
-import { WEAPON_PICK_KEY } from '@/keys'
+import { BOSS_REWARD_KEY, GAZE_TAUGHT_KEY, WEAPON_PICK_KEY } from '@/keys'
 import { buildTrack, perfectSquadFor, type Track } from '@/game/track'
 import {
   adaptiveBigHitMul, adaptiveBossHp, adaptiveBossSeconds, adaptiveBossStage,
@@ -66,6 +68,7 @@ import {
   CHARGE_TELEGRAPH_MIN,
   CLAW_HALF_DEPTH,
   CLAW_LEAD,
+  CLAW_SPACING,
   GUNNER_FRACTION,
   GUNNER_RELOAD,
   GUNNER_STANDOFF,
@@ -98,33 +101,76 @@ import {
   SUMMON_TELEGRAPH,
   SUMMON_TYPE,
   SUMMON_WAVES_MAX,
+  BURROWER_BLAST_R,
+  BURROWER_DIVES_MAX,
+  BURROWER_DIVE_GAP,
+  BURROWER_FRACTION,
+  BURROWER_LAG,
+  BURROWER_RECOVER,
+  BURROWER_SPEED,
+  BURROWER_SURFACE_S,
+  BURROWER_TRACK_S,
+  CROSSRAKE_GAP_S,
+  CROSSRAKE_OFFSET,
+  CROWD_TRAIL_S,
+  GAZE_OPEN,
+  GAZE_STRIKE_HALF_W,
+  GAZE_TEACH_LAST_STAGE,
+  GAZE_TOLERANCE,
+  GAZE_WATCH,
+  SHOCK_EYE_R,
+  WARDEN_FRACTION,
+  WARDEN_HALF_DEPTH,
+  WARDEN_PLANT_AHEAD,
+  WARDEN_RELOAD,
+  WARDEN_SLAB_HALF_W,
+  WARDEN_TELEGRAPH,
+  WARD_R,
   bossCharges,
   bossEnragesAt,
   bossGuardPayoff,
+  bossHasVariant,
   bossHpMulFor,
   bossKindFor,
+  bossPatternSeed,
+  bossVerbPool,
   chargeHalfW,
   chargeWindup,
   clawCoreHalfW,
   clawFurrowHalfW,
   clawLaneXs,
+  flankXs,
   inClawFurrow,
+  inShockBand,
+  mulberry32,
   minibossDesignFor,
   minibossKindFor,
   rollerCoreR,
   rollerLaneFor,
   rollerLaneX,
   enragedSpan,
+  shockEyeX,
+  shockOuterR,
+  shuffleBag,
   summonWaveSize,
+  wardX,
+  wardenSlabXs,
+  wardenSlotX,
   type BossBolt,
-  type BossKind
+  type BossKind,
+  type BossVerb
 } from '@/game/threats'
+import {
+  DECOY_AHEAD, DECOY_BURST_MULT, DECOY_BURST_R, DECOY_FLIGHT_S, DECOY_GUNNER_LOCK_X,
+  DECOY_PULL_R, DECOY_PULL_SPEED, DECOY_S, DECOY_SWARM_R, FROST_BRITTLE, FROST_S,
+  SKILL_VIEW_AHEAD, decoyRakeCentre, decoySpotX
+} from '@/game/skills'
 import { pushFx } from '@/use/useVfx'
 import { difficultyFactor } from '@/use/useUser'
 import {
   __setUpgradeLevel,
   coinMagnetBonus, coinMultiplier, fireRate as metaFireRate, gatePayoutBonus, rangeBonus,
-  startSquad, unitDamage, weaponPowerMul
+  startSquadAt, unitDamage, weaponPowerMul
 } from '@/use/useUpgrades'
 import { getState, setStates } from '@/use/useTowerState'
 import {
@@ -207,6 +253,32 @@ export const bossHp01 = ref(0)
  * behaving like the weapon that launched it.
  */
 export const activeWeapon = ref<WeaponId | null>(null)
+/**
+ * What that weapon is worth against its full self: 1 for everything the road
+ * hands over, `BOSS_REWARD_DAMAGE_MUL` for the stage-1 boss's launcher.
+ *
+ * Beside `activeWeapon` rather than a third `WeaponId`, because the gift is the
+ * launcher — same salvo, same homing, same art, same name on the badge — with
+ * less behind each round. Set with the weapon by `startStage`, and back to 1 the
+ * moment any box hands over a weapon of its own.
+ */
+export const weaponPower = ref(1)
+
+/**
+ * ─── A second gun, firing alongside the first ───────────────────────────────
+ *
+ * Stage 2 is the one road that can hand over TWO weapons: the stage-1 boss's
+ * launcher it opens with, and the free gatling box in the middle of it. A box
+ * used to REPLACE whatever the crowd held, which quietly took the first boss's
+ * reward away twenty seconds after it was given. Now the box's weapon becomes
+ * the main gun and the one already held keeps firing beside it — same squad,
+ * same cadence clock, its own rounds, its own power — so the player sees the
+ * hose AND the salvos, overlaid.
+ *
+ * `null` everywhere else; cleared with the stage like every other weapon.
+ */
+export const sideWeapon = ref<WeaponId | null>(null)
+export const sideWeaponPower = ref(1)
 
 /**
  * The puzzle the player can currently do something about, for the HUD.
@@ -318,6 +390,120 @@ let bossBolts: BossBolt[] = []
  */
 let bossEnraged = false
 let bossCharging = false
+/**
+ * …and is the cycle being wound up this kind's SECOND VERB?
+ *
+ * A third latch beside the two above, and it obeys the same discipline for the
+ * same reason: `armBossCycle` is the one place that decides what the next cycle
+ * is, `aimBoss` is the one place that announces it, and `throwBossAttack` is the
+ * one place that resolves it. The charge, the variant and the gaze latches are
+ * all read off ONE bag draw (`armBossCycle`), so no two of them can ever be true
+ * at once — one draw is one verb.
+ *
+ * Only the two kinds whose variant is a swing ever set it (the meteor and the
+ * claw — see `variantOnSlamClock`). The healer's ward and the summoner's flanks wave ride
+ * their own clocks and are decided where those clocks live.
+ */
+let bossVarying = false
+
+/**
+ * …and is it a GAZE? The third latch's sibling, with the same discipline: set
+ * where the next cycle is decided, read where it is announced and where it
+ * resolves. See `GAZE_WATCH` for what the attack is.
+ */
+let bossGazing = false
+
+/**
+ * The eye, while it is open: seconds left, the anchor travel it has seen, where
+ * the anchor was last frame, and whether it has already fired. Module scratch
+ * for the reason every other piece of phase state here is — there is one boss,
+ * and nothing outside this module writes it.
+ *
+ * While `gazeWatch` is above zero the boss's own attack clock is FROZEN (see
+ * `stepBoss`), so nothing else it does can land inside the window.
+ */
+let gazeWatch = 0
+let gazeTravel = 0
+let gazeLastX = 0
+let gazeStruck = false
+
+/**
+ * The fight's attack bag — see `bossVerbPool` and `shuffleBag`. `bossBagPool`
+ * is the pool the bag was filled from, so a pool that changes (the charge
+ * joining at the phase-two turn) is noticed on the next draw rather than
+ * leaving the old bag to run out first.
+ */
+let bossBag: BossVerb[] = []
+let bossBagLast: BossVerb | null = null
+let bossBagPool = ''
+
+/**
+ * This attempt's private random stream, reseeded at every `spawnBoss` from
+ * `bossPatternSeed`. Never `Math.random()` — see `mulberry32`.
+ */
+let bossRng: () => number = mulberry32(1)
+
+/**
+ * Boss fights started this session. The part of the seed that makes a retry a
+ * different fight; see `bossPatternSeed`.
+ */
+let bossTry = 0
+
+/**
+ * The part of the seed that makes a RELOAD a different session.
+ *
+ * Zero under test, and that is not a shortcut, it is the contract every spec in
+ * this repository relies on: a fight measured twice has to be the same fight, or
+ * the spec that measured it is a coin flip. Everywhere else it is drawn from the
+ * platform's crypto source rather than from `Math.random()`, so drawing it
+ * cannot shift a single roll anything else in the game makes.
+ */
+const BOSS_PATTERN_SALT: number = import.meta.env.MODE === 'test'
+  ? 0
+  : (() => {
+    try {
+      const out = new Uint32Array(1)
+      globalThis.crypto.getRandomValues(out)
+      return out[0]! >>> 0
+    } catch {
+      return Date.now() >>> 0
+    }
+  })()
+
+/** Is the summoner's NEXT wave a flanks wave? Decided by the bag when the
+ *  previous beat resolves — see `armSummon`. */
+let summonFlankNext = false
+
+/**
+ * The crossrake's second pass, in flight.
+ *
+ * `left` is the budget the two passes SHARE, which is the whole of why this is
+ * one object and not two attacks — see `throwCrossrake`. Module scratch rather
+ * than a field on `Boss` for the reason the phase-two block above gives: there
+ * is one boss, nothing outside this module writes it, and a field on the struct
+ * would have to be reset by every path that makes a boss rather than by the one
+ * path that makes a crossrake.
+ */
+let crossrake: {
+  t: number
+  lanes: readonly number[]
+  y: number
+  halfW: number
+  left: number
+} | null = null
+
+/**
+ * The healer's ward: is one on the road, and where?
+ *
+ * Planted a full cast before the heal it guards (see `plantWard`), so it
+ * outlives the cycle that created it — which is exactly why it cannot be
+ * inferred from `b.charging` at the moment the heal lands. `b.charging` is also
+ * revoked by the gap invariant in `stepBoss`, and a ward that survived that
+ * revocation would sit on the road promising a heal that had been called off.
+ */
+let bossWarded = false
+let bossWardX = 0
+let bossWardY = 0
 /** The column a charge is committed to, locked at the start of the wind-up. The
  *  band the player reads and the bodies the charge bills are the same numbers. */
 let bossChargeLane = 0
@@ -327,6 +513,12 @@ let bossChargeHalfW = 0
  *  different beat than the one the cast promised. */
 let bossChargeFromY = 0
 let bossChargeToY = 0
+/** A charge aimed at a flare (`aimBoss`): where the body stood when it locked,
+ *  so it can swing into the band over the wind-up instead of jumping to it —
+ *  `null` for every other charge, which starts in its own column. */
+let bossChargeSlideX: number | null = null
+/** …and the wind-up it has to do that in. */
+let bossChargeAimCd = 0
 
 /**
  * ─── A gunner's round in flight ─────────────────────────────────────────────
@@ -377,6 +569,8 @@ let targetX = 0
 
 let clock = 0
 let fireAccum = 0
+/** The side gun's own trigger clock — see `sideWeapon`. */
+let sideAccum = 0
 /** Slow-motion factor, driven by the moments worth savouring (a gate pass, the
  *  boss dying). Eases back to 1 on its own. */
 let timeScale = 1
@@ -470,7 +664,7 @@ export const FOE_BLANK: Readonly<Foe> = {
   bite: 0, biteShare: 0, biteCd: 0, scale: 1, flash: 0, phase: 0, dead: false,
   flying: false, hold: 0, hitCd: 0, sweepCd: 0, sweepSpan: 0, sweepDir: 1,
   sweepTold: false, kind: 'scythe', lane: 1, fuse: 0, reload: 0, kindTicks: 0,
-  swayPhase: 0, elite: false
+  markX: 0, markY: 0, swayPhase: 0, elite: false
 }
 
 export const BULLET_BLANK: Readonly<Bullet> = {
@@ -502,6 +696,7 @@ const resetFoe = (f: Foe): Foe => {
   f.hold = 0; f.hitCd = 0
   f.sweepCd = 0; f.sweepSpan = 0; f.sweepDir = 1; f.sweepTold = false
   f.kind = 'scythe'; f.lane = 1; f.fuse = 0; f.reload = 0; f.kindTicks = 0
+  f.markX = 0; f.markY = 0
   f.swayPhase = 0; f.elite = false
   return f
 }
@@ -573,6 +768,74 @@ export const getWeaponBoxes = (): WeaponBox[] => weaponBoxes
 export const readWeaponPick = (): WeaponId | null => {
   const v = getState<unknown>(WEAPON_PICK_KEY, null)
   return isWeaponId(v) ? v : null
+}
+
+/** Has the stage-1 boss handed over its launcher? See `BOSS_REWARD_STAGE`. */
+export const readBossReward = (): boolean => getState<unknown>(BOSS_REWARD_KEY, false) === true
+
+// ─── The road goes on ───────────────────────────────────────────────────────
+//
+// A cleared stage used to throw the whole world away and start the next one at
+// the road's origin, which read — correctly — as a level reload. Now the next
+// stage opens UNDER THE CROWD: same column, same survivors standing where they
+// stood, and the boss they just killed lying on the ground a few steps ahead.
+//
+// The sim still starts every stage at y = 0, and nothing that reads the track
+// had to learn otherwise. What moves is everything the player can SEE: the
+// survivors and the corpse are carried across in the new stage's coordinates,
+// the scene shifts the VFX pools by the same distance (`rebaseVfx`), and the
+// renderer scrolls the road's texture off `roadScrollY` so the ground does not
+// jump either. Only on the way FORWARD: a retry, a boot or an expedition opens
+// a road the crowd was not already standing on.
+
+/** A beaten boss, left where it fell. Scenery: nothing collides with it. */
+export interface BossCorpse {
+  design: string
+  x: number
+  y: number
+  scale: number
+  /** Which way it toppled — see `bossFallDir`. */
+  fall: -1 | 1
+}
+
+/**
+ * Which way a dying boss topples: in toward the middle of the road, so a body
+ * that died against a rail does not lie across it. One rule for the death
+ * animation and the corpse it turns into, so the two cannot disagree.
+ */
+export const bossFallDir = (x: number): -1 | 1 => (x > 0.05 ? -1 : 1)
+
+interface StageEntry {
+  /** The stage this is the opening of. */
+  stage: number
+  /** Where across the road the crowd stood. */
+  x: number
+  corpse: BossCorpse | null
+  /**
+   * The survivors' offsets from the anchor, innermost first. Spent by the first
+   * start only: a retry opens on the ordinary formation.
+   */
+  formation: Array<{ x: number; y: number }> | null
+}
+
+/** Where the stage in flight began, if it began where the last one ended. */
+let entry: StageEntry | null = null
+let corpse: BossCorpse | null = null
+/** Total distance the world has been re-based by — the road texture's phase. */
+let roadScroll = 0
+/** Survivors the new stage did not keep, for the renderer to see off once. */
+let departed: Array<{ x: number; y: number }> = []
+/** Enough to read as "the rest fell back" without a burst per body. */
+const DEPARTED_MAX = 24
+
+export const getBossCorpse = (): BossCorpse | null => corpse
+export const roadScrollY = (): number => roadScroll
+/** The survivors left behind by the last handover — returned ONCE, then empty. */
+export const takeDepartedSurvivors = (): Array<{ x: number; y: number }> | null => {
+  if (departed.length === 0) return null
+  const out = departed
+  departed = []
+  return out
 }
 
 /**
@@ -848,8 +1111,27 @@ const resetWorld = (): void => {
   bossBolts = []
   bossEnraged = false
   bossCharging = false
+  bossVarying = false
+  bossGazing = false
+  gazeWatch = 0
+  gazeStruck = false
+  bossBag = []
+  bossBagLast = null
+  bossBagPool = ''
+  summonFlankNext = false
+  bossWarded = false
+  crossrake = null
+  // The late skills belong to the road they were cast on. The cooldown does not
+  // (`useSkills` keeps it in the save); the freeze and the flare do.
+  frostLeft = 0
+  decoy = null
+  bossAimedAtDecoy = false
+  bossChargeSlideX = null
+  anchorStepY = 0
+  clearTrail()
   nextEvent = 0
   fireAccum = 0
+  sideAccum = 0
   timeScale = 1
   timeScaleTarget = 1
   slowHoldMs = 0
@@ -894,7 +1176,7 @@ const nextUnitSeed = (): number => {
   return (h >>> 8) / 16777216
 }
 
-const spawnUnit = (x: number, y: number): void => {
+const spawnUnit = (x: number, y: number, join = 0): void => {
   if (squadCount.value >= MAX_SQUAD) return
   units.push({
     i: units.length,
@@ -906,7 +1188,8 @@ const spawnUnit = (x: number, y: number): void => {
     phase: Math.random(),
     flash: 0,
     dying: 0,
-    inv: 0
+    inv: 0,
+    join
   })
   squadCount.value++
   if (squadCount.value > peakSquad.value) peakSquad.value = squadCount.value
@@ -958,14 +1241,27 @@ export const startStage = (n?: number, seed?: number): void => {
   // See `syncMetaToRun`.
   metaDamage = unitDamage.value
   metaRate = metaFireRate.value
-  metaSquad = startSquad.value
+  metaSquad = startSquadAt(target)
   runCoins.value = 0
   kills.value = 0
   // The weapon does not survive the stage that gave it. See `game/weapons.ts`:
   // the prize is for reading THIS road, and a launcher carried into stage 12
   // because the player solved stage 11 would quietly re-balance every stage
   // after it.
-  activeWeapon.value = target === WEAPON_PICK_STAGE ? readWeaponPick() : null
+  //
+  // Two stages are the exception, and both are loaners the player was SHOWN:
+  // the weapon they chose for `WEAPON_PICK_STAGE`, and the stage-1 boss's
+  // launcher on the road after it — at reduced power, see
+  // `BOSS_REWARD_DAMAGE_MUL`. Both are re-armed on every attempt, because a
+  // retry that quietly took back a reward already handed over reads as a
+  // punishment for dying.
+  const bossGift = !expedition && target === BOSS_REWARD_STAGE + 1 && readBossReward()
+  activeWeapon.value = target === WEAPON_PICK_STAGE
+    ? readWeaponPick()
+    : bossGift ? BOSS_REWARD_WEAPON : null
+  weaponPower.value = bossGift ? BOSS_REWARD_DAMAGE_MUL : 1
+  sideWeapon.value = null
+  sideWeaponPower.value = 1
   // Per run, like everything else here: the scene only ever reacts to it going
   // UP, so the reset announces nothing.
   rallies.value = 0
@@ -1009,14 +1305,24 @@ export const startStage = (n?: number, seed?: number): void => {
   // from the shop's value at this moment. `syncMetaToRun` can grow the crowd
   // mid-stage; it must not also grow the crowd the run is being compared to, or
   // buying Squad halfway down the road would retroactively demote the run.
-  perfectSquad = perfectSquadFor(target, startSquad.value, gatePayoutBonus.value)
+  perfectSquad = perfectSquadFor(target, startSquadAt(target), gatePayoutBonus.value)
   // Re-read at `spawnBoss` from the crowd that actually arrives; until then the
   // stage's authored value, so nothing can read a stale fight's number.
   bossSwingMul = earlyBigHitMul(target)
 
-  anchorX = 0
+  // ── Where this road begins ──
+  //
+  // On the ground the last boss fell on, when the crowd is walking on from it
+  // (`advanceStage`) or trying again from there (`retryStage`) — see "The road
+  // goes on". Anything else, a boot included, opens a fresh road: the corpse is
+  // only there because the player just watched it fall. An expedition leaves the
+  // entry alone, so the campaign it hands back to still opens where it was left.
+  const opening = !expedition && entry !== null && entry.stage === target ? entry : null
+  if (!expedition && opening === null) entry = null
+  corpse = opening?.corpse ? { ...opening.corpse } : null
+  anchorX = opening?.x ?? 0
   anchorY = 0
-  targetX = 0
+  targetX = anchorX
   steerMoves = 0
 
   funnelR = CROWD_MAX_R
@@ -1029,12 +1335,27 @@ export const startStage = (n?: number, seed?: number): void => {
   // Both read the same per-stage failure count, which the clear resets — so
   // winning the stage clears the whole effect.
   const start = Math.max(1, Math.round(
-    (startSquad.value + startBonusFor(failures, target))
+    (startSquadAt(target) + startBonusFor(failures, target))
     * retrySquadScaleFor(failures, target)
   ))
+  // Walking on, the new squad is the survivors nearest the middle of the old
+  // one, standing exactly where they stood — so nobody visibly jumps. It is still
+  // `start` of them: every stage opens on the squad the shop bought, and a crowd
+  // carried across the handover would re-price every road after it. The rest
+  // fall back, and the renderer sees them off (`takeDepartedSurvivors`).
+  const formation = opening?.formation ?? null
   for (let i = 0; i < start; i++) {
-    const p = slotPos(i, start, CROWD_MAX_R)
-    spawnUnit(p.x, p.y)
+    const p = formation?.[i] ?? slotPos(i, start, CROWD_MAX_R)
+    spawnUnit(anchorX + p.x, p.y)
+  }
+  departed = []
+  if (opening && formation) {
+    const step = Math.max(1, Math.ceil((formation.length - start) / DEPARTED_MAX))
+    for (let i = start; i < formation.length; i += step) {
+      const p = formation[i]!
+      departed.push({ x: anchorX + p.x, y: p.y })
+    }
+    opening.formation = null
   }
 
   worldVersion.value++
@@ -1073,7 +1394,7 @@ export const startExpedition = (now: number = Date.now()): void => {
  * The shop is reachable from the HUD **during a run**, and three of its tracks
  * used to be latched at `startStage` and nowhere else: `damage.value`,
  * `runFireRate` and the crowd itself are snapshots of `unitDamage`,
- * `fireRate` and `startSquad` taken as the stage opened. Buy Squad,
+ * `fireRate` and `startSquadAt` taken as the stage opened. Buy Squad,
  * Firepower or Fire Rate mid-stage and the coins went, the level went up, and
  * the run did not change by one survivor, one point of damage or one shot a
  * second — measured: six levels of each bought at stage 7 moved squad 11 -> 11,
@@ -1124,7 +1445,7 @@ const syncMetaToRun = (): void => {
     metaRate = rate
   }
 
-  const squad = startSquad.value
+  const squad = startSquadAt(stage.value)
   if (squad > metaSquad) {
     const arriving = Math.round(squad - metaSquad)
     metaSquad = squad
@@ -1153,7 +1474,7 @@ const syncMetaToRun = (): void => {
  * three derived values covers every writer there will ever be, including the
  * next one somebody adds.
  */
-watch([unitDamage, metaFireRate, startSquad], syncMetaToRun)
+watch([unitDamage, metaFireRate, () => startSquadAt(stage.value)], syncMetaToRun)
 
 /**
  * Advance to the next stage and start it.
@@ -1167,10 +1488,47 @@ watch([unitDamage, metaFireRate, startSquad], syncMetaToRun)
  * The guard lives HERE, not at the call site, because there are two call sites
  * today (the result screen's two buttons) and the cost of a third one forgetting
  * is a campaign jumped forward by four stages that no player can undo.
+ *
+ * In the campaign the next road opens under the crowd — see "The road goes on".
+ * Returns how far the world was re-based to get there, so the caller can move
+ * the VFX with it; 0 when nothing carried over.
  */
-export const advanceStage = (): void => {
-  if (isExpedition.value) startStage()
-  else startStage(stage.value + 1)
+export const advanceStage = (): number => {
+  if (isExpedition.value) {
+    startStage()
+    return 0
+  }
+  const next = stage.value + 1
+  const shift = anchorY
+  entry = entryFrom(next, shift)
+  roadScroll += shift
+  startStage(next)
+  return shift
+}
+
+/**
+ * The next stage's opening, read off the world as it stands.
+ *
+ * Every y is re-based by `shift` — the crowd's own y — so the new stage's
+ * origin is the ground under the crowd, which is exactly where `startStage` puts
+ * its anchor. The corpse is only taken from a boss that actually died: an
+ * advance made any other way (a dev skip, a test) carries the crowd and nothing
+ * else.
+ */
+const entryFrom = (next: number, shift: number): StageEntry => {
+  const b = boss
+  const body: BossCorpse | null = b && b.dead
+    ? { design: b.design, x: b.x, y: b.y - shift, scale: b.scale, fall: bossFallDir(b.x) }
+    : null
+  const alive = units.filter((u) => u.dying <= 0)
+  const dist = (u: Unit): number => (u.x - anchorX) ** 2 + ((u.y - anchorY) / CROWD_SQUASH) ** 2
+  alive.sort((p, q) => dist(p) - dist(q))
+  return {
+    stage: next,
+    x: anchorX,
+    corpse: body,
+    formation: alive.map((u) => ({ x: u.x - anchorX, y: u.y - shift }))
+  }
 }
 
 /** Restart the current stage after a wipe — or, out of an expedition, go back
@@ -1689,6 +2047,9 @@ export const step = (dtMs: number): void => {
   stepBullets(dt)
   stepGates(dt)
   if (steerOnly.value) return
+  // Before anything hostile moves, so a freeze that runs out this tick releases
+  // the world on this tick rather than one late.
+  stepLateSkills(dt)
   stepDividers(dt)
   stepFoes(dt)
   stepBarricades(dt)
@@ -1792,6 +2153,89 @@ export const RALLY_GRACE_MS = 1500
 export const steerOnly = ref(false)
 
 /** The crowd's centre: forward at the stage's pace, sideways after the thumb. */
+/**
+ * ─── The crowd's own trail ──────────────────────────────────────────────────
+ *
+ * Where the squad has BEEN, sampled at a fixed interval, for the hazards whose
+ * whole design is that they arrive at a place the player was standing rather
+ * than at the place they are standing.
+ *
+ * ── Why a ring of samples and not a pursuit ──
+ *
+ * `BURROWER_LAG`'s note has the arithmetic in full; the short version is that a
+ * pursuer converges on anything short of a full sprint, so a chase on a road
+ * 8.2 units wide has exactly one survivable answer and it has to be executed
+ * perfectly every time. A trail gives every unit of movement exactly its own
+ * unit of separation, so the dodge is graded and the player is allowed to be
+ * partly right.
+ *
+ * ── Why it is a fixed-interval ring and not a list of positions ──
+ *
+ * Zero allocation, zero growth, and a lookup that is arithmetic rather than a
+ * search: `lag / TRAIL_STEP` is the index. Typed arrays because this is written
+ * every frame of every run whether anything reads it or not, and the cost of
+ * that has to be a pair of float stores.
+ *
+ * `CROWD_TRAIL_S` bounds the memory and the resolution together — 1.2 seconds
+ * across `TRAIL_SLOTS` samples is one every 25 ms, or roughly a frame and a
+ * half at 60 fps.
+ *
+ * The resolution is not a memory question, it is an ACCURACY one, and the number
+ * is sized off the fastest thing the trail has to describe. `STEER_SPRING`
+ * settles a full-lane move in about a third of a second, so a crowd crossing the
+ * road is briefly doing 15-20 units a second — at a 50 ms sample that is nearly
+ * a unit of quantisation error in where the trail says the crowd was, against a
+ * blast whose whole tolerance is 3.85. Halving the step halves the error for two
+ * more Float32Arrays of 48.
+ */
+const TRAIL_SLOTS = 48
+const TRAIL_STEP = CROWD_TRAIL_S / TRAIL_SLOTS
+const trailX = new Float32Array(TRAIL_SLOTS)
+const trailY = new Float32Array(TRAIL_SLOTS)
+let trailHead = 0
+let trailFilled = 0
+let trailAccum = 0
+
+/** Reset by `resetWorld`, so a new stage never starts with the last one's path
+ *  under it. */
+const clearTrail = (): void => {
+  trailHead = 0
+  trailFilled = 0
+  trailAccum = 0
+}
+
+const sampleTrail = (dt: number): void => {
+  trailAccum += dt
+  // A `while` rather than an `if`, so a long frame (a tab coming back, a stall
+  // on a cheap phone) lays down the samples it owes instead of quietly
+  // stretching the trail's timebase. They land on top of each other, which is
+  // the honest record of a frame in which the crowd moved once.
+  while (trailAccum >= TRAIL_STEP) {
+    trailAccum -= TRAIL_STEP
+    trailHead = (trailHead + 1) % TRAIL_SLOTS
+    trailX[trailHead] = anchorX
+    trailY[trailHead] = anchorY
+    if (trailFilled < TRAIL_SLOTS) trailFilled++
+  }
+}
+
+/**
+ * The slot holding where the crowd was `lag` seconds ago, or -1 if the trail
+ * does not go back that far yet.
+ *
+ * -1 is a real answer and not an error: at the start of a stage the crowd HAS
+ * no past, and the honest reading of "where were you half a second ago" is
+ * "where you are", which is what the caller does with it. Clamped to the oldest
+ * sample rather than wrapping, because a wrapped index would hand back the
+ * FUTURE — the next thing that happens after a bug like that is a hazard that
+ * lands where the player is about to be.
+ */
+const trailAt = (lag: number): number => {
+  if (trailFilled === 0) return -1
+  const back = Math.min(trailFilled - 1, Math.max(0, Math.round(lag / TRAIL_STEP)))
+  return (trailHead - back + TRAIL_SLOTS) % TRAIL_SLOTS
+}
+
 const stepAnchor = (dt: number): void => {
   const forward = phase.value === 'run' && !steerOnly.value ? stageSpeed(stage.value) : 0
   // A holding elite DRAGS the road down to a crawl. It does not stop it.
@@ -1811,12 +2255,45 @@ const stepAnchor = (dt: number): void => {
   if (phase.value === 'run') {
     for (const f of foes) {
       if (!f.elite || f.dead || f.hold <= 0) continue
+      // ── A burrower under the road, and the two halves of its dive ──
+      //
+      // TRACKING: it is not blocking the road and must not slow it. Its whole
+      // attack is answered by moving, and lateral travel is bought with the
+      // road's speed — a mound that dragged the run to a crawl would be a hazard
+      // that takes away the only input that answers it.
+      //
+      // PLANTED: it holds, like an armed bomber, and for the reason written on
+      // `BOMBER_FUSE` — the crowd covers more ground in the fuse than the blast
+      // is wide, so a squad that simply kept walking would leave the ring behind
+      // and learn that eruptions do nothing. Forced to the crawl rather than
+      // handed to `eliteDragFor`, because the mound is BEHIND the crowd by
+      // however far the player has run and a gap-based curve would read that as
+      // "far away, no slow" — which is the opposite of what a ring under their
+      // feet means.
+      //
+      // `sweepTold` is the sim's own latch for which half it is in — see
+      // `stepBurrower`.
+      //
+      // ⚠ ASKED BEFORE THE `f.y < anchorY` TEST BELOW, and that ordering is the
+      // whole clause. A planted mound is behind the crowd by however far the
+      // player ran to get away from it, so the "is it still ahead of us" guard
+      // rejects it every time — and it did, for one revision: the crowd walked
+      // 3.55 units out of an eruption it was standing dead centre of, and a
+      // squad that answered the fight perfectly and one that ignored it both
+      // took zero.
+      if (f.kind === 'burrower' && f.fuse > 0) {
+        if (f.sweepTold) drag = Math.min(drag, ELITE_DRAG_MIN)
+        continue
+      }
       if (f.y < anchorY) continue
       drag = Math.min(drag, eliteDragFor(f.y - anchorY))
     }
   }
 
   anchorY += forward * drag * dt
+  // Kept for the one thing that has to ride with the crowd: bodies gathered at a
+  // hanging flare (`swarmDecoy`).
+  anchorStepY = forward * drag * dt
 
   // There is NO hard floor any more, and that is deliberate.
   //
@@ -1837,6 +2314,12 @@ const stepAnchor = (dt: number): void => {
   // that the crowd has mass.
   const k = 1 - Math.exp(-STEER_SPRING * dt)
   anchorX += (targetX - anchorX) * k
+
+  // Recorded AFTER the move, so a sample is a place the crowd actually was.
+  // Unconditional, because a trail with holes in it is worse than no trail: the
+  // burrower would read a stale position as a fresh one and plant where the
+  // crowd was two seconds ago rather than half of one.
+  sampleTrail(dt)
 
   if (phase.value === 'run' && anchorY >= track.arenaY) {
     phase.value = 'boss'
@@ -1878,7 +2361,20 @@ const stepAnchor = (dt: number): void => {
 const fightModel = (openingCd: number): AdaptiveFight => {
   const weapon = activeWeapon.value
   const def = weapon ? WEAPONS[weapon] : null
-  const damageMul = def ? def.damageMul * weaponPowerMul(weapon!) : 1
+  // `weaponPower` too: the stage-1 boss's launcher is priced as what it is, or
+  // the stage-2 boss would be sized for a full one and outlast the gift.
+  let damageMul = def ? def.damageMul * weaponPowerMul(weapon!) * weaponPower.value : 1
+  // …and a side gun adds its share (`sideWeapon`). Added as a RATIO of true
+  // firepower — rate × damage × power for each gun — and applied to the first
+  // gun's term, so the single-weapon model every fight was tuned against is
+  // untouched and two guns price as exactly as much more as they really fire.
+  const side = sideWeapon.value
+  if (side) {
+    const trueMul = (id: WeaponId, power: number): number =>
+      WEAPONS[id].rateMul * WEAPONS[id].damageMul * weaponPowerMul(id) * power
+    const first = weapon ? trueMul(weapon, weaponPower.value) : 1
+    damageMul *= (first + trueMul(side, sideWeaponPower.value)) / first
+  }
   // The bar is priced on the SOFT swing — see the note in `adaptiveHp`.
   const soft = earlyBigHitMul(stage.value)
   return {
@@ -2025,6 +2521,20 @@ const spawnBoss = (): void => {
   // through `startStage` — one reset each side keeps both honest.
   bossEnraged = false
   bossCharging = false
+  bossVarying = false
+  bossGazing = false
+  gazeWatch = 0
+  gazeStruck = false
+  bossBag = []
+  bossBagLast = null
+  bossBagPool = ''
+  summonFlankNext = false
+  bossWarded = false
+  crossrake = null
+  // A fresh stream per ATTEMPT — see `bossPatternSeed`. Counted here, where a
+  // boss is made, so a retry, a rally-and-retry and a fresh career all count as
+  // a new fight and none of them can replay the order the last one drew.
+  bossRng = mulberry32(bossPatternSeed(stage.value, bossTry++, BOSS_PATTERN_SALT))
   const hp = adaptive ? adaptiveHp(kind, openCd) : Math.max(authored, floor)
   boss = {
     kind,
@@ -2051,6 +2561,7 @@ const spawnBoss = (): void => {
     slamCd: openCd,
     slamSpan: openCd,
     slams: 0,
+    primaries: 0,
     aimed: false,
     guarded: 0,
     guard: 0,
@@ -2061,6 +2572,23 @@ const spawnBoss = (): void => {
     dying: 0
   }
   bossHp01.value = 1
+
+  // ── The opening attack comes out of the bag too ──
+  //
+  // A fight whose first move was always its primary would be a fight with one
+  // fixed beat left in it, and it would be the first one — the beat a player
+  // meets on every retry. So the swing-clock kinds draw their opener exactly as
+  // they draw everything after it, and the healer draws what its first NON-heal
+  // cast is. The SUMMONER is the one exception, on purpose: its opening wave is
+  // the lesson "bones come up out of the road ahead of you" (see
+  // `SUMMON_OPENING_CD`), and the first thing it does is that.
+  if (kind === 'meteor' || kind === 'claw') {
+    const first = drawBossVerb(boss)
+    bossVarying = first === 'variant'
+    bossGazing = first === 'gaze'
+  } else if (kind === 'healer' && !boss.charging) {
+    bossGazing = drawBossVerb(boss) === 'gaze'
+  }
 
   // ── Furnish the arena ──
   //
@@ -2306,9 +2834,34 @@ const stepUnits = (dt: number): void => {
     // the only thing this function is allowed to be authoritative about.
     tx = Math.max(-EDGE_X, Math.min(EDGE_X, clearOfSolids(tx, ty, u.x)))
 
-    const k = 1 - Math.exp(-14 * dt)
-    u.x += (tx - u.x) * k
-    u.y += (ty - u.y) * k
+    if (u.join > 0) {
+      // ── A freed survivor jogging over to the squad ──
+      //
+      // A capped speed instead of the formation spring, so the rescue is a run
+      // the player watches rather than a snap they miss. The road's own speed is
+      // added on top of `CAGE_JOIN_SPEED`, because the slot the joiner is
+      // heading for is moving forward with the crowd — without it, a joiner
+      // that came out behind the squad would chase it forever. It hands over to
+      // the spring the moment it arrives, or when `CAGE_JOIN_MAX_S` runs out and
+      // it is still somewhere it cannot reach.
+      u.join = Math.max(0, u.join - dt)
+      const dx = tx - u.x
+      const dy = ty - u.y
+      const d = Math.hypot(dx, dy)
+      const run = (CAGE_JOIN_SPEED + (phase.value === 'run' ? stageSpeed(stage.value) : 0)) * dt
+      if (d <= Math.max(run, 0.25)) {
+        u.x = tx
+        u.y = ty
+        u.join = 0
+      } else {
+        u.x += (dx / d) * run
+        u.y += (dy / d) * run
+      }
+    } else {
+      const k = 1 - Math.exp(-14 * dt)
+      u.x += (tx - u.x) * k
+      u.y += (ty - u.y) * k
+    }
     // Hard backstop for anything that moved a survivor outside the road behind
     // the formation's back — an obstacle shove, a gate spawn near the rail.
     if (u.x < -EDGE_X) u.x = -EDGE_X
@@ -2916,6 +3469,18 @@ export const attackIncoming = (): boolean => {
 export type IncomingKind =
   | 'slam' | 'rake' | 'bolt' | 'heal' | 'charge'
   | 'sweep' | 'bomb' | 'shot' | 'roll'
+  // ── The second verbs, and the one of them the badge's wording is wrong for ──
+  //
+  // `shock`, `ward` and `gap` all mark ground the player has to GET TO rather
+  // than ground to leave, so a badge printing `hud.dodge` over them is telling
+  // the player the opposite of the answer. That is a component fix (the block
+  // above says which prop it needs), not a reason to hide the badge: the badge's
+  // job is "look at the road", and on all three of these looking at the road is
+  // exactly right. Only `heal` stays down, because a bare heal is the one
+  // wind-up with nothing on the road to look at — see `attackIncoming`.
+  | 'shock' | 'ward' | 'gap' | 'burrow'
+  // …and the one whose answer is neither away nor into: STOP. See `GAZE_WATCH`.
+  | 'gaze'
 
 export interface Incoming {
   kind: IncomingKind
@@ -2932,16 +3497,82 @@ export interface Incoming {
   ttl: number
 }
 
+/**
+ * ─── …and the word the badge should print ───────────────────────────────────
+ *
+ * The corner badge says DODGE, and until the second verbs arrived that was true
+ * of everything it went up for. Three of the new attacks mark ground the player
+ * has to GET TO — the shock's eye, the healer's ward, the warden's slot — and a
+ * badge telling them to dodge is not a half-truth, it is the opposite of the
+ * answer. The one thing worse than no warning is a warning that sends the player
+ * out of the only safe patch of road.
+ *
+ * Derived from the kind in ONE place, here, rather than in the component: the
+ * component renders a word, and which word it is is a fact about the attack.
+ */
+export const incomingAnswer = (kind: IncomingKind): 'away' | 'into' | 'still' =>
+  kind === 'gaze'
+    ? 'still'
+    : kind === 'shock' || kind === 'ward' || kind === 'gap' ? 'into' : 'away'
+
+/**
+ * What the badge should say right now, or `null` while it is down.
+ *
+ * `attackIncoming` is the boolean the scene has always read and it keeps its
+ * meaning exactly; this is the same question with the answer attached, so a
+ * component can print the right verb without asking the simulation twice and
+ * risking two different answers in one frame.
+ */
+export const incomingWord = (): 'away' | 'into' | 'still' | null => {
+  const t = incomingThreat()
+  if (t === null || t.kind === 'heal') return null
+  return incomingAnswer(t.kind)
+}
+
 export const incomingThreat = (): Incoming | null => {
+  // Frozen: nothing is coming, and the badge says so by going down. It comes
+  // back up on the thaw for whatever is still wound up — the telegraphs held
+  // with the world, so it is the same warning with the same seconds left.
+  if (frostLeft > 0) return null
   const b = boss
-  if (b && !b.dead && b.aimed && b.slamCd > 0) {
+  // The eye, open or opening, outranks everything: while it is up the boss's
+  // other clocks are frozen, so there is nothing else it could be doing — and
+  // the summoner, which has no aim step, is asked here too. While a flare burns
+  // the eye is watching IT, and "hold still" would be an instruction about
+  // nothing.
+  if (b && !b.dead && !decoyLive()) {
+    if (gazeWatch > 0) return { kind: 'gaze', dodgeable: false, ttl: gazeWatch }
+    if (bossGazing && (b.aimed || b.kind === 'summoner')) {
+      return {
+        kind: 'gaze', dodgeable: false,
+        ttl: b.kind === 'summoner' ? b.summonCd : b.slamCd
+      }
+    }
+  }
+  // A swing aimed at the flare is not coming at the crowd. The elites below are
+  // still asked — they are their own fights.
+  if (b && !b.dead && b.aimed && b.slamCd > 0 && !bossAimedAtDecoy) {
     // Asked before the kind, because a charge is the same attack whichever
     // fight it is bolted onto — and because "get out of the lane" is a
     // different instruction from "get off that spot", which is the whole reason
     // a badge would want to know the kind at all.
     if (bossCharging) return { kind: 'charge', dodgeable: true, ttl: b.slamCd }
+    // A crossrake reports as a RAKE, because it is one: same strips, same
+    // instruction, and a player who has learned "get into a pocket" has learned
+    // most of it. A shock does NOT report as a slam, and that distinction is the
+    // whole reason this predicate reports a kind at all — the two look alike on
+    // the ground and the answers are opposites.
+    if (bossVarying) {
+      return b.kind === 'claw'
+        ? { kind: 'rake', dodgeable: true, ttl: b.slamCd }
+        : { kind: 'shock', dodgeable: true, ttl: b.slamCd }
+    }
     if (b.kind === 'healer') {
-      return { kind: b.charging ? 'heal' : 'bolt', dodgeable: !b.charging, ttl: b.slamCd }
+      // A warded heal is the first version of that cast with an answer in it, so
+      // it is reported as its own thing. `dodgeable` still says false — the
+      // answer is not a dodge — but it is no longer the dead end `heal` is.
+      const kind = b.charging ? (bossWarded ? 'ward' : 'heal') : 'bolt'
+      return { kind, dodgeable: !b.charging, ttl: b.slamCd }
     }
     return { kind: b.kind === 'claw' ? 'rake' : 'slam', dodgeable: true, ttl: b.slamCd }
   }
@@ -2959,6 +3590,19 @@ export const incomingThreat = (): Incoming | null => {
       case 'gunner':
         // `kindTicks` is the aim latch, `reload` the countdown to the shot.
         if (f.kindTicks > 0) return { kind: 'shot', dodgeable: true, ttl: Math.max(0, f.reload) }
+        break
+      case 'warden':
+        // `kindTicks` is the lock latch and `reload` the countdown to the slabs,
+        // exactly as they are for the gunner's round.
+        if (f.kindTicks > 0) return { kind: 'gap', dodgeable: true, ttl: Math.max(0, f.reload) }
+        break
+      case 'burrower':
+        // Reported for the WHOLE dive, the tracking half included, and that is
+        // the one place this predicate departs from "an attack has picked its
+        // ground". A mound following the crowd's trail has not picked any ground
+        // yet — but the thing the player has to do about it, keep moving, is
+        // what they have to be doing during the part BEFORE it picks.
+        if (f.fuse > 0) return { kind: 'burrow', dodgeable: true, ttl: Math.max(0, f.fuse) }
         break
       case 'roller': {
         // The ball has no wind-up because it does not need one — the roll IS the
@@ -3187,6 +3831,254 @@ const stepGrenades = (dt: number): void => {
 }
 
 /**
+ * Is there anything hostile in the fight for the two late skills to act on?
+ *
+ * Their refusal, and it is the grenade's rule for the grenade's reason: a skill
+ * that eats its whole cooldown on an empty road is a skill players learn
+ * not to press. Anything alive on the road ahead or just behind, any enemy round
+ * in the air, or a boss — a boss is the fight, whatever it is doing.
+ */
+const hostilesInFight = (): boolean => {
+  if (boss && !boss.dead) return true
+  for (const f of foes) {
+    if (!f.dead && f.y > anchorY - 3 && f.y < anchorY + SKILL_VIEW_AHEAD) return true
+  }
+  return bolts.some((b) => !b.dead) || bossBolts.length > 0
+}
+
+/**
+ * ─── Frost Nova ─────────────────────────────────────────────────────────────
+ *
+ * Everything hostile stops, for `FROST_S` seconds of the simulation's own clock
+ * — which is what makes it survive an ad: the scene does not step the world
+ * under one, so a freeze cast a moment before it is still a freeze afterwards.
+ *
+ * ── A freeze of the WORLD, not of a list of bodies ──
+ *
+ * One number, read wherever a hostile clock would run. Per-body freezes were
+ * the obvious shape and the wrong one: an attack's TELEGRAPH is drawn on the
+ * renderer's clock and paused with the world (`frostActive`), and a freeze that
+ * held the bodies it touched while a body that walked on a frame later kept
+ * winding up would split the world into two clocks — the one thing the cast
+ * contract (`ttl` is the exact seconds to impact) can never survive. So: the
+ * foes, their rounds, the elites' fuses and reloads, the boss's body, every one
+ * of its clocks, its bolts in the air and the second pass of a crossrake all
+ * stand still together, and all start again together.
+ *
+ * ── What frozen things do instead ──
+ *
+ *   • they take `FROST_BRITTLE` times the damage (`damageFoe`, `damageBoss`);
+ *   • an ORDINARY body the crowd walks into shatters (`frozenContact`); an elite
+ *     is a statue — solid, harmless, still there to be shot;
+ *   • nothing bites, nothing swings, nothing lands. The incoming badge goes
+ *     down (`incomingThreat`), because nothing is.
+ */
+let frostLeft = 0
+/** The simulation clock at the cast — the pose every frozen body is drawn in. */
+let frostAt = 0
+
+export const frostActive = (): boolean => frostLeft > 0
+/** 1 at the cast, 0 at the thaw — the renderer's single clock for the ice. */
+export const frostLeft01 = (): number => Math.max(0, Math.min(1, frostLeft / FROST_S))
+export const frostFrozenAt = (): number => frostAt
+
+/** Freeze the fight. Returns false (and costs nothing) on an empty road. */
+export const castFrostNova = (): boolean => {
+  if (phase.value !== 'run' && phase.value !== 'boss') return false
+  if (steerOnly.value || !hostilesInFight()) return false
+  frostLeft = FROST_S
+  frostAt = clock
+  pushFx({ kind: 'frostNova', x: anchorX, y: anchorY, seconds: FROST_S })
+  return true
+}
+
+/**
+ * A frozen body meets the crowd. Nothing it does costs a survivor: an ordinary
+ * body is brittle enough to walk through and comes apart, an elite (and a ball,
+ * and an armed bomber) is a statue the crowd flows round — the same shove
+ * `collideFoe` gives, with the bill taken out.
+ */
+const frozenContact = (f: Foe): void => {
+  // A burrower under the road has no body up here to touch.
+  if (f.kind === 'burrower' && f.fuse > 0) return
+  const halfW = f.scale * FOE_BODY_HALF_W
+  const halfH = f.scale * FOE_BODY_HALF_H
+  if (!nearCrowd(f.x, f.y, Math.max(halfW, halfH) + UNIT_R + 0.2)) return
+  for (const u of units) {
+    if (u.dying > 0) continue
+    const dx = u.x - f.x
+    const overlapX = halfW + UNIT_R - Math.abs(dx)
+    if (overlapX <= 0) continue
+    if (Math.abs(u.y - f.y) > halfH + UNIT_R) continue
+    if (!f.elite) {
+      pushFx({ kind: 'frostShatter', x: f.x, y: f.y, big: f.scale > 1.1 })
+      damageFoe(f, f.hp + 1)
+      return
+    }
+    const dir = Math.sign(dx) || (u.i % 2 === 0 ? 1 : -1)
+    u.x = Math.max(-EDGE_X, Math.min(EDGE_X, u.x + dir * overlapX))
+  }
+}
+
+/**
+ * ─── Decoy Flare ────────────────────────────────────────────────────────────
+ *
+ * A burning flare on a parachute, thrown to the far rail a little up the road
+ * (`decoySpotX`, `DECOY_AHEAD`) and hanging there — riding with the crowd, as
+ * the boss holds its line, so that in a run it does not fall behind the squad
+ * half a second after it lands. For `DECOY_S` seconds the fight looks at it:
+ *
+ *   • ordinary bodies near it go to it and mill round it (`swarmDecoy`);
+ *   • the boss tracks it and AIMS at it — the ring, the rake, the bolt and the
+ *     charge all land on the light instead of the crowd (`aimFocus`); the eye
+ *     watches it, so moving is free (`stepGaze`);
+ *   • the elites that aim — gunner, bomber, burrower — turn to it; the scythe
+ *     stops winding up its sweep and stares.
+ *
+ * The two attacks whose answer is a place to GO TO — the shock's eye and the
+ * warden's slot — are left on the crowd, deliberately: their safe ground is
+ * measured from where the crowd stands, and moving it to a flare on the other
+ * rail would turn a lure into a trap.
+ *
+ * It ends in a burst (`DECOY_BURST_R`) that pays for whatever it gathered.
+ */
+export interface Decoy {
+  /** Where it hangs, in world x. */
+  x: number
+  /** How far up the road from the crowd it hangs. */
+  ahead: number
+  /** Where it was thrown from, crowd-relative, for the arc. */
+  fromX: number
+  /** 0..1 along the throw; the lure starts when it lands. */
+  t: number
+  /** Seconds of burn left once lit. */
+  left: number
+  lit: boolean
+}
+
+let decoy: Decoy | null = null
+export const getDecoy = (): Decoy | null => decoy
+/** Is the flare burning — the whole question every lured thing asks. */
+export const decoyLive = (): boolean => decoy !== null && decoy.lit
+/** The flare's ground point, for a live flare. */
+const decoyAt = (d: Decoy): { x: number; y: number } => ({ x: d.x, y: anchorY + d.ahead })
+
+/** Throw it. Returns false (and costs nothing) on an empty road, or while one
+ *  is already up. */
+export const throwDecoy = (): boolean => {
+  if (phase.value !== 'run' && phase.value !== 'boss') return false
+  if (steerOnly.value || decoy !== null || !hostilesInFight()) return false
+  const x = decoySpotX(anchorX)
+  decoy = { x, ahead: DECOY_AHEAD, fromX: anchorX, t: 0, left: DECOY_S, lit: false }
+  pushFx({ kind: 'decoyThrow', x: anchorX, y: anchorY, tx: x, ty: anchorY + DECOY_AHEAD })
+  return true
+}
+
+const stepDecoy = (dt: number): void => {
+  const d = decoy
+  if (!d) return
+  if (!d.lit) {
+    d.t += dt / DECOY_FLIGHT_S
+    if (d.t < 1) return
+    d.t = 1
+    d.lit = true
+    const at = decoyAt(d)
+    pushFx({ kind: 'decoyLit', x: at.x, y: at.y, seconds: d.left })
+    return
+  }
+  d.left -= dt
+  if (d.left > 0) return
+  burstDecoy(d)
+  decoy = null
+}
+
+/** The burst: the crowd's fire, `DECOY_BURST_MULT` times over, on everything
+ *  the light gathered — and a barrel in reach goes up with it, as it does for
+ *  the grenade. */
+const burstDecoy = (d: Decoy): void => {
+  const at = decoyAt(d)
+  pushFx({ kind: 'decoyBurst', x: at.x, y: at.y, radius: DECOY_BURST_R })
+  const power = Math.max(1, squadDps.value * DECOY_BURST_MULT)
+  for (const f of foes) {
+    if (f.dead) continue
+    if (Math.hypot(f.x - at.x, f.y - at.y) > DECOY_BURST_R) continue
+    damageFoe(f, power)
+  }
+  for (const bl of barrels) {
+    if (bl.dead || bl.fuse >= 0) continue
+    if (Math.hypot(bl.x - at.x, bl.y - at.y) > DECOY_BURST_R) continue
+    bl.fuse = 0
+    pushFx({ kind: 'barrelLit', x: bl.x, y: bl.y })
+  }
+}
+
+/**
+ * Where a lured thing is looking, or `null` when nothing is lured.
+ *
+ * Asked by every aim in the file that targets the crowd, so "is the flare up"
+ * is one question with one answer. Only a LIT flare lures — one still in the air
+ * is a thing being thrown, not a light.
+ */
+const lureFor = (f: Foe | null): { x: number; y: number } | null => {
+  const d = decoy
+  if (!d || !d.lit) return null
+  const at = decoyAt(d)
+  // Bodies turn to it from within its pull; the boss (`f === null`) always does.
+  if (f && Math.hypot(f.x - at.x, f.y - at.y) > DECOY_PULL_R) return null
+  return at
+}
+
+/** How far the crowd moved up the road this tick — what a body gathered at a
+ *  hanging flare has to be carried by to stay with it. */
+let anchorStepY = 0
+
+/**
+ * An ordinary body, lured: straight to its own spot on a ring round the light,
+ * faster than it walks, and carried with the flare once it is there.
+ */
+const swarmDecoy = (f: Foe, dt: number, at: { x: number; y: number }): void => {
+  const ang = f.swayPhase + clock / 1400
+  const r = DECOY_SWARM_R + (f.id % 3) * 0.35
+  const tx = at.x + Math.cos(ang) * r
+  const ty = at.y + Math.sin(ang) * r * 0.6
+  f.y += anchorStepY
+  const dx = tx - f.x
+  const dy = ty - f.y
+  const dist = Math.hypot(dx, dy)
+  const sp = (f.speed + DECOY_PULL_SPEED) * dt
+  if (dist <= sp) {
+    f.x = tx
+    f.y = ty
+  } else {
+    f.x += (dx / dist) * sp
+    f.y += (dy / dist) * sp
+  }
+  f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+}
+
+/**
+ * The boss's aim, with the flare folded in: where it is pointing (`x`, `y`),
+ * which way the crowd is drifting for the lead (`tx`), and whether that point is
+ * the flare. A flare does not drift, so a lured aim carries no lead at all.
+ */
+let bossAimedAtDecoy = false
+const aimFocus = (): { x: number; y: number; tx: number; lured: boolean } => {
+  const at = lureFor(null)
+  return at
+    ? { x: at.x, y: at.y, tx: at.x, lured: true }
+    : { x: anchorX, y: anchorY, tx: targetX, lured: false }
+}
+
+/** The late skills' clocks, advanced with the world. */
+const stepLateSkills = (dt: number): void => {
+  if (frostLeft > 0) {
+    frostLeft = Math.max(0, frostLeft - dt)
+    if (frostLeft === 0) pushFx({ kind: 'frostThaw', x: anchorX, y: anchorY })
+  }
+  stepDecoy(dt)
+}
+
+/**
  * What a homing round should fly at, or `null` for "nothing worth turning for".
  *
  * The NEAREST live body ahead of the muzzle and inside the gun's reach, boss
@@ -3294,7 +4186,25 @@ const stepShooting = (dt: number): void => {
   if (phase.value !== 'run' && phase.value !== 'boss') return
   const alive = squadCount.value
   if (alive <= 0) return
+  fireAccum = fireGun(dt, alive, activeWeapon.value, weaponPower.value, fireAccum)
+  // The second gun, on the one road that can hand over two — see `sideWeapon`.
+  // AFTER the first, so a stage with one weapon draws exactly the random
+  // numbers it always drew and every seeded spec replays unchanged.
+  const side = sideWeapon.value
+  if (side) sideAccum = fireGun(dt, alive, side, sideWeaponPower.value, sideAccum)
+}
 
+/**
+ * One gun's shots for this tick, off its own trigger clock `accum`, returning
+ * the clock it leaves behind. `weapon === null` is the squad's own rifle.
+ *
+ * Every gun fires from the same squad at the same shop fire rate — a second gun
+ * is a second trigger on the same crowd, not a second crowd — so the DPS identity
+ * in `game/weapons.ts` holds per gun and the two simply add.
+ */
+const fireGun = (
+  dt: number, alive: number, weapon: WeaponId | null, power: number, accum: number
+): number => {
   // ── The weapon, resolved ONCE per tick ──
   //
   // Three numbers come out of it and none of them may be read per bullet: the
@@ -3305,13 +4215,12 @@ const stepShooting = (dt: number): void => {
   // damage and multiplies the cadence, so it cancels out of the DPS product
   // exactly; what it changes is whether the player sees fourteen thin tracers
   // or one fat rocket.
-  const weapon = activeWeapon.value
   const def = weapon ? WEAPONS[weapon] : null
   // Grows with the crowd for the launcher — see `weaponStreams`. It cancels out
   // of the DPS product, so this decides how MANY rockets the player sees and
   // nothing else.
   const streams = weaponStreams(weapon, alive)
-  const damageMul = def ? def.damageMul * weaponPowerMul(weapon!) : 1
+  const damageMul = def ? def.damageMul * weaponPowerMul(weapon!) * power : 1
 
   const shooters = Math.min(alive, streams)
   const perBullet = ((alive * damage.value) / shooters) * damageMul
@@ -3327,14 +4236,14 @@ const stepShooting = (dt: number): void => {
   // budget over any stretch of road is identical either way — this decides
   // whether the player sees a salvo or a trickle, and nothing else.
   const salvo = def?.volley ? shooters : 1
-  fireAccum += dt * (shooters / salvo) * runFireRate.value * (def?.rateMul ?? 1)
+  accum += dt * (shooters / salvo) * runFireRate.value * (def?.rateMul ?? 1)
   // Hard cap the burst a single frame can produce, so a long frame (a tab
   // regaining focus) cannot dump sixty bullets into one 16 ms slice. Counted in
   // TRIGGERS, so a five-round volley costs one — a gatling frame and a launcher
   // frame stay the same size in rounds.
   let budget = Math.max(1, Math.floor(8 / salvo))
-  while (fireAccum >= 1 && budget-- > 0) {
-    fireAccum -= 1
+  while (accum >= 1 && budget-- > 0) {
+    accum -= 1
     // Each volley spreads across as many different bodies as it can find (see
     // `aimTarget`). Cleared per TRIGGER, not per tick: the next volley is free
     // to re-pick the same pack, and the list is a module-level scratch buffer
@@ -3394,7 +4303,7 @@ const stepShooting = (dt: number): void => {
       pushFx({ kind: 'shoot', x: from.x, y: from.y + 0.35, weapon })
     }
   }
-  if (fireAccum > 4) fireAccum = 4
+  return accum > 4 ? 4 : accum
 }
 
 /**
@@ -3886,7 +4795,19 @@ const unlockPuzzle = (box: WeaponBox): void => {
 const takeWeaponBox = (box: WeaponBox): void => {
   if (box.dead) return
   box.dead = true
+  // Already holding a DIFFERENT weapon — the stage-1 boss's launcher, on stage
+  // 2 — and the box does not take it away: it drops to the side gun and keeps
+  // firing at its own power. See `sideWeapon`. The same weapon again is simply
+  // the full version of it.
+  const held = activeWeapon.value
+  if (held && held !== box.weapon) {
+    sideWeapon.value = held
+    sideWeaponPower.value = weaponPower.value
+    sideAccum = 0
+  }
   activeWeapon.value = box.weapon
+  // A box always hands over the full weapon, whatever the stage opened with.
+  weaponPower.value = 1
   puzzleWeapon.value = null
   puzzleGift.value = false
   // A weapon is a bigger moment than a crate, and the crowd should show it —
@@ -4076,9 +4997,15 @@ const breakCage = (c: Cage): void => {
   const room = MAX_SQUAD - squadCount.value
   const freed = Math.max(0, Math.min(c.hold, room))
   for (let i = 0; i < freed; i++) {
+    // They WALK over rather than being sprung into formation — see `Unit.join`.
+    // They are part of the squad from this frame (counted, shooting, and
+    // billable by anything they run into on the way), because the rescue paid
+    // the moment the bars came off; what the walk adds is that the player SEES
+    // the crowd grow out of the shoulder they steered to.
     spawnUnit(
       c.x + (Math.random() - 0.5) * CAGE_R * 2.2,
-      c.y - 0.2 - Math.random() * 0.7
+      c.y - 0.2 - Math.random() * 0.7,
+      CAGE_JOIN_MAX_S
     )
   }
   // `count` is what actually got out, not what was in there: a cage opened at
@@ -4107,7 +5034,8 @@ const takeBulwark = (w: Bulwark): void => {
 }
 
 const damageFoe = (f: Foe, amount: number): void => {
-  f.hp -= amount
+  // Frozen is brittle — see `FROST_BRITTLE`.
+  f.hp -= frostLeft > 0 ? amount * FROST_BRITTLE : amount
   f.flash = 1
   if (f.elite) eliteHp01.value = Math.max(0, f.hp / f.maxHp)
   if (f.hp > 0) return
@@ -4139,6 +5067,10 @@ const damageFoe = (f: Foe, amount: number): void => {
   spillCoins(f.x, f.y, drop, drop + 1)
 }
 
+/** Test seam: hit a body through the real damage path, so a spec can measure
+ *  what a freeze does to it. */
+export const __damageFoeForTest = (f: Foe, amount: number): void => damageFoe(f, amount)
+
 /**
  * Gate charge, gate crossing, gate payoff.
  *
@@ -4168,7 +5100,11 @@ const stepGates = (dt: number): void => {
   const addStep = gatePumpStep(stage.value)
   // The weapon in the crowd's hands winds every door it is pointed at faster
   // (the gatling) or exactly as fast (everything else) — see `WeaponDef.pumpMul`.
-  const weaponPump = activeWeapon.value ? WEAPONS[activeWeapon.value].pumpMul : 1
+  // With two guns the faster pump wins: they are firing at the same door.
+  const weaponPump = Math.max(
+    activeWeapon.value ? WEAPONS[activeWeapon.value].pumpMul : 1,
+    sideWeapon.value ? WEAPONS[sideWeapon.value].pumpMul : 1
+  )
 
   for (let i = gates.length - 1; i >= 0; i--) {
     const g = gates[i]!
@@ -4216,12 +5152,17 @@ const stepGates = (dt: number): void => {
         // `x2.4000000000000004` on the door. The additive step is clamped for
         // the same reason the loop condition is not enough on its own: a step
         // bigger than one can overshoot the cap from below it.
+        const was = g.value
         g.value = scale
           ? Math.min(pumpCap, Math.round((g.value + GATE_SCALE_STEP) * 10) / 10)
           : Math.min(pumpCap, g.value + addStep)
         g.pop = 1
         pushFx({
           kind: 'gateTick', x: g.x, y: g.y, value: g.value,
+          // MEASURED, not assumed: the step grows with the stage, a scale door
+          // moves a tenth, and the clamp above can hand out less than either on
+          // the tick that reaches the cap. The number that flies up is this.
+          step: Math.round((g.value - was) * 10) / 10,
           hostile: g.op === 'sub' || g.op === 'div'
         })
       }
@@ -4440,11 +5381,15 @@ const stepDividers = (dt: number): void => {
  *
  * Each is one question the others do not ask:
  *
- *   roller  WHICH SIDE ARE YOU ON.  Half the road, one straight line, no
- *           tracking. The dodge is total and so is the failure to dodge.
- *   bomber  WHERE DID YOU LEAD IT.  It comes to where you are, so where you are
- *           is the decision. Lure, then cross.
- *   gunner  ARE YOU STILL THERE.    One fat round down one column, slowly.
+ *   roller   WHICH SIDE ARE YOU ON.  Half the road, one straight line, no
+ *            tracking. The dodge is total and so is the failure to dodge.
+ *   bomber   WHERE DID YOU LEAD IT.  It comes to where you are, so where you
+ *            are is the decision. Lure, then cross.
+ *   gunner   ARE YOU STILL THERE.    One fat round down one column, slowly.
+ *   warden   WHERE IS THE GAP.       The whole road except one slot, and the
+ *            answer is a place to BE — the only one in the game.
+ *   burrower WHICH WAY ARE YOU GOING. It arrives where you were half a second
+ *            ago, so movement is the answer and reversing is the mistake.
  *
  * @returns whether the SHARED tail still applies to this body — the solid-body
  *          contact in `collideFoe` and the bite loop. Two of the three answer
@@ -4463,6 +5408,10 @@ const stepPoolElite = (f: Foe, dt: number): boolean => {
     case 'gunner':
       stepGunner(f, dt)
       return true
+    case 'warden':
+      return stepWarden(f, dt)
+    case 'burrower':
+      return stepBurrower(f, dt)
     default:
       return true
   }
@@ -4645,7 +5594,8 @@ const stepBomber = (f: Foe, dt: number): boolean => {
   f.hold = 0
   f.y -= BOMBER_SPEED * dt
   const slide = BOMBER_TRACK * dt
-  f.x += Math.max(-slide, Math.min(slide, anchorX - f.x))
+  // It runs at a burning flare instead of the crowd, and plants where it is.
+  f.x += Math.max(-slide, Math.min(slide, (lureFor(f)?.x ?? anchorX) - f.x))
   f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
 
   // Arming is gated on the run, like every other elite attack: nothing should be
@@ -4729,6 +5679,11 @@ const stepGunner = (f: Foe, dt: number): void => {
   // "nothing chases you into the arena" rule all behave identically.
   const engaged = f.hold > 0 && phase.value === 'run'
     && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
+  // A flare in reach: it swings its gun toward the light, faster than it tracks
+  // a crowd, and it will not level at anything else — see `DECOY_GUNNER_LOCK_X`.
+  const lure = lureFor(f)
+  const aimX = lure ? lure.x : anchorX
+  const track = lure ? 2.2 : 0.9
 
   if (!engaged) {
     // Walking in, or the leash has expired and it is walking through the crowd
@@ -4736,8 +5691,8 @@ const stepGunner = (f: Foe, dt: number): void => {
     // from off-screen has no author, and one thrown point-blank has no dodge.
     f.kindTicks = 0
     f.y -= f.speed * dt
-    const homing = 0.9
-    f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+    const homing = track
+    f.x += Math.max(-homing * dt, Math.min(homing * dt, (aimX - f.x) * dt * 0.9))
     f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
     return
   }
@@ -4753,8 +5708,8 @@ const stepGunner = (f: Foe, dt: number): void => {
   // It slides toward the crowd's column only while it is NOT aiming. Freezing x
   // at the lock is what makes the telegraph honest.
   if (f.kindTicks === 0) {
-    const homing = 0.9
-    f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+    const homing = track
+    f.x += Math.max(-homing * dt, Math.min(homing * dt, (aimX - f.x) * dt * 0.9))
     f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
   }
 
@@ -4769,6 +5724,8 @@ const stepGunner = (f: Foe, dt: number): void => {
     // arrives because the leash ran out is a false alarm, and a badge that cries
     // wolf is a badge players stop checking.
     if (f.hold <= GUNNER_TELEGRAPH) return
+    // Lured, it levels only once its column is the flare's.
+    if (lure && Math.abs(f.x - lure.x) > DECOY_GUNNER_LOCK_X) return
     f.kindTicks = 1
     // Never a shot with less than a full tell — the same extension the scythe's
     // wind-up gets, for the same reason.
@@ -4807,6 +5764,330 @@ const stepGunner = (f: Foe, dt: number): void => {
   pushFx({ kind: 'boltFire', x: f.x, y: f.y, dirX: 0, dirY: -1 })
   f.reload = GUNNER_RELOAD
   f.kindTicks = 0
+}
+
+/**
+ * The warden: plant, level the slabs, drop them.
+ *
+ * Structurally the gunner's fight — hold at a distance, lock, resolve — and the
+ * three places it differs are the three places the gunner's own notes said to
+ * look. It plants CLOSE rather than standing off, because the row lands under
+ * the crowd and there is no flight time to buy. It aims at ground rather than at
+ * its own column, because the answer is a place to reach rather than a place to
+ * leave, and a slot under its own feet would be a slot it was standing in. And
+ * it stores the aim (`markX`) instead of freezing its body, because the thing
+ * that has to hold still is the slot, not the warden.
+ */
+const stepWarden = (f: Foe, dt: number): boolean => {
+  // Same engagement window every planted elite uses, so the drag, the leash and
+  // the "nothing chases you into the arena" rule all behave identically.
+  const engaged = f.hold > 0 && phase.value === 'run'
+    && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
+
+  if (!engaged) {
+    // Walking in, or the leash has expired and it is walking through the crowd
+    // like any other body. It drops nothing from either state: a row slammed
+    // down from off-screen has no author, and one slammed on top of the crowd
+    // has no slot worth reaching.
+    f.kindTicks = 0
+    f.y -= f.speed * dt
+    f.x += Math.max(-0.9 * dt, Math.min(0.9 * dt, (anchorX - f.x) * dt * 0.9))
+    f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+    return true
+  }
+
+  f.hold -= dt
+
+  const want = anchorY + WARDEN_PLANT_AHEAD
+  if (f.y > want) f.y = Math.max(want, f.y - f.speed * dt)
+  else f.y += (want - f.y) * Math.min(1, dt * 2.5)
+
+  // It keeps sliding toward the crowd's column while it is NOT winding up. Once
+  // the row is announced its own position stops mattering to the attack, so it
+  // is free to keep tracking — but it does not, and that is deliberate: a body
+  // that drifts while its telegraph stands still invites the player to read the
+  // BODY as the threat, which is the one misreading this fight cannot afford.
+  if (f.kindTicks === 0) {
+    f.x += Math.max(-0.9 * dt, Math.min(0.9 * dt, (anchorX - f.x) * dt * 0.9))
+    f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+  }
+
+  // The first arrival levels the slabs immediately; every row after that waits a
+  // full reload. `reload` is spawned at 0, which is what makes that sentence one
+  // line instead of a flag — the gunner's trick, for the gunner's reason.
+  if (f.reload <= 0) f.reload = WARDEN_TELEGRAPH
+  f.reload -= dt
+
+  if (f.kindTicks === 0 && f.reload <= WARDEN_TELEGRAPH) {
+    // Only start a wind-up there is time to finish. A tell whose row never
+    // arrives because the leash ran out is a false alarm, and a badge that cries
+    // wolf is a badge players stop checking.
+    if (f.hold <= WARDEN_TELEGRAPH) return true
+    f.kindTicks = 1
+    // Never a row with less than a full tell — the same extension the scythe's
+    // wind-up and the gunner's lock both get.
+    f.reload = Math.max(f.reload, WARDEN_TELEGRAPH)
+    // THE AIM, LOCKED. The slot is chosen from where the crowd is now and does
+    // not move again; `markY` is the crowd's own line, and `WARDEN_HALF_DEPTH`
+    // is deep enough to swallow the unit or so a crawling crowd covers before
+    // the slabs land (see its note).
+    f.markX = wardenSlotX(anchorX)
+    f.markY = anchorY
+    // Announced with the claw's own cast, because a row of strips IS what that
+    // event describes and the renderer already draws it honestly from the
+    // numbers the kill reads. Reusing it is not a shortcut: a fifth ground
+    // telegraph with its own drawing code is a fifth thing that can disagree
+    // with its own hitbox.
+    pushFx({
+      kind: 'rakeCast',
+      x: f.markX, y: f.markY,
+      lanes: wardenSlabXs(f.markX),
+      halfW: WARDEN_SLAB_HALF_W,
+      depth: WARDEN_HALF_DEPTH,
+      ttl: f.reload
+    })
+    return true
+  }
+
+  if (f.reload > 0) return true
+
+  slamRow(f)
+  f.reload = WARDEN_RELOAD
+  f.kindTicks = 0
+  return true
+}
+
+/**
+ * The row lands: everything in the slabs, nothing in the slot.
+ *
+ * Billed under `elite` like every other miniboss attack, and measured with the
+ * claw's own predicate — `inClawFurrow` is "is this x inside any strip of this
+ * set", which is exactly the question a row of slabs asks. One definition of
+ * "inside a strip" in the whole game means the telegraph, the kill and the scar
+ * cannot drift apart.
+ */
+const slamRow = (f: Foe): void => {
+  const lanes = wardenSlabXs(f.markX)
+  const caught: Unit[] = []
+  for (const u of units) {
+    if (u.dying > 0) continue
+    if (Math.abs(u.y - f.markY) > WARDEN_HALF_DEPTH) continue
+    if (!inClawFurrow(u.x, lanes, WARDEN_SLAB_HALF_W)) continue
+    caught.push(u)
+  }
+
+  // The same three terms every elite share passes through: the endless
+  // pressure, the elite ceiling, and the two concessions (`earlyBigHitMul`,
+  // `slamRelief`) that `BOMBER_FRACTION`'s note argues at length may not be
+  // exempted for one attack.
+  const cut = earlyBigHitMul(stage.value)
+  const share = Math.min(SWEEP_FRACTION_MAX, WARDEN_FRACTION * endlessPressure(stage.value))
+  let budget = Math.max(
+    Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+    Math.ceil(squadCount.value * share * slamRelief * cut)
+  )
+
+  // The row still slams — the warden swung, and a wall the player did not answer
+  // should look like a wall they did not answer. What the pickup changes is that
+  // it lands on the dome. Capped by reality exactly as the bomber's is: the
+  // budget is what the row INTENDS to take, and it may only collect from bodies
+  // that were actually in a slab.
+  if (!bulwarkAbsorb(Math.min(budget, caught.length), f.markX, f.markY)) {
+    // Nearest the slot's edges last: the crowd is eaten from the slabs inward,
+    // so what survives is visibly the part that made it into the gap.
+    const d2 = (u: Unit): number => (u.x - f.markX) ** 2
+    caught.sort((a, b) => d2(b) - d2(a))
+    for (const u of caught) {
+      if (budget <= 0) break
+      killUnit(u, Math.sign(u.x - f.markX) || 1, 'elite')
+      budget--
+    }
+  }
+
+  pushFx({
+    kind: 'bossRake',
+    x: f.markX, y: f.markY,
+    lanes, halfW: WARDEN_SLAB_HALF_W, depth: WARDEN_HALF_DEPTH
+  })
+}
+
+/**
+ * The burrower: close, dive, follow the trail, plant, come back up.
+ *
+ * ── The three states, and the two numbers that hold them ──
+ *
+ * `fuse` is the whole state machine while it is under the road and `sweepTold`
+ * splits that in two, which is a deliberate reuse rather than a shortage of
+ * fields: `sweepTold`'s own doc is "has THIS swing been announced yet", and its
+ * whole reason for existing is that a wind-up detected as a threshold CROSSING
+ * can be missed by a body whose cooldown was already past the threshold. The
+ * lock here has exactly that shape — "the fuse has fallen below
+ * `BURROWER_SURFACE_S`" is a crossing — so it gets the answer the game already
+ * arrived at.
+ *
+ *   fuse > 0, !sweepTold   under the road, following the crowd's trail
+ *   fuse > 0, sweepTold    planted and announced, counting down to the eruption
+ *   fuse === 0, reload > 0 surfaced, recovering, and shootable
+ *
+ * @returns whether the shared solid-body and bite passes still apply. They do
+ *          while it is walking and while it is recovering — it is a body, and a
+ *          body is solid — and they do NOT while it is under the road, which is
+ *          the whole point of being under the road.
+ */
+const stepBurrower = (f: Foe, dt: number): boolean => {
+  if (f.fuse > 0) {
+    f.fuse -= dt
+
+    if (!f.sweepTold) {
+      // ── Following the trail ──
+      //
+      // It is not chasing the crowd, it is walking where the crowd walked
+      // (`BURROWER_LAG`). The mound's position is READ rather than integrated,
+      // so it cannot drift with the frame times and cannot be nudged off course
+      // by anything: the only input to where it is going is where the player
+      // actually went.
+      //
+      // LATERALLY ONLY. `f.y` is the crowd's line right now, not the line it was
+      // on half a second ago, and that is the difference between a fight and
+      // nothing at all — the road carries the crowd forward whatever they do, so
+      // a lag along it is free separation nobody chose. `BURROWER_LAG`'s note has
+      // the measurement: with the lag applied to both axes a crowd standing
+      // perfectly still took zero casualties.
+      const i = trailAt(BURROWER_LAG)
+      // …unless a flare is burning, and then it is walking toward the light:
+      // at a crowd's pace rather than teleporting, so the mound is seen to turn.
+      const lure = lureFor(null)
+      f.x = lure
+        ? f.x + Math.max(-4 * dt, Math.min(4 * dt, lure.x - f.x))
+        : i < 0 ? anchorX : trailX[i]!
+      f.y = anchorY
+      if (f.fuse <= BURROWER_SURFACE_S) {
+        f.sweepTold = true
+        // Snapped to the full window, so the ring on the ground closes on the
+        // beat the eruption arrives rather than a frame early — the same
+        // extension the gunner's lock and the scythe's wind-up get.
+        f.fuse = BURROWER_SURFACE_S
+        f.markX = f.x
+        f.markY = f.y
+        // The bomber's own cast, because from this instant it IS a bomber's
+        // fuse: a fixed spot, a fixed radius, and the exact seconds to the
+        // blast. The player has already been taught what that ring means.
+        pushFx({
+          kind: 'bombCast', x: f.markX, y: f.markY,
+          radius: BURROWER_BLAST_R, ttl: BURROWER_SURFACE_S
+        })
+      }
+    } else {
+      // ── Planted ──
+      //
+      // Absolutely still, and written as an ASSIGNMENT rather than as the
+      // absence of a move: the mound was tracking a moment ago, and "we stopped
+      // updating it" is a line somebody deletes by accident where this is a line
+      // a test can see.
+      //
+      // The road is held to a crawl for exactly this window (see `stepAnchor`),
+      // so the crowd cannot simply walk off the ring — the bomber's rule, and
+      // the ring is already on the ground here.
+      f.x = f.markX
+      f.y = f.markY
+    }
+
+    if (f.fuse > 0) return false
+    erupt(f)
+    return false
+  }
+
+  if (f.reload > 0) {
+    // ── Surfaced, recovering ──
+    //
+    // It stands where it came up. This is the shooting window the fight is paid
+    // for with — the approach is the bomber's and this is the burrower's — and
+    // it is solid and biting throughout, so ignoring it entirely is not free
+    // either.
+    f.reload -= dt
+    if (f.hold > 0) f.hold = Math.max(0, f.hold - dt)
+    return true
+  }
+
+  // ── The approach ──
+  //
+  // A plain walk down the lane, like every other body on the road, with the
+  // bomber's lazy sideways homing on top. It only ever closes from AHEAD, and it
+  // is worth writing down that this is a consequence rather than a simplifying
+  // assumption: the dive is one per burrower (`BURROWER_DIVES_MAX` has the
+  // measurement), so there is no second approach to make from behind. A version
+  // that could chase back up the road was written, and the honest reading of it
+  // was a body that has to outrun `stageSpeed` to be worth having — which is a
+  // body that visibly outruns the road.
+  const engaged = f.hold > 0 && phase.value === 'run'
+    && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
+  if (engaged) f.hold -= dt
+
+  f.y -= BURROWER_SPEED * dt
+  f.x += Math.max(-0.9 * dt, Math.min(0.9 * dt, (anchorX - f.x) * dt * 0.9))
+  f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
+
+  // Diving is gated on the run, like every other elite attack: nothing should be
+  // erupting inside the arena, where the boss owns the fight. It is also gated
+  // on the leash, so a burrower that has been walked past does not turn round
+  // and dive at a crowd it is no longer fighting.
+  if (phase.value !== 'run' || f.hold <= 0) return true
+  if (f.kindTicks >= BURROWER_DIVES_MAX) return true
+  if (f.y - anchorY > BURROWER_DIVE_GAP) return true
+
+  f.kindTicks++
+  f.fuse = BURROWER_TRACK_S + BURROWER_SURFACE_S
+  f.sweepTold = false
+  pushFx({ kind: 'burrowDive', x: f.x, y: f.y })
+  return false
+}
+
+/**
+ * The eruption.
+ *
+ * The bomber's blast with two differences, and both of them are the same
+ * difference: this one is not the end of the fight. It is priced lower
+ * (`BURROWER_FRACTION` against `BOMBER_FRACTION`) because it happens twice, and
+ * the body SURVIVES it — so a player who answered every dive still has something
+ * to shoot and still gets paid for it. See `BURROWER_DIVES_MAX`.
+ */
+const erupt = (f: Foe): void => {
+  f.fuse = 0
+  f.sweepTold = false
+  f.reload = BURROWER_RECOVER
+  // It comes up exactly where the ring said it would, whatever the frame times
+  // did on the way — the mark is the contract.
+  f.x = f.markX
+  f.y = f.markY
+
+  const inside: Unit[] = []
+  const r2 = BURROWER_BLAST_R * BURROWER_BLAST_R
+  for (const u of units) {
+    if (u.dying > 0) continue
+    const dx = u.x - f.x
+    const dy = u.y - f.y
+    if (dx * dx + dy * dy > r2) continue
+    inside.push(u)
+  }
+
+  const cut = earlyBigHitMul(stage.value)
+  const share = Math.min(SWEEP_FRACTION_MAX, BURROWER_FRACTION * endlessPressure(stage.value))
+  let budget = Math.max(
+    Math.max(1, Math.round(BOSS_MIN_KILL * cut)),
+    Math.ceil(squadCount.value * share * slamRelief * cut)
+  )
+
+  const d2 = (u: Unit): number => (u.x - f.x) ** 2 + (u.y - f.y) ** 2
+  inside.sort((a, b) => d2(a) - d2(b))
+  if (!bulwarkAbsorb(Math.min(budget, inside.length), f.x, f.y)) {
+    for (const u of inside) {
+      if (budget <= 0) break
+      killUnit(u, Math.sign(u.x - f.x) || 1, 'elite')
+      budget--
+    }
+  }
+
+  pushFx({ kind: 'bombBlast', x: f.x, y: f.y, radius: BURROWER_BLAST_R })
 }
 
 /**
@@ -4933,6 +6214,14 @@ const stepFoes = (dt: number): void => {
     }
     if (f.y > anchorY + LOOKAHEAD + 6) continue
 
+    // Frozen: no walk, no fuse, no swing, no bite — and not even the walk
+    // cycle (`phase`), so the pose the renderer holds is the pose it froze in.
+    // Contact is the one thing left, and it costs the crowd nothing.
+    if (frostLeft > 0) {
+      frozenContact(f)
+      continue
+    }
+
     f.phase += dt
 
     // ─── The pool minibosses take their own branch ────────────────────────
@@ -4969,7 +6258,12 @@ const stepFoes = (dt: number): void => {
     //
     // Everything from here to the sweep is the SCYTHE's fight and every ordinary
     // foe's walk. A pool kind has already moved itself.
-    if (!pool) {
+    // A flare in reach: an ordinary body forgets the crowd and goes to the
+    // light; the scythe turns to it but keeps its own fight (below).
+    const lure = lureFor(f)
+    if (!pool && lure && !f.elite) {
+      swarmDecoy(f, dt, lure)
+    } else if (!pool) {
       const engaged = f.elite && f.hold > 0 && phase.value === 'run'
         && f.y - anchorY <= ELITE_DRAG_LEAD && f.y >= anchorY
       if (engaged) {
@@ -4984,7 +6278,8 @@ const stepFoes = (dt: number): void => {
       // Home in on the crowd, but lazily — a foe that tracks perfectly is
       // unavoidable, and unavoidable is not the same as difficult.
       const homing = f.flying ? 1.5 : 0.9
-      f.x += Math.max(-homing * dt, Math.min(homing * dt, (anchorX - f.x) * dt * 0.9))
+      const aimX = lure ? lure.x : anchorX
+      f.x += Math.max(-homing * dt, Math.min(homing * dt, (aimX - f.x) * dt * 0.9))
       if (f.flying) f.x += Math.sin(clock / 700 + f.swayPhase) * dt * 1.1
       f.x = Math.max(-LANE_HALF + 0.3, Math.min(LANE_HALF - 0.3, f.x))
     }
@@ -5007,7 +6302,10 @@ const stepFoes = (dt: number): void => {
     // reaches `ELITE_SWEEP_REACH` down the road from its own feet, which is the
     // distance it is drawn at.
     const sweepGap = f.y - anchorY
-    if (!pool && f.elite && !f.dead && phase.value === 'run' && sweepGap < ELITE_SWEEP_REACH && sweepGap > -1.5) {
+    // A lured scythe is staring at the flare: its clock holds, and the swing it
+    // was winding up waits for the light to go out. (Its arc spans the road, so
+    // there is no aiming it at a flare — the only lure it can obey is a stare.)
+    if (!pool && !lure && f.elite && !f.dead && phase.value === 'run' && sweepGap < ELITE_SWEEP_REACH && sweepGap > -1.5) {
       // The arc's direction is chosen when the WIND-UP starts, not when it
       // lands, so the telegraph can show which way it is coming from. A tell
       // that only becomes true on impact is not a tell.
@@ -5175,8 +6473,9 @@ const stepFoes = (dt: number): void => {
   if (!anyElite) eliteHp01.value = 0
   // Stepped here rather than from `step` because a bolt is one elite's fight
   // carried on after it — a gunner that dies mid-flight leaves its round in the
-  // air, and the round is the only enemy projectile in the game.
-  stepBolts(dt)
+  // air, and the round is the only enemy projectile in the game. A frozen round
+  // hangs where it was.
+  if (frostLeft <= 0) stepBolts(dt)
 }
 
 /**
@@ -5660,6 +6959,31 @@ const BOSS_HOLD_AHEAD = 3.8
 // outside this module writes phase two, and nothing outside it needs more than
 // "is the fight turned over" and "is a charge on the road right now".
 
+/**
+ * The eye, for the renderer: how far open it is (0 shut, 1 open) and whether it
+ * is WATCHING. Two scalars rather than an object, because the renderer asks every
+ * frame and the answer is two numbers.
+ */
+export const bossGazeWatching = (): boolean => gazeWatch > 0 && boss !== null && !boss.dead
+export const bossGazeOpening = (): number => {
+  const b = boss
+  if (!b || b.dead) return 0
+  if (gazeWatch > 0) return 1
+  if (!bossGazing) return 0
+  const left = b.kind === 'summoner' ? b.summonCd : b.slamCd
+  if (b.kind !== 'summoner' && !b.aimed) return 0
+  return Math.max(0, Math.min(1, 1 - left / GAZE_OPEN))
+}
+/** …and how much of the watch is left, 0..1, for the closing ring. */
+export const bossGazeLeft01 = (): number => Math.max(0, Math.min(1, gazeWatch / GAZE_WATCH))
+
+/**
+ * …and is the cycle being wound up the kind's SECOND verb? Read by the renderer
+ * to hold back the meteor's own slam ring, which is a "not here" mark and would
+ * be drawn straight over the one patch of road a shock says is safe.
+ */
+export const bossIsVarying = (): boolean => bossVarying && boss !== null && !boss.dead
+
 /** Is the boss in phase two? For the renderer's colour shift. */
 export const bossIsEnraged = (): boolean => bossEnraged && boss !== null && !boss.dead
 /** …and is it winding up or running a lane charge right now? Read by the
@@ -5686,6 +7010,24 @@ const stepBoss = (dt: number): void => {
   const b = boss
   if (!b) return
   if (b.flash > 0) b.flash = Math.max(0, b.flash - dt * 4)
+
+  // ── Frozen: the whole fight holds ──
+  //
+  // Before the bolts and the crossrake as well as the clocks, because they are
+  // this fight's own threats in flight, and a freeze that stopped the boss while
+  // its round kept coming would be a freeze with a hole in it. Everything picks
+  // up from exactly where it stopped when the ice comes off, telegraphs included
+  // — the renderer holds those on the same clock (`frostActive`).
+  //
+  // The eye's travel is re-based every frozen frame: moving under the freeze is
+  // free, and it must not be billed the moment the watch resumes.
+  //
+  // A boss that DIES while frozen (brittle damage is exactly how that happens)
+  // falls over at once — the corpse is not a hostile clock.
+  if (frostLeft > 0 && !b.dead) {
+    gazeLastX = anchorX
+    return
+  }
   b.phase += dt
 
   // Stepped BEFORE the death check, so a bolt already in the air when the healer
@@ -5694,10 +7036,27 @@ const stepBoss = (dt: number): void => {
   // to stop reading them. It stops at the end of the RUN rather than at the end
   // of the boss — see the guard in `stepBossBolts`.
   if (bossBolts.length > 0) stepBossBolts(dt)
+  // The crossrake's second pass, on the same "before the death check" rule and
+  // for the same reason — see `stepCrossrake`.
+  if (crossrake) stepCrossrake(dt)
 
   if (b.dead) {
     b.dying += dt * 1000
     if (b.dying > 900 && phase.value === 'boss') finishRun(true)
+    return
+  }
+
+  // ── While the eye is open, the rest of the boss is not ──
+  //
+  // Returned BEFORE the walk-in, the tracker and every attack clock, and each
+  // of those is load-bearing. The body holds still because it is staring. The
+  // clocks hold still because the gaze's answer is to stop moving, and an attack
+  // that could land inside the window would turn "hold still" into a choice
+  // between two hits with no way out — the one thing a telegraph in this game
+  // may never ask. The healer's heal gap is paused with them, which can only
+  // ever make its heals rarer, never closer together.
+  if (gazeWatch > 0) {
+    stepGaze(b, dt)
     return
   }
 
@@ -5720,8 +7079,10 @@ const stepBoss = (dt: number): void => {
     else b.y += (holdY - b.y) * Math.min(1, dt * 1.4)
 
     // Track the crowd slowly — slowly enough that a player who keeps moving is
-    // never cornered, which is the skill the fight tests.
-    b.x += Math.max(-1.1 * dt, Math.min(1.1 * dt, (anchorX - b.x) * dt * 1.6))
+    // never cornered, which is the skill the fight tests. A burning flare is
+    // tracked instead: the boss turns to face what it is about to swing at.
+    const trackX = lureFor(null)?.x ?? anchorX
+    b.x += Math.max(-1.1 * dt, Math.min(1.1 * dt, (trackX - b.x) * dt * 1.6))
     b.x = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, b.x))
   }
 
@@ -5760,7 +7121,13 @@ const stepBoss = (dt: number): void => {
   // rather than merely equal: the cast resolves on the tick `slamCd` goes
   // NEGATIVE, and a bare `healCd > slamCd` is therefore true for a paid-off gap
   // (0 > -0.004) on exactly that tick — which revoked every heal in the game.
-  if (b.kind === 'healer' && b.charging && b.healCd > Math.max(0, b.slamCd)) b.charging = false
+  if (b.kind === 'healer' && b.charging && b.healCd > Math.max(0, b.slamCd)) {
+    b.charging = false
+    // The ward goes with it. It was planted for THIS heal (`plantWard`), and a
+    // circle left on the road for a heal that has been called off is a mark the
+    // player spends a cycle standing on for nothing. See `clearWard`.
+    clearWard(0)
+  }
 
   // Lock the target at the START of the telegraph, on the crowd's own position
   // plus a small lead. Locking early is what makes it dodgeable; aiming at the
@@ -5817,6 +7184,15 @@ const stepBossCharge = (b: Boss): void => {
   const left = Math.max(0, b.slamCd)
   if (left >= CHARGE_DASH_S) {
     b.y = bossChargeFromY
+    // …except a charge lining up on a flare, which swings its body into the
+    // band over the first two thirds of the wait. Still a pure function of the
+    // cooldown, so it cannot drift; and in the band, exactly, before the dash.
+    if (bossChargeSlideX !== null) {
+      const span = Math.max(0.001, bossChargeAimCd - CHARGE_DASH_S)
+      const k = Math.min(1, ((bossChargeAimCd - left) / span) * 1.5)
+      const e = k * k * (3 - 2 * k)
+      b.x = bossChargeSlideX + (bossChargeLane - bossChargeSlideX) * e
+    }
     return
   }
   const k = 1 - left / CHARGE_DASH_S
@@ -5831,7 +7207,9 @@ const stepBossCharge = (b: Boss): void => {
  * which reads as no tell at all.
  */
 const bossTelegraph = (kind: BossKind): number =>
-  kind === 'healer' ? HEALER_TELEGRAPH : SLAM_TELEGRAPH
+  // A gaze opens for the same `GAZE_OPEN` on every kind — the eye has to mean
+  // the same thing wherever it opens, and that includes how long it gives you.
+  bossGazing ? GAZE_OPEN : kind === 'healer' ? HEALER_TELEGRAPH : SLAM_TELEGRAPH
 
 /**
  * The cycle this boss runs next, phase two included.
@@ -5845,6 +7223,179 @@ const bossTelegraph = (kind: BossKind): number =>
 const bossSpan = (b: Boss): number => {
   const raw = Math.max(SLAM_CD_MIN, SLAM_CD_BASE - b.slams * SLAM_CD_DECAY)
   return bossEnraged ? enragedSpan(raw, endlessPressure(stage.value), SLAM_CD_MIN) : raw
+}
+
+/**
+ * ─── The attack bag, drawn ──────────────────────────────────────────────────
+ *
+ * The one place a boss decides what it does next — `armBossCycle`, the healer's
+ * cast loop and the summoner's wave clock all ask here, so "equally often" is a
+ * property of one function rather than three schedules kept in step by hand.
+ * See `bossVerbPool` for what goes in and `shuffleBag` for how it is drawn.
+ *
+ * The pool is re-read on every draw and the bag is rebuilt the moment it
+ * changes, which in practice means exactly once: at the phase-two turn, when the
+ * lane charge joins. A charge added to the TAIL of a bag already running would
+ * be under-drawn for the rest of that bag, and a charge that waited for the next
+ * refill would not arrive at all in a short enrage.
+ */
+const drawBossVerb = (b: Boss): BossVerb => {
+  const pool = bossVerbPool(b.kind, stage.value, bossEnraged)
+  const sig = pool.join(',')
+  if (sig !== bossBagPool) {
+    bossBagPool = sig
+    bossBag = []
+  }
+  if (bossBag.length === 0) bossBag = shuffleBag(pool, bossRng, bossBagLast)
+  let v = bossBag.shift() ?? 'primary'
+  // ── A charge never follows a charge ──
+  //
+  // Not a taste rule, a physical one. A charge ends with the body PAST the crowd
+  // (`CHARGE_OVERRUN`), and the next charge is aimed the instant its cycle opens
+  // — from wherever the body is standing. Back to back, the second one was aimed
+  // from behind the formation and "crossed" about a tenth of a unit of road:
+  // a band on screen with no charge in it. The fixed rotation hid this by never
+  // putting two charges in a row; a shuffle bag with two attacks in it does it
+  // half the time.
+  //
+  // The swap keeps the counts equal — the charge is only moved one place later,
+  // never dropped — so it is the ORDER the rule constrains, not the share.
+  if (v === 'charge' && bossBagLast === 'charge') {
+    if (bossBag.length === 0) bossBag = shuffleBag(pool, bossRng, 'charge')
+    const alt = bossBag.findIndex((x) => x !== 'charge')
+    if (alt >= 0) {
+      const other = bossBag[alt]!
+      bossBag[alt] = v
+      v = other
+    }
+  }
+  bossBagLast = v
+  return v
+}
+
+/**
+ * Is the stage-1 / stage-2 teaching gaze still owed?
+ *
+ * Asked at the guard gate and nowhere else, because the gate is the one beat of
+ * those two fights the simulation guarantees — see `GAZE_TEACH_LAST_STAGE`.
+ * Swing-clock kinds only, which on those stages is everyone (they are meteors),
+ * and is written down so a future re-rotation that put a summoner on stage 2
+ * could not hand a boss with no swing clock a gaze it has no way to throw.
+ */
+const gazeTeachPending = (b: Boss): boolean =>
+  stage.value <= GAZE_TEACH_LAST_STAGE &&
+  b.kind !== 'summoner' &&
+  getState<boolean>(GAZE_TAUGHT_KEY, false) !== true
+
+/**
+ * The eye has finished opening: from this frame, moving is punished.
+ *
+ * Deliberately does NOT touch `bossGazing`. The latch belongs to the cycle being
+ * WOUND UP, and by the time a watch starts every caller has already cleared it
+ * for the gaze being thrown and may have set it again for the next one — the
+ * healer decides its next cast in the same breath as it throws this one.
+ */
+const startGazeWatch = (b: Boss): void => {
+  gazeWatch = GAZE_WATCH
+  gazeTravel = 0
+  gazeLastX = anchorX
+  gazeStruck = false
+  // The boss HAD the chance to throw it, so the lesson is delivered — even if
+  // it dies a frame from now. See `GAZE_TEACH_LAST_STAGE` for why this is the
+  // moment and not the end of the watch.
+  if (stage.value <= GAZE_TEACH_LAST_STAGE) setStates({ [GAZE_TAUGHT_KEY]: true })
+  pushFx({ kind: 'gazeWatch', x: b.x, y: b.y, ttl: GAZE_WATCH })
+}
+
+/**
+ * One frame of the eye being open.
+ *
+ * Travel is the ANCHOR's, not any survivor's: the anchor is what the player's
+ * thumb moves, and it is the only thing in the crowd that is perfectly still
+ * when the player is. The bodies jostle around their slots whatever happens
+ * (the idle wobble in `stepUnits`, a monster's shove), and a gaze that read them
+ * would punish a player for the crowd breathing.
+ */
+const stepGaze = (b: Boss, dt: number): void => {
+  // While a flare burns the eye is on IT, and the crowd moving is not seen —
+  // the one attack a decoy answers completely, which is the point of throwing
+  // one into a gaze.
+  if (!decoyLive()) gazeTravel += Math.abs(anchorX - gazeLastX)
+  gazeLastX = anchorX
+  gazeWatch = Math.max(0, gazeWatch - dt)
+  if (!gazeStruck && gazeTravel > GAZE_TOLERANCE) {
+    gazeStruck = true
+    gazeWatch = 0
+    gazeStrike(b)
+  }
+  if (gazeWatch <= 0) pushFx({ kind: 'gazeEnd', x: b.x, y: b.y, kept: !gazeStruck })
+}
+
+/**
+ * The eye saw the crowd move, and fires down its column.
+ *
+ * Priced at exactly one big hit (`bossHitShare`) for every kind, and that is the
+ * whole balance statement: the gaze is a cycle the boss spent, and a player who
+ * breaks it is billed what the boss's ordinary attack would have cost them. A
+ * player who holds still is billed nothing — which makes the gaze a cycle the
+ * boss gives away to anybody who reads it, the same bargain the shock's eye and
+ * the ward already strike.
+ *
+ * The column is wherever the crowd is NOW, not where it was when the eye
+ * opened: the rule was "do not move", so the consequence finds the crowd at the
+ * place it moved to. `GAZE_STRIKE_HALF_W` swallows the disc whole, so what the
+ * strike costs is the budget, not the geometry.
+ */
+const gazeStrike = (b: Boss): void => {
+  const x = anchorX
+  const halfW = GAZE_STRIKE_HALF_W
+  pushFx({ kind: 'gazeStrike', x, y: anchorY, fromX: b.x, fromY: b.y, halfW })
+  let budget = bossHitBudget(bossHitShare())
+  const inBeam = (u: Unit): boolean => Math.abs(u.x - x) <= halfW
+  if (absorbedBlow(budget, x, anchorY, inBeam)) return
+  for (const u of units) {
+    if (budget <= 0) break
+    if (u.dying > 0) continue
+    if (!inBeam(u)) continue
+    killUnit(u, Math.sign(u.x - x) || 1, 'slam')
+    budget--
+  }
+}
+
+/**
+ * Throw a gaze for a swing-clock boss (the meteor and the claw).
+ *
+ * It counts as a swing, for the reason every non-primary swing does: the rage
+ * curve is keyed to `slams`, and a verb that did not advance it would let the
+ * boss stand still on the curve for a third of the fight. The next cycle is armed
+ * immediately — but its clock does not run until the eye has shut, because
+ * `stepBoss` returns before draining it while a watch is open.
+ */
+const throwGaze = (b: Boss): void => {
+  b.slams++
+  b.slamSpan = bossSpan(b)
+  startGazeWatch(b)
+  armBossCycle(b)
+}
+
+/**
+ * Decide what the summoner does next, and start its clock for it.
+ *
+ * The summoner has no wind-up to hang a draw on — its clock simply fires — so
+ * the draw happens as the previous beat RESOLVES, and a gaze is announced on the
+ * spot, with `GAZE_OPEN` on the clock. A wave never costs a draw it did not get:
+ * once the wall is spent (`SUMMON_WAVES_MAX`) a drawn wave is a beat that simply
+ * does nothing, exactly as the spent wall always behaved, and the gaze keeps its
+ * equal share of the fight.
+ */
+const armSummon = (b: Boss): void => {
+  const v = drawBossVerb(b)
+  bossGazing = v === 'gaze'
+  summonFlankNext = v === 'variant'
+  b.summonCd = bossGazing ? GAZE_OPEN : summonSpan()
+  if (bossGazing) {
+    pushFx({ kind: 'gazeCast', x: b.x, y: b.y, ttl: GAZE_OPEN, watch: GAZE_WATCH })
+  }
 }
 
 /**
@@ -5862,13 +7413,32 @@ const bossSpan = (b: Boss): number => {
  * doubled ring was announced and a charge that arrives instead.
  */
 const armBossCycle = (b: Boss): void => {
-  bossCharging = bossEnraged &&
-    bossCharges(b.kind) &&
-    !b.charging &&
-    (b.slams + 2) % CHARGE_EVERY === 0
+  // ── One draw, and every latch is read off it ──
+  //
+  // This used to be three residue tests — `CHARGE_EVERY`, a variant cadence and
+  // the charged ring's `CHARGED_EVERY` — partitioning the swings so they could
+  // never collide. The bag makes collisions impossible by construction instead:
+  // one draw is one verb, so at most one of these can ever be true, and there is
+  // no tie-break left to get wrong. See `bossVerbPool` for why the order is no
+  // longer fixed.
+  const verb = drawBossVerb(b)
+  bossCharging = verb === 'charge'
+  bossVarying = verb === 'variant'
+  bossGazing = verb === 'gaze'
+  // The charged ring is every `CHARGED_EVERY`-th RING, counted over `primaries`
+  // rather than over every swing — the meteor's own escalation, which a bag
+  // would otherwise dilute into something the player might never see.
+  b.charging = verb === 'primary' &&
+    b.kind === 'meteor' &&
+    (b.primaries + 1) % CHARGED_EVERY === 0
   b.slamCd = bossCharging
     ? chargeWindup(b.slamSpan)
-    : b.slamSpan * (b.charging ? CHARGED_WINDUP_MUL : 1)
+    // The eye starts opening at once: the gaze's whole wind-up is `GAZE_OPEN`,
+    // and a normal cycle of dead air in front of it would be a fight standing
+    // still for no reason.
+    : bossGazing
+      ? GAZE_OPEN
+      : b.slamSpan * (b.charging ? CHARGED_WINDUP_MUL : 1)
 }
 
 /**
@@ -5879,6 +7449,57 @@ const armBossCycle = (b: Boss): void => {
  * and the kill all read `slamX` / `slamY`, which were written on the line above.
  */
 const aimBoss = (b: Boss, leadMul = 1): void => {
+  // A burning flare is where every aimed attack below goes (`aimFocus`) — the
+  // ring, the rake, the bolt and the charge. The gaze and the shock are not
+  // aimed at the crowd's position in the first place and are left alone; see
+  // the Decoy Flare header for why the shock in particular must not follow it.
+  const aim = aimFocus()
+  bossAimedAtDecoy = false
+  bossChargeSlideX = null
+
+  if (bossGazing) {
+    // Aimed at nothing on the road — the eye is on the BOSS, and what it is
+    // watching is the crowd's own stillness. `slamX`/`slamY` still describe the
+    // cycle for everything that asks the boss what it is aiming at.
+    b.slamX = b.x
+    b.slamY = b.y
+    pushFx({
+      kind: 'gazeCast', x: b.x, y: b.y,
+      ttl: Math.max(0.15, b.slamCd), watch: GAZE_WATCH
+    })
+    return
+  }
+
+  if (bossCharging && aim.lured) {
+    // ── A charge at a flare ──
+    //
+    // Down the FLARE's column, not the boss's own — a charge from wherever the
+    // boss happens to be standing would still come down on a crowd that has not
+    // moved, which is a lure that does not lure. The body swings into the band
+    // over the first part of the wind-up (`stepBossCharge`) rather than jumping
+    // to it, so the band and the body agree by the time it matters.
+    bossAimedAtDecoy = true
+    bossChargeLane = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, aim.x))
+    if (Math.abs(b.x - bossChargeLane) > 0.05) {
+      bossChargeSlideX = b.x
+      bossChargeAimCd = Math.max(0.15, b.slamCd)
+    }
+    bossChargeHalfW = chargeHalfW(b.slams)
+    bossChargeFromY = b.y
+    bossChargeToY = anchorY - CHARGE_OVERRUN
+    b.slamX = bossChargeLane
+    b.slamY = anchorY
+    pushFx({
+      kind: 'chargeCast',
+      x: bossChargeLane,
+      y: bossChargeFromY,
+      halfW: bossChargeHalfW,
+      toY: bossChargeToY,
+      ttl: Math.max(0.15, b.slamCd)
+    })
+    return
+  }
+
   if (bossCharging) {
     // ── The one attack in the game with NO lead, deliberately ──
     //
@@ -5911,17 +7532,86 @@ const aimBoss = (b: Boss, leadMul = 1): void => {
     return
   }
 
+  if (bossVarying) {
+    // ── Both of these are announced from `b.slams + 1` ──
+    //
+    // `b.slams` is the count already THROWN, and the attack being wound up is
+    // the next one. The rake's own cast carries the same note for the same
+    // reason: getting it off by one paints a narrower furrow, or a smaller ring
+    // of fire, than the one that kills.
+    const ttl = Math.max(0.15, b.slamCd)
+
+    if (b.kind === 'claw') {
+      const lead = CLAW_LEAD * leadMul
+      if (aim.lured) {
+        // Both passes measured against the crowd — the flare sits under a furrow
+        // of the first, and neither pass is allowed to be the one that finds the
+        // squad the flare was thrown to protect. See `decoyRakeCentre`.
+        bossAimedAtDecoy = true
+        b.slamX = decoyRakeCentre(aim.x, anchorX, CLAW_SPACING, (c) =>
+          [...clawLaneXs(c), ...clawLaneXs(c + CROSSRAKE_OFFSET)])
+      } else {
+        b.slamX = Math.max(
+          -LANE_HALF + 1,
+          Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead)
+        )
+      }
+      b.slamY = anchorY
+      const halfW = clawFurrowHalfW(b.slams + 1)
+      const second = b.slamX + CROSSRAKE_OFFSET
+      // BOTH passes, up front, and that is what makes 0.7 s between them fair
+      // rather than a second telegraph the player has to read under fire —
+      // `CROSSRAKE_GAP_S` has the argument. Two casts of one event rather than a
+      // new event with two lane sets, so the renderer draws the second pass with
+      // the same code that draws the first and the two cannot look like
+      // different attacks.
+      pushFx({
+        kind: 'rakeCast', x: b.slamX, y: b.slamY,
+        lanes: clawLaneXs(b.slamX), halfW, depth: CLAW_HALF_DEPTH, ttl
+      })
+      pushFx({
+        kind: 'rakeCast', x: second, y: b.slamY,
+        lanes: clawLaneXs(second), halfW, depth: CLAW_HALF_DEPTH,
+        ttl: ttl + CROSSRAKE_GAP_S
+      })
+      return
+    }
+
+    // ── The shock is aimed with NO lead, deliberately ──
+    //
+    // The charge's argument, arrived at from the opposite direction: a ring is a
+    // place to not be standing and a lead punishes drifting into it, but an eye
+    // is a place to GET TO, and leading it would move the answer while the
+    // player was on their way to it. `shockEyeX` puts it on the crowd's far side
+    // so it is always a real move; `leadMul` is accepted and ignored so the
+    // guard-gate path can keep calling one function for every kind.
+    b.slamX = shockEyeX(anchorX)
+    b.slamY = anchorY
+    pushFx({
+      kind: 'shockCast',
+      x: b.slamX, y: b.slamY,
+      eye: SHOCK_EYE_R,
+      outer: shockOuterR(b.slams + 1),
+      ttl
+    })
+    return
+  }
+
   if (b.kind === 'healer') {
     // A heal is aimed at the healer itself; there is nothing on the road to
     // point at. A bolt is aimed at the crowd and then flies — the lead is small
     // because the projectile's own travel time is the real difficulty.
+    // A bolt at a flare flies at the light and on past it, off the side of the
+    // road — `stepBossBolts` drops a round that leaves the lane.
+    const boltLured = !b.charging && aim.lured
+    if (boltLured) bossAimedAtDecoy = true
     b.slamX = b.charging
       ? b.x
       : Math.max(
         -LANE_HALF + 1,
-        Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * BOLT_LEAD * leadMul)
+        Math.min(LANE_HALF - 1, aim.x + (aim.tx - aim.x) * BOLT_LEAD * leadMul)
       )
-    b.slamY = b.charging ? b.y : anchorY
+    b.slamY = b.charging ? b.y : boltLured ? aim.y : anchorY
     pushFx(
       b.charging
         ? { kind: 'healCast', x: b.x, y: b.y, ttl: Math.max(0.15, b.slamCd) }
@@ -5935,8 +7625,18 @@ const aimBoss = (b: Boss, leadMul = 1): void => {
   // player has to answer rather than drift out of. A rake never charges (see
   // `throwBossAttack`), so it always uses the ordinary lead.
   const lead = (b.kind === 'claw' ? CLAW_LEAD : b.charging ? CHARGED_LEAD : 0.35) * leadMul
-  b.slamX = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead))
-  b.slamY = anchorY
+  if (aim.lured) {
+    // The ring comes down on the flare; the rake puts the flare under a furrow
+    // and keeps every furrow off the crowd (`decoyRakeCentre`).
+    bossAimedAtDecoy = true
+    b.slamX = b.kind === 'claw'
+      ? decoyRakeCentre(aim.x, anchorX, CLAW_SPACING, clawLaneXs)
+      : Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, aim.x))
+    b.slamY = b.kind === 'claw' ? anchorY : aim.y
+  } else {
+    b.slamX = Math.max(-LANE_HALF + 1, Math.min(LANE_HALF - 1, anchorX + (targetX - anchorX) * lead))
+    b.slamY = anchorY
+  }
 
   if (b.kind === 'claw') {
     // Sized from the rake that is actually coming — `b.slams` is the count
@@ -6030,6 +7730,24 @@ const throwBossAttack = (b: Boss): void => {
     return
   }
 
+  // Beside the charge and for the same reason: a variant is a second verb bolted
+  // onto whichever fight this is rather than a fifth archetype, so it resolves
+  // off the same clock through one branch. See `throwBossVariant`.
+  if (bossVarying) {
+    throwBossVariant(b)
+    return
+  }
+
+  // …and the third verb, the same way. Cleared HERE rather than inside the
+  // throw, because the healer decides its next cast in the same breath as it
+  // throws this one and may set the latch again for it.
+  if (bossGazing) {
+    bossGazing = false
+    if (b.kind === 'healer') throwHealerCast(b, true)
+    else throwGaze(b)
+    return
+  }
+
   if (b.kind === 'healer') {
     throwHealerCast(b)
     return
@@ -6046,6 +7764,10 @@ const throwBossAttack = (b: Boss): void => {
   // off-by-one would make the boss throw a hit it never telegraphed.
   const charged = b.charging
   b.slams++
+  // Every path that reaches here is the kind's own attack — the charge, the
+  // variant, the gaze and the healer all returned above — so this is the one
+  // place a primary is counted. See `Boss.primaries`.
+  b.primaries++
   b.slamSpan = bossSpan(b)
 
   if (b.kind === 'claw') {
@@ -6061,19 +7783,19 @@ const throwBossAttack = (b: Boss): void => {
     // The claw's escalation is `CLAW_FURROW_GROWTH` instead: the furrows fatten
     // as the fight drags, which tightens the window to reach a pocket without
     // ever removing the pocket. `CLAW_SPACING` is derived from the fattest
-    // furrow precisely so that stays true.
-    b.charging = false
+    // furrow precisely so that stays true. `armBossCycle` reads the kind and
+    // never hands the claw a charged ring.
     armBossCycle(b)
     throwRake(b)
     return
   }
 
-  // Every third swing, and the wind-up stretches to pay for the size of it.
-  b.charging = (b.slams + 1) % CHARGED_EVERY === 0
+  // Every third RING, and the wind-up stretches to pay for the size of it —
+  // decided in `armBossCycle`, which is where the bag says what comes next.
   armBossCycle(b)
   const radius = slamRadiusFor(b.slams, charged)
 
-  pushFx({ kind: 'bossSlam', x: b.slamX, y: b.slamY, radius, charged })
+  pushFx({ kind: 'bossSlam', x: b.slamX, y: b.slamY, radius, charged, slam: b.slams })
   // The retry relief scales the SLAM as well as enemy health. Health alone did
   // nothing measurable — 14 of 15 simulated retries moved the clear rate by
   // exactly zero — because 68–80 % of a failing run's losses are slams, which
@@ -6155,7 +7877,9 @@ const throwBossCharge = (b: Boss): void => {
   //
   // The claw still never charges. That is the kind's rule, so it is read off the
   // kind rather than inherited from whichever branch happened to arrive here.
-  b.charging = b.kind === 'meteor' && (b.slams + 1) % CHARGED_EVERY === 0
+  // The charged ring's schedule is `armBossCycle`'s to hand back now — it counts
+  // RINGS (`Boss.primaries`), so a charge in between cannot delete one, which is
+  // the bug the old bare `b.charging = false` here was once caught making.
   b.slamSpan = bossSpan(b)
   armBossCycle(b)
   // The body ends where it promised to end, whatever the frame times did on the
@@ -6193,6 +7917,235 @@ const throwBossCharge = (b: Boss): void => {
     killUnit(u, Math.sign(u.x - bossChargeLane) || 1, 'slam')
     budget--
   }
+}
+
+/**
+ * ─── The variant, resolved ──────────────────────────────────────────────────
+ *
+ * Two of the four second verbs ride the swing clock (`variantOnSlamClock`), and
+ * this is where they land. The other two do not touch this path at all: the
+ * ward is an overlay on a heal the healer was already going to cast, and the
+ * flanks wave is a wave the summoner was already going to spend, so both live
+ * inside their own kind's step function where their own clocks are.
+ *
+ * The structure mirrors `throwBossCharge` line for line, and the mirroring is
+ * the point rather than a coincidence — a charge is the first thing that ever
+ * replaced a cycle, and everything it had to remember to hand back is something
+ * this has to hand back too. In particular the charged swing's schedule: that
+ * line was a bare `b.charging = false` for one revision of the charge and it
+ * silently deleted every charged swing from the second half of a meteor fight.
+ */
+const throwBossVariant = (b: Boss): void => {
+  bossVarying = false
+  // It counts as a swing, because it is one: the rage curve, the ring's growth
+  // and the charged swing's every-third are all keyed to `slams`, and a variant
+  // that did not increment it would let the boss stand still on the curve for as
+  // long as it kept throwing them — which, on an every-third schedule, is a
+  // third of the fight.
+  b.slams++
+  // The charged ring's schedule is handed back by `armBossCycle`, which counts
+  // rings rather than swings — see `Boss.primaries`.
+  b.slamSpan = bossSpan(b)
+  armBossCycle(b)
+  if (b.kind === 'claw') throwCrossrake(b)
+  else throwShock(b)
+}
+
+/**
+ * The shock: a ring of fire with a hole in the middle of it.
+ *
+ * ── The kill is an ANNULUS, and the eye is not a courtesy ──
+ *
+ * `inShockBand` is the one definition of what burns, and the telegraph is drawn
+ * from the same two radii. That matters more here than anywhere else in the
+ * file, because this is the only attack whose safe ground is INSIDE its own
+ * mark: every other tell in the game can be a little generous at its edge
+ * without lying, and a shock whose drawn eye were a hair bigger than its billed
+ * eye would kill a player standing exactly where it told them to stand.
+ *
+ * ── …and it is priced at exactly one slam ──
+ *
+ * Same `bossHitShare`, no multiplier, no unbudgeted core. It replaces the cycle
+ * it arrives on rather than adding to it, so the meteor gains a second question
+ * and no extra damage — the rule the second-verb header in `threats.ts` sets
+ * out for all four.
+ */
+const throwShock = (b: Boss): void => {
+  const outer = shockOuterR(b.slams)
+  pushFx({ kind: 'bossShock', x: b.slamX, y: b.slamY, eye: SHOCK_EYE_R, outer, slam: b.slams })
+
+  let budget = bossHitBudget(bossHitShare())
+  const burns = (u: Unit): boolean => inShockBand(u.x - b.slamX, u.y - b.slamY, outer)
+  if (absorbedBlow(budget, b.slamX, b.slamY, burns)) return
+  for (const u of units) {
+    if (budget <= 0) break
+    if (u.dying > 0) continue
+    if (!burns(u)) continue
+    // Thrown OUTWARD from the eye, so the bodies the band takes leave away from
+    // the one place that was safe — a crowd flung toward the middle would read
+    // as the fire pushing survivors into shelter it had just killed them for
+    // missing.
+    killUnit(u, Math.sign(u.x - b.slamX) || 1, 'slam')
+    budget--
+  }
+}
+
+/**
+ * The crossrake: the rake, and then a second rake through its own pockets.
+ *
+ * ── One blow, two landings, ONE budget ──
+ *
+ * The second pass is not a second attack and it may not be billed as one. Both
+ * passes draw from a single `bossHitShare` budget carried on `crossrake.left`,
+ * so a player who eats the first rake has already paid for the whole swing and a
+ * player who eats only the second pays the same as a player who eats only the
+ * first. That is what makes the attack a ROUTE rather than a doubled tax: the
+ * cost of getting it wrong is one mistake's worth however many of the two passes
+ * the mistake was made in.
+ *
+ * ── …and no unbudgeted core, deliberately ──
+ *
+ * An ordinary rake kills everything down the middle quarter of each furrow with
+ * no budget at all (`CLAW_CORE_FRACTION`), because "the rest of a furrow is a
+ * graze and the centre line is the claw passing THROUGH the crowd". A crossrake
+ * has no need of that argument: it already means it, by putting the second
+ * furrow where the player was standing. Two unbudgeted cores would also be the
+ * one thing the shared budget cannot bound, which is precisely the shape of
+ * every pricing failure the boss pool has had.
+ */
+const throwCrossrake = (b: Boss): void => {
+  const halfW = clawFurrowHalfW(b.slams)
+  const first = clawLaneXs(b.slamX)
+  const second = clawLaneXs(b.slamX + CROSSRAKE_OFFSET)
+  const total = bossHitBudget(bossHitShare())
+
+  // ── The pickup prices BOTH passes, before either lands ──
+  //
+  // The rake's own note has the argument: "a rake is two passes with different
+  // rules but it is one swing, and the player who eats it eats all of it —
+  // absorbing only the half that happened to be measured would be the worst
+  // possible reading of a pickup that promises to stop the next big hit". This
+  // is that sentence with the second pass 0.7 s in the future instead of one
+  // loop away, so the count is what the two passes WOULD collect between them,
+  // capped by the budget they share.
+  if (bulwarkArmed) {
+    let n = 0
+    for (const u of units) {
+      if (u.dying > 0) continue
+      if (Math.abs(u.y - b.slamY) > CLAW_HALF_DEPTH) continue
+      if (inClawFurrow(u.x, first, halfW) || inClawFurrow(u.x, second, halfW)) n++
+    }
+    // Vetoed together. The scars are still painted by the two `bossRake` events
+    // — the boss swung twice and the road should say so — and the budget is left
+    // at zero, so the second pass lands on a dome that has already eaten it.
+    if (bulwarkAbsorb(Math.min(total, n), b.slamX, b.slamY)) {
+      pushFx({
+        kind: 'bossRake', x: b.slamX, y: b.slamY,
+        lanes: first, halfW, depth: CLAW_HALF_DEPTH
+      })
+      crossrake = { t: CROSSRAKE_GAP_S, lanes: second, y: b.slamY, halfW, left: 0 }
+      return
+    }
+  }
+
+  crossrake = { t: CROSSRAKE_GAP_S, lanes: second, y: b.slamY, halfW, left: total }
+  // The first pass is announced exactly as an ordinary rake is, and pushing it
+  // HERE rather than leaving it to `rakePass` is deliberate: the pass has to be
+  // drawn whether it took anybody or not. Left out entirely for one revision and
+  // the symptom was precise — the crowd lost survivors on a frame with no scar on
+  // the road, and the only rake the player ever SAW was the second one, arriving
+  // 0.7 s after a hit it had no explanation for.
+  pushFx({
+    kind: 'bossRake', x: b.slamX, y: b.slamY,
+    lanes: first, halfW, depth: CLAW_HALF_DEPTH
+  })
+  rakePass(first, b.slamY, halfW, b.slamX)
+}
+
+/**
+ * One pass of a crossrake: take what is in the strips, out of the shared purse.
+ *
+ * `origin` is only ever the direction bodies are flung in, so the two passes
+ * throw their casualties the same way and the road reads as one attack having
+ * crossed it twice.
+ */
+const rakePass = (lanes: readonly number[], y: number, halfW: number, origin: number): void => {
+  if (!crossrake || crossrake.left <= 0) return
+  for (const u of units) {
+    if (crossrake.left <= 0) break
+    if (u.dying > 0) continue
+    if (Math.abs(u.y - y) > CLAW_HALF_DEPTH) continue
+    if (!inClawFurrow(u.x, lanes, halfW)) continue
+    killUnit(u, Math.sign(u.x - origin) || 1, 'slam')
+    crossrake.left--
+  }
+}
+
+/**
+ * Land the crossrake's second pass when its clock runs out.
+ *
+ * Stepped from `stepBoss` BEFORE the death check, exactly as the healer's bolts
+ * are, and for the same reason written down there: a pass that vanished because
+ * the boss fell over in the 0.7 s between them would be the game taking back a
+ * threat it had already drawn on the road, which teaches the player to stop
+ * reading them. It stops at the end of the RUN rather than at the end of the
+ * boss.
+ */
+const stepCrossrake = (dt: number): void => {
+  if (!crossrake) return
+  if (phase.value !== 'boss') {
+    crossrake = null
+    return
+  }
+  crossrake.t -= dt
+  if (crossrake.t > 0) return
+  const pass = crossrake
+  pushFx({
+    kind: 'bossRake',
+    x: pass.lanes[1] ?? pass.lanes[0] ?? 0, y: pass.y,
+    lanes: pass.lanes, halfW: pass.halfW, depth: CLAW_HALF_DEPTH
+  })
+  rakePass(pass.lanes, pass.y, pass.halfW, pass.lanes[1] ?? 0)
+  crossrake = null
+}
+
+/**
+ * How much of the heal the crowd is standing on.
+ *
+ * A SHARE of the squad rather than a yes/no, and the grading is the whole
+ * mechanic — see the note on `WARD_R`. Counted over live bodies, so a crowd that
+ * has just been cut in half by a bolt is measured as it now is: the ward asks
+ * "how much of what you have left is on the circle", which is the question a
+ * player who is losing can still answer well.
+ */
+const wardCoverage = (): number => {
+  const live = squadCount.value
+  if (live <= 0 || !bossWarded) return 0
+  const r2 = WARD_R * WARD_R
+  let on = 0
+  for (const u of units) {
+    if (u.dying > 0) continue
+    const dx = u.x - bossWardX
+    const dy = u.y - bossWardY
+    if (dx * dx + dy * dy <= r2) on++
+  }
+  return Math.max(0, Math.min(1, on / live))
+}
+
+/**
+ * Take the ward off the road.
+ *
+ * Called from three places and the third is the one that matters: the heal
+ * landing, the run ending, and the heal being REVOKED by the gap invariant in
+ * `stepBoss`. A circle left on the road promising a heal that was called off is
+ * a mark the player spends a cycle standing on for nothing, which is worse than
+ * no mark at all — they have paid the ward's price and been given none of what
+ * it was for.
+ */
+const clearWard = (denied: number): void => {
+  if (!bossWarded) return
+  bossWarded = false
+  pushFx({ kind: 'wardEnd', x: bossWardX, y: bossWardY, radius: WARD_R, denied })
 }
 
 /**
@@ -6293,8 +8246,47 @@ const healCastDue = (n: number, healCd: number, leadS: number): boolean =>
   Math.floor(n / HEAL_EVERY) <= HEAL_MAX_CASTS &&
   healCd <= leadS
 
-const throwHealerCast = (b: Boss): void => {
+/**
+ * Put a ward on the road, a full cast before the heal it guards.
+ *
+ * ── Why a cast early and not at the wind-up ──
+ *
+ * The healer already decides its every-third a cycle in advance, so the circle
+ * can go down the moment that decision is taken — and it has to, because the
+ * move it asks for is `WARD_OFFSET` and the cycle in between is a BOLT. Planted
+ * at the heal's own 0.7 s wind-up the player would be asked to cross the arena
+ * and land on a mark inside a window priced for neither; planted here they get
+ * the whole 1.7 s cast, and what they have to solve is a bolt and a destination
+ * at the same time. That tension is the fight — the healer's other cast stops
+ * being a thing to merely survive and becomes a thing to survive ON THE WAY
+ * somewhere.
+ */
+const plantWard = (): void => {
+  bossWarded = true
+  bossWardX = wardX(anchorX)
+  bossWardY = anchorY
+  // `ttl` is the seconds to the HEAL, not to a wind-up — the circle is live for
+  // the whole cast in between. A guard gate can re-time that cycle shorter (see
+  // `damageBoss`), which makes the ring on the ground finish closing before the
+  // heal lands; the resolve reads the crowd at the moment the heal actually
+  // fires, so the arithmetic stays honest even when the drawing runs out early.
+  pushFx({ kind: 'wardCast', x: bossWardX, y: bossWardY, radius: WARD_R, ttl: HEALER_CAST_CD })
+}
+
+const throwHealerCast = (b: Boss, gaze = false): void => {
   const healing = b.charging
+  // ── Read the ward BEFORE the next cycle is armed ──
+  //
+  // Arming it can plant a new ward (below), and the heal landing this instant
+  // has to be measured against the circle the player was actually standing on.
+  // `healCastDue` cannot currently return true on the cast right after a heal,
+  // so this ordering is belt-and-braces — and it is the cheap half of a bug
+  // whose expensive half is a mechanic that silently reads the wrong ground.
+  let denied = 0
+  if (healing && bossWarded) {
+    denied = wardCoverage()
+    clearWard(denied)
+  }
   // ── The healer's cadence is NOT phase two's to touch ──
   //
   // It was, for one revision, and the archetype came apart. `enragedSpan` pulled
@@ -6336,16 +8328,38 @@ const throwHealerCast = (b: Boss): void => {
   // the one still on the boss. Read off `b.healCd` instead and a healer would
   // wave its own next heal through on a gap it had not started yet.
   b.charging = healCastDue(b.attacks + 1, healing ? HEAL_MIN_GAP_S : b.healCd, HEALER_CAST_CD)
+  // A heal keeps its own schedule and is never drawn — see `bossVerbPool` for
+  // why a regeneration rate may not be decided by a shuffle. When the next cast
+  // is NOT the heal, the bag says whether it is a bolt or a gaze, and a heal that
+  // comes due takes the cycle without spending a draw, so the other two stay
+  // level with each other.
+  bossGazing = !b.charging && drawBossVerb(b) === 'gaze'
+
+  // If the cycle just armed is the heal, the circle goes down NOW. Gated on the
+  // stage rather than on the kind, because this is the healer's second verb and
+  // the second verbs are a tier — see `BOSS_VARIANT_FROM_STAGE`.
+  if (b.charging && bossHasVariant(stage.value)) plantWard()
 
   if (healing) {
     const before = b.hp
-    b.hp = Math.min(b.maxHp, b.hp + b.maxHp * HEAL_FRACTION)
+    // Graded by what the crowd was standing on. `HEAL_FRACTION` is untouched and
+    // so is the cadence and so is `bossHpMulFor`'s discount on the printed bar:
+    // the ward does not make the healer heal less, it lets the PLAYER make it
+    // heal less. See the note above `WARD_R` for why that asymmetry is the
+    // reward rather than a mispricing.
+    b.hp = Math.min(b.maxHp, b.hp + b.maxHp * HEAL_FRACTION * (1 - denied))
     bossHp01.value = Math.max(0, b.hp / b.maxHp)
     // The gap is counted from the heal LANDING, which is here — not from the
     // cast being armed, which is a cycle earlier and would shorten every gap by
     // `HEALER_CAST_CD`.
     b.healCd = HEAL_MIN_GAP_S
     pushFx({ kind: 'bossHeal', x: b.x, y: b.y, amount: b.hp - before, hp01: bossHp01.value })
+    return
+  }
+
+  // This cast was the gaze: the eye has finished opening, and there is no bolt.
+  if (gaze) {
+    startGazeWatch(b)
     return
   }
 
@@ -6554,15 +8568,25 @@ const stepSummoner = (b: Boss, dt: number): void => {
   // `bossGuardPayoff`. Releasing the shield here and nowhere else is what keeps
   // "the phase is over when the boss has paid for it" true for this kind too.
   b.guard = 0
+  // The beat that just came due was a gaze: the eye has opened, and nothing
+  // comes up out of the road.
+  if (bossGazing) {
+    bossGazing = false
+    startGazeWatch(b)
+    armSummon(b)
+    return
+  }
+  // Read BEFORE the next draw overwrites it — this wave's shape was decided
+  // when the last beat resolved, exactly as a swing's is decided a cycle ahead.
+  const flank = summonFlankNext
+  armSummon(b)
   if (b.attacks >= SUMMON_WAVES_MAX) {
-    // Budget spent. The timer keeps running so a later guard phase still has
+    // Budget spent. The clock keeps running so a later guard phase still has
     // something to release, but nothing is spawned: the road stops filling and
     // the fight becomes an ordinary one. See `SUMMON_WAVES_MAX`.
-    b.summonCd = summonSpan()
     return
   }
   b.attacks++
-  b.summonCd = summonSpan()
 
   // They come up out of the road in front of the CROWD, not out of the boss —
   // see `SUMMON_AHEAD`. Sited off `anchorX`/`anchorY` for the same reason the
@@ -6575,6 +8599,32 @@ const stepSummoner = (b: Boss, dt: number): void => {
   // road rather than spanning it, and "wider than the crowd" is the whole reason
   // a wave cannot simply be stood beside.
   const size = summonWaveSize(b.attacks)
+
+  // ── A drawn wave may come up at the RAILS instead of in front ──
+  //
+  // Same bodies, same health share, same walk-in distance (`FLANK_AHEAD_MUL`),
+  // so the variant re-prices nothing at all — the only thing that changes is x,
+  // and with it the question. A line ahead of the crowd is a DPS check: shoot
+  // the wall down or be eaten by it. Two packs as far apart as the road allows
+  // is a positioning question with a wrong intuitive answer, because the middle
+  // — where a player under pressure sits by default — is the one place that
+  // meets both packs at once. A rail meets them one at a time.
+  if (flank) {
+    const xs = flankXs()
+    for (let i = 0; i < size; i++) {
+      const side = xs[i % 2] ?? 0
+      const rank = Math.floor(i / 2)
+      // Stacked in depth at each rail and stepped INWARD as they go back, so a
+      // pack reads as a column arriving rather than as a stack of bodies at one
+      // point — and so the back of it is already a little way toward the crowd,
+      // which is what stops a rail-hugger from answering one pack with a single
+      // burst and then strolling.
+      placeSummon(b, side - Math.sign(side) * rank * 0.55, waveY + rank * 0.8)
+    }
+    pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: size, wave: b.attacks, flank: true })
+    return
+  }
+
   for (let i = 0; i < size; i++) {
     // Constant SPACING, centred — not a constant span. Spanning
     // `SUMMON_SPREAD` whatever the count put a two-body wave's pair on the
@@ -6587,7 +8637,7 @@ const stepSummoner = (b: Boss, dt: number): void => {
     const spread = (i - (size - 1) / 2) * step
     placeSummon(b, anchorX + spread, waveY + (i % 2) * 0.7)
   }
-  pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: size, wave: b.attacks })
+  pushFx({ kind: 'summonWave', x: anchorX, y: waveY, count: size, wave: b.attacks, flank: false })
 }
 
 /**
@@ -6613,7 +8663,9 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
   if (b.guard > 0 && !throughGuard) return
   const gate = bossGuardGates(stage.value)[b.guarded]
   const floor = gate === undefined ? 0 : gate * b.maxHp
-  b.hp -= amount
+  // Frozen is brittle, the boss included — and still CLAMPED at the gate below,
+  // so a freeze can carry a boss to its next phase and never past it.
+  b.hp -= frostLeft > 0 ? amount * FROST_BRITTLE : amount
   b.flash = 1
 
   if (gate !== undefined && b.hp <= floor) {
@@ -6643,6 +8695,11 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
       // the player is watching, so it is where the new move belongs. Arriving a
       // cycle later it would be one more attack in a fight full of them.
       bossCharging = bossCharges(b.kind)
+      // Recorded as the bag's last draw, because it IS the fight's last attack:
+      // without it the very next draw — from a pool that now contains the charge
+      // — could hand out a second charge straight after this one, which is the
+      // back-to-back the rule in `drawBossVerb` exists to forbid.
+      if (bossCharging) bossBagLast = 'charge'
     }
 
     if (bossGuardPayoff(b.kind) === 'wave') {
@@ -6650,48 +8707,72 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
       // its own clock is what releases the shield — see `bossGuardPayoff` and
       // `stepSummoner`. Nothing here touches the slam machinery, because the
       // summoner never uses it.
-      b.summonCd = SUMMON_TELEGRAPH
+      //
+      // …unless the eye is already opening. A gaze announced a moment ago IS the
+      // beat this gate owes; pulling its clock in would draw an eye whose
+      // countdown no longer matches the one on screen.
+      if (!bossGazing) b.summonCd = SUMMON_TELEGRAPH
     } else {
-      // Start the wind-up now rather than on the old clock: the phase turn IS
-      // the telegraph, so the player gets the full window from the moment they
-      // see it. The window is the KIND's, not the meteor's — a healer given a
-      // full second here would spend the phase turn on a longer wind-up than any
-      // of its own.
+      // ── The teaching gaze ──
       //
-      // A charge gets `CHARGE_TELEGRAPH_MIN` flat rather than `chargeWindup`'s
-      // multiple of the cycle, and that is the guard phase's constraint rather
-      // than the charge's: the wind-up here IS how long the boss is immune, and
-      // multiplying a fresh 2.4 s cycle by 1.7 would hand the player four
-      // seconds of shooting a shield in payment for one attack. The floor is the
-      // part of `chargeWindup` that was measured against a human anyway.
-      const tell = bossCharging ? CHARGE_TELEGRAPH_MIN : bossTelegraph(b.kind)
-      b.slamCd = tell
-      b.slamSpan = tell
-      // This path shortens a healer's fuse from a cast to a telegraph, which can
-      // pull an armed heal inside its gap. Nothing is done about it here: the
-      // invariant in `stepBoss` catches it on the next tick, before the
-      // telegraph this path announces has finished drawing. See it for why the
-      // correction lives there rather than at each site that re-times a cycle.
-      // The guard picks its own target, here, at the moment the phase turns —
-      // so `stepBoss` must not re-aim it a frame later on stale input.
-      b.aimed = true
-      // …and it announces itself, exactly as the ordinary swing does.
-      //
-      // This is a SECOND path that arms an attack, and it used to arm one
-      // silently: `stepBoss` only casts when it is the thing doing the aiming,
-      // so the swing a guard phase turns into landed with nothing falling out of
-      // the sky. It is also the swing the player is least ready for, arriving on
-      // the beat their fire stopped working.
-      //
-      // Routed through `aimBoss` rather than repeating a `meteorCast` here, so a
-      // kind can never end up with a guard phase that announces somebody else's
-      // attack — which is exactly what a hard-coded meteor cast did to the claw
-      // and the healer the first time round.
-      //
-      // With NO lead, which is what the hand-written version did and is the
-      // right behaviour anyway: the phase turn is not a read on where the crowd
-      // is drifting, it is a swing owed at the ground they are standing on.
-      aimBoss(b, 0)
+      // On stages 1 and 2, until the player has been shown it once, the swing
+      // this gate owes is the GAZE. The gate is the one beat of those fights the
+      // simulation guarantees — see `GAZE_TEACH_LAST_STAGE` — and it takes
+      // precedence over whatever the bag had drawn, because the lesson is owed
+      // and the bag is not.
+      const teaching = gazeTeachPending(b)
+      if (teaching) {
+        bossCharging = false
+        bossVarying = false
+        bossGazing = true
+        b.charging = false
+      }
+      if (bossGazing && b.aimed && !teaching) {
+        // An eye already opening IS the beat this gate owes. Re-timing it would
+        // put a second eye on screen with a different countdown from the first,
+        // which is the one kind of telegraph this game refuses to draw.
+      } else {
+        // Start the wind-up now rather than on the old clock: the phase turn IS
+        // the telegraph, so the player gets the full window from the moment they
+        // see it. The window is the KIND's, not the meteor's — a healer given a
+        // full second here would spend the phase turn on a longer wind-up than any
+        // of its own.
+        //
+        // A charge gets `CHARGE_TELEGRAPH_MIN` flat rather than `chargeWindup`'s
+        // multiple of the cycle, and that is the guard phase's constraint rather
+        // than the charge's: the wind-up here IS how long the boss is immune, and
+        // multiplying a fresh 2.4 s cycle by 1.7 would hand the player four
+        // seconds of shooting a shield in payment for one attack. The floor is the
+        // part of `chargeWindup` that was measured against a human anyway.
+        const tell = bossCharging ? CHARGE_TELEGRAPH_MIN : bossTelegraph(b.kind)
+        b.slamCd = tell
+        b.slamSpan = tell
+        // This path shortens a healer's fuse from a cast to a telegraph, which can
+        // pull an armed heal inside its gap. Nothing is done about it here: the
+        // invariant in `stepBoss` catches it on the next tick, before the
+        // telegraph this path announces has finished drawing. See it for why the
+        // correction lives there rather than at each site that re-times a cycle.
+        // The guard picks its own target, here, at the moment the phase turns —
+        // so `stepBoss` must not re-aim it a frame later on stale input.
+        b.aimed = true
+        // …and it announces itself, exactly as the ordinary swing does.
+        //
+        // This is a SECOND path that arms an attack, and it used to arm one
+        // silently: `stepBoss` only casts when it is the thing doing the aiming,
+        // so the swing a guard phase turns into landed with nothing falling out of
+        // the sky. It is also the swing the player is least ready for, arriving on
+        // the beat their fire stopped working.
+        //
+        // Routed through `aimBoss` rather than repeating a `meteorCast` here, so a
+        // kind can never end up with a guard phase that announces somebody else's
+        // attack — which is exactly what a hard-coded meteor cast did to the claw
+        // and the healer the first time round.
+        //
+        // With NO lead, which is what the hand-written version did and is the
+        // right behaviour anyway: the phase turn is not a read on where the crowd
+        // is drifting, it is a swing owed at the ground they are standing on.
+        aimBoss(b, 0)
+      }
     }
     slowHoldMs = 320
     pushFx({ kind: 'bossRage', x: b.x, y: b.y, stage: b.guarded })
@@ -6707,6 +8788,18 @@ const damageBoss = (b: Boss, amount: number, throughGuard = false): void => {
 
 const killBoss = (): void => {
   if (!boss || boss.dead) return
+  // Nothing left to heal, so the circle comes off the road with the thing that
+  // put it there. Announced rather than silently dropped, so the renderer can
+  // fade it out on the same frame as the death rather than leaving a mark
+  // counting down over a corpse.
+  clearWard(0)
+  // …and shuts the eye. A watch left running over a corpse would freeze
+  // nothing (the dead boss has no clock) and still hold the corner badge up.
+  bossGazing = false
+  if (gazeWatch > 0) {
+    gazeWatch = 0
+    pushFx({ kind: 'gazeEnd', x: boss.x, y: boss.y, kept: true })
+  }
   boss.dead = true
   boss.dying = 0
   bossHp01.value = 0
@@ -6792,13 +8885,23 @@ export const debugAddFireRate = (n: number): void => setFireRate(runFireRate.val
  * the splash, the HUD badge, the tracer colour — is on the shipping path. A seam
  * that set its own private flag would pass while the real pickup was broken.
  */
-export const debugGiveWeapon = (id: WeaponId | null): void => { activeWeapon.value = id }
+export const debugGiveWeapon = (id: WeaponId | null): void => {
+  activeWeapon.value = id
+  weaponPower.value = 1
+  sideWeapon.value = null
+  sideWeaponPower.value = 1
+}
 
 /** Test-only: wipe both the world and the persisted failure record. */
 export const __resetForTest = (): void => {
   resetWorld()
   squadCount.value = 0
   phase.value = 'run'
+  // A carried opening is session state, not world state — `resetWorld` leaves
+  // it alone on purpose, so a test that wants a boot has to drop it here.
+  entry = null
+  corpse = null
+  departed = []
 }
 
 export default {

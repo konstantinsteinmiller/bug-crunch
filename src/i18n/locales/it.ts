@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': 'Attacco in arrivo!',
     'dodge': 'Schiva',
+    'getIn': 'Entra',
+    'holdStill': 'Fermo',
     'milestone': '{n} in campo!',
     'weaponActive': '{name} pronto',
+    'weaponsActive': '{a} + {b} pronti',
     'weaponLocked': '{name} bloccato — {n} di {total} leve colpite',
     'weaponGift': '{name} più avanti — gratis, niente leve',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Cadenza di fuoco doppia",
       'b': "Carica i cancelli più in fretta"
     }
+  },
+  'bossReward': {
+    'title': "Boss sconfitto!",
+    'subtitle': "Un regalo per il livello {n}. Continua a correre!"
   },
   'result': {
     'stageClear': 'Livello superato!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granata',
 
-    'shield': 'Scudo'
+    'shield': 'Scudo',
 
+    'locked': 'Bloccato',
+
+    'unlocksAt': 'Si sblocca al livello {n}',
+
+    'frost': 'Nova di gelo',
+
+    'decoy': 'Razzo esca',
+
+    'trialLabel': '{name} · prova gratis',
+
+    'trialTag': 'Prova gratis!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

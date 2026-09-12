@@ -75,6 +75,8 @@ import {
   type Pickup,
   type Rock
 } from '@/game/survival'
+import { BURROWER_BLAST_R, WARDEN_SLAB_HALF_W, wardenSlabXs } from '@/game/threats'
+import type { Incoming } from '@/use/useSurvivalGame'
 
 // ─── The world, as a policy sees it ─────────────────────────────────────────
 
@@ -106,6 +108,18 @@ export interface View {
   foes: readonly Foe[]
   pickups: readonly Pickup[]
   boss: Boss | null
+  /**
+   * What the simulation says is about to land, if anything — the same answer
+   * the corner badge reads (`incomingThreat`).
+   *
+   * Handed over whole rather than re-derived from `boss`, because two of the
+   * things a policy now has to answer live in module state the struct does not
+   * carry: whether the boss's eye is open (the gaze) and whether its next cycle
+   * is one. A policy that re-derived them would be a second model of the
+   * attack's timing, and the day the two disagreed the balance suite would be
+   * measuring the policy's bug rather than the game.
+   */
+  incoming: Incoming | null
 }
 
 export interface Policy {
@@ -176,7 +190,7 @@ export interface Hazard {
   coreHi: number
   /** Distance ahead, world units — used only for ordering / debugging. */
   dist: number
-  kind: 'divider' | 'crate' | 'barricade'
+  kind: 'divider' | 'crate' | 'barricade' | 'elite'
 }
 
 /**
@@ -288,6 +302,68 @@ export const lethalIntervals = (
     }
   }
 
+  return out
+}
+
+
+/**
+ * ─── The elite attacks a competent player actually answers ──────────────────
+ *
+ * `lethalIntervals` above is the ROAD: pillars, crates, walls and boulders,
+ * everything that is solid and standing still. None of the elite pool's attacks
+ * appear in it, and for the first four kinds that is a deliberate and recorded
+ * calibration rather than an oversight — the balance suite's numbers were all
+ * measured against policies that eat a sweep, a roll, a bomb and a bolt, which
+ * is a fair model of a player who is watching the gates.
+ *
+ * The late tier breaks that model, and only for its own two fights:
+ *
+ *   • a BURROWER's mound follows the crowd's own trail, so a policy that does
+ *     not move is caught by definition, every single time. Measured on stage 10
+ *     at challenge 6 before this existed: `good` lost 155 of 380 survivors to
+ *     one elite, against 8 for the gunner it replaced. That is not a difficulty
+ *     finding, it is a measurement of an unanswerable attack — the answer exists
+ *     and the model player simply had no idea it was being asked.
+ *   • a WARDEN's row marks the whole road except one slot, so a policy with no
+ *     opinion about it stands in stone.
+ *
+ * Both are folded in as ordinary `Hazard` intervals rather than as special
+ * cases in a policy, so `safestNear`'s existing arithmetic does the work: the
+ * scan already picks the line that costs the fewest survivors, and the mound
+ * moving with the crowd's trail makes "keep going" fall out of it rather than
+ * having to be written down.
+ *
+ * ── Why `good` and not `average` ──
+ *
+ * `average` is the median first-week player and `careless` is not reading the
+ * road at all. Handing either of them a correct answer to a mechanic they have
+ * met twice would erase the difficulty spread the study exists to measure. The
+ * competent player learns the new fight; the other two are still learning the
+ * old ones.
+ */
+export const eliteAttackIntervals = (view: View): Hazard[] => {
+  const out: Hazard[] = []
+  const r = view.crowdR
+  const add = (lo: number, hi: number, dist: number): void => {
+    out.push({ lo: lo - r, hi: hi + r, coreLo: lo, coreHi: hi, dist, kind: 'elite' })
+  }
+  for (const f of view.foes) {
+    if (!f.elite || f.dead) continue
+    if (f.kind === 'burrower' && f.fuse > 0) {
+      // The mound, wherever it is right now. Priced as the disc it will erupt
+      // into, which is what the ring on the ground promises once it plants and
+      // is the honest read of the tracking half too: the mound is the place the
+      // blast will be if the crowd stops here.
+      add(f.x - BURROWER_BLAST_R, f.x + BURROWER_BLAST_R, Math.abs(f.y - view.anchorY))
+    } else if (f.kind === 'warden' && f.kindTicks > 0) {
+      // Every slab of the announced row. The SLOT is simply the gap this leaves,
+      // so the policy finds it by scoring lines rather than by being told where
+      // it is — the same way a player finds it.
+      for (const c of wardenSlabXs(f.markX)) {
+        add(c - WARDEN_SLAB_HALF_W, c + WARDEN_SLAB_HALF_W, Math.abs(f.markY - view.anchorY))
+      }
+    }
+  }
   return out
 }
 
@@ -519,6 +595,20 @@ export const leafValue = (leaf: Gate, view: View, withPump: boolean): number => 
 const bossDance = (view: View, dodge: boolean): number => {
   const b = view.boss
   if (!b || b.dead) return view.anchorX
+  // ── The gaze: the one attack answered by NOT moving ──
+  //
+  // Asked before anything else, and for every policy that dodges at all. Holding
+  // still is the easiest answer in the game once it is known — the eye says it
+  // in one colour and one word — so it goes to `average` as well as to `good`:
+  // unlike the burrower's trail it is not a skill the median player is still
+  // learning, it is an instruction they can read. `careless` (`dodge: false`)
+  // keeps walking at the boss, which is exactly the player the gaze exists to
+  // catch.
+  //
+  // Steering to where the crowd already IS, not where it was heading: the anchor
+  // stops dead the moment the target does, which is what a thumb coming off the
+  // glass looks like.
+  if (dodge && view.incoming?.kind === 'gaze') return view.anchorX
   // Bullets fly straight up, so damage only lands while the crowd is roughly
   // under the body. A dodge that never comes back never kills anything.
   if (!dodge) return clampLane(b.x)
@@ -683,7 +773,10 @@ export const good: Policy = {
       }
       desired = safeLeafAnchor(best, view)
     }
-    return safestNear(desired, view, lethalIntervals(view, 1.1))
+    return safestNear(desired, view, [
+      ...lethalIntervals(view, 1.1),
+      ...eliteAttackIntervals(view)
+    ])
   }
 }
 

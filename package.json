@@ -1,6 +1,6 @@
 {
   "name": "survivalist",
-  "version": "2.2.1",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -34,6 +34,12 @@
     "compress-promotion-with-backup": "node scripts/compress-images.mjs src/assets/promotion --max-effort --backup-dir src/assets/promotion-backup",
     "art:export": "node tools/export-sheets.mjs",
     "slice-sheets": "node tools/slice-sheets.mjs",
+    "art:prompts": "node --import ./tools/ts-resolve.mjs tools/art-prompts.mjs",
+    "art:models": "node tools/art-models.mjs",
+    "art:status": "node --import ./tools/ts-resolve.mjs tools/art-status.mjs",
+    "art:measure": "python tools/measure-art.py",
+    "art:desk": "node tools/art-desk/server.mjs",
+    "preview:video": "node tools/preview-video/record.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -58,8 +64,10 @@
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.8.1",
     "autoprefixer": "^10.4.27",
+    "ffmpeg-static": "^5.3.0",
     "jsdom": "^28.1.0",
     "npm-run-all2": "^8.0.4",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.5.8",
     "pug": "^3.0.3",
     "sass": "^1.97.3",
@@ -76,5 +84,10 @@
   },
   "engines": {
     "node": "^25.5.0 || >=22.12.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "ffmpeg-static"
+    ]
   }
 }

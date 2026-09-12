@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Уклонись',
+    'getIn': 'Внутрь',
+    'holdStill': 'Замри',
     'milestone': '{n} в строю!',
     'weaponActive': '{name} готов',
+    'weaponsActive': '{a} + {b} готовы',
     'weaponLocked': '{name} заблокирован — сбито рычагов: {n} из {total}',
     'weaponGift': '{name} впереди — бесплатно, без рычагов',
     'weaponFree': 'ДАРОМ'
@@ -90,6 +93,10 @@ export default {
       'a': "Вдвое выше скорострельность",
       'b': "Быстрее качает ворота"
     }
+  },
+  'bossReward': {
+    'title': "Босс повержен!",
+    'subtitle': "Подарок на уровень {n}. Беги дальше!"
   },
   'result': {
     'stageClear': 'Этап пройден!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Граната',
 
-    'shield': 'Щит'
+    'shield': 'Щит',
 
+    'locked': 'Закрыто',
+
+    'unlocksAt': 'Откроется на уровне {n}',
+
+    'frost': 'Ледяная нова',
+
+    'decoy': 'Сигнал-приманка',
+
+    'trialLabel': '{name} · бесплатно',
+
+    'trialTag': 'Попробуй бесплатно!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

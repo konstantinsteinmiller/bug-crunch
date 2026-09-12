@@ -5,6 +5,7 @@
  *   pnpm dev                       # in one terminal, on port 2050
  *   pnpm art:export                # in another; writes art-sheets/
  *   pnpm art:export http://localhost:2050/#/art-sheets
+ *   pnpm art:export -- --deaths    # the boss deaths only (+ the whole index)
  *
  * Own profile, own port — never the shared debugging profile, which belongs to
  * whatever the user has open, and two clients on one profile deadlock with no
@@ -16,7 +17,9 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const APP = process.argv[2] ?? 'http://localhost:2050/#/art-sheets'
+const ARGS = process.argv.slice(2)
+const DEATHS_ONLY = ARGS.includes('--deaths')
+const APP = ARGS.find((a) => !a.startsWith('--')) ?? 'http://localhost:2050/#/art-sheets'
 const PORT = 9700 + Math.floor(Math.random() * 200)
 const PROFILE = mkdtempSync(join(tmpdir(), 'sv-art-'))
 
@@ -109,7 +112,7 @@ try {
   // ── Press export ──
   const label = await evaluate(`(() => {
     const b = [...document.querySelectorAll('.art-sheets .bar button')]
-      .find((x) => /Export all/i.test(x.textContent));
+      .find((x) => ${DEATHS_ONLY ? '/Export boss deaths/i' : '/Export all/i'}.test(x.textContent));
     if (!b) return null;
     b.click();
     return b.textContent.trim();

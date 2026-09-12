@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Rythme',
     'incoming': 'Attaque imminente !',
     'dodge': 'Esquive',
+    'getIn': 'Entre',
+    'holdStill': 'Bouge pas',
     'milestone': '{n} au combat !',
     'weaponActive': '{name} prêt',
+    'weaponsActive': '{a} + {b} prêts',
     'weaponLocked': '{name} verrouillé — {n} leviers sur {total} touchés',
     'weaponGift': '{name} devant — gratuit, sans leviers',
     'weaponFree': 'GRATUIT'
@@ -90,6 +93,10 @@ export default {
       'a': "Cadence de tir doublée",
       'b': "Charge les portes plus vite"
     }
+  },
+  'bossReward': {
+    'title': "Boss vaincu !",
+    'subtitle': "Un cadeau pour le niveau {n}. Continue de courir !"
   },
   'result': {
     'stageClear': 'Niveau terminé !',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Grenade',
 
-    'shield': 'Bouclier'
+    'shield': 'Bouclier',
 
+    'locked': 'Verrouillé',
+
+    'unlocksAt': 'Débloqué au niveau {n}',
+
+    'frost': 'Nova de givre',
+
+    'decoy': 'Fusée leurre',
+
+    'trialLabel': '{name} · essai gratuit',
+
+    'trialTag': 'Essai gratuit !',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

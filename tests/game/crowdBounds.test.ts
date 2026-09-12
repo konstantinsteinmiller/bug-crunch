@@ -18,6 +18,50 @@ const importGame = () => import('@/use/useSurvivalGame')
 type Game = Awaited<ReturnType<typeof importGame>>
 
 /**
+ * ─── Which bodies these physics claims are about ────────────────────────────
+ *
+ * "The crowd parts around it" and "nobody rests inside it" are claims about a
+ * SOLID body, and three of the pool minibosses deliberately are not one for part
+ * of their fight. `stepPoolElite` is the authority — it returns whether the
+ * shared solid-body and bite passes still apply to a body — and this is that
+ * answer restated for a test that cannot call it:
+ *
+ *   • a ROLLER never is. It bills once, at the crossing, and charging for its
+ *     body as well would bill one roll twice (its own note has the measurement).
+ *   • an ARMED BOMBER stops being one the moment it plants: it is a fuse, and it
+ *     was measured taking 96 of 150 survivors against the 75 its blast is
+ *     priced at.
+ *   • a SUBMERGED BURROWER has no body on the road at all — the whole point of
+ *     being under it.
+ *
+ * The last two are both `fuse > 0`; the roller is a kind. Stated here rather
+ * than inline twice, so the day a fourth kind opts out there is one place that
+ * has to learn about it. It matters from stage 9, where `MINIBOSS_POOL_LATE`
+ * puts a burrower and a roller among the first elites of the fixture road these
+ * tests use.
+ */
+const isSolid = (f: { kind: string; fuse: number }): boolean =>
+  f.kind !== 'roller' && f.fuse <= 0
+
+/**
+ * …and the kinds whose body is solid for the WHOLE of their fight.
+ *
+ * `isSolid` above answers "right now", which is the correct question for a
+ * per-frame assertion. The parting fixture needs the stronger one: a body that
+ * is there for every frame of the fight, because what it measures is a crowd
+ * meeting a landmark and the elite eventually walking back THROUGH it. Pick a
+ * kind that spends part of its fight intangible and the fixture measures
+ * whichever half of the fight it happened to sample.
+ *
+ * Named as a set rather than derived, because "solid throughout" is not a fact
+ * the simulation exposes — it is the complement of the three kinds that opt out,
+ * and the honest way to depend on it is to say so out loud where a new kind's
+ * author will see it. `MINIBOSS_POOL_LATE` is ordered so every road the rotation
+ * produces fields at least one of these.
+ */
+const ALWAYS_SOLID = new Set(['scythe', 'gunner', 'warden'])
+
+/**
  * Pin `Math.random` for a test.
  *
  * The contact tests below depend on whether a monster survives long enough to
@@ -93,6 +137,18 @@ describe('the crowd behaves like a swarm against the rail, not a ghost through i
   })
 
   it('parts around a miniboss instead of walking through it', async () => {
+    // ── SEEDED, like its siblings in this file, and for `withSeed`'s own reason ──
+    //
+    // Whether a forty-strong squad with no upgrades survives far enough down the
+    // road to be standing next to its second landmark is decided by the
+    // generator, so on the real RNG this is "a coin flip that mostly lands
+    // right, which is the worst kind of test". It got away with it while the
+    // road's FIRST elite was a gunner: that one holds at a stand-off and then
+    // walks the length of the crowd when its leash expires, so the fixture only
+    // ever needed one landmark. `MINIBOSS_POOL_LATE` leads this road with a
+    // burrower instead — which is intangible for half of its fight — and the
+    // assertion moved to the scythe behind it, which is a longer walk.
+    const restore = withSeed(20260814)
     const game = await importGame()
     const { FOE_BODY_HALF_H, FOE_BODY_HALF_W, GATE_LEAF_X, UNIT_R } = await import('@/game/survival')
 
@@ -113,13 +169,23 @@ describe('the crowd behaves like a swarm against the rail, not a ghost through i
     // on the anchor either way, so it still ends up inside the formation, but
     // the centre line is where a passage rib stands and driving into stone
     // would end the run long before the leash ever expired.
-    // Stage 10 rather than 14. These are tests about crowd physics, and stage 14
-    // is now an authored weave (chicane, pincer, passage, chicane) that kills an
+    // Stage 9 rather than 14. These are tests about crowd physics, and stage 14
+    // is an authored weave (chicane, pincer, passage, chicane) that kills an
     // under-gunned crowd long before it ever meets the elite — the fixture has
     // to be a road this squad survives, not a road that proves a point about
-    // difficulty. Stage 10's elite is still unkillable by forty survivors with no
+    // difficulty. Stage 9's elite is still unkillable by forty survivors with no
     // upgrades, which is the condition the test actually needs.
-    game.startStage(10)
+    //
+    // It was stage 10 while that road's first landmark was a gunner. It is 9
+    // now because the late tier opens there and leads with the WARDEN: a body
+    // that plants at `ELITE_HOLD_AHEAD` and is solid for every frame of its
+    // fight, first on the road, so a forty-strong squad meets it before the
+    // stage has had a chance to take them apart. Measured across five seeds,
+    // stage 9 satisfies the fixture on all of them and stage 10 on none — its
+    // first landmark is now a burrower, which spends half its fight under the
+    // road with no body on it at all, and the next solid landmark is most of a
+    // road further on.
+    game.startStage(9)
     game.debugAddUnits(40)
     game.steerTo(GATE_LEAF_X)
 
@@ -129,7 +195,12 @@ describe('the crowd behaves like a swarm against the rail, not a ghost through i
 
     for (let i = 0; i < 2600; i++) {
       game.step(16)
-      const elite = game.getFoes().find((f) => f.elite && !f.dead)
+      // The one landmark on this road that is a body for its whole fight — see
+      // `ALWAYS_SOLID`. Stage 9 on, the rotation also puts a burrower and a
+      // roller on this road, and neither is something the crowd is supposed to
+      // part around all the time.
+      const elite = game.getFoes().find((f) =>
+        f.elite && !f.dead && ALWAYS_SOLID.has(f.kind))
       if (!elite) continue
       sawElite = true
       if (elite.y < game.anchor().y) sawItPass = true
@@ -143,12 +214,14 @@ describe('the crowd behaves like a swarm against the rail, not a ghost through i
         sawInBand = true
         expect(
           Math.abs(u.x - elite.x),
-          `frame ${i}: a survivor stood inside the miniboss at x=${u.x.toFixed(2)} ` +
-          `against a body at ${elite.x.toFixed(2)} ±${halfW.toFixed(2)}`
+          `frame ${i}: a survivor stood inside the ${elite.kind} miniboss at ` +
+          `x=${u.x.toFixed(2)} against a body at ${elite.x.toFixed(2)} ±${halfW.toFixed(2)} ` +
+          `(fuse ${elite.fuse.toFixed(2)}, reload ${elite.reload.toFixed(2)}, ticks ${elite.kindTicks})`
         ).toBeGreaterThanOrEqual(halfW + UNIT_R - 1e-6)
       }
     }
 
+    restore()
     expect(sawElite, 'no elite ever spawned — the test proved nothing').toBe(true)
     expect(sawInBand, 'no survivor ever stood level with the body').toBe(true)
     // NOTE: a monster displaces and does not kill on contact. That asymmetry is
@@ -428,7 +501,7 @@ describe('a monster knocks a rank down, not a column', () => {
         for (const u of game.getUnits()) {
           if (u.dying > 0) continue
           const inside = game.getFoes().some((foe) =>
-            !foe.dead &&
+            !foe.dead && isSolid(foe) &&
             Math.abs(u.y - foe.y) < foe.scale * FOE_BODY_HALF_H &&
             Math.abs(u.x - foe.x) < foe.scale * FOE_BODY_HALF_W)
           const run = inside ? (stuck.get(u) ?? 0) + 1 : 0
@@ -643,10 +716,20 @@ describe('every third boss swing is charged', () => {
       const slams = await fight()
       expect(slams.length, 'the fight was too short to show the pattern')
         .toBeGreaterThanOrEqual(CHARGED_EVERY * 2)
-      for (const [i, s] of slams.entries()) {
-        expect(s.charged, `swing ${i + 1} charged=${s.charged}`)
+      // Keyed to the RING's own index, and not to the swing number. The meteor
+      // draws its attacks from a shuffle bag (`bossVerbPool`), so the rings are a
+      // subsequence of the swings with the shocks and gazes shuffled in between,
+      // and the charged ring is every `CHARGED_EVERY`-th RING (`Boss.primaries`)
+      // — which is the one count a shuffled order cannot land on a shock.
+      slams.forEach((s, i) => {
+        expect(s.charged, `ring ${i + 1} (swing ${s.slam}) charged=${s.charged}`)
           .toBe((i + 1) % CHARGED_EVERY === 0)
-      }
+      })
+      // …and the other attacks really are in there: a fight this long has to
+      // have spent swings on something other than a ring, or the rings are the
+      // whole sequence and this spec no longer tests what it says it does.
+      expect(slams.at(-1)!.slam, 'no swing went to anything but a ring')
+        .toBeGreaterThan(slams.length)
     } finally { restore() }
   })
 
@@ -661,8 +744,8 @@ describe('every third boss swing is charged', () => {
       // measures rage instead: the plain radius grows every swing and finally
       // pins at `SLAM_RADIUS_MAX`, so a charged third swing against a capped
       // twelfth reads as 1.5× when the multiplier is exactly 2.
-      for (const [i, s] of slams.entries()) {
-        const n = i + 1
+      for (const s of slams) {
+        const n = s.slam
         expect(s.radius, `swing ${n} reached ${s.radius.toFixed(2)}`)
           .toBeCloseTo(slamRadiusFor(n, s.charged), 5)
         if (s.charged) {

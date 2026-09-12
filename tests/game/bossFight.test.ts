@@ -93,7 +93,16 @@ describe('the boss cannot be skipped', () => {
     // that turns the fight over (see `BOSS_ENRAGE_AT`) and the swing it owes
     // arrives as a lane charge, so counting only `bossSlam` here would read a
     // paid gate as a skipped one.
-    const swings = fx.filter((e) => e.kind === 'bossSlam' || e.kind === 'bossCharge')
+    //
+    // Stage 9 is past the variant tier, and a boss there draws its attacks from
+    // a shuffle bag (`bossVerbPool`) — so the swing a gate owes can equally be a
+    // SHOCK or a GAZE. Both are the boss's big attack for that cycle and both
+    // ask the player for an answer (get into the eye; hold still), which is the
+    // property this spec protects. Counting only rings and charges would read a
+    // paid gate as a skipped one whenever the bag had put something else there.
+    const swings = fx.filter((e) =>
+      e.kind === 'bossSlam' || e.kind === 'bossCharge' ||
+      e.kind === 'bossShock' || e.kind === 'gazeWatch')
 
     // Both gates, in order, exactly once each.
     expect(rages.length, 'the boss skipped a guard phase').toBe(BOSS_GUARD_GATES.length)

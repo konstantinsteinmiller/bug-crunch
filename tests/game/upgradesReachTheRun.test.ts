@@ -24,8 +24,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { effectiveBulletRange, MAX_FIRE_RATE } from '@/game/survival'
 import {
   UPGRADE_ORDER, applyUpgrade, coinMagnetBonus, coinMultiplier, fireRate as metaFireRate,
-  gatePayoutBonus, grenadeMult, rangeBonus, shieldSeconds, startSquad, unitDamage,
-  upgradeLevel, weaponPowerMul, __setUpgradeLevel, type UpgradeId
+  gatePayoutBonus, grenadeMult, rangeBonus, shieldSeconds, squadPerLevel, startSquadAt,
+  unitDamage, upgradeLevel, weaponPowerMul, __setUpgradeLevel, type UpgradeId
 } from '@/use/useUpgrades'
 
 const importGame = () => import('@/use/useSurvivalGame')
@@ -111,10 +111,11 @@ describe('a purchase DURING a run reaches that run', () => {
     const before = game.squadCount.value
     for (let i = 0; i < 6; i++) applyUpgrade('squad')
     await settle()
-    // Exactly six bodies for six levels — `startSquad` is `START_SQUAD + level`,
-    // and the relief multipliers are a stage-start concession that has no
-    // business scaling a purchase.
-    expect(game.squadCount.value - before).toBe(6)
+    // Exactly six levels' worth of bodies — a level is `squadPerLevel(stage)`
+    // survivors (two, on stage 7), and the relief multipliers are a stage-start
+    // concession that has no business scaling a purchase.
+    expect(squadPerLevel(7)).toBe(2)
+    expect(game.squadCount.value - before).toBe(6 * squadPerLevel(7))
   })
 
   it('raises Firepower and Fire Rate on the spot', async () => {
@@ -170,7 +171,7 @@ describe('a purchase DURING a run reaches that run', () => {
     // The new stage rebuilds from the meta value directly. If the mid-run fold
     // also survived, the baseline would be double-counted.
     expect(game.damage.value).toBeCloseTo(unitDamage.value, 4)
-    expect(game.squadCount.value).toBe(Math.round(startSquad.value))
+    expect(game.squadCount.value).toBe(Math.round(startSquadAt(8)))
   })
 
   it('never shrinks a live crowd when the level appears to fall', async () => {

@@ -276,6 +276,15 @@ export const rosterDesigns = (stage: number): string[] => {
   return [...set]
 }
 
+/**
+ * Every body a BOSS can wear, in campaign order: the two introduction stages'
+ * borrowed bodies, then the rotation. What the art bench paints a death strip
+ * for (`artSheet.BOSS_DEATHS`) — derived here so a design added to the rotation
+ * gets a death sheet without anybody remembering to list it twice.
+ */
+export const bossDesigns = (): string[] =>
+  [...new Set([bossDesign(1), bossDesign(2), ...BOSS_DESIGNS, SUMMON_DESIGN])]
+
 /** Every design the game can ask for, so the baker can prime them all on an
  *  idle slot after first paint. */
 export const allFoeDesigns = (): string[] => {

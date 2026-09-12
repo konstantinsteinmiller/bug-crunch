@@ -84,3 +84,11 @@ __screenshots__/
 /public/images/rounds/tinified.zip
 /public/images/ui/tinified.zip
 /public-backup/
+
+# The Art Desk archives a replaced painting here (tools/art-desk)
+/art-sheets/painted/replaced/
+/art-sheets/
+
+# Recorded preview clips (tools/preview-video) — build artifacts, and a
+# lossless 30 s 1080p master runs to well over a hundred megabytes.
+/preview-videos/

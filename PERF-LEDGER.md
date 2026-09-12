@@ -497,3 +497,118 @@ Kept: the ramp cache itself at full precision.
   batcher has nothing to batch until far more of the art is baked. See the
   sprite-baking work in `spriteBake.test.ts` / `monsterSprites.ts` for the path
   that would have to come first.
+
+---
+
+## 2026-09-12 — scoped art invalidation ✅ KEPT (the largest win in this file)
+
+**Reported as:** "right after loading the first level the art assets are baked
+and repaint multiple assets again, creating heavy early level load" — seen
+first in another project with the same art layer, then here.
+
+**Claim.** Every painting that decoded answered with "art changed" and nothing
+else, so all three listeners dropped everything they held: the sliced-strip
+cache (`spriteStrip`, up to 32 canvases per strip), the backdrop with both
+silhouette caches (`invalidateArtSurfaces`), and every `useArtImage` in the DOM.
+With ~70 paintings arriving one after another through the opening stage, that is
+~70 whole-scene re-bakes in the first seconds. Naming the painting on the
+event lets each listener drop only what was built from it.
+
+### Census — the verdict, because the work is concentrated in time
+
+`art-churn-census.mjs`, 4x CPU, 20 s play window, 3 reps interleaved, art ON in
+both arms, dev server:
+
+```
+median over reps          A (legacy)   B (scoped)
+bootCanvases                     693          158     -77%
+bootReadbacks                     40            2     -95%
+playCanvases                      26           45     (noise, both small)
+```
+
+For scale, the same census with the art layer OFF bakes **119** canvases during
+boot — so the scoped path is within ~40 canvases of the no-art floor, which is
+the signature the procedure says to aim for.
+
+### Frame time — a veto that turned into a second win
+
+`pnpm perf:play --stage 22 --a "perf=art-invalidate-legacy" --b "" --reps 3`,
+412x915 @ DPR 2, 4x CPU:
+
+```
+  workP50      A  5.60 ->  B  4.90   (-12.5%)
+  workP95      A  9.80 ->  B  8.70   (-11.2%)   paired wins 3/3
+  workP99      A 14.30 ->  B 11.60   (-18.9%)
+  intervalP95  A 33.30 ->  B 17.60   (-47.1%)
+  longTasks    A  2.00 ->  B  1.00
+  ranges       A [9.8, 25.4]   B [8.6, 8.9]
+```
+
+Rep 1 of the legacy arm is the whole finding in one line: **461 frames recorded
+against B's 1170, workP95 25.4 ms, 145 long tasks** — a run that spent its
+opening seconds re-baking instead of drawing.
+
+### The audit, which IS the fix
+
+| painting | what it invalidates now |
+| --- | --- |
+| any `kind/id` | its own `spriteStrip` entry, and nothing else |
+| `bg/ridge-far`, `bg/ridge-near` | the backdrop, that image's tint, its measured trim (the `getImageData` the readback count is made of) |
+| `fx/smoke` | the shared sprite cache (`useVfx.bakePuffSprite` bakes into `useGradientRamps`) — the cache the renderer does not own, and the one easy to miss |
+| everything else | nothing. The lane tile and every gradient ramp are procedural and were being thrown away for free |
+
+`null` still means "everything": a flag flip and `refreshArtOverrides` cannot
+name a painting, and both must drop the lot.
+
+Pinned by `tests/game/artInvalidation.test.ts` (the payload, and that one
+arrival leaves other strips alone). Legacy branch and its flag deleted.
+
+---
+
+## 2026-09-12 — lazy strip slicing ❌ REVERTED (null on canvases, negative on time)
+
+**Claim.** `stripFrames` cuts every panel of a painted strip the first time the
+strip is touched — eight for a walk, seven for a boss's death, each one a canvas
+plus a `drawImage`. Cutting them on demand instead should move that burst off
+the frame the sprite first appears on, cutting boot canvases and the p99 spike
+when a new design or a death enters mid-fight. Predicted: boot canvases down by
+the strip share, p99 down, p95 unchanged.
+
+Implemented as a `Strip` record (`img`, `n`, `fw`, `fh`, `frames` with holes)
+behind `perf=strip-eager-legacy`, with `stripCount` / `stripFrameAt` replacing
+the array-returning `stripFrames` at all three call sites.
+
+### Census — no difference at all
+
+```
+median over 3 reps        A (eager)    B (lazy)
+bootCanvases                     203          203
+playCanvases                       0            0
+over50 / longTasks               0/0          0/0
+```
+
+**Why, and this is the finding:** a walk cycle asks for *every* panel within
+about a second of the sprite appearing, and the sprite appears while the game is
+still booting. Lazy and eager converge almost immediately, so there is no burst
+left to move. The panels a run never reaches — the tail of a cycle a monster
+dies before finishing — are a handful of canvases, not a spike.
+
+### Frame time — slightly worse, if anything
+
+```
+pnpm perf:play --stage 22, 3 reps interleaved, 4x CPU
+  workP50      A  4.90 ->  B  5.40   (+10.2%)
+  workP95      A  8.00 ->  B  8.70   (+8.7%)    paired wins for B 1/3
+  workP99      A 10.40 ->  B 14.30   (+37.5%)
+  longTasks    A  1.00 ->  B  2.00
+  ranges       A [6.7, 8.5]   B [8.2, 8.8]
+```
+
+Plausible mechanism for the regression: the cut now happens on gameplay frames
+rather than during boot, and every frame lookup pays a sparse-array hole check.
+Either way there is no win to weigh it against.
+
+**Verdict: reverted in full** — both paths and the flag are gone, and
+`stripFrames` is back exactly as it was. Do not re-try this without a workload
+where a strip's panels are genuinely *not* all reached in its first second;
+this game does not have one.

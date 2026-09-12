@@ -191,16 +191,24 @@ describe('the crowd pays for what it aims at', () => {
 // pin the shape of both, because the curve is the feature.
 
 describe('the pump scales with the stage', () => {
-  it('adds one whole survivor per tick, per 15-stage band', async () => {
-    const { gatePumpStep, GATE_PUMP_BAND } = await import('@/game/survival')
+  it('adds 0.9 of a survivor per tick per 15-stage band, in whole survivors', async () => {
+    const { gatePumpStep, GATE_PUMP_BAND, GATE_GROWTH_TRIM } = await import('@/game/survival')
     expect(GATE_PUMP_BAND).toBe(15)
+    expect(GATE_GROWTH_TRIM).toBe(0.9)
     expect(gatePumpStep(1)).toBe(1)
     expect(gatePumpStep(14)).toBe(1)
-    expect(gatePumpStep(15)).toBe(2)
-    expect(gatePumpStep(30)).toBe(3)
-    // The band the ask was written from: a stage-45 door pumps +4 a tick.
-    expect(gatePumpStep(45)).toBe(4)
-    expect(gatePumpStep(49)).toBe(4)
+    // A band's step is 0.9 of a survivor, so the whole one lands two stages
+    // late — and every later rise with it, a little later each band.
+    expect(gatePumpStep(16)).toBe(1)
+    expect(gatePumpStep(17)).toBe(2)
+    expect(gatePumpStep(33)).toBe(2)
+    expect(gatePumpStep(34)).toBe(3)
+    expect(gatePumpStep(45)).toBe(3)
+    expect(gatePumpStep(50)).toBe(4)
+    // The stage the trim was asked for: 60 pumped +5 a tick and now pumps +4.
+    expect(gatePumpStep(60)).toBe(4)
+    expect(gatePumpStep(67)).toBe(5)
+    expect(gatePumpStep(100)).toBe(7)
   })
 
   it('gives a `-N` the SAME step, because the two are one mechanic with a sign', async () => {
@@ -249,15 +257,17 @@ describe('the pump scales with the stage', () => {
     // It was a third of the door on the stages that teach it…
     expect(share(10)).toBeGreaterThan(0.25)
     // …and had decayed to a ninth by the stages that need it most. Both bands
-    // now sit in the same place, which is the whole point of the change.
-    expect(share(46)).toBeGreaterThan(0.4)
+    // now sit in the same place, which is the whole point of the change. (Stage
+    // 46 was over 0.4 before `GATE_GROWTH_TRIM`; the trimmed step is 3 there
+    // rather than 4, which still leaves it above a third.)
+    expect(share(46)).toBeGreaterThan(1 / 3)
     expect(share(90)).toBeGreaterThan(0.4)
     // ── Where the curve goes, stated rather than assumed ──────────────────
     //
-    // The step is LINEAR in the stage (one per 15) and `gateAddBase` past the
+    // The step is LINEAR in the stage (0.9 per 15) and `gateAddBase` past the
     // campaign is LOGARITHMIC, so the ratio has no upper bound: the pump is
-    // half a door at stage 46, a whole one somewhere around 140, and more than
-    // the printed number after that. That is a deliberate consequence of the
+    // a third of a door at stage 46, a whole one somewhere around 140, and more
+    // than the printed number after that. That is a deliberate consequence of the
     // rule as specified — the printed number stays the floor and the approach
     // is what earns the rest — and it is asserted here so that a later change
     // to either curve has to come past it on purpose.
@@ -300,5 +310,95 @@ describe('the tick still SOUNDS like the pump at the stages it matters on', () =
     // the band, which is the whole fix.
     expect(tickFreq(LADDER_STEPS)).toBe(phrase[0])
     expect(new Set(phrase).size).toBe(LADDER_STEPS)
+  })
+})
+
+// ─── The number that flies up is the number the door gained ─────────────────
+//
+// The pop-up was a hardcoded `+1`. From stage 20 the additive step is 2 — so a
+// door climbing 8 → 10 → 12 printed `+1` over itself each time — and a scale
+// door has NEVER stepped by one: it moves a tenth, and printed `+1` for it at
+// every stage. Players read that as the game miscounting, which is the worst
+// thing a number on a door can do, because the door's number is the whole
+// decision.
+describe('the pump prints its own step', () => {
+  /** Ride one leaf and collect what the door gained against what it announced. */
+  const rideAndListen = async (
+    stage: number, op: 'mul' | 'add'
+  ): Promise<{ open: number; peak: number; steps: number[] } | null> => {
+    const game = await import('@/use/useSurvivalGame')
+    const { drainFx } = await import('@/use/useVfx')
+    const { __resetTowerState } = await import('@/use/useTowerState')
+    localStorage.clear()
+    __resetTowerState()
+    drainFx()
+
+    game.startStage(stage)
+    game.debugAddUnits(40)
+
+    // ONE leaf, held from the moment it streams in until its bank resolves.
+    // Leaf positions repeat down the road (every two-leaf bank puts its doors
+    // at the same x), so an event is this door's only if it matches both
+    // coordinates — and the ride stops when this door is spent, or a later
+    // bank's ticks would be counted against it.
+    let leaf: { x: number; y: number; value: number; used: boolean } | null = null
+    let open: number | null = null
+    let peak = 0
+    const steps: number[] = []
+    for (let i = 0; i < 6000; i++) {
+      if (!leaf) {
+        const found = game.getGates().find((d) => d.op === op && !d.used)
+        if (found) { leaf = found; open = found.value }
+      }
+      if (leaf) {
+        if (leaf.used) break
+        peak = Math.max(peak, leaf.value)
+        game.steerTo(leaf.x)
+      }
+      game.step(16)
+      for (const e of drainFx()) {
+        if (e.kind !== 'gateTick' || !leaf) continue
+        if (Math.abs(e.x - leaf.x) < 0.01 && Math.abs(e.y - leaf.y) < 0.01) steps.push(e.step)
+      }
+      if (game.phase.value !== 'run' && game.phase.value !== 'boss') break
+    }
+    if (leaf) peak = Math.max(peak, leaf.value)
+    return open === null ? null : { open, peak, steps }
+  }
+
+  it('announces a tenth on a multiplier, never a whole survivor', async () => {
+    const seen = await rideAndListen(1, 'mul')
+    expect(seen, 'stage 1 never streamed a multiplier bank').not.toBeNull()
+    expect(seen!.steps.length, 'the x2 door never ticked').toBeGreaterThan(0)
+    for (const s of seen!.steps) expect(s).toBeCloseTo(GATE_SCALE_STEP, 5)
+    // And it reads as a tenth rather than as `0.1000000000000000055`.
+    expect(gateValueLabel(seen!.steps[0]!)).toBe('0.1')
+  })
+
+  it('announces the stage\'s whole step on an additive door', async () => {
+    const { gatePumpStep } = await import('@/game/survival')
+    const stage = 20
+    expect(gatePumpStep(stage), 'pick a stage where the step is not 1').toBeGreaterThan(1)
+
+    const seen = await rideAndListen(stage, 'add')
+    expect(seen, 'stage 20 never streamed an additive bank').not.toBeNull()
+    expect(seen!.steps.length, 'the +N door never ticked').toBeGreaterThan(0)
+    for (const s of seen!.steps) {
+      // Every tick is the stage's step, except one clipped by the pump cap.
+      expect(s).toBeGreaterThan(0)
+      expect(s).toBeLessThanOrEqual(gatePumpStep(stage))
+    }
+    expect(seen!.steps.some((s) => s === gatePumpStep(stage))).toBe(true)
+  })
+
+  it('adds up: what flew up is exactly what the door gained', async () => {
+    // The claim that catches any future drift, in either direction — a step the
+    // sim applies without announcing, or a number announced without applying.
+    for (const [stage, op] of [[1, 'mul'], [20, 'add']] as const) {
+      const seen = await rideAndListen(stage, op)
+      expect(seen).not.toBeNull()
+      const announced = seen!.steps.reduce((a, b) => a + b, 0)
+      expect(Math.round(announced * 10) / 10).toBeCloseTo(seen!.peak - seen!.open, 5)
+    }
   })
 })

@@ -73,6 +73,9 @@ export interface ShopView {
   cost: Record<UpgradeId, number>
   /** Survivors the run will START with, at the levels held right now. */
   startSquad: number
+  /** Survivors the NEXT Squad level would add to that start on this stage —
+   *  `squadPerLevel(stage)`, which grows with the stage's doors. */
+  squadPerLevel: number
   /** Per-survivor damage and shots/s the run will START with. */
   damage: number
   fireRate: number
@@ -221,9 +224,10 @@ export const marginalDps = (view: ShopView, id: UpgradeId): number => {
   const damage = view.lastRun?.damage ?? view.damage
   const rate = view.lastRun?.fireRate ?? view.fireRate
   switch (id) {
-    // One more survivor at the start, multiplied by every gate on the way.
+    // A level's worth of survivors at the start, multiplied by every gate on
+    // the way. (Its share of every door is not priced here, as it never was.)
     case 'squad':
-      return squadLeverage(view) * damage * rate
+      return view.squadPerLevel * squadLeverage(view) * damage * rate
     // `+0.4` damage on every body in the crowd.
     case 'power':
       return squad * 0.4 * rate

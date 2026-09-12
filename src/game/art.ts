@@ -51,6 +51,14 @@ export const ART_FOLDERS = {
   monster: 'images/monsters',
   /** The squad's RUN CYCLES, one strip per outfit, on the same terms. */
   hero: 'images/heroes',
+  /**
+   * Painted DEATHS, one strip per BOSS design: eight panels from the killing
+   * blow to the body lying still, played once and held on the last panel as
+   * the corpse the next stage opens beside. Wider panels than a walk's (see
+   * `DEATH_FRAME_ASPECT`). Fetched late on purpose — when the stage is 80 %
+   * run, never on the splash (`deathArtWant`) — and a miss is the drawn topple.
+   */
+  death: 'images/deaths',
   /** Road props: the two crates, the barricade tile, boulders, the powder keg,
    *  the divider pillar, the coin. One still each. */
   prop: 'images/props',
@@ -116,16 +124,31 @@ const probes = new Map<string, Probe>()
 // look and keeps it for the life of the page unless it is told otherwise.
 // A canvas cannot bind to a value, so it has to be told.
 
-const artListeners = new Set<() => void>()
+/**
+ * WHICH painting changed, or `null` for "assume everything did".
+ *
+ * A decode names itself. A flag flip and a refresh cannot: the first turns
+ * every painting on or off at once and the second re-probes the lot, so both
+ * pass `null` and every listener drops everything it holds.
+ *
+ * The payload is what keeps the first seconds cheap. Without it, each of the
+ * ~70 paintings that decode during the opening stage makes every cache in the
+ * renderer throw away work built from the other sixty-nine — measured at 670
+ * canvases baked during boot against 119 with the art layer off.
+ */
+export type ArtChange = { kind: ArtKind; id: string } | null
 
-/** Repaint when drop-in art arrives or the flag flips. Returns an unsubscribe. */
-export const onArtChanged = (fn: () => void): (() => void) => {
+const artListeners = new Set<(change: ArtChange) => void>()
+
+/** Repaint when drop-in art arrives or the flag flips. Returns an unsubscribe.
+ *  A listener that ignores its argument keeps the old whole-cache behaviour. */
+export const onArtChanged = (fn: (change: ArtChange) => void): (() => void) => {
   artListeners.add(fn)
   return () => { artListeners.delete(fn) }
 }
 
-const artChanged = (): void => {
-  for (const fn of artListeners) fn()
+const artChanged = (change: ArtChange = null): void => {
+  for (const fn of artListeners) fn(change)
 }
 
 /**
@@ -231,8 +254,10 @@ export const spriteFor = (
       if (img.naturalWidth > 0) {
         probe!.state = 'ready'
         probe!.img = img
-        // The whole point: whoever painted before this arrived gets to repaint.
-        artChanged()
+        // The whole point: whoever painted before this arrived gets to repaint
+        // — and only what was built from THIS painting, which is why the
+        // arrival names itself. See `ArtChange`.
+        artChanged({ kind, id })
       } else probe!.state = 'missing'
       done()
     }, { once: true })

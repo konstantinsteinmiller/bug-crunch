@@ -41,6 +41,10 @@ export type FxSound =
   | 'squadMilestone'
   | 'countUp'
   | 'lever' | 'weaponOpen' | 'weaponTake' | 'rocketLaunch' | 'rocketBlast'
+  // The two late skills (`game/skills.ts`). The only cues in the mix with a
+  // room around them — see `getReverb`.
+  | 'frostNova' | 'frostShatter' | 'frostThaw'
+  | 'decoyThrow' | 'decoyLit' | 'decoyBurst'
 
 // ─── Throttling ─────────────────────────────────────────────────────────────
 //
@@ -91,7 +95,11 @@ const THROTTLES: Partial<Record<FxSound, Throttle>> = {
   // this row protects the player from a caller that has lost track of which
   // rungs it has already announced, which would turn a half-second chime into
   // the sound of the rest of the run. One row is cheaper than trusting the HUD.
-  squadMilestone: { minGapMs: 700, maxPerWindow: 2, windowMs: 3000 }
+  squadMilestone: { minGapMs: 700, maxPerWindow: 2, windowMs: 3000 },
+  // A crowd walking into a frozen pack shatters a body a frame — the crack has
+  // to keep coming for as long as they keep coming apart, without becoming one
+  // continuous hiss of glass.
+  frostShatter: { minGapMs: 45, maxPerWindow: 5, windowMs: 350 }
 }
 
 const lastAt: Partial<Record<FxSound, number>> = {}
@@ -135,7 +143,95 @@ const getNoise = (ctx: AudioContext): AudioBuffer => {
   return buf
 }
 
-interface NoiseOpts {
+/**
+ * ─── A room, for the few cues that need one ─────────────────────────────────
+ *
+ * Every voice in this mixer goes straight to the destination, dry, and for the
+ * combat bed that is right: forty shots a second through a reverb is a wash.
+ * The two late skills are the exception. A frost nova is the whole world
+ * stopping, and a dry crackle reads as a sound effect where a crackle with a
+ * cold cavern behind it reads as a place; the flare is a light in the distance
+ * and needs distance. So they alone SEND to this bus — a synthesised stereo
+ * impulse, darkened by a low-pass so the space is stone rather than tile.
+ *
+ * Built lazily on the first cue that asks for it, and never for a session that
+ * never reaches stage 5: ~1.7 MB of impulse for a player who will never hear it
+ * would be the definition of waste.
+ */
+let reverb: { ctx: AudioContext; input: GainNode } | null = null
+
+const buildImpulse = (ctx: AudioContext, seconds: number, decay: number): AudioBuffer => {
+  const rate = ctx.sampleRate
+  const len = Math.max(1, Math.floor(rate * seconds))
+  const buf = ctx.createBuffer(2, len, rate)
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch)
+    for (let i = 0; i < len; i++) {
+      const t = i / len
+      // Exponential-ish decay, independently noisy per channel: the difference
+      // between the ears is what makes it a space rather than an echo.
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay)
+    }
+    // A handful of early reflections, the walls answering first.
+    for (const [ms, g] of [[11, 0.55], [23, 0.4], [37, 0.3], [52, 0.22]] as const) {
+      const at = Math.floor((ms + ch * 3) * rate / 1000)
+      if (at < len) d[at] = (d[at] ?? 0) + (ch === 0 ? g : -g)
+    }
+  }
+  return buf
+}
+
+const getReverb = (ctx: AudioContext): AudioNode | null => {
+  if (reverb && reverb.ctx === ctx) return reverb.input
+  try {
+    const conv = ctx.createConvolver()
+    conv.buffer = buildImpulse(ctx, 2.2, 3.1)
+    const input = ctx.createGain()
+    const tone = ctx.createBiquadFilter()
+    tone.type = 'lowpass'
+    tone.frequency.value = 5200
+    const wet = ctx.createGain()
+    wet.gain.value = 0.55
+    input.connect(conv).connect(tone).connect(wet).connect(ctx.destination)
+    reverb = { ctx, input }
+    return input
+  } catch {
+    return null
+  }
+}
+
+/** Where a voice's last gain stage goes: straight out (the combat bed), or out
+ *  through a pan and a send — the late skills, which have a side and a room. */
+interface Route {
+  /** -1 left … 1 right. */
+  pan?: number
+  /** 0…1 of the voice sent to the room as well. */
+  send?: number
+  /** A bus of the caller's own, instead of the destination — the flare's burn
+   *  loop, so the whole loop can be faded as one. */
+  dest?: AudioNode
+}
+
+const route = (ctx: AudioContext, out: AudioNode, o: Route): void => {
+  let tail: AudioNode = out
+  if (o.pan && ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner()
+    p.pan.value = Math.max(-1, Math.min(1, o.pan))
+    out.connect(p)
+    tail = p
+  }
+  tail.connect(o.dest ?? ctx.destination)
+  if (o.send && o.send > 0 && !o.dest) {
+    const room = getReverb(ctx)
+    if (room) {
+      const s = ctx.createGain()
+      s.gain.value = o.send
+      tail.connect(s).connect(room)
+    }
+  }
+}
+
+interface NoiseOpts extends Route {
   duration: number
   gain: number
   /** Filter sweep, Hz. */
@@ -163,12 +259,13 @@ const noiseBurst = (ctx: AudioContext, o: NoiseOpts): void => {
   gain.gain.setValueAtTime(o.gain, now)
   gain.gain.exponentialRampToValueAtTime(0.0001, now + o.duration)
 
-  src.connect(filter).connect(gain).connect(ctx.destination)
+  src.connect(filter).connect(gain)
+  route(ctx, gain, o)
   src.start(now)
   src.stop(now + o.duration + 0.02)
 }
 
-interface ToneOpts {
+interface ToneOpts extends Route {
   freq: number
   toFreq?: number
   duration: number
@@ -177,6 +274,8 @@ interface ToneOpts {
   delay?: number
   /** Optional lowpass to take the edge off a raw saw/square. */
   filter?: number
+  /** Seconds to the peak. 4 ms by default — a pad wants a swell, not a click. */
+  attack?: number
 }
 
 /** A single pitched voice with an exponential envelope. */
@@ -192,7 +291,7 @@ const tone = (ctx: AudioContext, o: ToneOpts): void => {
   const gain = ctx.createGain()
   // 4 ms attack avoids the click a hard start would produce.
   gain.gain.setValueAtTime(0.0001, now)
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.gain), now + 0.004)
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.gain), now + (o.attack ?? 0.004))
   gain.gain.exponentialRampToValueAtTime(0.0001, now + o.duration)
 
   let node: AudioNode = osc
@@ -203,9 +302,51 @@ const tone = (ctx: AudioContext, o: ToneOpts): void => {
     osc.connect(f)
     node = f
   }
-  node.connect(gain).connect(ctx.destination)
+  node.connect(gain)
+  route(ctx, gain, o)
   osc.start(now)
   osc.stop(now + o.duration + 0.02)
+}
+
+/**
+ * A struck bell: the note, plus two INHARMONIC partials above it (×2.76 and
+ * ×5.4, the ratios of a real bar or bell) that decay faster than the note does.
+ * The inharmonics are what make it glass or ice rather than a keyboard — a pure
+ * sine at 2.6 kHz is a test tone, the same sine with its overtones out of tune
+ * is a crystal ringing.
+ */
+const bell = (ctx: AudioContext, o: ToneOpts): void => {
+  tone(ctx, { ...o, type: 'sine' })
+  tone(ctx, { ...o, freq: o.freq * 2.76, toFreq: undefined, gain: o.gain * 0.36, duration: o.duration * 0.45, type: 'sine' })
+  tone(ctx, { ...o, freq: o.freq * 5.4, toFreq: undefined, gain: o.gain * 0.16, duration: o.duration * 0.22, type: 'sine' })
+}
+
+/**
+ * Tiny, dry, high clicks scattered over a window: ice forming, a flame
+ * spitting, a firework's tail. Each is a few milliseconds of noise through a
+ * band chosen per click, so a run of them is a texture rather than a rhythm.
+ */
+interface CrackleOpts extends Route {
+  count: number
+  /** Window, seconds from now. */
+  from: number
+  to: number
+  gain: number
+  lo: number
+  hi: number
+}
+const crackle = (ctx: AudioContext, o: CrackleOpts): void => {
+  for (let i = 0; i < o.count; i++) {
+    const f = o.lo + Math.random() * (o.hi - o.lo)
+    noiseBurst(ctx, {
+      duration: 0.012 + Math.random() * 0.024,
+      gain: o.gain * (0.45 + Math.random() * 0.55),
+      filterFrom: f, filterTo: f * 0.7,
+      type: 'bandpass', q: 1.6 + Math.random() * 2,
+      delay: o.from + Math.random() * (o.to - o.from),
+      pan: o.pan, send: o.send, dest: o.dest
+    })
+  }
 }
 
 // ─── Cue definitions ────────────────────────────────────────────────────────
@@ -265,7 +406,7 @@ export const tickFreq = (step: number): number => {
  * has been pumped, how many survivors just arrived). It never changes WHICH
  * sound plays — only how big it is — so the mix stays legible.
  */
-const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
+const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => {
   const r = Math.random()
 
   switch (id) {
@@ -753,9 +894,196 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
       tone(ctx, { freq: 880 * (1 + power * 0.5), duration: 0.05, gain: vol(0.03), type: 'square', filter: 4000 })
       break
 
+    // ─── Frost Nova ─────────────────────────────────────────────────────────
+    //
+    // The biggest thing the PLAYER ever does, so it is built like the biggest
+    // things the boss does — a sub under a body under a texture — and then given
+    // the one quality nothing else in the mix has: a room. Five layers, in the
+    // order the ear takes them in:
+    //
+    //   1. the blast: a sub dropping from 130 to 36 Hz, the "whoomp" the screen
+    //      shake is timed to;
+    //   2. the wave: noise OPENING upward as the ring leaves the crowd, then a
+    //      long bright sweep collapsing behind it as it crosses the screen;
+    //   3. the ice forming: a crackle racing out with the ring;
+    //   4. the crystal: seven inharmonic bells in E, falling into place — the
+    //      part that says "ice" and not "explosion";
+    //   5. the held breath: a thin high chord swelling UNDER the reverb and
+    //      hanging there, because the world has just stopped and the sound
+    //      should stop with it rather than decaying back into the fight.
+    case 'frostNova': {
+      tone(ctx, { freq: 130, toFreq: 36, duration: 0.7, gain: vol(0.24), type: 'sine' })
+      tone(ctx, { freq: 260, toFreq: 70, duration: 0.3, gain: vol(0.08), type: 'triangle', filter: 900 })
+      noiseBurst(ctx, { duration: 0.42, gain: vol(0.13), filterFrom: 380, filterTo: 7200, type: 'bandpass', q: 0.8, send: 0.35 })
+      noiseBurst(ctx, { duration: 1.1, gain: vol(0.06), filterFrom: 9000, filterTo: 700, type: 'lowpass', delay: 0.18, send: 0.6 })
+      crackle(ctx, { count: 22, from: 0.06, to: 0.75, gain: vol(0.07), lo: 2600, hi: 9500, send: 0.3 })
+      for (const [i, f] of [2637, 1976, 3136, 1661, 2349, 3951, 1319].entries()) {
+        bell(ctx, {
+          freq: f * (0.996 + r * 0.008), duration: 0.5 + i * 0.07, gain: vol(0.03),
+          delay: 0.04 + i * 0.055, send: 0.7
+        })
+      }
+      for (const f of [659, 988, 1319]) {
+        tone(ctx, { freq: f, duration: 1.6, gain: vol(0.018), type: 'sine', delay: 0.12, attack: 0.09, send: 0.8 })
+      }
+      break
+    }
+
+    case 'frostShatter':
+      // One body coming apart: glass, not bone. A bright highpassed crack, three
+      // tinkles scattered across the top of the band, and a small thud so it
+      // still has weight on a phone speaker.
+      noiseBurst(ctx, { duration: 0.16, gain: vol(0.085), filterFrom: 9000, filterTo: 2600, type: 'highpass', q: 0.7, send: 0.25 })
+      for (let i = 0; i < 3; i++) {
+        const f = 2200 + Math.random() * 3400
+        tone(ctx, {
+          freq: f, toFreq: f * 0.92, duration: 0.07 + Math.random() * 0.12, gain: vol(0.028),
+          type: 'triangle', delay: i * 0.018 + Math.random() * 0.02, send: 0.35
+        })
+      }
+      tone(ctx, { freq: 180, toFreq: 70, duration: 0.09, gain: vol(0.05), type: 'sine' })
+      break
+
+    case 'frostThaw':
+      // Every body's ice going at once: the nova's crystal in reverse — a crack
+      // opening UP, a crackle, and the bells FALLING — so the end of the freeze
+      // is heard as the same object as its start, coming apart.
+      noiseBurst(ctx, { duration: 0.5, gain: vol(0.1), filterFrom: 2400, filterTo: 9000, type: 'bandpass', q: 0.7, send: 0.4 })
+      crackle(ctx, { count: 26, from: 0, to: 0.5, gain: vol(0.07), lo: 2000, hi: 8000, send: 0.35 })
+      for (const [i, f] of [3951, 3136, 2637, 2093, 1568].entries()) {
+        bell(ctx, { freq: f, duration: 0.35, gain: vol(0.026), delay: 0.03 + i * 0.045, send: 0.6 })
+      }
+      tone(ctx, { freq: 110, toFreq: 48, duration: 0.3, gain: vol(0.09), type: 'sine' })
+      break
+
+    // ─── Decoy Flare ────────────────────────────────────────────────────────
+    //
+    // Panned to the rail it lands on — the one cue in the game with a side,
+    // because the one thing it has to say is WHERE.
+    case 'decoyThrow':
+      // The launcher's pop, and a whistle climbing away from the crowd.
+      tone(ctx, { freq: 170, toFreq: 70, duration: 0.14, gain: vol(0.1), type: 'sine' })
+      noiseBurst(ctx, { duration: 0.05, gain: vol(0.06), filterFrom: 5200, filterTo: 1600, type: 'bandpass', q: 1.2 })
+      noiseBurst(ctx, { duration: 0.42, gain: vol(0.07), filterFrom: 700, filterTo: 3600, type: 'bandpass', q: 1.4, delay: 0.03, pan: pan * 0.6 })
+      tone(ctx, { freq: 320, toFreq: 980, duration: 0.4, gain: vol(0.025), type: 'sine', delay: 0.04, pan: pan * 0.6 })
+      break
+
+    case 'decoyLit':
+      // It caught: a strike, a FWOOSH opening up, a body under both, and the
+      // first spit of the flame. The burn loop (`startFlareBurn`) takes over
+      // from here.
+      noiseBurst(ctx, { duration: 0.06, gain: vol(0.09), filterFrom: 9000, filterTo: 3000, type: 'highpass', pan })
+      noiseBurst(ctx, { duration: 0.55, gain: vol(0.13), filterFrom: 500, filterTo: 4200, type: 'bandpass', q: 0.7, pan, send: 0.35 })
+      tone(ctx, { freq: 90, toFreq: 45, duration: 0.35, gain: vol(0.11), type: 'sine', pan: pan * 0.4 })
+      crackle(ctx, { count: 12, from: 0.05, to: 0.5, gain: vol(0.06), lo: 1800, hi: 6000, pan })
+      // A two-step rising call under the fire — "over here" — filtered dark so
+      // it is felt as a lure rather than heard as an alarm.
+      tone(ctx, { freq: 330, toFreq: 440, duration: 0.3, gain: vol(0.03), type: 'sawtooth', filter: 1500, delay: 0.08, pan, send: 0.45 })
+      tone(ctx, { freq: 440, toFreq: 660, duration: 0.42, gain: vol(0.026), type: 'sawtooth', filter: 1800, delay: 0.3, pan, send: 0.45 })
+      break
+
+    case 'decoyBurst':
+      // The pay-off: a deep blast, a body of fire, a long sizzle and a
+      // firework's crackle running out into the room.
+      tone(ctx, { freq: 120, toFreq: 32, duration: 0.8, gain: vol(0.24), type: 'sine', pan: pan * 0.4 })
+      noiseBurst(ctx, { duration: 0.6, gain: vol(0.16), filterFrom: 4200, filterTo: 180, pan, send: 0.35 })
+      noiseBurst(ctx, { duration: 1.1, gain: vol(0.045), filterFrom: 7000, filterTo: 2500, type: 'highpass', q: 0.5, delay: 0.08, pan, send: 0.5 })
+      crackle(ctx, { count: 26, from: 0.1, to: 1.0, gain: vol(0.07), lo: 1500, hi: 7000, pan, send: 0.3 })
+      break
+
     default:
       break
   }
+}
+
+/**
+ * ─── The flare, burning ─────────────────────────────────────────────────────
+ *
+ * The one cue in the game that LASTS: five seconds of a flame on a parachute,
+ * which is exactly as long as the fight is looking at it. A hiss with a flame's
+ * flutter on it, a low roar under that, crackles spat across the whole burn and
+ * a soft thrum every 0.8 s — the lure's pulse, on the beat of the light pool the
+ * renderer pulses on the road.
+ *
+ * Everything runs into ONE bus, so the burn can be cut the instant the flare
+ * goes out early (a stage ending, a wipe) rather than hissing on over a result
+ * screen. The shared AudioContext is what an ad suspends, so a burn under an ad
+ * pauses with everything else.
+ */
+let burn: { ctx: AudioContext; bus: GainNode; sources: AudioScheduledSourceNode[] } | null = null
+
+export const startFlareBurn = (seconds: number, pan = 0): void => {
+  stopFlareBurn()
+  if (!canPlay() || seconds <= 0.4) return
+  const ctx = getAudioContext()
+  if (!ctx || ctx.state !== 'running') return
+  try {
+    const now = ctx.currentTime
+    const bus = ctx.createGain()
+    bus.gain.setValueAtTime(0.0001, now)
+    bus.gain.exponentialRampToValueAtTime(1, now + 0.14)
+    bus.gain.setValueAtTime(1, now + seconds - 0.5)
+    bus.gain.exponentialRampToValueAtTime(0.0001, now + seconds)
+    route(ctx, bus, { pan, send: 0.25 })
+
+    const hiss = ctx.createBufferSource()
+    hiss.buffer = getNoise(ctx)
+    hiss.loop = true
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 3200
+    band.Q.value = 0.6
+    const hissGain = ctx.createGain()
+    hissGain.gain.value = vol(0.045)
+    // The flutter: a flame is never a steady hiss.
+    const lfo = ctx.createOscillator()
+    lfo.frequency.value = 9 + Math.random() * 4
+    const depth = ctx.createGain()
+    depth.gain.value = vol(0.018)
+    lfo.connect(depth).connect(hissGain.gain)
+    hiss.connect(band).connect(hissGain).connect(bus)
+
+    const roar = ctx.createBufferSource()
+    roar.buffer = getNoise(ctx)
+    roar.loop = true
+    roar.playbackRate.value = 0.5
+    const low = ctx.createBiquadFilter()
+    low.type = 'lowpass'
+    low.frequency.value = 420
+    const roarGain = ctx.createGain()
+    roarGain.gain.value = vol(0.07)
+    roar.connect(low).connect(roarGain).connect(bus)
+
+    crackle(ctx, { count: Math.round(seconds * 9), from: 0.1, to: seconds - 0.2, gain: vol(0.055), lo: 1600, hi: 7000, dest: bus })
+    for (let t = 0.25; t < seconds - 0.3; t += 0.8) {
+      tone(ctx, { freq: 78, toFreq: 58, duration: 0.32, gain: vol(0.07), type: 'sine', delay: t, attack: 0.03, dest: bus })
+    }
+
+    hiss.start(now)
+    roar.start(now)
+    lfo.start(now)
+    const end = now + seconds + 0.05
+    hiss.stop(end)
+    roar.stop(end)
+    lfo.stop(end)
+    burn = { ctx, bus, sources: [hiss, roar, lfo] }
+  } catch {
+    // Out of nodes: the light on the road is still the whole message.
+  }
+}
+
+/** Put the flare out now, with a short fade rather than a click. */
+export const stopFlareBurn = (): void => {
+  const b = burn
+  burn = null
+  if (!b) return
+  try {
+    const now = b.ctx.currentTime
+    b.bus.gain.cancelScheduledValues(now)
+    b.bus.gain.setValueAtTime(Math.max(0.0001, b.bus.gain.value), now)
+    b.bus.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
+    for (const s of b.sources) s.stop(now + 0.15)
+  } catch { /* already stopped */ }
 }
 
 /**
@@ -765,8 +1093,10 @@ const synth = (ctx: AudioContext, id: FxSound, power: number): void => {
  * @param power 0..1 intensity hint — or a ladder index for the two cues that
  *              are pitched rather than sized: a step for `gateTick` /
  *              `gateSubTick`, a rung for `squadMilestone`.
+ * @param pan   -1 left … 1 right, read only by the cues that have a side (the
+ *              flare's). Everything else is centred, as it always was.
  */
-export const playFx = (id: FxSound, power = 0): void => {
+export const playFx = (id: FxSound, power = 0, pan = 0): void => {
   if (!canPlay()) return
   if (!passesThrottle(id)) return
 
@@ -793,7 +1123,7 @@ export const playFx = (id: FxSound, power = 0): void => {
   if (ctx.state !== 'running') return
 
   try {
-    synth(ctx, id, power)
+    synth(ctx, id, power, pan)
   } catch {
     // A browser refusing to allocate more nodes is not worth interrupting a
     // frame for — the visual feedback carries the moment on its own.

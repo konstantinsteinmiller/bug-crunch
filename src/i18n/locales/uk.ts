@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Темп',
     'incoming': 'Атака!',
     'dodge': 'Ухилися',
+    'getIn': 'Всередину',
+    'holdStill': 'Завмри',
     'milestone': '{n} у строю!',
     'weaponActive': '{name} готовий',
+    'weaponsActive': '{a} + {b} готові',
     'weaponLocked': '{name} заблоковано — збито важелів: {n} з {total}',
     'weaponGift': '{name} попереду — безкоштовно, без важелів',
     'weaponFree': 'ДАРМА'
@@ -90,6 +93,10 @@ export default {
       'a': "Удвічі вища скорострільність",
       'b': "Швидше качає ворота"
     }
+  },
+  'bossReward': {
+    'title': "Боса переможено!",
+    'subtitle': "Подарунок на рівень {n}. Біжи далі!"
   },
   'result': {
     'stageClear': 'Етап пройдено!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Граната',
 
-    'shield': 'Щит'
+    'shield': 'Щит',
 
+    'locked': 'Закрито',
+
+    'unlocksAt': 'Відкриється на рівні {n}',
+
+    'frost': 'Крижана нова',
+
+    'decoy': 'Сигнал-приманка',
+
+    'trialLabel': '{name} · безкоштовно',
+
+    'trialTag': 'Спробуй безкоштовно!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

@@ -11,13 +11,14 @@ import type { ArtKind } from '@/game/art'
  *
  * Monsters and survivors are not here: their ids are the designs in
  * `monsters.ts` and the outfits in `heroSprites.ts`, and both modules are
- * already on the boot path.
+ * already on the boot path. Nor are the boss deaths, which are keyed by the
+ * same designs — the boss roster in `foes.ts` (`bossDesigns`) says which.
  *
  * The logo is not here either. It is painted through the same pipeline but
  * never probed at run time — the manifest lists it with an explicit target
  * under `images/logo/`, where the PWA manifest and the portals read it.
  */
-export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero'>, readonly string[]> = {
+export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero' | 'death'>, readonly string[]> = {
   prop: [
     'crate-damage', 'crate-rate', 'barricade',
     'boulder-1', 'boulder-2', 'boulder-3',
@@ -42,6 +43,8 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero'>, readonl
   // weapon choice, shown through `ArtIcon` and `FReward`. See `uiArt.ts`.
   ui: [
     'crown', 'ribbon', 'chest', 'forge', 'skill-grenade', 'skill-shield',
-    'weapon-card-rocket', 'weapon-card-gatling'
+    'weapon-card-rocket', 'weapon-card-gatling',
+    // The incoming-attack alarm, one drawable per state — see `uiArt.ts`.
+    'warn-away', 'warn-into', 'warn-still'
   ]
 }

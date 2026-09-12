@@ -24,6 +24,15 @@
         //- detour worth it", and it needs no translating in any of the
         //- twenty-one languages this ships in.
         span.wtag__note(v-else) ×{{ mult }}
+      //- The second gun — stage 2's overlay (`sideWeapon`): a glyph and its own
+      //- multiplier after a plus, because two weapons firing at once is a SUM
+      //- and the badge should read like one. Before the box is broken the same
+      //- slot promises it: the gift ahead, FREE, since it now adds rather
+      //- than replaces.
+      template(v-if="second")
+        span.wtag__plus(aria-hidden="true") +
+        GameIcon.wtag__icon.wtag__icon--second(:name="second.icon" :class="{ 'is-gift': second.gift }")
+        span.wtag__note.wtag__note--second(:class="{ 'is-gift': second.gift }") {{ second.note }}
 </template>
 
 <script setup lang="ts">
@@ -80,8 +89,14 @@ interface Props {
   gift: boolean
   /** The weapon the player is actually carrying, or `null`. */
   active: WeaponId | null
+  /** …and what it is worth against its full self — below 1 only for the
+   *  stage-1 boss's launcher (`weaponPower`). */
+  power?: number
+  /** A second gun firing alongside (`sideWeapon`), and its power. */
+  side?: WeaponId | null
+  sidePower?: number
 }
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { power: 1, side: null, sidePower: 1 })
 
 const WEAPON_ICONS: Record<WeaponId, GameIconName> = {
   rocket: 'rocket',
@@ -107,12 +122,33 @@ const name = computed(() => (weapon.value ? t(`weapons.${weapon.value}`) : ''))
 
 /** The weapon's total damage multiplier over the squad's own gun, shop levels
  *  included — see `weaponTotalMul`. */
-const mult = computed(() => (props.active ? weaponTotalMul(props.active) : 0))
+const mult = computed(() =>
+  props.active ? Math.round(weaponTotalMul(props.active) * props.power * 10) / 10 : 0
+)
+
+/**
+ * The second slot: the gun firing alongside, or — while a weapon is held and a
+ * gift box of a different one is still ahead — that gift, which will ADD to it.
+ */
+const second = computed<{ icon: GameIconName; note: string; gift: boolean } | null>(() => {
+  if (!props.active) return null
+  if (props.side) {
+    const m = Math.round(weaponTotalMul(props.side) * props.sidePower * 10) / 10
+    return { icon: WEAPON_ICONS[props.side], note: `×${m}`, gift: false }
+  }
+  if (props.puzzle && props.gift && props.puzzle !== props.active) {
+    return { icon: WEAPON_ICONS[props.puzzle], note: t('hud.weaponFree'), gift: true }
+  }
+  return null
+})
 
 /** The accessible name says which of the two states this is — a screen reader
  *  gets no help at all from a dimmed glyph and a row of dots. */
 const label = computed(() => {
   if (!weapon.value) return ''
+  if (props.active && props.side) {
+    return t('hud.weaponsActive', { a: name.value, b: t(`weapons.${props.side}`) })
+  }
   if (props.active) return t('hud.weaponActive', { name: name.value })
   // A gift has no levers, so the locked wording's "{n} of {total}" would read
   // "0 of 0" to a screen reader — which is worse than silence, because it
@@ -225,6 +261,35 @@ const label = computed(() => {
 .wtag__pip.is-on
   background-color: #7ee08a
   box-shadow: 0 0 6px rgba(126, 224, 138, 0.8)
+
+// ─── The second gun ──────────────────────────────────────────────────────────
+// Smaller than the first: it is the gun the player already had, and the name
+// on the badge belongs to the one that just arrived.
+.wtag__plus
+  flex: 0 0 auto
+  font-weight: 900
+  font-size: clamp(0.55rem, 2.4vw, 0.72rem)
+  line-height: 1
+  color: rgba(255, 233, 168, 0.6)
+
+.wtag .wtag__icon--second
+  width: clamp(0.85rem, 3.8vw, 1.2rem)
+  height: clamp(0.85rem, 3.8vw, 1.2rem)
+  color: #ffd93c
+  filter: drop-shadow(0 0 4px rgba(255, 200, 60, 0.45))
+
+  &.is-gift
+    color: #ffd07a
+    filter: none
+    opacity: 0.85
+
+.wtag__note--second
+  flex: 0 0 auto
+
+  &.is-gift
+    font-weight: 900
+    letter-spacing: 0.06em
+    color: #ffd07a
 
 @keyframes wtag-pop
   0%

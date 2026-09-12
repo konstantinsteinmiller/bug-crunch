@@ -39,13 +39,19 @@ export const GAME_ICON_NAMES = [
   // end. Geometry moved verbatim from those call sites — they are tuned against
   // each other's weight in the HUD strip, so redraw them together or not at all.
   'squad', 'bolt', 'rate', 'range', 'flame', 'skull',
-  // Active skills — see `SkillBar.vue`.
-  'bomb', 'shield',
+  // Active skills — see `SkillBar.vue`. The last two are the late skills
+  // (`game/skills.ts`): a six-armed ice crystal and a burning flare stick.
+  'bomb', 'shield', 'snowflake', 'flare',
   // The two per-stage weapons. They front a shop row AND the run's weapon
   // badge, which is the same rule the five stat glyphs above follow: the thing
   // bought and the thing carried must be one drawing, or the player has to
   // learn the same object twice. See `game/weapons.ts`.
-  'rocket', 'gatling'
+  'rocket', 'gatling',
+  // The incoming-attack alarm. It lives in the shared set rather than inline in
+  // `IncomingWarning.vue` because that badge now asks `ArtIcon` for its mark,
+  // and `ArtIcon`'s floor is a glyph from this list — see `game/uiArt.ts`,
+  // which draws the same sign on a canvas for the reference sheet.
+  'warning'
 ] as const
 
 export type GameIconName = (typeof GAME_ICON_NAMES)[number]

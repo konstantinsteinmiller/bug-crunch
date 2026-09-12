@@ -70,30 +70,33 @@ describe('the endless road keeps scaling', () => {
     }
   })
 
-  it('does not promise more survivors than the game can hold', () => {
+  it('does not promise more survivors than the game can hold', async () => {
     // Summing the best `add` of every bank is the most the additive path can
     // hand a run. Past `MAX_SQUAD` the surplus is silently clipped and every
     // door lies about its payout — the bug the cap was raised to fix for a
-    // thirty-stage career, arriving again later. The `1.64` is a maxed Squad
-    // track's `gatePayoutBonus`.
+    // thirty-stage career, arriving again later. `maxBonus` is the most the
+    // Squad track's door share can ever reach (+37 %, from level 20).
+    const { gatePayoutBonusAt } = await import('@/use/useUpgrades')
+    const maxBonus = gatePayoutBonusAt(Number.MAX_SAFE_INTEGER)
     //
-    // Bounded at stage 200 on purpose, and this is the honest statement of the
+    // Bounded at stage 250 on purpose, and this is the honest statement of the
     // limit rather than a convenient one: NO finite cap survives an unbounded
-    // sum. With `MAX_SQUAD` at 4 000 and `gateAddBase` flattened into a
-    // logarithm, the theoretical sum first crosses the cap at **stage ~240**
-    // (measured: 4 057 at stage 250). Two things make that acceptable rather
-    // than a deferred bug: stage 240 is roughly three hours of unbroken play,
-    // and the figure is a THEORETICAL maximum that ignores attrition — a real
-    // run at that depth is losing a fifth of the crowd to every elite sweep and
-    // a third to every boss slam, so it never accumulates anything close.
-    for (const stage of DEEP.filter((s) => s <= 200)) {
+    // sum. With `MAX_SQUAD` at 4 000, `gateAddBase` flattened into a logarithm
+    // and trimmed (`GATE_GROWTH_TRIM`), and the Squad share capped, the
+    // theoretical sum first crosses the cap at **stage ~280** (measured: 3 640
+    // at stage 250, 4 087 at 280; it was ~240 before the trim). Two things make
+    // that acceptable rather than a deferred bug: stage 280 is hours of unbroken
+    // play, and the figure is a THEORETICAL maximum that ignores attrition — a
+    // real run at that depth is losing a fifth of the crowd to every elite sweep
+    // and a third to every boss slam, so it never accumulates anything close.
+    for (const stage of DEEP.filter((s) => s <= 250)) {
       let sum = 0
       for (const e of buildTrack(stage).events) {
         if (e.kind !== 'gates') continue
         const best = e.leaves.filter((l) => l.op === 'add').map((l) => l.value)
         if (best.length) sum += Math.max(...best)
       }
-      expect(sum * 1.64, `stage ${stage} promises ${Math.round(sum * 1.64)} of ${MAX_SQUAD}`)
+      expect(sum * maxBonus, `stage ${stage} promises ${Math.round(sum * maxBonus)} of ${MAX_SQUAD}`)
         .toBeLessThan(MAX_SQUAD)
     }
   })

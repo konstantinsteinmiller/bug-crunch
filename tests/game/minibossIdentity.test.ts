@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CLAW_CORE_FRACTION, CLAW_DODGE_MARGIN, CLAW_FURROWS, CLAW_FURROW_HALF_W,
   CLAW_FURROW_HALF_W_MAX, CLAW_SPACING, MINIBOSS_DESIGN, MINIBOSS_POOL,
-  THREAT_POOL_FROM_STAGE,
+  MINIBOSS_POOL_LATE, MINIBOSS_TIER2_FROM_STAGE, THREAT_POOL_FROM_STAGE,
   clawCoreHalfW, clawFurrowHalfW, clawLaneXs, inClawFurrow,
   minibossDesignFor, minibossDesignsFor, minibossKindFor
 } from '@/game/threats'
@@ -19,29 +19,59 @@ import { CROWD_MAX_R } from '@/game/survival'
  * re-rolled; these assertions carry that rule through to what the player sees.
  */
 describe('one body per fight, permanently', () => {
-  it('pairs the three the player was promised', () => {
+  it('pairs the five the player was promised', () => {
     // Stated as literals rather than read back from the map: this is the
     // contract, and a test that reads the same constant the code does would
     // pass for any pairing at all.
     expect(minibossDesignFor('scythe')).toBe('snaggletusk')
     expect(minibossDesignFor('gunner')).toBe('thornwick')
     expect(minibossDesignFor('bomber')).toBe('cinderhound')
+    expect(minibossDesignFor('warden')).toBe('bonecap')
+    expect(minibossDesignFor('burrower')).toBe('skewer')
   })
 
   it('gives every kind in the pool a body, and never shares one', () => {
-    const bodies = MINIBOSS_POOL.map(minibossDesignFor)
+    // Read off the LATE pool, which is the set of every kind that exists — the
+    // tier-one pool is a slice of it (`minibossPoolFor`), so asserting against
+    // that one would stop covering a kind on the day one is added.
+    const bodies = MINIBOSS_POOL_LATE.map(minibossDesignFor)
     for (const b of bodies) expect(typeof b === 'string' && b.length > 0).toBe(true)
-    // Injective. A fifth kind that reused an existing body would silently undo
-    // the lesson for BOTH — the player would meet one silhouette that means two
+    // Injective. A kind that reused an existing body would silently undo the
+    // lesson for BOTH — the player would meet one silhouette that means two
     // different attacks, which is worse than the decoupling this replaced.
-    expect(new Set(bodies).size).toBe(MINIBOSS_POOL.length)
-    expect(Object.keys(MINIBOSS_DESIGN).sort()).toEqual([...MINIBOSS_POOL].sort())
+    expect(new Set(bodies).size).toBe(MINIBOSS_POOL_LATE.length)
+    expect(Object.keys(MINIBOSS_DESIGN).sort()).toEqual([...MINIBOSS_POOL_LATE].sort())
+    // …and the early pool is genuinely a subset, not a second list that has to
+    // be kept in step by hand.
+    for (const kind of MINIBOSS_POOL) expect(MINIBOSS_POOL_LATE).toContain(kind)
   })
 
   it('names only bodies the game can actually draw', async () => {
     const { MONSTERS } = await import('@/game/monsters')
     const known = new Set(MONSTERS.map((m) => m.id))
-    for (const kind of MINIBOSS_POOL) expect(known.has(minibossDesignFor(kind))).toBe(true)
+    for (const kind of MINIBOSS_POOL_LATE) {
+      expect(known.has(minibossDesignFor(kind))).toBe(true)
+    }
+  })
+
+  it('costs the late tier no new strips, because the roster already carries them', async () => {
+    // THE reason `MINIBOSS_TIER2_FROM_STAGE` is 9 and not 4 — see its note. A
+    // miniboss's body is its fight, so a new kind is a new sprite strip on the
+    // road unless the stage's own roster was already going to bake it. Both late
+    // bodies are roster designs by stage 5 (`bonecap` with the husks, `skewer`
+    // with the flyers), so the tier is free to the loader.
+    //
+    // Asserted against `rosterDesigns` rather than against the stage number,
+    // because that is the fact that actually has to hold: a re-body to something
+    // exotic would put a fresh strip in front of a stage-9 player, and the only
+    // symptom is a red fallback ellipse on a device slow enough to notice.
+    const { rosterDesigns } = await import('@/game/foes')
+    const roster = new Set(rosterDesigns(MINIBOSS_TIER2_FROM_STAGE))
+    for (const kind of MINIBOSS_POOL_LATE) {
+      if (MINIBOSS_POOL.includes(kind)) continue
+      const body = minibossDesignFor(kind)
+      expect(roster.has(body), `the late tier adds an unrostered ${body}`).toBe(true)
+    }
   })
 
   it('bakes every body a stage can field, so none draws as the fallback ellipse', () => {
@@ -63,6 +93,9 @@ describe('one body per fight, permanently', () => {
     expect(minibossDesignsFor(1)).toEqual(['snaggletusk'])
     expect(minibossDesignsFor(THREAT_POOL_FROM_STAGE - 1)).toHaveLength(1)
     expect(minibossDesignsFor(THREAT_POOL_FROM_STAGE)).toHaveLength(MINIBOSS_POOL.length)
+    // …and the late tier bakes its own two on top, which is the whole cost of it.
+    expect(minibossDesignsFor(MINIBOSS_TIER2_FROM_STAGE))
+      .toHaveLength(MINIBOSS_POOL_LATE.length)
   })
 })
 

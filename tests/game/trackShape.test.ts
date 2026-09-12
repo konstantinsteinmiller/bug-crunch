@@ -3,6 +3,7 @@ import {
   barricadeHp,
   beatGap,
   buildTrack,
+  CAGE_TAKES,
   crateHp,
   maxTriples,
   minDamageCrates,
@@ -579,17 +580,46 @@ describe('a bank owns the road either side of it', () => {
 describe('a stage gives the run what it needs', () => {
   it('meets its supply floor, which grows with the length of the road', () => {
     for (const stage of STAGES) {
+      const t = track(stage)
       const count = (kind: 'rate' | 'damage'): number =>
-        track(stage).events.reduce(
+        t.events.reduce(
           (n, e) => (e.kind === 'crates' ? n + e.crates.filter((c) => c.kind === kind).length : n),
           0
         )
+      // ── …less the one box a rescue cage stands in for ──
+      //
+      // A cage REPLACES a supply crate rather than joining them (`CAGE_TAKES`),
+      // and it is retired after the floor has been topped up on purpose — run
+      // before, the floor would simply put it back. So a stage that carries a
+      // cage ships exactly one `CAGE_TAKES` crate under its floor, and this is
+      // the line that says so rather than pretending the floor still holds.
+      const caged = t.events.some((e) => e.kind === 'cages')
+      const floor = (kind: 'rate' | 'damage', min: number): number =>
+        caged && kind === CAGE_TAKES ? min - 1 : min
       expect(count('rate'), `stage ${stage} cannot speed up`).toBeGreaterThanOrEqual(
-        minRateCrates(stage)
+        floor('rate', minRateCrates(stage))
       )
       expect(count('damage'), `stage ${stage} cannot hit harder`).toBeGreaterThanOrEqual(
-        minDamageCrates(stage)
+        floor('damage', minDamageCrates(stage))
       )
+    }
+  })
+
+  it('takes exactly one box off the road for every cage it puts on', () => {
+    // The trade, stated as a trade. `buildTrack` is compared against itself with
+    // the cage's crate counted back in: every caged stage is one `CAGE_TAKES`
+    // crate short of its floor-or-better and not two, so a future pass cannot
+    // quietly make a cage cost the stage more than the box it replaced.
+    for (const stage of STAGES) {
+      const t = track(stage)
+      if (!t.events.some((e) => e.kind === 'cages')) continue
+      const taken = t.events.reduce(
+        (n, e) => (e.kind === 'crates' ? n + e.crates.filter((c) => c.kind === CAGE_TAKES).length : n),
+        0
+      )
+      const min = CAGE_TAKES === 'rate' ? minRateCrates(stage) : minDamageCrates(stage)
+      expect(taken, `stage ${stage} lost more than one ${CAGE_TAKES} crate to its cage`)
+        .toBeGreaterThanOrEqual(min - 1)
     }
   })
 

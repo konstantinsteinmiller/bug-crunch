@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tốc độ',
     'incoming': 'Sắp bị tấn công!',
     'dodge': 'Né',
+    'getIn': 'Vào trong',
+    'holdStill': 'Đứng yên',
     'milestone': '{n} chiến binh!',
     'weaponActive': '{name} sẵn sàng',
+    'weaponsActive': '{a} + {b} sẵn sàng',
     'weaponLocked': '{name} đã khoá — đã bắn {n}/{total} cần gạt',
     'weaponGift': '{name} phía trước — miễn phí, không cần cần gạt',
     'weaponFree': 'MIỄN PHÍ'
@@ -90,6 +93,10 @@ export default {
       'a': "Tốc độ bắn gấp đôi",
       'b': "Bơm cổng nhanh hơn"
     }
+  },
+  'bossReward': {
+    'title': "Đã hạ Trùm!",
+    'subtitle': "Quà cho Màn {n}. Chạy tiếp nào!"
   },
   'result': {
     'stageClear': 'Qua màn!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Lựu đạn',
 
-    'shield': 'Khiên'
+    'shield': 'Khiên',
 
+    'locked': 'Đã khóa',
+
+    'unlocksAt': 'Mở khóa ở màn {n}',
+
+    'frost': 'Nova Băng Giá',
+
+    'decoy': 'Pháo Sáng Mồi',
+
+    'trialLabel': '{name} · dùng thử miễn phí',
+
+    'trialTag': 'Dùng thử miễn phí!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

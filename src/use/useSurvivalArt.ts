@@ -7,13 +7,14 @@ import {
   SLAM_RADIUS_MAX, VIEW_HEIGHT, UNIT_R,
   type Divider, type GateOp
 } from '@/game/survival'
-import { BOLT_R, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD } from '@/game/threats'
+import { BOLT_R, ROLLER_R, ROLLER_SPEED, ROLLER_WARN_AHEAD, flankXs } from '@/game/threats'
 import {
   GUARD_H, LEVER_R, STONE_H, WEAPON_BOX_R, WEAPON_REVEAL_S, type WeaponId
 } from '@/game/weapons'
 import {
   anchor, crowdRadius, damage, eliteAlive, formationRadius, getBarricades, getBolts, getBoss,
-  bossIsCharging, bossIsEnraged,
+  bossIsCharging, bossIsEnraged, bossIsVarying,
+  bossGazeLeft01, bossGazeOpening, bossGazeWatching,
   shieldActive as isShieldUp, shieldLeftMs as shieldLeft,
   getBarrels, getBullets, getBulwarks, getCages, getCrates, getDividers, getFoes, getGates,
   getGrenades, getPickups,
@@ -22,20 +23,33 @@ import {
   getRocks,
   getUnits,
   activeWeapon, getGuards, getLevers, getStones, getWeaponBoxes,
-  nowMs, phase, runFireRate, squadCount, stage
+  nowMs, phase, runFireRate, squadCount, stage,
+  bossFallDir, getBossCorpse, progress01, roadScrollY, takeDepartedSurvivors,
+  frostActive, frostFrozenAt
 } from '@/use/useSurvivalGame'
+import {
+  applySkillFx, drawIceOn, drawSkillAir, drawSkillGround, drawSkillScreen, isSkillFx,
+  stepSkillFx, syncSkillView
+} from '@/use/useSkillFx'
 import { CLAW_CORE_FRACTION, HEAL_FRACTION } from '@/game/threats'
 import {
   HERO_CYCLE_MS, HERO_FOOT_R, HERO_FRAME_ASPECT, HERO_HEIGHT_R, outfitIndex, outfitTone,
   primeSurvivors, survivorFrame
 } from '@/game/heroSprites'
 import {
-  SPRITE_FOOT_R, SPRITE_HEIGHT_R, bakeMonsterSlice, monsterFaces, monsterFrame,
-  monstersReady, primeMonsterSprites
+  SPRITE_FOOT_R, SPRITE_HEIGHT_R, bakeMonsterSlice, deathFallSide,
+  monsterDeathFrame, monsterDeathLength, monsterFaces, monsterFrame, monstersReady,
+  primeMonsterDeaths, primeMonsterSprites
 } from '@/game/monsterSprites'
+import { deathArtDue, deathArtWant } from '@/game/artPreload'
+// DEV-only, false in every player's build: the preview recorder's "hide the
+// readouts" flag — see `game/previewFeed.ts`. The numbers painted ON the world
+// (a gate's value, a crate's HP) deliberately stay; only the readouts go.
+import { HIDE_READOUTS } from '@/game/previewFeed'
+import { GATE_FRAME, ROCKET_BOX } from '@/game/artBoxes'
 import { spriteFor, onArtChanged, type ArtKind } from '@/game/art'
 import { stripFrames } from '@/game/spriteStrip'
-import { stageDesigns } from '@/game/foes'
+import { bossDesign, stageDesigns } from '@/game/foes'
 import {
   drainFx, drawParticles, emit, emitDecal, emitText, getDecals, getTexts,
   qualityTier, sampleFrame, stepDecals, stepParticles, stepTexts,
@@ -142,6 +156,13 @@ let camY = 0
 /** The crowd's anchor x, latched with it, for the passes that need to know
  *  which side of the formation a body is on. */
 let camX = 0
+/**
+ * `camY` plus every re-base the world has had (`roadScrollY`) — the phase the
+ * ROAD scrolls on. Positions still project through `camY`; only the repeating
+ * ground (tile, rungs, posts, dashes, sky drift) reads this, so a stage that
+ * opens under the crowd does not snap the ground back to the origin's pattern.
+ */
+let roadY = 0
 
 export const getScale = (): number => scale
 export const worldToScreenX = (wx: number): number => viewW / 2 + wx * scale
@@ -1015,15 +1036,9 @@ export const paintBarricadeBody = (
   ctx.fill()
 }
 
-/**
- * The gate frame painting's own geometry, shared with the art bench.
- *
- * The reference is drawn at `ppu` px per world unit with a two-leaf door
- * (`refHalfW`) centred in a `w` x `h` panel, the leaf's origin at the panel's
- * centre. `cap` is how much of each side is blitted at true size; the span
- * between the caps is stretched to whatever leaf it is drawn on.
- */
-export const GATE_FRAME = { ppu: 220, w: 1344, h: 576, cap: 260, refHalfW: 2.05 } as const
+// The gate frame painting's own geometry lives in `game/artBoxes.ts` — shared
+// with the art manifest, which must load without the renderer.
+export { GATE_FRAME }
 
 /**
  * A gate leaf's FRAME: two posts and, painted, whatever spans them.
@@ -1672,13 +1687,9 @@ export const paintTracerRef = (
   ctx.restore()
 }
 
-/**
- * The box a painted rocket is blitted into, in units of the shell's radius
- * `rr`: `w` wide and `h` tall, its top edge `top` above the shell's centre.
- * 9:16 — a ratio the image tools offer — with the plume given the room it
- * has in the drawing.
- */
-export const ROCKET_BOX = { w: 3.6, h: 6.4, top: 2 } as const
+// The box a painted rocket is blitted into — in `game/artBoxes.ts`, for the
+// same reason as `GATE_FRAME`.
+export { ROCKET_BOX }
 
 /**
  * The launcher's rocket at the origin, nose up (−y), `rr` the shell's radius;
@@ -2194,7 +2205,44 @@ export const invalidateArtSurfaces = (): void => {
   silhouetteTrim.clear()
   clearRamps()
 }
-onArtChanged(invalidateArtSurfaces)
+
+/**
+ * The bakes ONE painting can have got into — the scoped half of the above.
+ *
+ * The audit behind it, site by site:
+ *
+ *   · Almost every `art()` call reads its painting fresh each frame and draws
+ *     it. An arrival costs those nothing and they are not listed here.
+ *   · The BACKDROP bakes the two ridge silhouettes (`paintRidge`): tinted to
+ *     the stage's sky and source-cut to their own opaque bounds. So a `bg`
+ *     arrival drops the backdrop, that image's tint, and its measured trim —
+ *     and the trim is a `getImageData` over a 1536x384 band, which is every
+ *     readback the churn census counted.
+ *   · The shared SPRITE cache holds the tinted smoke puffs baked from
+ *     `fx/smoke` (`useVfx.bakePuffSprite`) — a cache this module does not own
+ *     and the one thing here that is easy to miss.
+ *   · The lane tile and every gradient ramp are procedural: no painting has
+ *     ever been baked into either. They were being thrown away on every
+ *     arrival for nothing.
+ */
+export const dropArtBakes = (kind: ArtKind, id: string): void => {
+  if (kind === 'bg') {
+    backdrop = null
+    backdropKey = ''
+    // Both caches are keyed by the image's own URL, so the id is matched
+    // inside it — `/ridge-far.` cannot match `ridge-near`, and a re-probe's
+    // `?v=` suffix does not get in the way.
+    const mark = `/${id}.`
+    for (const key of tinted.keys()) if (key.includes(mark)) tinted.delete(key)
+    for (const key of silhouetteTrim.keys()) if (key.includes(mark)) silhouetteTrim.delete(key)
+  }
+  if (kind === 'fx' && id === 'smoke') clearRamps()
+}
+
+onArtChanged((change) => {
+  if (!change) invalidateArtSurfaces()
+  else dropArtBakes(change.kind, change.id)
+})
 
 // ─── Cached backdrop ────────────────────────────────────────────────────────
 //
@@ -2891,6 +2939,8 @@ const burstDismissal = (d: Dismissal): void => {
 let primedStage = -1
 /** Designs the CURRENT stage can spawn — the set the top-up below guarantees. */
 let currentStageDesigns: string[] = []
+/** The stage whose boss death strip has been asked for. */
+let deathAsked = -1
 
 export const drawScene = (
   ctx: CanvasRenderingContext2D,
@@ -2918,7 +2968,10 @@ export const drawScene = (
   const a = anchor()
   camX = a.x
   camY = a.y
+  roadY = camY + roadScrollY()
   measureCrowd(dtMs)
+  // The late skills draw from their own module, through this frame's camera.
+  syncSkillView(worldToScreenX, worldToScreenY, scale, w, h, tier)
 
   // Prime per STAGE, not the whole cast, and re-prime when the stage changes.
   // The lookahead queues the next stage's designs while the player is still on
@@ -2930,6 +2983,9 @@ export const drawScene = (
     primeSurvivors()
     primeMonsterSprites(currentStageDesigns)
     primeMonsterSprites(stageDesigns(stage.value + 1))
+    // The boss's drawn death, and the next boss's, behind every walk strip —
+    // baked in the same breaks, so the kill rarely has to bake one itself.
+    primeMonsterDeaths([bossDesign(stage.value), bossDesign(stage.value + 1)])
   }
 
   // The guarantee that closes the last hole. The idle baker is switched OFF
@@ -2945,10 +3001,23 @@ export const drawScene = (
   // A brief dip is worth never showing a placeholder where a monster should be.
   if (!monstersReady(currentStageDesigns)) bakeMonsterSlice(6)
 
+  // The boss's painted death, asked for once a stage when the road is 80 % run
+  // — no tier carries it, see `deathArtWant`. A no-op with the art layer off,
+  // and a no-op for a strip this session (or the HTTP cache) already holds.
+  if (deathAsked !== stage.value && deathArtDue(progress01.value)) {
+    deathAsked = stage.value
+    const [kind, id] = deathArtWant(stage.value)
+    spriteFor(kind, id, 'low')
+  }
+
   // Events → particles, sound and shake. Drained BEFORE stepping the pools so a
   // burst spawned this frame is already integrated once when it is first drawn
   // (otherwise every burst appears one frame late, which reads as input lag).
   consumeFx()
+  // The survivors the last handover did not keep. Handed over once, so this is
+  // one null check on every other frame.
+  const leftBehind = takeDepartedSurvivors()
+  if (leftBehind) seeOffSurvivors(leftBehind)
 
   // ── Two clocks, and the telegraphs belong to the SIMULATION's ─────────────
   //
@@ -2977,10 +3046,16 @@ export const drawScene = (
   // clock back to zero: no world time passed that this pool should see.
   const simDtMs = lastSimNow < 0 ? 0 : Math.max(0, Math.min(simNow - lastSimNow, 120))
   lastSimNow = simNow
+  // …and under a Frost Nova the simulation's HOSTILE clocks stand still while
+  // its own clock runs on (the crowd keeps walking). The telegraphs are those
+  // hostile clocks drawn, so they hold with them: a meteor frozen in the air,
+  // a ring that stops closing, and every one of them picking up on the beat it
+  // left off at when the ice comes off. See `castFrostNova`.
+  const tellDtMs = frostActive() ? 0 : simDtMs
 
   stepDismissals(dtMs)
-  stepRakes(simDtMs)
-  stepHealTells(simDtMs)
+  stepRakes(tellDtMs)
+  stepHealTells(tellDtMs)
   // Particles, floating text and decals deliberately stay on WALL time. They
   // carry no deadline — nothing in the simulation is waiting for a spark to
   // finish — and the debris of a hit continuing at speed while the world holds
@@ -2988,12 +3063,14 @@ export const drawScene = (
   // fix, and it should be made on purpose rather than as a side effect of this
   // one.
   stepParticles(dtMs)
+  stepSkillFx(dtMs)
   // Stashed for the draw pass: the health-bar chip eases on real time, and the
   // draw functions are not handed a delta of their own.
   lastDtMs = dtMs
   stepTexts(dtMs)
   stepDecals(dtMs)
-  stepCasts(simDtMs)
+  stepCasts(tellDtMs)
+  stepGazeBeams(tellDtMs)
 
   screenFlash = Math.max(0, screenFlash - dtMs / 320)
   hurtPulse = Math.max(0, hurtPulse - dtMs / 700)
@@ -3011,6 +3088,11 @@ export const drawScene = (
   // Scorch marks are pure history: they say what already happened, and nothing
   // the player has to react to is ever carried by one.
   if (!minFx) drawDecals(ctx)
+  // The flare's pool of red light, on the road under everything that stands on
+  // it — the bodies it lures are drawn lit from below, not behind a glow.
+  drawSkillGround(ctx)
+  // …and so is the last stage's boss, lying where it fell.
+  drawBossCorpse(ctx)
   drawPickups(ctx)
   drawCrates(ctx)
   // The two roadside prizes sit in the crates' layer because they ARE crates as
@@ -3042,9 +3124,14 @@ export const drawScene = (
   drawDividers(ctx)
   drawFoes(ctx)
   drawBossBody(ctx)
+  // The eye goes straight on top of the body it belongs to. See `drawBossGaze`.
+  drawBossGaze(ctx)
   drawUnits(ctx)
   // The player's own effects sit above the crowd they belong to.
   drawSkills(ctx)
+  // …the late skills' among them: the flare hanging in the air and the nova's
+  // ring crossing the screen.
+  drawSkillAir(ctx)
   // Above the crowd: a telegraph nobody can see is not a telegraph.
   drawCasts(ctx)
   // The two pool minibosses whose threat is a live OBJECT rather than a wind-up
@@ -3053,6 +3140,9 @@ export const drawScene = (
   // thing that must not be allowed to hide them. See `drawRollers`.
   drawRollers(ctx)
   drawGunnerBolts(ctx)
+  // …and the third: a mound of earth at the place the crowd was half a second
+  // ago. Same band, same reason. See `drawBurrowMounds`.
+  drawBurrowMounds(ctx)
   // …and the three the boss pool added, in the same band and for the same
   // reason. The rake goes UNDER the bossBolts because a bolt has to stay findable
   // while three furrows are burning across the road behind it.
@@ -3068,6 +3158,9 @@ export const drawScene = (
   drawFloatingText(ctx)
   drawEliteMarker(ctx, w)
   drawGrades(ctx, w, h)
+  // Frost on the glass, over the grades: it is the one full-screen pass that
+  // is a place rather than a mood.
+  drawSkillScreen(ctx, w, h)
 }
 
 // ─── Layer 1–3: backdrop ────────────────────────────────────────────────────
@@ -3091,7 +3184,7 @@ const drawBackdrop = (ctx: CanvasRenderingContext2D, w: number, h: number): void
   // Normalised into `[0, span)`. A raw `%` keeps the sign of its left operand,
   // so a negative camera y produced a destination above the texture's top and a
   // strip of nothing along the bottom of the screen.
-  const drift = span > 0 ? (((camY * scale * 0.09) % span) + span) % span : 0
+  const drift = span > 0 ? (((roadY * scale * 0.09) % span) + span) % span : 0
   const sy = span > 0 ? span - drift : 0
 
   // ── Only the strips that survive ──
@@ -3161,7 +3254,7 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
   if (pattern) {
     // Scroll the pattern with the camera. Translating the context (rather than
     // the pattern's own matrix) keeps this working on every browser we ship to.
-    const offset = ((camY * scale) % laneTilePx + laneTilePx) % laneTilePx
+    const offset = ((roadY * scale) % laneTilePx + laneTilePx) % laneTilePx
     ctx.save()
     ctx.translate(0, offset)
     ctx.fillStyle = pattern
@@ -3188,13 +3281,16 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
   }
 
   // Rungs every 2 world units: the entire sensation of SPEED comes from these.
-  const top = camY + (viewH * CROWD_SCREEN_Y) / scale
-  const bottom = camY - (viewH * (1 - CROWD_SCREEN_Y)) / scale
+  // Laid out on the ROAD's phase (`roadY`), not the stage's, and projected back
+  // through the camera — `lift` is how far the world has been re-based.
+  const lift = roadY - camY
+  const top = roadY + (viewH * CROWD_SCREEN_Y) / scale
+  const bottom = roadY - (viewH * (1 - CROWD_SCREEN_Y)) / scale
   ctx.strokeStyle = LANE_TONE.line
   ctx.lineWidth = Math.max(1, scale * 0.03)
   ctx.beginPath()
   for (let y = Math.floor(bottom / 2) * 2; y < top + 2; y += 2) {
-    const sy = worldToScreenY(y)
+    const sy = worldToScreenY(y - lift)
     ctx.moveTo(left, sy)
     ctx.lineTo(right, sy)
   }
@@ -3204,7 +3300,7 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
   ctx.strokeStyle = 'rgba(255,255,255,0.07)'
   ctx.lineWidth = Math.max(1.5, scale * 0.05)
   ctx.setLineDash([scale * 0.9, scale * 0.9])
-  ctx.lineDashOffset = -(camY * scale) % (scale * 1.8)
+  ctx.lineDashOffset = -(roadY * scale) % (scale * 1.8)
   ctx.beginPath()
   ctx.moveTo(worldToScreenX(0), 0)
   ctx.lineTo(worldToScreenX(0), h)
@@ -3236,11 +3332,11 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
     ctx.restore()
   }
   // Posts, spaced on the rung rhythm, to give the rails depth.
-  const top2 = camY + (viewH * CROWD_SCREEN_Y) / scale
-  const bottom2 = camY - (viewH * (1 - CROWD_SCREEN_Y)) / scale
+  const top2 = roadY + (viewH * CROWD_SCREEN_Y) / scale
+  const bottom2 = roadY - (viewH * (1 - CROWD_SCREEN_Y)) / scale
   ctx.fillStyle = 'rgba(20,22,30,0.85)'
   for (let y = Math.floor(bottom2 / 4) * 4; y < top2 + 4; y += 4) {
-    const sy = worldToScreenY(y)
+    const sy = worldToScreenY(y - lift)
     for (const x of [-LANE_HALF, LANE_HALF]) {
       const sx = worldToScreenX(x)
       ctx.fillRect(sx - scale * 0.16, sy - scale * 0.28, scale * 0.32, scale * 0.56)
@@ -3248,9 +3344,41 @@ const drawLane = (ctx: CanvasRenderingContext2D, w: number, h: number): void => 
   }
 }
 
+/**
+ * Clip what follows to the ROAD.
+ *
+ * Everything painted ON the ground — the boss's pool, scorch marks, craters —
+ * is drawn around a world position with no idea where the kerb is, and the
+ * lane's two edges are the hardest lines in the picture. A liquid that laps
+ * over one of them stops reading as liquid: it becomes a sticker hanging over
+ * the void beside the road, which is exactly how a player describes it.
+ *
+ * What is NOT clipped is anything standing: a fallen giant may hang over the
+ * kerb and should, because a body has volume and the eye reads it as lying
+ * across the edge rather than as paint on nothing.
+ *
+ * `ox` is the caller's origin in screen x — 0 under the identity transform,
+ * and the body's own screen x inside the entity layer, which translates to
+ * each body's feet before it paints anything.
+ */
+const clipToRoad = (
+  ctx: CanvasRenderingContext2D, ox = 0, top = 0, height = viewH
+): void => {
+  const l = worldToScreenX(-LANE_HALF) - ox
+  const r = worldToScreenX(LANE_HALF) - ox
+  ctx.beginPath()
+  ctx.rect(l, top, r - l, height)
+  ctx.clip()
+}
+
 const drawDecals = (ctx: CanvasRenderingContext2D): void => {
   const decals = getDecals()
   if (decals.length === 0) return
+
+  // One clip for the whole layer: every decal is ground paint, and the pass
+  // runs under the identity transform.
+  ctx.save()
+  clipToRoad(ctx)
 
   // Scorch marks vary in BOTH radius and opacity, which is what made this the
   // worst of the per-entity ramps: neither could be carried in a cache key, so
@@ -3283,6 +3411,7 @@ const drawDecals = (ctx: CanvasRenderingContext2D): void => {
     paintScorch(ctx, r)
     ctx.restore()
   }
+  ctx.restore()
 }
 
 // ─── Layer 6: pickups, crates, barricades, gates ────────────────────────────
@@ -3412,13 +3541,23 @@ interface Cast {
    * rolling down the road for a second and a half, and it is painted straight
    * from the world by `drawRollers` rather than from an event.
    */
-  kind: 'meteor' | 'slice' | 'bomb' | 'bolt' | 'charge'
+  kind: 'meteor' | 'slice' | 'bomb' | 'bolt' | 'charge' | 'shock' | 'ward'
   x: number
   y: number
-  /** Ground footprint for a meteor or a bomb; arc reach for a slice; the lethal
-   *  half-width of the swathe for a charge; unused by a bolt, which is a line
-   *  rather than an area. */
+  /** Ground footprint for a meteor, a bomb or a ward; arc reach for a slice; the
+   *  lethal half-width of the swathe for a charge; the OUTER radius of the band
+   *  for a shock; unused by a bolt, which is a line rather than an area. */
   r: number
+  /**
+   * Inner radius, for the one shape that has a hole in it.
+   *
+   * A `shock` is an annulus and the hole is the ANSWER, so it needs a second
+   * radius and the simulation has to be the thing that supplies it — the eye is
+   * drawn from `SHOCK_EYE_R` and billed against `SHOCK_EYE_R`, and this is the
+   * field that keeps those the same number. Zero for every other kind, where
+   * "there is no hole" is the honest value rather than a placeholder.
+   */
+  inner: number
   dir: number
   charged: boolean
   /** Where a `bolt` is aimed. The aim is locked when the cast is emitted, so
@@ -3521,6 +3660,158 @@ const drawCasts = (ctx: CanvasRenderingContext2D): void => {
         paintMeteorRock(ctx, rockR, big, scale, cheap, { cycle })
         ctx.restore()
       }
+      continue
+    }
+
+    if (c.kind === 'shock') {
+      // ── The ring of fire, and the hole in the middle of it ──
+      //
+      // This is the one telegraph in the game that has to say TWO opposite
+      // things at once, and everything below is spent on keeping them apart:
+      //
+      //   THE BAND  burning, in the meteor's own heat — the colour the player
+      //             has been taught means "not here" since stage one.
+      //   THE EYE   cool, bright, and pulsing INWARD — a different hue entirely,
+      //             because a player who reads this mark as a slam with a
+      //             strange middle will run out of the only safe ground on the
+      //             road, and they will be right to, given everything else the
+      //             game has shown them.
+      //
+      // The annulus is one path with the inner ellipse wound backwards, which
+      // fills the ring and leaves the eye untouched in a single fill — the same
+      // trick the elite's blade uses for its crescent, and the reason this draws
+      // for about what a slam ring costs.
+      const outer = c.r * scale
+      const eye = c.inner * scale
+      const sq = 0.42
+
+      ctx.save()
+      ctx.globalAlpha = c.done ? 1 - after : 1
+      ctx.fillStyle = c.done ? 'rgba(255,255,255,0.4)' : 'rgba(255,96,28,0.3)'
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, outer, outer * sq, 0, 0, TAU)
+      ctx.ellipse(sx, sy, eye, eye * sq, 0, TAU, 0, true)
+      ctx.fill()
+
+      // The band's two rims. The INNER one is the edge that matters — it is the
+      // line the player has to get across — so it is the hotter and the thicker
+      // of the two, and it brightens as the wind-up runs out.
+      ctx.translate(sx, sy)
+      paintRing(ctx, 'heat', outer, outer * sq, Math.max(2, scale * 0.07), '#ff7a2a')
+      paintRing(ctx, 'heat', eye, eye * sq,
+        Math.max(2.5, scale * (0.07 + p * 0.08)), c.done ? '#ffffff' : '#ffcf7a')
+      ctx.restore()
+
+      if (!c.done) {
+        ctx.save()
+        // ── The eye, in the corner badge's own blue ──
+        //
+        // `#6ecbff`, and it is the same value the `incoming--into` badge pulses
+        // in — see `IncomingWarning.vue`. The pairing is the whole legibility
+        // argument for this attack: the badge catches the eye in the corner, it
+        // reads GET IN, and the only thing on the road that is the same colour is
+        // where to go. Screened rather than plain-filled so it stays that colour
+        // over a dark road instead of muddying into it, and bright enough that a
+        // player who has been taught for eight stages that a mark means "not
+        // here" is given something that plainly is not a mark.
+        ctx.globalAlpha = 0.42 + p * 0.32
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.fillStyle = 'rgba(70,150,205,0.85)'
+        ctx.beginPath()
+        ctx.ellipse(sx, sy, eye * 0.92, eye * sq * 0.92, 0, 0, TAU)
+        ctx.fill()
+        ctx.globalCompositeOperation = 'source-over'
+
+        // …and a clock, drawn on the eye's own rim rather than out on the band.
+        // The player's eye is going to be on the safe ground — that is what the
+        // attack is asking of them — so the "when" has to be there too, or they
+        // read the countdown by looking at the thing they are trying to leave.
+        ctx.globalAlpha = 0.9
+        ctx.strokeStyle = '#eafaff'
+        ctx.lineWidth = Math.max(3, scale * 0.1)
+        ctx.beginPath()
+        ctx.ellipse(sx, sy, eye, eye * sq, 0, -Math.PI / 2, -Math.PI / 2 + p * TAU)
+        ctx.stroke()
+
+        // Three chevrons closing on the middle, one per third of the wind-up.
+        // The only element here that says which DIRECTION the answer is in, and
+        // it costs three lines: at a glance the mark reads as something being
+        // pulled inward, which is the instruction.
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.strokeStyle = '#bfefff'
+        ctx.lineWidth = Math.max(2, scale * 0.055)
+        for (let i = 0; i < 3; i++) {
+          const march = ((p * 1.6 + i / 3) % 1)
+          const at = outer - (outer - eye) * march
+          ctx.globalAlpha = 0.5 * (1 - Math.abs(march - 0.5) * 1.2)
+          ctx.beginPath()
+          ctx.ellipse(sx, sy, at, at * sq, 0, -Math.PI * 0.62, -Math.PI * 0.38)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.ellipse(sx, sy, at, at * sq, 0, Math.PI * 0.38, Math.PI * 0.62)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+      continue
+    }
+
+    if (c.kind === 'ward') {
+      // ── The healer's ward ──
+      //
+      // The one mark on the road that is not a threat at all, and it has to be
+      // unmistakably that: no heat anywhere, no hazard stripe, no closing ring.
+      // A circle the player is invited to stand in, in the same blue the shield
+      // and the eye use, breathing rather than counting down.
+      //
+      // The clock still exists, because the player has to know how long they
+      // have to get there — but it runs the other way round from every other
+      // cast in the game: it FILLS toward the heal instead of closing on an
+      // impact, so a full ring is a heal about to be denied rather than a hit
+      // about to land.
+      const r = c.r * scale
+      const sq = 0.5
+      const breathe = 0.5 + 0.5 * Math.sin(c.t * 5)
+      ctx.save()
+      ctx.globalAlpha = (c.done ? 1 - after : 0.75)
+      ctx.fillStyle = 'rgba(110,210,255,0.16)'
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, r, r * sq, 0, 0, TAU)
+      ctx.fill()
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.globalAlpha = (c.done ? 1 - after : 0.5 + breathe * 0.3)
+      ctx.strokeStyle = '#9fe8ff'
+      ctx.lineWidth = Math.max(2, scale * (0.05 + breathe * 0.03))
+      ctx.beginPath()
+      ctx.ellipse(sx, sy, r, r * sq, 0, 0, TAU)
+      ctx.stroke()
+      if (!c.done) {
+        ctx.globalAlpha = 0.9
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = Math.max(3, scale * 0.09)
+        ctx.beginPath()
+        ctx.ellipse(sx, sy, r * 0.86, r * sq * 0.86, 0, -Math.PI / 2, -Math.PI / 2 + p * TAU)
+        ctx.stroke()
+        // Motes drifting up out of it, so the circle reads as something being
+        // gathered rather than as a decal somebody left on the road.
+        if (!cheap) {
+          ctx.globalAlpha = 0.5
+          ctx.fillStyle = '#d8f6ff'
+          for (let i = 0; i < 5; i++) {
+            const a = (i / 5) * TAU + c.t * 1.4
+            const rise = ((c.t * 0.9 + i / 5) % 1)
+            ctx.beginPath()
+            ctx.arc(
+              sx + Math.cos(a) * r * 0.7,
+              sy + Math.sin(a) * r * sq * 0.7 - rise * scale * 1.1,
+              Math.max(1.5, scale * 0.05 * (1 - rise)),
+              0, TAU
+            )
+            ctx.fill()
+          }
+        }
+      }
+      ctx.restore()
       continue
     }
 
@@ -4046,6 +4337,92 @@ const drawBossBolts = (ctx: CanvasRenderingContext2D): void => {
  * radius and the sphere at the same, so what the player is shown and what the
  * simulation bills are the same 4.5 units.
  */
+/**
+ * ─── The burrower's mound ───────────────────────────────────────────────────
+ *
+ * Drawn from the WORLD every frame, for the reason `drawRollers` gives: a thing
+ * that TRACKS cannot be described by an event pushed before it started
+ * tracking. The mound's whole content is where it is right now, so its picture
+ * has to be read out of the simulation rather than animated off a countdown.
+ *
+ * ── Over the crowd, which is the wrong place and the right decision ──
+ *
+ * A ridge of earth pushing up under the squad ought to be behind the bodies
+ * standing on it. It is drawn in front of them anyway, and the roller's note has
+ * the argument in its own words: the crowd is exactly what this is aimed at, so
+ * the crowd is the one thing that must not be allowed to hide it. The failure
+ * mode is asymmetric and that is what settles it — the mound is BEHIND the crowd
+ * whenever the player is answering it correctly (that is the whole mechanic), so
+ * it only ends up under the squad when they have stopped moving, which is
+ * precisely the moment they need to see it.
+ *
+ * It is kept low and mostly transparent so the crowd stays readable through it.
+ * The bright element is the RIM, which is the shape the eye needs: a crescent of
+ * turned earth pointing the way the thing is travelling.
+ */
+const drawBurrowMounds = (ctx: CanvasRenderingContext2D): void => {
+  for (const f of getFoes()) {
+    if (!f.elite || f.dead || f.kind !== 'burrower' || f.fuse <= 0) continue
+
+    const sx = worldToScreenX(f.x)
+    const sy = worldToScreenY(f.y)
+    if (sy < -80 || sy > viewH + 80) continue
+    // Planted or still following? The two states have to look different, because
+    // one of them is a countdown the player can still answer by leaving and the
+    // other is a chase they answer by continuing. `sweepTold` is the sim's own
+    // latch for "this one has been announced" — see `stepBurrower`.
+    const locked = f.sweepTold
+    // Sized to be seen THROUGH the crowd. It was 0.62 and read as a smudge when
+    // a four-hundred-strong squad was standing on it — which is exactly the
+    // moment the player has to see it, because standing on it is the mistake.
+    const r = f.scale * scale * 0.82
+    const heave = locked
+      ? 1
+      : 0.78 + 0.22 * Math.sin(nowMs() / 90 + f.phase * 6)
+
+    ctx.save()
+    // The disturbed ground: a squashed dome, dark, so it reads as earth rather
+    // than as an effect.
+    ctx.globalAlpha = locked ? 0.62 : 0.72
+    ctx.fillStyle = locked ? 'rgba(96,62,38,0.9)' : 'rgba(92,66,44,0.95)'
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, r * 1.25 * heave, r * 0.5 * heave, 0, 0, TAU)
+    ctx.fill()
+
+    // The rim of turned soil. Brighter and thicker once it has planted, which is
+    // the visual half of "it has committed" — the ring from `bombCast` is the
+    // other half and arrives on the same frame.
+    ctx.globalAlpha = locked ? 0.95 : 0.9
+    ctx.strokeStyle = locked ? '#e0a05a' : '#c98f52'
+    ctx.lineWidth = Math.max(2.5, scale * (locked ? 0.09 : 0.075))
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, r * 1.25 * heave, r * 0.5 * heave, 0, Math.PI, TAU)
+    ctx.stroke()
+
+    if (!cheapFx) {
+      // A few clods riding the heave, so a still frame says the ground is
+      // MOVING. Drawn rather than emitted as particles: the mound exists for a
+      // second and a bit and can be on screen at the same time as two other
+      // elites, and a particle budget spent here is a budget not spent on the
+      // eruption.
+      ctx.globalAlpha = 0.55
+      ctx.fillStyle = '#6b4c33'
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI + (i / 3) * Math.PI
+        const wob = Math.sin(nowMs() / 70 + i * 2.1 + f.phase * 5)
+        ctx.beginPath()
+        ctx.arc(
+          sx + Math.cos(a) * r * (0.9 + wob * 0.12),
+          sy + Math.sin(a) * r * 0.4 - Math.abs(wob) * scale * 0.16,
+          Math.max(1.5, scale * 0.07), 0, TAU
+        )
+        ctx.fill()
+      }
+    }
+    ctx.restore()
+  }
+}
+
 const drawRollers = (ctx: CanvasRenderingContext2D): void => {
   const a = anchor()
   for (const f of getFoes()) {
@@ -5518,10 +5895,13 @@ const drawStones = (ctx: CanvasRenderingContext2D): void => {
     ctx.restore()
 
     // The two marks that say "this one can be shot": the bar and the number.
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w, h * 0.14)
-    ctx.fillStyle = hp01 > 0.5 ? '#7ee08a' : hp01 > 0.22 ? '#ffcf3c' : '#ff6a5a'
-    ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w * hp01, h * 0.14)
+    // The bar is a readout, so a recorded feed keeps only the number.
+    if (!HIDE_READOUTS) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w, h * 0.14)
+      ctx.fillStyle = hp01 > 0.5 ? '#7ee08a' : hp01 > 0.22 ? '#ffcf3c' : '#ff6a5a'
+      ctx.fillRect(-w / 2, -h / 2 - h * 0.24, w * hp01, h * 0.14)
+    }
 
     const label = formatCount(Math.ceil(st.hp))
     ctx.font = `900 ${Math.max(10, h * 0.44)}px Angry, sans-serif`
@@ -5610,11 +5990,14 @@ const drawBarricades = (ctx: CanvasRenderingContext2D): void => {
     ctx.restore()
 
     // Damage bar along the top edge: the number tells you how much is left, the
-    // bar tells you at a glance whether you are winning the exchange.
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
-    ctx.fillRect(-w / 2, -h / 2 - h * 0.2, w, h * 0.14)
-    ctx.fillStyle = hp01 > 0.5 ? '#7ee08a' : hp01 > 0.22 ? '#ffcf3c' : '#ff6a5a'
-    ctx.fillRect(-w / 2, -h / 2 - h * 0.2, w * hp01, h * 0.14)
+    // bar tells you at a glance whether you are winning the exchange. The bar
+    // is a readout, so a recorded feed keeps only the number.
+    if (!HIDE_READOUTS) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.fillRect(-w / 2, -h / 2 - h * 0.2, w, h * 0.14)
+      ctx.fillStyle = hp01 > 0.5 ? '#7ee08a' : hp01 > 0.22 ? '#ffcf3c' : '#ff6a5a'
+      ctx.fillRect(-w / 2, -h / 2 - h * 0.2, w * hp01, h * 0.14)
+    }
 
     ctx.strokeStyle = 'rgba(12,14,20,0.85)'
     ctx.lineWidth = Math.max(1.5, h * 0.07)
@@ -6575,7 +6958,10 @@ const drawEliteTelegraphs = (ctx: CanvasRenderingContext2D, overCrowd = false): 
 }
 
 const drawFoes = (ctx: CanvasRenderingContext2D): void => {
-  const t = nowMs()
+  // Frozen, the whole road holds its pose: the walk cycle and the flyers' bob
+  // are read off the moment of the freeze rather than off the running clock.
+  const frozen = frostActive()
+  const t = frozen ? frostFrozenAt() : nowMs()
   eliteTopY = viewH * 2
   eliteMarkX = viewW / 2
   drawEliteTelegraphs(ctx)
@@ -6590,6 +6976,12 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
       eliteMarkX = sx
     }
     if (sy < -100 || sy > viewH + 100) continue
+    // A BURROWER UNDER THE ROAD HAS NO BODY ON IT. `drawBurrowMounds` paints the
+    // ground it is moving through instead. Skipped after the off-screen marker
+    // above has already recorded it, so the arrow at the top of the screen still
+    // points at an elite the player cannot see — which is the one case that
+    // marker exists for.
+    if (f.kind === 'burrower' && f.fuse > 0) continue
     const size = f.scale * scale * 1.25
 
     ctx.save()
@@ -6625,6 +7017,10 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
       ctx.drawImage(frame, -dw / 2, top, dw, dh)
       ctx.restore()
 
+      // Encased in ice, under the hit flash so a brittle body still visibly
+      // takes the rounds it is taking. See `drawIceOn`.
+      if (frozen) drawIceOn(ctx, frame, mirror, -dw / 2, top, dw, dh, size * (f.elite ? 0.82 : 0.72), f.id, sx, sy)
+
       if (f.flash > 0.02) {
         // Hit flash: re-blit the frame as a white silhouette. Cheap, and it is
         // the single most important piece of feedback in the game after the
@@ -6642,6 +7038,7 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
       ctx.beginPath()
       ctx.ellipse(0, -size * 0.35, size * 0.3, size * 0.42, 0, 0, Math.PI * 2)
       ctx.fill()
+      if (frozen) drawIceOn(ctx, null, 1, -size * 0.3, -size * 0.77, size * 0.6, size * 0.84, size * 0.72, f.id, sx, sy)
     }
 
     // A slim HP bar, only once the foe has actually been hit — an untouched
@@ -6651,7 +7048,12 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
     // player cannot see the length of is a fight they will disengage from. The
     // bar is up from the first frame, wider, and framed so it does not read as
     // "a normal foe that happens to be hurt".
-    if (f.elite || f.hp < f.maxHp) {
+    // …and none of it in a recorded feed: a health bar is a readout. The crown
+    // is not — it is how the miniboss is told apart from the pack — so it is
+    // drawn on its own below, at the height the bar would have put it.
+    if (HIDE_READOUTS) {
+      if (f.elite) paintCrown(ctx, 0, -size * 1.14, size * 0.3, size * 0.17, Math.max(1, size * 0.016))
+    } else if (f.elite || f.hp < f.maxHp) {
       const bw = size * (f.elite ? 1.02 : 0.6)
       const bh = size * (f.elite ? 0.17 : 0.07)
       const by = -size * (f.elite ? 1.08 : 0.98)
@@ -6762,6 +7164,9 @@ const drawFoes = (ctx: CanvasRenderingContext2D): void => {
  * clutter.
  */
 const drawEliteMarker = (ctx: CanvasRenderingContext2D, w: number): void => {
+  // A screen-edge pointer at an off-screen thing is HUD that happens to be
+  // painted on the canvas — off in a recorded feed.
+  if (HIDE_READOUTS) return
   if (!eliteAlive.value || eliteTopY > 0) return
   const t = nowMs()
   const beat = 0.5 + 0.5 * Math.sin(t / 210)
@@ -6862,6 +7267,509 @@ const emberFrame = (src: HTMLCanvasElement): HTMLCanvasElement | null => {
   return c
 }
 
+/**
+ * ─── The gaze: an eye over the boss, and the beam it fires ──────────────────
+ *
+ * Drawn from the WORLD rather than from the cast events, for the reason
+ * `drawRollers` gives: the eye sits on the boss, and during its opening the boss
+ * is still walking and tracking, so an event pushed at the start of the wind-up
+ * could not say where it would be. The simulation answers two scalars every
+ * frame (`bossGazeOpening`, `bossGazeLeft01`) and the picture is read off them.
+ *
+ * ── Violet, and on purpose ──
+ *
+ * Every telegraph in this game already owns a colour and a meaning: heat is
+ * "get off this ground", blue is "get onto this ground", green is the heal. The
+ * gaze asks for a fourth thing — STOP — and it gets the one hue nothing else on
+ * the road uses, so it can never be read as a variation on any of them. The
+ * corner badge pulses the same violet (`IncomingWarning.vue`).
+ *
+ * Three layers, each answering one question:
+ *
+ *   THE EYE      is it coming, and how soon. An almond whose aperture IS the
+ *                wind-up — half open is half way — above the boss's head,
+ *                where the player's eyes already are during a boss fight.
+ *   THE RING     how long must I hold. A clock around the open eye, closing as
+ *                the watch runs out.
+ *   THE EDGES    is it watching NOW. The screen's borders tint violet for
+ *                exactly the window in which moving is punished, so the answer
+ *                reaches a player whose eyes are on their own thumb.
+ */
+interface GazeBeam {
+  /** Where the crowd was when it moved, in world space — the beam's far end. */
+  x: number
+  y: number
+  /** The boss's body, in world space, and its scale — so the beam leaves the
+   *  pupil wherever the pupil is drawn this frame. */
+  bx: number
+  by: number
+  bscale: number
+  halfW: number
+  t: number
+}
+
+/** How long a strike's beam stays on screen, seconds. The damage is already
+ *  paid on the frame it fires; this is the explanation, and it only needs to be
+ *  long enough to be seen. */
+const GAZE_BEAM_S = 0.42
+
+const gazeBeams: GazeBeam[] = []
+
+const stepGazeBeams = (dtMs: number): void => {
+  for (let i = gazeBeams.length - 1; i >= 0; i--) {
+    const g = gazeBeams[i]!
+    g.t += dtMs / 1000
+    if (g.t >= GAZE_BEAM_S) gazeBeams.splice(i, 1)
+  }
+}
+
+/**
+ * Where the eye sits over a boss body, in screen space. Shared by the eye and
+ * the beam, so the beam leaves from the pupil the player was watching.
+ *
+ * 1.32 of the body's `size` above its feet, which is measured against the
+ * designs rather than the frame box. `drawBossBody` scales the character box to
+ * `size * 1.6`, but most of the cast do not fill it — the stage-1 grumpling's
+ * head tops out around `1.05`, so an eye parked at the box's top floated a
+ * whole head clear of the creature it belonged to. At 1.32 its lower lid rests
+ * on a short design's crown and a tall one (Thornwick's canopy) wears it on the
+ * brow: over the boss either way, and never mistakable for a separate thing.
+ */
+const gazeEyeAt = (bx: number, by: number, bossScale: number): { x: number; y: number; r: number } => {
+  const size = bossScale * scale * 1.3
+  return { x: worldToScreenX(bx), y: worldToScreenY(by) - size * 1.32, r: size * 0.34 }
+}
+
+const drawBossGaze = (ctx: CanvasRenderingContext2D): void => {
+  const b = getBoss()
+  if (b) {
+    const open = bossGazeOpening()
+    if (open > 0.001) {
+      const { x, y, r } = gazeEyeAt(b.x, b.y, b.scale)
+      const watching = bossGazeWatching()
+      const t = nowMs() / 1000
+      // The aperture eases OPEN — slow at first, snapping wide at the end — so
+      // the last tenth of a second before the watch begins is the most
+      // conspicuous frame of the whole wind-up, which is the frame the player
+      // has to stop on.
+      const lid = watching ? 1 : open * open * (3 - 2 * open)
+      const w = r * 1.45
+      const h = r * Math.max(0.06, lid) * 0.82
+
+      ctx.save()
+      ctx.translate(x, y)
+      // Halo: soft, additive, pulsing faster once it is watching.
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.globalAlpha = (watching ? 0.34 + 0.12 * Math.sin(t * 14) : 0.18 * lid)
+      ctx.fillStyle = '#b46bff'
+      ctx.beginPath()
+      ctx.ellipse(0, 0, w * 1.35, w * 0.95, 0, 0, TAU)
+      ctx.fill()
+      ctx.globalCompositeOperation = 'source-over'
+
+      // The almond: the white of the eye, then the iris, then a slit pupil. The
+      // pupil TRACKS the crowd while it is watching, which is the whole of the
+      // read — this is the one attack in the game that is looking at you.
+      ctx.globalAlpha = 1
+      ctx.fillStyle = '#f4ecff'
+      ctx.strokeStyle = '#2a0c3f'
+      ctx.lineWidth = Math.max(2, r * 0.12)
+      ctx.beginPath()
+      ctx.moveTo(-w, 0)
+      ctx.quadraticCurveTo(0, -h * 2, w, 0)
+      ctx.quadraticCurveTo(0, h * 2, -w, 0)
+      ctx.closePath()
+      ctx.fill()
+      ctx.save()
+      ctx.clip()
+      const a = anchor()
+      const look = Math.max(-1, Math.min(1, (worldToScreenX(a.x) - x) / (viewW * 0.4)))
+      const ir = r * 0.62
+      const ix = look * (w - ir) * 0.7
+      ctx.fillStyle = watching ? '#a430ff' : '#8a3fd1'
+      ctx.beginPath()
+      ctx.arc(ix, 0, ir, 0, TAU)
+      ctx.fill()
+      ctx.fillStyle = '#12021d'
+      ctx.beginPath()
+      ctx.ellipse(ix, 0, ir * 0.22, ir * 0.82, 0, 0, TAU)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'
+      ctx.beginPath()
+      ctx.arc(ix - ir * 0.3, -ir * 0.35, ir * 0.16, 0, TAU)
+      ctx.fill()
+      ctx.restore()
+      ctx.stroke()
+
+      // The clock: how much of the watch is left, closing clockwise.
+      if (watching) {
+        const left = bossGazeLeft01()
+        ctx.strokeStyle = '#e2c6ff'
+        ctx.lineWidth = Math.max(3, r * 0.16)
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.arc(0, 0, w * 1.18, -Math.PI / 2, -Math.PI / 2 + left * TAU)
+        ctx.stroke()
+      }
+      ctx.restore()
+
+      // ── The edges: it is watching NOW ──
+      //
+      // Three nested strokes rather than a gradient, so it costs three calls and
+      // no allocation, and it sits at the screen's border where it cannot hide
+      // anything the player is reading.
+      if (watching) {
+        ctx.save()
+        ctx.strokeStyle = '#8a2be2'
+        const edge = Math.min(viewW, viewH)
+        for (let i = 0; i < 3; i++) {
+          ctx.globalAlpha = 0.09 + i * 0.05
+          ctx.lineWidth = edge * (0.09 - i * 0.028)
+          ctx.strokeRect(0, 0, viewW, viewH)
+        }
+        ctx.restore()
+      }
+    }
+  }
+
+  // ── The beam, when the eye saw the crowd move ──
+  if (gazeBeams.length === 0) return
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  for (const g of gazeBeams) {
+    const k = g.t / GAZE_BEAM_S
+    const fade = 1 - k
+    const tx = worldToScreenX(g.x)
+    const ty = worldToScreenY(g.y)
+    const from = gazeEyeAt(g.bx, g.by, g.bscale)
+    const half = g.halfW * scale * (0.7 + 0.3 * fade)
+    // A wedge from the pupil to the whole width of the crowd's column, so what
+    // the player sees is exactly the ground that paid.
+    ctx.globalAlpha = 0.55 * fade
+    ctx.fillStyle = '#c77dff'
+    ctx.beginPath()
+    ctx.moveTo(from.x - half * 0.12, from.y)
+    ctx.lineTo(from.x + half * 0.12, from.y)
+    ctx.lineTo(tx + half, ty + half * 0.35)
+    ctx.lineTo(tx - half, ty + half * 0.35)
+    ctx.closePath()
+    ctx.fill()
+    ctx.globalAlpha = 0.85 * fade
+    ctx.fillStyle = '#f6e9ff'
+    ctx.beginPath()
+    ctx.moveTo(from.x - half * 0.04, from.y)
+    ctx.lineTo(from.x + half * 0.04, from.y)
+    ctx.lineTo(tx + half * 0.3, ty)
+    ctx.lineTo(tx - half * 0.3, ty)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+// ─── The fallen boss ────────────────────────────────────────────────────────
+//
+// A boss used to fade to nothing over its death beat while the next stage was
+// built somewhere else. Now the next road opens under the crowd (`advanceStage`),
+// and the body is what says so: it topples in toward the middle of the road and
+// lies there, dimmed, while the squad walks on past it. The death beat and the
+// corpse are ONE drawing at two values of `k`, so the handover cannot pop.
+
+/** How far the body rolls onto its side, radians. Short of a quarter turn: the
+ *  sprites are drawn in three-quarter view, and a full 90° lays the head flat
+ *  along a rung, where it reads as a sticker rather than as something heavy. */
+const FALLEN_TILT = 1.32
+/** How far it slides back along its own length as it goes down, in body sizes,
+ *  so the lying body stays over the ground it stood on instead of beside it. */
+const FALLEN_SLIDE = 0.5
+/** The frame of the stride it is frozen on. A corpse still walking in place is
+ *  the one thing that would make it read as alive. */
+const FALLEN_CYCLE = 0.2
+
+/** A dimmed copy of each frame, baked once. Keyed on the frame itself, so a
+ *  painting that decodes later gets its own copy rather than the drawing's. */
+const fallenTints = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>()
+
+const fallenTint = (frame: HTMLCanvasElement): HTMLCanvasElement | null => {
+  const hit = fallenTints.get(frame)
+  if (hit) return hit
+  if (typeof document === 'undefined') return null
+  const c = document.createElement('canvas')
+  c.width = frame.width
+  c.height = frame.height
+  const g = c.getContext('2d')
+  if (!g) return null
+  g.drawImage(frame, 0, 0)
+  // `source-atop` tints the sprite's own pixels and nothing else — on a canvas
+  // that holds only the sprite. (On the scene canvas it would tint the road too,
+  // which is the trap the ember pass in `drawBossBody` describes.)
+  g.globalCompositeOperation = 'source-atop'
+  // Cool, not warm: a reddish dim over a fallen body reads as gore, and this is
+  // a game children play.
+  g.fillStyle = 'rgba(20, 16, 36, 0.56)'
+  g.fillRect(0, 0, c.width, c.height)
+  fallenTints.set(frame, c)
+  return c
+}
+
+// ─── The goo it leaves ──────────────────────────────────────────────────────
+//
+// What says "FALLEN" rather than "lying down" is the pool under the body — and
+// it is magic, not blood: a glowing violet ooze that spreads out as the body
+// lands, catches the light, and keeps bubbling. Deliberately a colour no living
+// thing on this road is, so it reads as the boss's power running out of it.
+//
+// Laid out in body sizes for a fall to the RIGHT (`fall` mirrors x), with +y
+// toward the camera — the lobes that must be seen sit in FRONT of the body,
+// because everything behind it is under the sprite. One path for all the lobes,
+// so where they overlap the pool is one liquid rather than a stack of stickers.
+
+const GOO_LOBES: ReadonlyArray<readonly [x: number, y: number, rx: number, ry: number]> = [
+  [0.3, 0.1, 0.95, 0.3],
+  [-0.45, 0.22, 0.4, 0.15],
+  [1.05, 0.02, 0.38, 0.14],
+  [0.55, 0.34, 0.48, 0.14],
+  [-0.1, -0.1, 0.42, 0.12]
+]
+/** Splash drops thrown clear of the pool when the body hit the ground. */
+const GOO_DROPS: ReadonlyArray<readonly [x: number, y: number, r: number]> = [
+  [-0.95, 0.3, 0.06], [1.5, 0.12, 0.05], [0.15, 0.54, 0.05], [1.12, 0.44, 0.04]
+]
+/** Where it bubbles, and each bubble's offset into its cycle. */
+const GOO_BUBBLES: ReadonlyArray<readonly [x: number, y: number, phase: number]> = [
+  [-0.5, 0.24, 0], [0.78, 0.38, 0.37], [1.15, 0.06, 0.71]
+]
+/** One bubble's life, ms: it swells, and pops over the last fifth. */
+const GOO_BUBBLE_MS = 1700
+
+/**
+ * The pool, in the body's local frame (feet at the origin, not yet rolled).
+ *
+ * `centred` for a death strip, painted or drawn, whose body lies across the
+ * ground it stood on rather than pivoting off its feet the way the rolled walk
+ * frame does — so the pool is pulled back under the middle of it instead of out
+ * along the fall.
+ */
+const paintGoo = (
+  ctx: CanvasRenderingContext2D, size: number, fall: -1 | 1, g: number, centred = false
+): void => {
+  if (g <= 0.01) return
+  // Spreads out from under the body as it lands — lobes grow from the middle.
+  const sp = 0.15 + 0.85 * g
+  const lobes = (grow: number): void => {
+    ctx.beginPath()
+    for (const [x, y, rx, ry] of GOO_LOBES) {
+      const cx = fall * x * sp * size
+      const cy = y * sp * size
+      ctx.moveTo(cx + rx * sp * grow * size, cy)
+      ctx.ellipse(cx, cy, rx * sp * grow * size, ry * sp * grow * size, 0, 0, Math.PI * 2)
+    }
+  }
+  ctx.save()
+  // The layout's main lobe sits 0.3 of a body out along the fall; centred, it
+  // sits under the feet instead — and up the road a little, because a death
+  // strip lays the body down above its feet line, and a pool entirely in front
+  // of the body reads as spilled rather than as running out of it.
+  if (centred) ctx.translate(-fall * 0.3 * sp * size, -0.22 * sp * size)
+  if (!minFx) {
+    // A soft glow on the road around it — additive, so it lights the ground
+    // rather than painting over it.
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = 0.2 * g
+    ctx.fillStyle = '#7c4dff'
+    ctx.beginPath()
+    ctx.ellipse(fall * 0.3 * sp * size, 0.12 * size, 1.3 * sp * size, 0.46 * sp * size, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.globalCompositeOperation = 'source-over'
+  }
+  // The liquid: a deep rim, and a brighter body inset from it.
+  ctx.globalAlpha = 0.78 * g
+  ctx.fillStyle = '#4b2596'
+  lobes(1)
+  ctx.fill()
+  ctx.globalAlpha = 0.7 * g
+  ctx.fillStyle = '#8a5cf0'
+  lobes(0.74)
+  ctx.fill()
+  ctx.globalAlpha = 0.85 * g
+  ctx.fillStyle = '#5a2fb0'
+  ctx.beginPath()
+  for (const [x, y, r] of GOO_DROPS) {
+    const cx = fall * x * size * (0.4 + 0.6 * g)
+    const cy = y * size * (0.4 + 0.6 * g)
+    ctx.moveTo(cx + r * size, cy)
+    ctx.ellipse(cx, cy, r * size, r * size * 0.55, 0, 0, Math.PI * 2)
+  }
+  ctx.fill()
+  if (!cheapFx) {
+    const now = performance.now()
+    // Glints along the front edge, breathing — what makes it read as WET.
+    ctx.globalAlpha = (0.45 + Math.sin(now / 420) * 0.15) * g
+    ctx.fillStyle = '#efe4ff'
+    ctx.beginPath()
+    ctx.ellipse(fall * 0.02 * sp * size, 0.27 * sp * size, 0.17 * sp * size, 0.035 * sp * size, 0, 0, Math.PI * 2)
+    ctx.moveTo(fall * 0.86 * sp * size + 0.1 * sp * size, 0.31 * sp * size)
+    ctx.ellipse(fall * 0.86 * sp * size, 0.31 * sp * size, 0.1 * sp * size, 0.026 * sp * size, 0, 0, Math.PI * 2)
+    ctx.fill()
+    // Bubbles: swell, then pop into a ring that widens and fades.
+    ctx.lineWidth = Math.max(1, size * 0.012)
+    for (const [x, y, phase] of GOO_BUBBLES) {
+      const c = (((now / GOO_BUBBLE_MS + phase) % 1) + 1) % 1
+      const bx = fall * x * sp * size
+      const by = y * sp * size
+      if (c < 0.8) {
+        const r = size * 0.075 * (c / 0.8)
+        ctx.globalAlpha = 0.6 * g
+        ctx.fillStyle = '#b89bff'
+        ctx.beginPath()
+        ctx.ellipse(bx, by - r * 0.4, r, r * 0.8, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.globalAlpha = 0.8 * g
+        ctx.fillStyle = '#f4edff'
+        ctx.beginPath()
+        ctx.arc(bx - r * 0.35, by - r * 0.75, r * 0.25, 0, Math.PI * 2)
+        ctx.fill()
+      } else {
+        const p = (c - 0.8) / 0.2
+        ctx.globalAlpha = (1 - p) * 0.7 * g
+        ctx.strokeStyle = '#e2d4ff'
+        ctx.beginPath()
+        ctx.ellipse(bx, by, size * 0.075 * (1 + p), size * 0.04 * (1 + p), 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+  }
+  ctx.restore()
+}
+
+/**
+ * A boss going down (`k` 0 → 1) or already down (`k` = 1), feet at `sx, sy`.
+ *
+ * Its own DEATH, played across `k` with the last panel held as the body — the
+ * painted strip once it has arrived (`images/deaths/`, asked for at 80 % of the
+ * road, see `deathArtWant`), and until then the same fall DRAWN, baked from the
+ * rigs the painting is painted over (`monsterDeathFrame`): knees buckling, arms
+ * flailing, the body going over and lying spread out on the road. Either is
+ * blitted exactly as the walk is — same scale, same feet line, same facing
+ * mirror — so the cut from the last living frame to the first dying one cannot
+ * jump, and it is never mirrored for the fall (see `deathFallSide`).
+ *
+ * It replaced the walk frame rolled onto its side, which players read as just
+ * that: a standing creature turned ninety degrees. That roll is kept only for a
+ * design with no drawing at all, eased so the weight lands at the end and
+ * dimmed as it goes.
+ */
+const paintFallenBoss = (
+  ctx: CanvasRenderingContext2D,
+  design: string,
+  sx: number,
+  sy: number,
+  size: number,
+  k: number,
+  fall: -1 | 1
+): void => {
+  const kk = Math.max(0, Math.min(1, k))
+  const e = 1 - (1 - kk) ** 3
+  const mirror = monsterFaces(design) === 'left' ? -1 : 1
+  const n = monsterDeathLength(design)
+  const death = monsterDeathFrame(design, Math.min(n - 1, Math.floor(kk * n)))
+  // The side the body ends up on screen — which is where its pool spreads.
+  const lies = death ? ((deathFallSide(design) * mirror) as -1 | 1) : fall
+  ctx.save()
+  ctx.translate(sx, sy)
+  // The standing shadow, fading as the body goes down and the pool takes over.
+  ctx.globalAlpha = 0.4 * (1 - e)
+  ctx.fillStyle = '#000'
+  ctx.beginPath()
+  ctx.ellipse(0, 0, size * 0.42, size * 0.12, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
+  // The pool is liquid lying ON the road — see `clipToRoad`. The body is
+  // painted after this and deliberately outside the clip.
+  ctx.save()
+  clipToRoad(ctx, sx, -size * 3, size * 6)
+  paintGoo(ctx, size, lies, e, death !== null)
+  ctx.restore()
+
+  if (death) {
+    // Panel by panel across the death beat, the last one held as the body. The
+    // death carries its own "lights out" — eyes shut, fire guttered — so the
+    // dim below is not laid on.
+    const frame = death.frame
+    const fk = (size * 1.6) / (frame.height * SPRITE_HEIGHT_R)
+    const dw = frame.width * fk
+    const dh = frame.height * fk
+    ctx.scale(mirror, 1)
+    ctx.drawImage(frame, -dw / 2, -frame.height * SPRITE_FOOT_R * fk, dw, dh)
+    ctx.restore()
+    return
+  }
+
+  ctx.rotate(fall * FALLEN_TILT * e)
+  ctx.translate(0, size * FALLEN_SLIDE * e)
+  const frame = monsterFrame(design, FALLEN_CYCLE)
+  if (frame) {
+    const fk = (size * 1.6) / (frame.height * SPRITE_HEIGHT_R)
+    const dw = frame.width * fk
+    const dh = frame.height * fk
+    const top = -frame.height * SPRITE_FOOT_R * fk
+    ctx.scale(monsterFaces(design) === 'left' ? -1 : 1, 1)
+    ctx.drawImage(frame, -dw / 2, top, dw, dh)
+    const dim = e > 0.01 ? fallenTint(frame) : null
+    if (dim) {
+      ctx.globalAlpha = e
+      ctx.drawImage(dim, -dw / 2, top, dw, dh)
+    }
+  } else {
+    ctx.fillStyle = '#3a2440'
+    ctx.beginPath()
+    ctx.ellipse(0, -size * 0.5, size * 0.4, size * 0.6, 0, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/**
+ * The last stage's boss, lying where it fell — on the GROUND layer, under
+ * everything that moves, because the crowd walks over it.
+ */
+const drawBossCorpse = (ctx: CanvasRenderingContext2D): void => {
+  const c = getBossCorpse()
+  if (!c) return
+  const sy = worldToScreenY(c.y)
+  const size = c.scale * scale * 1.3
+  // Behind the bottom edge (the crowd is long past it) or not yet on screen.
+  if (sy - size * 1.2 > viewH || sy + size * 1.2 < 0) return
+  paintFallenBoss(ctx, c.design, worldToScreenX(c.x), sy, size, 1, c.fall)
+}
+
+/**
+ * The survivors a handover did not keep, seen off: a puff of dust where each one
+ * stood and a couple of sparks going up. It is what stops a squad of forty
+ * becoming a squad of five between two frames with nothing to say why — the
+ * next stage opens on the squad the shop bought, and the rest fall back.
+ */
+const seeOffSurvivors = (spots: ReadonlyArray<{ x: number; y: number }>): void => {
+  for (const p of spots) {
+    // Light on purpose: it plays around the squad that stays, and a heavy cloud
+    // there reads as the survivors being hit rather than stepping back.
+    emit({
+      x: p.x, y: p.y + 0.25, vx: (Math.random() - 0.5) * 0.6, vy: 1.2 + Math.random() * 1.2,
+      life: 420 + Math.random() * 220, size: 0.2 + Math.random() * 0.08,
+      color: [206, 192, 168], alpha: 0.32, shape: 3, drag: 1.4
+    })
+    if (cheapFx) continue
+    for (let i = 0; i < 2; i++) {
+      emit({
+        x: p.x + (Math.random() - 0.5) * 0.3, y: p.y + 0.2,
+        vx: (Math.random() - 0.5) * 0.5, vy: 3 + Math.random() * 3,
+        life: 460 + Math.random() * 300, size: 0.07 + Math.random() * 0.05,
+        color: [255, 226, 150], additive: true, shape: 2, drag: 1.1, gravity: -1.5
+      })
+    }
+  }
+}
+
 const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   const b = getBoss()
   if (!b) return
@@ -6897,7 +7805,14 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
   // column entirely — a telegraph pointing at the one axis it is wrong about.
   // The band `drawCasts` paints is the charge's tell and it is the whole tell.
   const windowS = b.charging ? 1.1 : 0.6
-  if (b.kind === 'meteor' && !b.dead && !bossIsCharging() && b.slamCd < windowS) {
+  // …and a SHOCK and a GAZE are held back for the same reason again. A shock's
+  // `slamX` is the centre of its safe eye, so this ring would paint "not here"
+  // on the one patch of road the attack says is safe; a gaze's is the boss's
+  // own feet, where nothing is landing at all.
+  if (
+    b.kind === 'meteor' && !b.dead && !bossIsCharging() && !bossIsVarying() &&
+    bossGazeOpening() === 0 && b.slamCd < windowS
+  ) {
     const k = 1 - b.slamCd / windowS
     const rx = worldToScreenX(b.slamX)
     const ry = worldToScreenY(b.slamY)
@@ -6954,9 +7869,16 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     ctx.restore()
   }
 
+  // A dead boss topples and STAYS down — the next road opens where it fell. The
+  // death beat and the corpse are one drawing (`paintFallenBoss`), so nothing
+  // below this line is for a body that is no longer fighting.
+  if (b.dead) {
+    paintFallenBoss(ctx, b.design, sx, sy, size, dying, bossFallDir(b.x))
+    return
+  }
+
   ctx.save()
   ctx.translate(sx, sy)
-  ctx.globalAlpha = 1 - dying * 0.85
   ctx.fillStyle = 'rgba(0,0,0,0.4)'
   ctx.beginPath()
   ctx.ellipse(0, 0, size * 0.42, size * 0.12, 0, 0, Math.PI * 2)
@@ -7004,11 +7926,9 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
 
   if (guarding) paintGuardHex(ctx, gCy, gR, gRy, gPulse, scale)
 
-  if (dying > 0) {
-    ctx.rotate(dying * 0.6)
-    ctx.translate(0, dying * size * 0.3)
-  }
-  const frame = monsterFrame(b.design, (t / 900) % 1)
+  // Frozen, it holds the pose it was caught in — see `drawFoes`.
+  const frozen = frostActive() && !b.dead
+  const frame = monsterFrame(b.design, ((frozen ? frostFrozenAt() : t) / 900) % 1)
   const enraged = bossIsEnraged()
   if (frame) {
     const k = (size * 1.6) / (frame.height * SPRITE_HEIGHT_R)
@@ -7016,9 +7936,19 @@ const drawBossBody = (ctx: CanvasRenderingContext2D): void => {
     const dh = frame.height * k
     const top = -frame.height * SPRITE_FOOT_R * k
     const mirror = monsterFaces(b.design) === 'left' ? -1 : 1
+    if (frozen) {
+      // The boss in its block: the sprite first, then the ice, then the ember
+      // and the hit flash on top — a frozen boss still shows which half of the
+      // fight it is in and still flashes where the brittle rounds land.
+      ctx.save()
+      ctx.scale(mirror, 1)
+      ctx.drawImage(frame, -dw / 2, top, dw, dh)
+      ctx.restore()
+      drawIceOn(ctx, frame, mirror, -dw / 2, top, dw, dh, size * 0.95, 9001, sx, sy)
+    }
     ctx.save()
     ctx.scale(mirror, 1)
-    ctx.drawImage(frame, -dw / 2, top, dw, dh)
+    if (!frozen) ctx.drawImage(frame, -dw / 2, top, dw, dh)
     // ── Phase two's colour shift ──
     //
     // An EMBER COPY of the frame, added over the frame itself, so the shift
@@ -7442,6 +8372,8 @@ const drawBullets = (ctx: CanvasRenderingContext2D): void => {
 // ─── Layer 11: text and grades ──────────────────────────────────────────────
 
 const drawFloatingText = (ctx: CanvasRenderingContext2D): void => {
+  // Damage numbers are a readout, not the world: off in a recorded feed.
+  if (HIDE_READOUTS) return
   const texts = getTexts()
   if (texts.length === 0) return
   ctx.textAlign = 'center'
@@ -7588,6 +8520,11 @@ const consumeFx = (): void => {
 }
 
 const applyFx = (e: FxEvent): void => {
+  // The two late skills own their own juice — see `useSkillFx`.
+  if (isSkillFx(e)) {
+    applySkillFx(e)
+    return
+  }
   switch (e.kind) {
     case 'shoot':
       if (e.weapon === 'rocket') {
@@ -7659,10 +8596,16 @@ const applyFx = (e: FxEvent): void => {
       //
       // A `-N` leaf runs the identical mechanic and must therefore get the
       // identical *grammar* — tick, punch, particles — with every channel
-      // inverted: descending cue, amber instead of cyan, `−1` instead of `+1`,
-      // and sparks falling INWARD rather than blowing out. Same sentence,
+      // inverted: descending cue, amber instead of cyan, a minus instead of a
+      // plus, and sparks falling INWARD rather than blowing out. Same sentence,
       // opposite meaning, which is the only way the player learns that aiming
       // at the wrong door is an action with a price.
+      //
+      // The number is the tick's OWN step, which the sim measured (`step` on the
+      // event). It used to be a hardcoded `+1`, and from the stage the pump step
+      // reaches 2 that is a door climbing `8 → 10 → 12` while printing `+1` over
+      // itself — which reads as the game miscounting. A scale door printed `+1`
+      // for a tenth, too.
       const hostile = e.hostile === true
       playFx(hostile ? 'gateSubTick' : 'gateTick', e.value)
       // …and the fourth channel, on a phone. Both signs get it, for the same
@@ -7673,7 +8616,7 @@ const applyFx = (e: FxEvent): void => {
       haptic('tick')
       emitText({
         x: e.x, y: e.y + 0.9, vy: hostile ? 1.8 : 2.6, life: 620,
-        text: hostile ? '−1' : '+1',
+        text: `${hostile ? '−' : '+'}${gateValueLabel(e.step)}`,
         color: hostile ? '#ffb060' : '#bff0ff', size: 0.5, crit: false
       })
       for (let i = 0; i < 10; i++) {
@@ -8051,14 +8994,14 @@ const applyFx = (e: FxEvent): void => {
 
     case 'meteorCast':
       casts.push({
-        kind: 'meteor', x: e.x, y: e.y, r: e.radius, dir: 1,
+        kind: 'meteor', x: e.x, y: e.y, r: e.radius, inner: 0, dir: 1,
         charged: e.charged, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
       })
       break
 
     case 'sliceCast':
       casts.push({
-        kind: 'slice', x: e.x, y: e.y, r: e.reach, dir: e.dir,
+        kind: 'slice', x: e.x, y: e.y, r: e.reach, inner: 0, dir: e.dir,
         charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
       })
       break
@@ -8071,7 +9014,7 @@ const applyFx = (e: FxEvent): void => {
       // what a lit bomb is.
       playFx('bossRage', 0.6)
       casts.push({
-        kind: 'bomb', x: e.x, y: e.y, r: e.radius, dir: 1,
+        kind: 'bomb', x: e.x, y: e.y, r: e.radius, inner: 0, dir: 1,
         charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
       })
       break
@@ -8111,7 +9054,7 @@ const applyFx = (e: FxEvent): void => {
       // The column the round will come down. Emitted once, at the lock.
       playFx('bossGuard', 0.8)
       casts.push({
-        kind: 'bolt', x: e.x, y: e.y, r: BOLT_R, dir: 1,
+        kind: 'bolt', x: e.x, y: e.y, r: BOLT_R, inner: 0, dir: 1,
         charged: false, tx: e.tx, ty: e.ty, t: 0, life: e.ttl, done: false
       })
       break
@@ -8181,7 +9124,7 @@ const applyFx = (e: FxEvent): void => {
       // already too late to use.
       playFx('bossCharge')
       casts.push({
-        kind: 'charge', x: e.x, y: e.y, r: e.halfW, dir: 1,
+        kind: 'charge', x: e.x, y: e.y, r: e.halfW, inner: 0, dir: 1,
         charged: false, tx: e.x, ty: e.toY, t: 0, life: e.ttl, done: false
       })
       break
@@ -8259,6 +9202,172 @@ const applyFx = (e: FxEvent): void => {
       break
     }
 
+    case 'shockCast':
+      // The meteor's own rage cue, because that is what the sound means here:
+      // "something has committed and it is about to arrive". The DIRECTION of the
+      // answer is carried entirely by the picture — a mark that says "get in" and
+      // a sound that says "get out" would be a mix arguing with itself.
+      playFx('bossRage', 0.7)
+      casts.push({
+        kind: 'shock', x: e.x, y: e.y, r: e.outer, inner: e.eye, dir: 1,
+        charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'bossShock': {
+      playFx('bossSlam')
+      triggerShake('big')
+      // Scars on the BAND and nothing in the eye. What is left on the road
+      // afterwards is a burnt ring with clean ground inside it, which is the one
+      // thing worth having learned before the next one — and a crater in the
+      // middle would teach the opposite.
+      const ring = minFx ? 6 : cheapFx ? 10 : 18
+      const mid = (e.eye + e.outer) / 2
+      for (let i = 0; i < ring; i++) {
+        const a = (i / ring) * TAU
+        emitDecal(e.x + Math.cos(a) * mid, e.y + Math.sin(a) * mid * 0.45, e.outer * 0.3, 0.4)
+      }
+      const n = minFx ? 10 : cheapFx ? 20 : 40
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * TAU
+        // Everything leaves OUTWARD from the band it came off, so the eye stays
+        // visibly clear through the impact. A radial burst from the centre would
+        // spray fire across the one patch of road the player was told to stand
+        // on, at the exact moment they are standing on it.
+        const at = e.eye + Math.random() * (e.outer - e.eye)
+        const sp = 3 + Math.random() * 7
+        emit({
+          x: e.x + Math.cos(a) * at, y: e.y + Math.sin(a) * at * 0.45,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 + 2,
+          life: 420 + Math.random() * 360, size: 0.12 + Math.random() * 0.1,
+          color: Math.random() < 0.5 ? [255, 170, 70] : [160, 80, 50],
+          additive: Math.random() < 0.45, shape: Math.random() < 0.5 ? 2 : 1,
+          gravity: 8, drag: 1.5
+        })
+      }
+      break
+    }
+
+    case 'wardCast':
+      // No combat cue at all. The one thing on the road that is not about to hurt
+      // anybody gets the pickup's own chime, because that is what the player
+      // already reads as "this is for you".
+      playFx('bossGuard', 0.35)
+      casts.push({
+        kind: 'ward', x: e.x, y: e.y, r: e.radius, inner: 0, dir: 1,
+        charged: false, tx: e.x, ty: e.y, t: 0, life: e.ttl, done: false
+      })
+      break
+
+    case 'wardEnd': {
+      // Finish the circle NOW rather than letting it run its `ttl` out. The three
+      // things that end a ward — the heal landing, the heal being revoked, the
+      // boss dying — all arrive early relative to the cast's own clock, and a
+      // circle still counting down over a resolved heal is a mark promising
+      // something that has already happened.
+      for (const c of casts) {
+        if (c.kind !== 'ward' || c.done) continue
+        c.t = c.life
+        c.done = true
+        break
+      }
+      // Nothing to celebrate at zero: a ward the player never reached, or one
+      // withdrawn with its heal, simply fades. The burst is the reward for having
+      // stood on it, and it is sized by how much of it they actually denied.
+      if (e.denied <= 0.02) break
+      playFx('bossGuard', 0.5 + e.denied * 0.5)
+      const n = minFx ? 8 : cheapFx ? 16 : 14 + Math.round(e.denied * 26)
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU
+        emit({
+          x: e.x + Math.cos(a) * e.radius * 0.7,
+          y: e.y + Math.sin(a) * e.radius * 0.35,
+          vx: Math.cos(a) * 2, vy: 3 + Math.random() * 4,
+          life: 520 + Math.random() * 420, size: 0.1 + Math.random() * 0.07,
+          color: [180, 240, 255], additive: true, shape: 2, drag: 1.2, gravity: -1.4
+        })
+      }
+      break
+    }
+
+    case 'gazeCast':
+      // A low, rising note rather than a combat cue: nothing is coming AT the
+      // player, something is starting to LOOK at them. The eye itself is drawn
+      // from the world every frame — see `drawBossGaze`.
+      playFx('bossRage', 0.45)
+      break
+
+    case 'gazeWatch':
+      // The lock. Short and dry, because the instruction it carries is "stop",
+      // and a long sound would tempt the thumb to react to it.
+      playFx('bossGuard', 0.7)
+      triggerShake('small')
+      break
+
+    case 'gazeStrike': {
+      playFx('bossSlam')
+      triggerShake('big')
+      screenFlash = 0.35
+      flashColour = '190,110,255'
+      gazeBeams.push({
+        x: e.x, y: e.y,
+        bx: e.fromX, by: e.fromY, bscale: getBoss()?.scale ?? 2.5,
+        halfW: e.halfW, t: 0
+      })
+      emitDecal(e.x, e.y, e.halfW * 0.8, 0.4)
+      const n = minFx ? 8 : cheapFx ? 16 : 30
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * TAU
+        emit({
+          x: e.x + Math.cos(a) * e.halfW * 0.6, y: e.y + Math.sin(a) * 0.6,
+          vx: Math.cos(a) * (3 + Math.random() * 6), vy: 2 + Math.random() * 5,
+          life: 380 + Math.random() * 300, size: 0.11 + Math.random() * 0.08,
+          color: Math.random() < 0.6 ? [200, 130, 255] : [245, 230, 255],
+          additive: true, shape: 2, drag: 1.8, gravity: 3
+        })
+      }
+      break
+    }
+
+    case 'gazeEnd':
+      // The one moment to say "that was the answer". Quiet, and only when the
+      // crowd actually held — a strike already said everything there was to say.
+      if (!e.kept) break
+      playFx('bossGuard', 0.35)
+      for (let i = 0; i < (minFx ? 6 : cheapFx ? 10 : 18); i++) {
+        const a = (i / 18) * TAU
+        const at = anchor()
+        emit({
+          x: at.x + Math.cos(a) * 1.4, y: at.y + Math.sin(a) * 0.7,
+          vx: Math.cos(a) * 1.2, vy: 2.5 + Math.random() * 2,
+          life: 520 + Math.random() * 300, size: 0.09,
+          color: [220, 190, 255], additive: true, shape: 2, drag: 1.2, gravity: -1.2
+        })
+      }
+      break
+
+    case 'burrowDive': {
+      // It went under. Read as a body leaving the road rather than as an attack
+      // starting, because that is what it is — the attack is the mound, and the
+      // mound draws itself.
+      playFx('eliteSweep', 0.45)
+      triggerShake('small')
+      emitDecal(e.x, e.y, 0.9, 0.45)
+      for (let i = 0; i < (minFx ? 6 : cheapFx ? 12 : 24); i++) {
+        const a = Math.random() * TAU
+        const sp = 2 + Math.random() * 5
+        emit({
+          x: e.x, y: e.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 + 3 + Math.random() * 3,
+          life: 340 + Math.random() * 280, size: 0.11 + Math.random() * 0.09,
+          color: Math.random() < 0.5 ? [120, 92, 62] : [76, 58, 40],
+          shape: 1, gravity: 11, drag: 1.4,
+          rot: Math.random() * 6, vrot: (Math.random() - 0.5) * 8
+        })
+      }
+      break
+    }
+
     case 'rakeCast':
       // The claw's wind-up. No sound of its own: it borrows the elite's swing,
       // because it IS a swing, and a fifth combat cue in the same second of the
@@ -8276,7 +9385,16 @@ const applyFx = (e: FxEvent): void => {
       // Mark the rake struck if its wind-up is still on screen; otherwise paint
       // the scar on its own, so a rake that arrived without a tell (it cannot,
       // but a future path might) still leaves the evidence that it landed.
-      const live = rakes.find((r) => !r.done)
+      // Matched on the LANES rather than on "the first one still winding up",
+      // because a crossrake puts two casts on the road at once (see
+      // `throwCrossrake`) and its second pass has to close its own telegraph.
+      // The positional fallback is kept for the same reason it was written: a
+      // strike that arrived without a tell should still leave the evidence that
+      // it landed.
+      const sameLanes = (r: Rake): boolean =>
+        r.lanes.length === e.lanes.length &&
+        r.lanes.every((x, i) => Math.abs(x - (e.lanes[i] ?? 0)) < 1e-6)
+      const live = rakes.find((r) => !r.done && sameLanes(r)) ?? rakes.find((r) => !r.done)
       if (live) { live.t = live.life; live.done = true }
       else {
         rakes.push({
@@ -8374,10 +9492,18 @@ const applyFx = (e: FxEvent): void => {
       playFx('eliteSpawn', 0.6)
       triggerShake('small')
       const n = minFx ? 6 : cheapFx ? 12 : 26
+      // A FLANKS wave came up at the two rails rather than in a line ahead of
+      // the crowd (`e.flank`), and the ground has to break where the bodies
+      // actually are. `e.x` stays the crowd's own centre for both shapes — see
+      // the note on the event — so a flanks wave that reused the spread below
+      // would tear the road open in the one place nothing was summoned, which is
+      // also the place the player is standing.
+      const rails = e.flank ? flankXs() : null
       for (let i = 0; i < n; i++) {
+        const at = rails ? (rails[i % rails.length] ?? e.x) : e.x
         emit({
-          x: e.x + (Math.random() - 0.5) * 6.4,
-          y: e.y + (Math.random() - 0.5) * 1.6,
+          x: at + (Math.random() - 0.5) * (rails ? 1.8 : 6.4),
+          y: e.y + (Math.random() - 0.5) * (rails ? 2.6 : 1.6),
           vx: (Math.random() - 0.5) * 2.4, vy: 2 + Math.random() * 3.5,
           life: 560, size: 0.15, color: [120, 130, 145], shape: 3, drag: 1.5, gravity: 5
         })
@@ -8894,6 +10020,7 @@ export const invalidateArt = (): void => {
   // announce an attack that is not coming.
   casts.length = 0
   rakes.length = 0
+  gazeBeams.length = 0
   healTells.length = 0
   // …and with them the clock they were being stepped against. `resetWorld` puts
   // the simulation clock back to zero, so a delta taken across a stage change is

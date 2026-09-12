@@ -316,7 +316,7 @@ export const isScaleOp = (op: GateOp): boolean => op === 'mul' || op === 'div'
  *
  * A `+1` per half-second was the whole skill of the game for thirty stages and
  * then quietly stopped being anything at all. The reason is arithmetic: a door
- * prints `gateAddBase(stage)`, which is 12 at stage 10 and 36 at stage 46,
+ * prints `gateAddBase(stage)`, which is 12 at stage 10 and 34 at stage 46,
  * while the pump keeps paying the same +1 a tick into a ~2 s in-range approach.
  * That is a third of the door at stage 10 and a ninth of it at 46 — so the one
  * mechanic that turns a bank into a decision fades out exactly as the banks get
@@ -325,20 +325,43 @@ export const isScaleOp = (op: GateOp): boolean => op === 'mul' || op === 'div'
  *
  * Both halves of the fix are keyed to the same 15-stage band:
  *
- *   • the STEP grows by one per band, so `+/-` doors move by 1, 2, 3, 4 …
- *     (stage 45 pumps `+4`, and a `-N` beside it pumps `-4` — the two are one
- *     mechanic with a sign, and an asymmetric step would make the mirror a lie);
+ *   • the STEP grows by 0.9 per band (`GATE_GROWTH_TRIM`), floored to a whole
+ *     survivor, so `+/-` doors move by 1, 2, 3, 4 … (stage 50 pumps `+4`, and a
+ *     `-N` beside it pumps `-4` — the two are one mechanic with a sign, and an
+ *     asymmetric step would make the mirror a lie);
  *   • the TICK shortens, so the same approach buys more ticks of it.
  *
- * At stage 46 that takes a full approach from `+4` on a printed `+36` to about
- * `+19` — back to the third-of-a-door the mechanic was worth when it was still
- * teaching people to commit early.
+ * At stage 46 that takes a full approach from `+4` on a printed `+34` to about
+ * `+14` — still over a third of the door, which is what the mechanic was worth
+ * when it was still teaching people to commit early.
  */
 export const GATE_PUMP_BAND = 15
 
-/** Whole survivors a `+N` / `-N` door moves per tick at this stage. */
+/**
+ * ─── Every step up a door takes is a tenth smaller ──────────────────────────
+ *
+ * Applied to the two ways a `+N` door grows with depth: its printed value from
+ * one stage to the next (`gateAddBase`) and the pump's `+N` per tick (below).
+ * Played at stage 40, a door printed 33 and pumped `+3` a tick, which paid 40–50
+ * before the Squad track added its share; past stage 60 the doors carried the
+ * crowd most of the way to `MAX_SQUAD` on their own.
+ *
+ * The SLOPE is trimmed, not the value, and only from stage 15 on. Stages 1–14
+ * are the band the onboarding and retention studies were tuned on, and they
+ * keep every door they had.
+ */
+export const GATE_GROWTH_TRIM = 0.9
+
+/**
+ * Whole survivors a `+N` / `-N` door moves per tick at this stage.
+ *
+ * The step climbs `GATE_GROWTH_TRIM` a band instead of a whole survivor, so it
+ * rises at stages 17, 34, 50, 67 … rather than 15, 30, 45, 60 …: stage 60 pumps
+ * `+4` where it pumped `+5`. The clock (`gateTickMs`) still turns on the plain
+ * band — it is how OFTEN a door grows, not by how much.
+ */
 export const gatePumpStep = (stage: number): number =>
-  1 + Math.floor(Math.max(0, stage) / GATE_PUMP_BAND)
+  1 + Math.floor(Math.max(0, stage) * GATE_GROWTH_TRIM / GATE_PUMP_BAND)
 
 /** How much of the tick a band shaves off an additive door… */
 export const GATE_TICK_DECAY = 0.05
@@ -1876,7 +1899,25 @@ export const CAGE_R = 0.68
  * out at 5. The measurement behind choosing a curve at all is written down on
  * `cageSurvivors`.
  */
-export const CAGE_RESCUE_BASE = 5
+export const CAGE_RESCUE_BASE = 3
+
+/**
+ * How fast a freed survivor jogs over to the crowd, world units per second,
+ * RELATIVE to the crowd — the road's own speed is added on top, so a joiner
+ * behind the squad still closes on it.
+ *
+ * Four is a visible run across a road nine units wide: a survivor let out on the
+ * far shoulder takes about three quarters of a second to reach the squad, which
+ * is long enough to be seen and short enough that the payout still arrives in
+ * the approach the player spent on it.
+ */
+export const CAGE_JOIN_SPEED = 4
+
+/** …and the longest any one survivor may spend jogging before the ordinary
+ *  formation spring takes over. A backstop, so a joiner that cannot reach its
+ *  slot (a wall in the way, the crowd pinned on a rail) is never left walking
+ *  alone forever. */
+export const CAGE_JOIN_MAX_S = 2.5
 
 /**
  * ─── The bulwark: an auto-shield in a box ───────────────────────────────────
@@ -2131,8 +2172,26 @@ export interface Foe {
   fuse: number
   /** Seconds until a `gunner`'s next bolt. */
   reload: number
-  /** Free per-kind counter — shots taken, bounces, whatever the branch needs. */
+  /** Free per-kind counter — shots taken, bounces, dives spent, whatever the
+   *  branch needs. */
   kindTicks: number
+  /**
+   * Where this kind's attack has LOCKED, in world space, or 0/0 if it has not.
+   *
+   * Two of the late kinds aim at ground rather than at the crowd — the warden's
+   * slot and the burrower's eruption — and both have to answer the question every
+   * wind-up in this game answers: is the place the player was shown the place
+   * that bills them? Recomputing it at impact from `anchorX` would say no, every
+   * time, because the crowd has spent the whole wind-up moving.
+   *
+   * On the FOE rather than in module scratch, and that is the same call the note
+   * above makes for `lane` and `fuse`: `minibossKindFor` cycles the pool by index
+   * so one road cannot currently field two wardens, and a module-level mark that
+   * relies on that is a bug waiting for the day somebody widens the pool or
+   * places a fourth elite. A field cannot be aliased by a second body.
+   */
+  markX: number
+  markY: number
   swayPhase: number
   /**
    * A miniboss: bigger, tankier, worth real coins, and announced in the HUD.
@@ -2192,6 +2251,17 @@ export interface Boss {
   slamSpan: number
   /** Slams thrown so far. Drives the rage: cadence down, radius up. */
   slams: number
+  /**
+   * The kind's OWN attack thrown so far — rings for a meteor, rakes for a claw.
+   *
+   * Separate from `slams`, which counts every swing of every shape, because the
+   * charged ring is "every `CHARGED_EVERY`-th RING" and not every third swing.
+   * While a fight's attacks were a fixed rotation the two were the same count;
+   * with the attacks drawn from a shuffle bag (`bossVerbPool`) a swing count
+   * would make the charged ring land on whatever the bag happened to put in the
+   * third slot — or on nothing at all, when that slot was a shock.
+   */
+  primaries: number
   /**
    * Has THIS swing picked its target yet? Cleared the moment a slam fires.
    *
@@ -2261,6 +2331,18 @@ export interface Unit {
   dying: number
   /** Monster-collision immunity, ms remaining. See `FOE_COLLIDE_IFRAMES_MS`. */
   inv: number
+  /**
+   * Seconds this survivor has left to WALK into formation, or 0 once it is in.
+   *
+   * Everyone else in the crowd is on a stiff spring to their slot, which is right
+   * for a crowd that is already together — it reads as a squad closing ranks.
+   * It is wrong for the survivors a rescue cage lets out: on that spring they
+   * cross three units of road in about a fifth of a second, which reads as the
+   * crowd teleporting a few bodies wider rather than as people running over to
+   * join it. While this is counting down the body moves at a capped jog instead
+   * (`CAGE_JOIN_SPEED`), so the rescue is something the player watches happen.
+   */
+  join: number
 }
 
 export interface Bullet {

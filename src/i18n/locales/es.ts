@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': '¡Ataque entrante!',
     'dodge': 'Esquiva',
+    'getIn': 'Entra',
+    'holdStill': 'Quieto',
     'milestone': '¡{n} en pie!',
     'weaponActive': '{name} listo',
+    'weaponsActive': '{a} + {b} listos',
     'weaponLocked': '{name} bloqueado: {n} de {total} palancas disparadas',
     'weaponGift': '{name} más adelante: gratis, sin palancas',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Doble cadencia de fuego",
       'b': "Carga las puertas más rápido"
     }
+  },
+  'bossReward': {
+    'title': "¡Jefe derrotado!",
+    'subtitle': "Un regalo para el nivel {n}. ¡Sigue corriendo!"
   },
   'result': {
     'stageClear': '¡Nivel superado!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granada',
 
-    'shield': 'Escudo'
+    'shield': 'Escudo',
 
+    'locked': 'Bloqueado',
+
+    'unlocksAt': 'Se desbloquea en el nivel {n}',
+
+    'frost': 'Nova de escarcha',
+
+    'decoy': 'Bengala señuelo',
+
+    'trialLabel': '{name} · prueba gratis',
+
+    'trialTag': '¡Prueba gratis!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

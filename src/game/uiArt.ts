@@ -337,13 +337,124 @@ export const forgeDataUrl = (): string | null => {
   }
 }
 
+// ─── The incoming-attack sign ───────────────────────────────────────────────
+
+/**
+ * The alarm the badge in the top-right corner wears.
+ *
+ * THREE marks, not one, because the badge's colour is load-bearing: amber is
+ * "get out of the way", the cold blue is the same blue as the shock's eye and
+ * the ward it tells the player to stand in, and the violet is the boss's own
+ * gaze. A painting cannot be re-tinted by `currentColor` the way the flat SVG
+ * this replaces could, so each state is its own drawable and its own painting.
+ *
+ * Drawn rather than filled from the glyph for the reason `paintForge` is: this
+ * is the one mark on the screen that has to be caught in peripheral vision at
+ * a tenth of the screen's width, and a flat vector triangle beside a painted
+ * cast is exactly the thing that reads as "not finished".
+ *
+ * Centred on the origin, `size` px square — the contract every mark here
+ * keeps, so the badge, the reference sheet and the playground show one drawing.
+ */
+export const WARN_TONES = {
+  'warn-away': '#ffb32e',
+  'warn-into': '#6ecbff',
+  'warn-still': '#c77dff'
+} as const
+
+export type WarnId = keyof typeof WARN_TONES
+
+export const paintWarnSign = (
+  ctx: CanvasRenderingContext2D, size: number, id: WarnId
+): void => {
+  const S = size
+  const P = (pts: readonly (readonly [number, number])[]): Pt[] =>
+    pts.map(([x, y]) => [x * S, y * S] as Pt)
+
+  const plate = tones(WARN_TONES[id], 1.35)
+
+  // ── The plate ──
+  //
+  // The same triangle the badge has always shown — apex at the top, a wide
+  // flat base — with every vertex DOUBLED so `trace`'s quadratics pass through
+  // the corners instead of rounding them off. A hazard sign whose points have
+  // gone soft is a shield, and the silhouette is the whole signal here.
+  const tri = rough(densify(P([
+    [0, -0.45], [0, -0.45],
+    [0.5, 0.41], [0.5, 0.41],
+    [-0.5, 0.41], [-0.5, 0.41]
+  ]), 5), S * 0.006, 21)
+
+  // The shadow side, authored rather than derived: the key light is up and to
+  // the left for the whole cast (`SHADOW_DIR`), so the right flank and the
+  // underside of the base carry the dark.
+  const shade = P([
+    [0.03, -0.42], [0.03, -0.42],
+    [0.5, 0.41], [0.5, 0.41],
+    [-0.5, 0.41], [-0.5, 0.41],
+    [-0.34, 0.28], [-0.34, 0.28],
+    [0.26, 0.28], [0.26, 0.28]
+  ])
+
+  cel(ctx, tri, plate, { shade })
+
+  // ── The bang ──
+  //
+  // A wedge, not a bar: it tapers toward the point exactly as the plate does,
+  // which is what keeps the two reading as one object at 24 px. Ink-dark
+  // rather than black — the same near-black the cast is outlined in.
+  const bar = rough(densify(P([
+    [-0.075, -0.24], [-0.075, -0.24],
+    [0.075, -0.24], [0.075, -0.24],
+    [0.052, 0.08], [0.052, 0.08],
+    [-0.052, 0.08], [-0.052, 0.08]
+  ]), 4), S * 0.004, 37)
+  const dot = blob(0, S * 0.235, S * 0.072, S * 0.072, 43, 0.1)
+  fillShape(ctx, bar, INK)
+  fillShape(ctx, dot, INK)
+
+  // ── The outline ──
+  //
+  // Last, so it sits over both the plate's shade and the bang's edge.
+  ink(ctx, tri, { width: S * 0.05, color: INK, breakUp: 0.22, seed: 12 })
+}
+
+const drawnWarn = new Map<WarnId, string>()
+
+/** A drawn warning sign as a data URL, for the badge's `<img>`. One bake per
+ *  state, kept for the page: the badge is up and down all fight. */
+export const warnSignDataUrl = (id: WarnId): string | null => {
+  const had = drawnWarn.get(id)
+  if (had !== undefined) return had
+  try {
+    const c = document.createElement('canvas')
+    c.width = 256
+    c.height = 256
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    ctx.translate(128, 128)
+    paintWarnSign(ctx, 256, id)
+    const url = c.toDataURL('image/png')
+    // jsdom hands back a 1×1 stub rather than throwing; anything this short is
+    // not an image and must fall through to the glyph.
+    if (url.length < 128) return null
+    drawnWarn.set(id, url)
+    return url
+  } catch {
+    return null
+  }
+}
+
 /**
  * The DOM-side marks this module can DRAW when the pipeline has not painted
  * them — keyed the way `spriteFor` keys the paintings, so `ArtIcon` can ask
  * one question and get the best answer available.
  */
 const UI_DRAWN_MARKS: Record<string, () => string | null> = {
-  forge: forgeDataUrl
+  forge: forgeDataUrl,
+  'warn-away': () => warnSignDataUrl('warn-away'),
+  'warn-into': () => warnSignDataUrl('warn-into'),
+  'warn-still': () => warnSignDataUrl('warn-still')
 }
 
 /** A drawn stand-in for `images/ui/<id>.webp`, or `null` if there is none. */
@@ -362,7 +473,11 @@ export const UI_ICON_GLYPH = {
   // The two cards of the stage-3 weapon choice — the weapon itself, big, on a
   // lit plate. Their glyphs are the HUD's own weapon marks.
   'weapon-card-rocket': 'rocket',
-  'weapon-card-gatling': 'gatling'
+  'weapon-card-gatling': 'gatling',
+  // The three states of the incoming-attack alarm — see `paintWarnSign`.
+  'warn-away': 'warning',
+  'warn-into': 'warning',
+  'warn-still': 'warning'
 } as const satisfies Record<string, GameIconName>
 
 export type UiIconId = keyof typeof UI_ICON_GLYPH
@@ -382,9 +497,14 @@ export const paintUiIcon = (
     ctx.drawImage(painted, -size / 2, -size / 2, size, size)
     return
   }
-  // The forge has a drawing of its own — every other mark here IS its glyph.
+  // The forge and the three alarms have drawings of their own — every other
+  // mark here IS its glyph.
   if (id === 'forge') {
     paintForge(ctx, size)
+    return
+  }
+  if (id in WARN_TONES) {
+    paintWarnSign(ctx, size, id as WarnId)
     return
   }
   const path = new Path2D(ICON_PATHS[UI_ICON_GLYPH[id]].join(''))

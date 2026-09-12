@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tempo',
     'incoming': 'Aanval!',
     'dodge': 'Ontwijk',
+    'getIn': 'Ga erin',
+    'holdStill': 'Stilstaan',
     'milestone': '{n} man sterk!',
     'weaponActive': '{name} gereed',
+    'weaponsActive': '{a} + {b} gereed',
     'weaponLocked': '{name} vergrendeld — {n} van {total} hendels geraakt',
     'weaponGift': '{name} verderop — gratis, geen hendels',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Dubbele vuursnelheid",
       'b': "Pompt poorten sneller op"
     }
+  },
+  'bossReward': {
+    'title': "Baas verslagen!",
+    'subtitle': "Een cadeau voor level {n}. Blijf rennen!"
   },
   'result': {
     'stageClear': 'Level gehaald!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granaat',
 
-    'shield': 'Schild'
+    'shield': 'Schild',
 
+    'locked': 'Vergrendeld',
+
+    'unlocksAt': 'Vanaf level {n}',
+
+    'frost': 'Vorstnova',
+
+    'decoy': 'Lokfakkel',
+
+    'trialLabel': '{name} · gratis proberen',
+
+    'trialTag': 'Gratis proberen!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

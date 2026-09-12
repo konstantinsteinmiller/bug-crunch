@@ -31,8 +31,11 @@ export default {
     'fireRate': '連射',
     'incoming': '攻撃が来る！',
     'dodge': '回避',
+    'getIn': '中へ',
+    'holdStill': '動くな',
     'milestone': '{n}人突破！',
     'weaponActive': '{name} 準備完了',
+    'weaponsActive': '{a} + {b} 準備完了',
     'weaponLocked': '{name} ロック中 — レバー {total} 本中 {n} 本',
     'weaponGift': '{name} が前方に — 無料、レバーなし',
     'weaponFree': '無料'
@@ -90,6 +93,10 @@ export default {
       'a': "連射速度2倍",
       'b': "ゲートを速く育てる"
     }
+  },
+  'bossReward': {
+    'title': "ボス撃破！",
+    'subtitle': "ステージ{n}へのプレゼント。走り続けよう！"
   },
   'result': {
     'stageClear': 'ステージクリア！',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': '手榴弾',
 
-    'shield': 'シールド'
+    'shield': 'シールド',
 
+    'locked': 'ロック中',
+
+    'unlocksAt': 'ステージ{n}で解放',
+
+    'frost': 'フロストノヴァ',
+
+    'decoy': 'デコイフレア',
+
+    'trialLabel': '{name}・無料お試し',
+
+    'trialTag': '無料お試し！',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

@@ -1,0 +1,4 @@
+{
+  "compress": ["node", "scripts/compress-images.mjs", "{compressRoot}", "--max-effort", "--backup-dir", "public-backup", "--fresh", "--only", "{files}"],
+  "alsoHint": "Run pnpm art:models — it cuts each boss's character model from its painted walk."
+}

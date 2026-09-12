@@ -7,22 +7,33 @@ import {
   eliteAlive, eliteHp01, challenge, declines,
   startStage, advanceStage, retryStage, step, steerTo, steerBy, steerOnly, runSummary,
   attackIncoming,
+  incomingWord,
   isChargingGate, getCrates, getGates, getDividers, getBoss, getLevers, anchor, crowdRadius,
   getCages, getBulwarks,
   throwGrenade, raiseShield, shieldActive as isShieldUp,
-  activeWeapon, puzzleGift, puzzlePulled, puzzleTotal, puzzleWeapon,
+  castFrostNova, throwDecoy, frostActive, getDecoy,
+  activeWeapon, puzzleGift, puzzlePulled, puzzleTotal, puzzleWeapon, weaponPower,
+  sideWeapon, sideWeaponPower,
   rallies, readWeaponPick, setRallyPolicy, stageBeats, worldVersion,
   isExpedition, startExpedition
 } from '@/use/useSurvivalGame'
 import { EXPEDITION_STAGE } from '@/use/useDailyExpedition'
-import { WEAPON_PICK_STAGE, type WeaponId } from '@/game/weapons'
-import { SHIELD_GIFT_STAGE, nextUnlock, stagesAway, type Unlock } from '@/game/ladder'
+import {
+  BOSS_REWARD_STAGE, BOSS_REWARD_WEAPON, WEAPON_PICK_STAGE, type WeaponId
+} from '@/game/weapons'
+import {
+  DECOY_GIFT_STAGE, FROST_GIFT_STAGE, FROST_TRIAL_STAGE, SHIELD_GIFT_STAGE,
+  nextUnlock, stagesAway, type Unlock
+} from '@/game/ladder'
 import WeaponChoice from '@/components/organisms/WeaponChoice.vue'
+import BossReward from '@/components/organisms/BossReward.vue'
 import { roundedOutlineFromTop } from '@/components/atoms/outlinePath'
 import {
   drawScene, setViewport, screenToWorldX, screenDeltaToWorld, invalidateArt, worldToScreenX, getScale
 } from '@/use/useSurvivalArt'
-import { renderScaleTier, resetVfx } from '@/use/useVfx'
+import { rebaseVfx, renderScaleTier, resetVfx } from '@/use/useVfx'
+import { FEED_ON, installPreviewSeam } from '@/game/previewFeed'
+import { resetSkillFx } from '@/use/useSkillFx'
 import { warmAudio, playFx } from '@/use/useGameAudio'
 import {
   CROWD_MAX_R, CROWD_SCREEN_Y, DECLINE_FREE_THROUGH_STAGE, DECLINE_MAX, LANE_HALF, UNIT_R
@@ -31,7 +42,7 @@ import {
 import { getState, setState } from '@/use/useTowerState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
-  BULWARK_HINT_KEY, CAGE_HINT_KEY,
+  BOSS_REWARD_KEY, BULWARK_HINT_KEY, CAGE_HINT_KEY,
   GUARD_HINT_KEY, LEVER_HINT_KEY, ONBOARDED_KEY, RESULTS_SEEN_KEY, REWARD_DECLINE_KEY,
   SHOP_SPOTLIGHT_KEY, TUTORIAL_KEY, WEAPON_PICK_KEY
 } from '@/keys'
@@ -52,14 +63,18 @@ import {
   canShowInterstitial, markInterstitialShown, adInFlight, canOfferReward, claimReward, isRewardGated
 } from '@/use/useAdGate'
 import { signalGameplayLoaded, triggerHappytime } from '@/use/useCrazyGames'
-import { syncGameplayLifecycle, isGameplayLive } from '@/use/useGameplayLifecycle'
+import {
+  syncGameplayLifecycle, isGameplayLive, restartGameplayBracket
+} from '@/use/useGameplayLifecycle'
 import { isAnyModalOpen } from '@/use/useModalState'
 import { isMobileLandscape, isShortViewport } from '@/use/useUser'
 import { mobileCheck } from '@/utils/function'
 import {
   OUTSIDE_BOARD, boardSize, leaderboardEnabled, leaderboardFailed, playerTotal, rankFor, reportRun
 } from '@/use/useLeaderboard'
-import { shareCardBusy, shareCardOffered, shareRunCard } from '@/use/useShareCard'
+// The share button is commented out of the result screen — see "The share
+// card" below. The composable and its specs stay as they are.
+// import { shareCardBusy, shareCardOffered, shareRunCard } from '@/use/useShareCard'
 
 import RunHud from '@/components/game/RunHud.vue'
 import GuardianBanner from '@/components/game/GuardianBanner.vue'
@@ -69,6 +84,7 @@ import SteerHint from '@/components/game/SteerHint.vue'
 import SkillBar from '@/components/game/SkillBar.vue'
 import {
   skillReady, startCooldown, tickSkills, grenadeMultiplier, shieldDuration,
+  skillOwned, skillTrial, spendTrial,
   type SkillId
 } from '@/use/useSkills'
 import RewardAdIcon from '@/components/atoms/RewardAdIcon.vue'
@@ -139,7 +155,17 @@ const measureInsets = (): { top: number; bottom: number } => ({
  * end up disagreeing by a few pixels on a phone that just rotated.
  */
 const applyViewport = (): void => {
-  const insets = measureInsets()
+  // ── The recording's own framing ──
+  //
+  // The preview recorder hides the HUD with `visibility`, which keeps every box
+  // exactly where it was: the bars are invisible and the camera still refuses
+  // to use the two hundred pixels they occupy. So a clean feed reads the
+  // insets as zero and the road is framed against the WHOLE viewport — 40 %
+  // more scale on a phone-shaped clip, which is the difference between a lane
+  // down the middle of the frame and a lane that fills it. Nothing else moves:
+  // the crowd's screen position is a share of the viewport height, not a
+  // measurement of the HUD. See `src/game/previewFeed.ts`.
+  const insets = FEED_ON ? { top: 0, bottom: 0 } : measureInsets()
   setViewport(cssW, cssH, insets.top, insets.bottom)
   hudBottomPx.value = insets.bottom
   // The deepest a survivor is ever drawn: the anchor row, plus a full-size
@@ -222,6 +248,8 @@ const loop = (t: number): void => {
       // timer of their own — a second-resolution countdown does not need 60 Hz.
       tickSkills()
       shieldLive.value = isShieldUp()
+      frostLive.value = frostActive()
+      decoyLive.value = getDecoy() !== null
     }
     phaseEnd('step')
   }
@@ -240,6 +268,10 @@ const loop = (t: number): void => {
 // keeps its charge, because a button that eats thirty seconds for nothing is a
 // button players stop trusting.
 const shieldLive = ref(false)
+/** The world is frozen / a flare is up — the two late buttons glow rather
+ *  than wait, as the shield's does. */
+const frostLive = ref(false)
+const decoyLive = ref(false)
 
 const onUseSkill = (id: SkillId): void => {
   if (!skillReady(id)) return
@@ -248,6 +280,27 @@ const onUseSkill = (id: SkillId): void => {
   if (id === 'grenade') {
     if (!throwGrenade(grenadeMultiplier.value)) return
     startCooldown('grenade')
+    return
+  }
+
+  if (id === 'frost') {
+    // The stage-4 gift is one press of the real thing: it does everything the
+    // owned skill does, and then the slot goes back behind its question mark
+    // until stage 7 (`skillTrial`). An owned frost pays the cooldown instead.
+    const trial = !skillOwned('frost') && skillTrial('frost')
+    if (!trial && !skillOwned('frost')) return
+    if (!castFrostNova()) return
+    frostLive.value = true
+    if (trial) spendTrial('frost')
+    else startCooldown('frost')
+    return
+  }
+
+  if (id === 'decoy') {
+    if (!skillOwned('decoy')) return
+    if (!throwDecoy()) return
+    decoyLive.value = true
+    startCooldown('decoy')
     return
   }
 
@@ -715,6 +768,19 @@ const attackWarning = computed(() => {
   void hintTick.value
   return attackIncoming()
 })
+/**
+ * …and WHICH WAY, for the badge's one word.
+ *
+ * On the same 5 Hz clock as the boolean above, and read from the same place, so
+ * the two can never describe different attacks. Three of the boss pool's second
+ * verbs mark ground to get TO rather than ground to leave — see
+ * `incomingAnswer` — and the badge has to say so or it is pointing the player
+ * out of the only safe patch of road. The gaze is the third answer: STOP.
+ */
+const attackAnswer = computed(() => {
+  void hintTick.value
+  return incomingWord() ?? 'away'
+})
 // Retire it the moment the shield drops: the lesson has landed by then, and the
 // swing that follows is the part the player needs to be looking at. Persisted,
 // because a primer that reappears every boss is nagging rather than teaching.
@@ -746,12 +812,14 @@ const summary = ref(runSummary())
 
 /** The weapon choice is up — see `flowToNextStage`. */
 const showWeaponPick = ref(false)
+/** The first boss's gift is up — see `presentBossReward`. */
+const showBossReward = ref(false)
 /**
- * Something full-screen owns the road: the result screen or the weapon
- * choice. Both stop the clock, both hide the run's own controls, and both
- * are "not gameplay" to every portal listening.
+ * Something full-screen owns the road: the result screen, the weapon choice or
+ * the first boss's gift. All three stop the clock, hide the run's own controls
+ * (the chest included), and are "not gameplay" to every portal listening.
  */
-const overlayUp = computed(() => showResult.value || showWeaponPick.value)
+const overlayUp = computed(() => showResult.value || showWeaponPick.value || showBossReward.value)
 
 /**
  * The player's global rank, for the result screen.
@@ -798,12 +866,16 @@ const resultRank = computed<string>(() => {
 // than the run's: no Web Share for files, no permissions policy for it in this
 // iframe, or a refusal already seen this session, and the button does not
 // exist. See `useShareCard` for why that is three separate questions.
-const showShareCard = computed(() =>
-  summary.value.isRecord &&
-  resultRank.value !== '' &&
-  resultRank.value !== '…' &&
-  shareCardOffered.value
-)
+// TAKEN OUT OF THE SCREEN (2026-09-12): the share sheet on the devices that
+// reached it had no target that takes a picture, so the button could only
+// DOWNLOAD the card — which tells nobody about the run and leaves a stray file
+// behind. Everything below is kept so it can come back in one uncomment.
+// const showShareCard = computed(() =>
+//   summary.value.isRecord &&
+//   resultRank.value !== '' &&
+//   resultRank.value !== '…' &&
+//   shareCardOffered.value
+// )
 
 /**
  * Everything the card prints, resolved HERE.
@@ -815,19 +887,19 @@ const showShareCard = computed(() =>
  * gluing them into one string would translate "of" into English word order for
  * twenty locales.
  */
-const onShareCard = (): void => {
-  void shareRunCard({
-    stage: summary.value.stage,
-    peakSquad: summary.value.peakSquad,
-    title: t('gameName'),
-    recordLabel: t('result.newRecord'),
-    stageWord: t('leaderboard.stage'),
-    squadWord: t('leaderboard.squad'),
-    rankValue: resultRank.value,
-    rankOf: playerTotal.value > 0 ? t('result.rankOf', { n: playerTotal.value }) : '',
-    text: t('share.text', { n: summary.value.stage, game: t('gameName') })
-  })
-}
+// const onShareCard = (): void => {
+//   void shareRunCard({
+//     stage: summary.value.stage,
+//     peakSquad: summary.value.peakSquad,
+//     title: t('gameName'),
+//     recordLabel: t('result.newRecord'),
+//     stageWord: t('leaderboard.stage'),
+//     squadWord: t('leaderboard.squad'),
+//     rankValue: resultRank.value,
+//     rankOf: playerTotal.value > 0 ? t('result.rankOf', { n: playerTotal.value }) : '',
+//     text: t('share.text', { n: summary.value.stage, game: t('gameName') })
+//   })
+// }
 
 const rewardCoinRef = ref<HTMLElement | null>(null)
 const coinBadgeRef = ref<InstanceType<typeof CoinBadge> | null>(null)
@@ -882,6 +954,10 @@ const maybeShowInterstitial = async (): Promise<void> => {
  * already announced and coins worth spending. The one stop the opening stages
  * DO make on purpose is the weapon choice on the way into stage 3, and that is
  * a gift with a decision in it rather than a summary.
+ *
+ * …and, since the playtests that lost a quarter of their players at the first
+ * kill, a three-second one after stage 1: the boss's launcher, handed over as a
+ * reveal that closes itself (`presentBossReward`). A gift, not a screen.
  */
 const CONTINUOUS_THROUGH_STAGE = 3
 
@@ -889,7 +965,7 @@ const CONTINUOUS_THROUGH_STAGE = 3
 const BANNER_MS = 1700
 
 const bannerStage = ref(0)
-const bannerUnlock = ref<{ icon: GameIconName; label: string } | null>(null)
+const bannerUnlock = ref<{ icon: GameIconName; label: string; tag?: string } | null>(null)
 const bannerNext = ref<{ icon: GameIconName; text: string } | null>(null)
 const bannerTitle = ref<string | null>(null)
 const bannerShown = ref(false)
@@ -898,7 +974,7 @@ let bannerTimer: number | null = null
 const showBanner = (
   o: {
     stage: number
-    unlock?: { icon: GameIconName; label: string } | null
+    unlock?: { icon: GameIconName; label: string; tag?: string } | null
     next?: { icon: GameIconName; text: string } | null
     title?: string | null
   }
@@ -922,7 +998,9 @@ const unlockLabel = (u: Unlock): string =>
     ? t('ladder.weaponPick')
     : u.kind === 'shield'
       ? t('skills.shield')
-      : t(`weapons.${u.weapon ?? 'gatling'}`)
+      : u.kind === 'skill'
+        ? t(`skills.${u.skill ?? 'frost'}`)
+        : t(`weapons.${u.weapon ?? 'gatling'}`)
 
 const unlockWhen = (n: number): string =>
   n <= 1 ? t('ladder.nextStage') : t('ladder.stagesAway', { n })
@@ -979,6 +1057,27 @@ const grantStageGift = (clearedStage: number): { icon: GameIconName; label: stri
   return { icon: 'shield', label: t('skills.shield') }
 }
 
+/**
+ * The late skills' handover, read off the stage just cleared: the stage-4 boss
+ * pays one free Frost Nova, stage 6 the skill itself, stage 9 the Decoy Flare.
+ *
+ * Nothing is GRANTED here — ownership is read off the cleared stage in the save
+ * (`useSkills`), so the slot is already filled by the time this runs. This is
+ * only the announcement, and it is made once: on the way out of the first clear
+ * of that stage, never on a retry and never out of an expedition.
+ */
+const skillGiftFor = (
+  s: { stage: number; cleared: boolean; expedition: boolean }
+): { icon: GameIconName; label: string; tag?: string } | null => {
+  if (!s.cleared || s.expedition) return null
+  if (s.stage === FROST_TRIAL_STAGE - 1 && skillTrial('frost')) {
+    return { icon: 'snowflake', label: t('skills.frost'), tag: t('skills.trialTag') }
+  }
+  if (s.stage === FROST_GIFT_STAGE - 1) return { icon: 'snowflake', label: t('skills.frost') }
+  if (s.stage === DECOY_GIFT_STAGE - 1) return { icon: 'flare', label: t('skills.decoy') }
+  return null
+}
+
 /** A cleared stage that hands straight over to the next one. */
 const flowToNextStage = async (): Promise<void> => {
   summary.value = runSummary()
@@ -1009,11 +1108,36 @@ const flowToNextStage = async (): Promise<void> => {
   completeHandover(gift)
 }
 
+/**
+ * The next stage, picked up on the ground the last boss fell on.
+ *
+ * `advanceStage` opens the new road under the crowd and says how far it moved
+ * the world to do it; the sparks, numbers and scorch marks of the fight move by
+ * the same distance and stay where they were made. Only when nothing carried
+ * over (out of an expedition) is the debris swept instead, as before.
+ */
+const continueRoad = (): void => {
+  const moved = advanceStage()
+  if (moved !== 0) rebaseVfx(moved)
+  else resetVfx()
+  // The freeze and the flare ended with the road they were used on; their
+  // rings and frost go with them rather than drawing into the next one.
+  resetSkillFx()
+  // A NEW STAGE IS A NEW PLAY, even when the road never stopped. A handover
+  // with no screen in between moves `phase` from 'boss' through 'clear' to
+  // 'run' inside one tick, so `isLiveGameplay` reads true on both sides and
+  // reports nothing — the stage the player just cleared never ended as far as
+  // the portal is concerned, and the one they are in now never began. Plays and
+  // playtime are counted off those brackets, so the handover says it here, with
+  // the new road already open. Where a screen DID separate the two stages the
+  // bracket is already closed and this is a no-op.
+  restartGameplayBracket()
+}
+
 /** The back half of a continuous handover: the next road, and the banner. */
 const completeHandover = (gift: { icon: GameIconName; label: string } | null): void => {
-  resetVfx()
   invalidateArt()
-  advanceStage()
+  continueRoad()
   showBanner({
     stage: stage.value,
     unlock: gift,
@@ -1035,6 +1159,43 @@ const onWeaponPicked = (id: WeaponId): void => {
   void flushSaveNow()
   showWeaponPick.value = false
   completeHandover({ icon: id, label: t(`weapons.${id}`) })
+}
+
+/**
+ * ─── The first boss pays out on the spot ────────────────────────────────────
+ *
+ * A quarter of the playtesters who killed the stage-1 boss left right there —
+ * even with the road already moving on under them. The kill reads as the end
+ * of the session unless something is handed over in the same breath, so this
+ * clear skips the handover banner, the chest and every other screen, and goes
+ * straight to a one-card reveal of the launcher the stage-1 boss drops
+ * (`BOSS_REWARD_STAGE`). It closes itself on the three-second mark, and the
+ * crowd walks on from the ground the boss fell on.
+ *
+ * Everything `flowToNextStage` banks is banked here too, and — like it — no
+ * interstitial: an ad on the first win would be the worst-placed ad in the game.
+ */
+const presentBossReward = (): void => {
+  summary.value = runSummary()
+  triggerHappytime()
+  void bankCoins()
+  void reportRun(bestStage.value, summary.value.peakSquad)
+  if (!onboarded.value) {
+    onboarded.value = true
+    setState(ONBOARDED_KEY, true)
+  }
+  // The gift is the player's the moment the card goes up, tapped or not, and it
+  // is flushed before anything moves: `startStage` re-arms the launcher from
+  // this key, so a tab closed on the reveal still opens stage 2 holding it.
+  setState(BOSS_REWARD_KEY, true)
+  void flushSaveNow()
+  showBossReward.value = true
+}
+
+/** The reveal closed — tapped, or on its own at three seconds. */
+const onBossRewardDone = (): void => {
+  showBossReward.value = false
+  completeHandover({ icon: BOSS_REWARD_WEAPON, label: t(`weapons.${BOSS_REWARD_WEAPON}`) })
 }
 
 // ─── The rally ──────────────────────────────────────────────────────────────
@@ -1264,9 +1425,16 @@ const bankCoins = async (): Promise<void> => {
 
 watch(phase, (p, prev) => {
   if (p === 'clear' && prev !== p) {
+    const s = runSummary()
+    // The first boss hands over its launcher instead of a banner — see
+    // `presentBossReward`.
+    if (s.stage === BOSS_REWARD_STAGE && !s.expedition) {
+      presentBossReward()
+      return
+    }
     // A wipe always presents: the player has a decision to make there (retry,
     // and the x3 on the coins they just lost). A clear this early has none.
-    void (runSummary().stage <= CONTINUOUS_THROUGH_STAGE ? flowToNextStage() : presentResult())
+    void (s.stage <= CONTINUOUS_THROUGH_STAGE ? flowToNextStage() : presentResult())
     return
   }
   if (p === 'wipe' && prev !== p) void presentResult()
@@ -1278,10 +1446,22 @@ const beginStage = (next: boolean): void => {
   // by pressing on, which is the only honest place to read the intent.
   recordDecline()
   showResult.value = false
-  resetVfx()
   invalidateArt()
-  if (next) advanceStage()
-  else retryStage()
+  // Forward, the road opens where the boss fell (`continueRoad`). A retry goes
+  // back to the start of the stage it lost — which is that same ground, corpse
+  // and all, but not where the crowd is standing, so its debris is swept.
+  if (next) {
+    continueRoad()
+    // The late skills are handed over here, on the banner of the stage that
+    // opens them — the shield's handover, for stages that come after a result
+    // screen instead of flowing on.
+    const gift = skillGiftFor(summary.value)
+    if (gift) showBanner({ stage: stage.value, unlock: gift })
+  } else {
+    resetVfx()
+    resetSkillFx()
+    retryStage()
+  }
   startBattleMusic()
   // `isLiveGameplay` flips true here and `syncGameplayLifecycle` sends the
   // matching `gameplayStart` on the full release. Nothing to do by hand: the
@@ -1321,6 +1501,7 @@ const onStartExpedition = (): void => {
   if (adInFlight.value) return
   showResult.value = false
   resetVfx()
+  resetSkillFx()
   invalidateArt()
   startExpedition()
   showBanner({ stage: EXPEDITION_STAGE, title: t('expedition.title') })
@@ -1518,6 +1699,7 @@ const isLiveGameplay = computed(() => isGameplayLive({
 }))
 watch(isLiveGameplay, syncGameplayLifecycle, { immediate: true })
 
+
 // The hint's clock starts when the road does — not at mount, which on a first
 // run is behind the tutorial lightbox, and not at boot, which is behind the
 // splash. Five seconds of gameplay is what was asked for, so it is five seconds
@@ -1592,6 +1774,11 @@ let insetTimer = 0
 
 onMounted(() => {
   setRallyPolicy(rallyPolicy)
+  // DEV-only, and only under `?feed=` — the preview recorder's handle on the
+  // run (`tools/preview-video`). Its two scene actions are the result screen's
+  // own buttons, so a recorded clip ends on the road moving again rather than
+  // on a frozen frame behind an overlay it has hidden.
+  installPreviewSeam({ next: () => onNext(), retry: () => onRetry() })
   void boot()
   window.addEventListener('resize', resize)
   window.addEventListener('orientationchange', onOrientationChange)
@@ -1698,7 +1885,7 @@ onUnmounted(() => {
       TutorialOverlay(v-if="tutorialActive" :progress="tutorialProgress")
 
       //- Touch-only, and only for the opening seconds — see `showSteerHint`.
-      IncomingWarning(:show="attackWarning")
+      IncomingWarning(:show="attackWarning" :answer="attackAnswer")
 
       //- The lever puzzle, then the weapon it pays out. Hidden behind the
       //- result screen for the same reason every other run readout is: the
@@ -1710,6 +1897,9 @@ onUnmounted(() => {
         :total="puzzleTotal"
         :gift="puzzleGift"
         :active="activeWeapon"
+        :power="weaponPower"
+        :side="sideWeapon"
+        :side-power="sideWeaponPower"
       )
 
       StageBanner(
@@ -1727,6 +1917,8 @@ onUnmounted(() => {
       SkillBar(
         v-if="!overlayUp"
         :shield-live="shieldLive"
+        :frost-live="frostLive"
+        :decoy-live="decoyLive"
         :lane-half-px="laneHalfPx"
         :squad-floor-px="squadFloorPx"
         :hud-bottom-px="hudBottomPx"
@@ -1911,16 +2103,26 @@ onUnmounted(() => {
           //- ("Ergebnis teilen") would be the widest thing on the row in half
           //- the locales, and a share arrow is as conventional a mark as this
           //- game has. The `aria-label` is what carries the name.
-          FButton.result__share(
-            v-if="showShareCard"
-            icon-only
-            icon="share"
-            :size="resultCompact ? 'sm' : 'md'"
-            type="secondary"
-            :is-disabled="adInFlight || shareCardBusy"
-            :aria-label="t('share.action')"
-            @click="onShareCard"
-          )
+          //-
+          //- TAKEN OUT OF THE SCREEN (2026-09-12) — kept, not deleted.
+          //- On the devices that actually reached it, the share sheet had no
+          //- target that takes a picture, so the only thing the button could do
+          //- was DOWNLOAD the card to the phone. A download is not a share: it
+          //- tells nobody about the run and leaves a stray file behind, which is
+          //- a worse result screen than no button at all. The card renderer and
+          //- its offer rules are untouched (`useShareCard`, and its specs), so
+          //- putting it back is uncommenting this block and the two consts and
+          //- the import it uses — whenever there is a share path worth having.
+          //- FButton.result__share(
+          //-   v-if="showShareCard"
+          //-   icon-only
+          //-   icon="share"
+          //-   :size="resultCompact ? 'sm' : 'md'"
+          //-   type="secondary"
+          //-   :is-disabled="adInFlight || shareCardBusy"
+          //-   :aria-label="t('share.action')"
+          //-   @click="onShareCard"
+          //- )
           //- The upgrade button wears a pointer on the first three result
           //- screens only. It is a glyph in a row of glyphs, and it is the one
           //- that makes the next run different from the last.
@@ -1978,6 +2180,8 @@ onUnmounted(() => {
     //- ── The weapon choice ─────────────────────────────────────────────────
     //- The one stop the opening stages make on purpose. See `flowToNextStage`.
     WeaponChoice(:open="showWeaponPick" :stage="WEAPON_PICK_STAGE" @pick="onWeaponPicked")
+    //- The first boss's launcher. See `presentBossReward`.
+    BossReward(:open="showBossReward" :stage="BOSS_REWARD_STAGE + 1" @done="onBossRewardDone")
 
     OptionsModal(:is-open="showOptions" @close="showOptions = false")
     UpgradeModal(v-model="showUpgrades")
@@ -2385,12 +2589,14 @@ onUnmounted(() => {
   gap: clamp(0.5rem, 3vmin, 1rem)
   width: 100%
 
-// The share button is present on a handful of result screens and absent on the
-// rest, so the row's width changes with it. Nothing is pinned to compensate:
-// the row is centre-justified, the button sits at the far end from the forward
-// action, and a record screen simply has one more glyph on it. Pinning the
-// forward action instead would leave a permanent gap on every ordinary screen
-// to protect the muscle memory of a screen most players never see.
+// The share button is commented out of the template for now (see "The share
+// card"), so nothing wears this today. The rule is kept with it: the button was
+// present on a handful of result screens and absent on the rest, and nothing is
+// pinned to compensate — the row is centre-justified, the button sits at the far
+// end from the forward action, and a record screen simply has one more glyph on
+// it. Pinning the forward action instead would leave a permanent gap on every
+// ordinary screen to protect the muscle memory of a screen most players never
+// see.
 .result__share
   flex: 0 0 auto
 

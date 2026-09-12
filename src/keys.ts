@@ -108,6 +108,25 @@ export const RESULTS_SEEN_KEY = 'ts_results_seen'
  * being a decision about when to spend it.
  */
 export const SKILL_READY_KEY = 'ts_skill_ready'
+
+/**
+ * Which skills have already played their reveal — the question mark coming off
+ * a locked slot the first time the skill in it is owned (`claimReveal`).
+ *
+ * In the save rather than in memory because the one skill that is gifted (the
+ * shield) is handed over while the skill bar is not mounted, and "was it owned
+ * at boot" is the wrong question on a portal whose cloud save arrives after
+ * boot. Absent on a save that predates it, which is read as "everything already
+ * owned has been revealed".
+ */
+export const SKILL_REVEALED_KEY = 'ts_skills_revealed'
+/**
+ * The stage-4 boss's gift: one free Frost Nova, three stages before the skill is
+ * the player's for good (`skillTrial`). Holds `'spent'` once it has been used and
+ * is absent until then — the offer itself is read off the cleared stage, so a
+ * save that crossed stage 4 before the trial existed still gets its one use.
+ */
+export const FROST_TRIAL_KEY = 'ts_frost_trial'
 /**
  * One-time "the boss shielded and your fire stopped working" primer.
  *
@@ -138,7 +157,7 @@ export const LEVER_HINT_KEY = 'ts_lever_hint_seen'
  * The rescue-cage primer has been shown, and the auto-shield one.
  *
  * Same footing as `LEVER_HINT_KEY` and for the same reason, doubled: both props
- * arrive well past the onboarding ladder (stage 6 and stage 8), both are pure
+ * arrive past the onboarding ladder's reach (stage 2 and stage 8), both are pure
  * BONUS — nothing happens to a player who drives past one — and both look
  * enough like a supply crate at a glance that "another box" is the default
  * reading. A beat with no consequence for missing it is a beat the road cannot
@@ -152,6 +171,21 @@ export const CAGE_HINT_KEY = 'ts_cage_hint_seen'
 export const BULWARK_HINT_KEY = 'ts_bulwark_hint_seen'
 
 /**
+ * The boss's gaze has been shown once, on the stage-1 or stage-2 boss.
+ *
+ * Set the moment the eye actually OPENS on one of those fights — not when the
+ * attack is scheduled — because the teaching rule is "the stage-2 boss shows it
+ * if the stage-1 boss never had the chance to" (see `GAZE_TEACH_LAST_STAGE`),
+ * and a flag set on scheduling would mark the lesson delivered for a player
+ * whose stage-1 boss died before its eye ever opened.
+ *
+ * Its own key rather than the guard hint's for the reason the cage and bulwark
+ * primers each have one: two lessons, and a shared flag lets whichever arrives
+ * first silence the other.
+ */
+export const GAZE_TAUGHT_KEY = 'ts_gaze_taught'
+
+/**
  * The weapon the player chose on the handover into `WEAPON_PICK_STAGE`, as a
  * `WeaponId` — or absent, which is what makes the reveal appear.
  *
@@ -162,6 +196,16 @@ export const BULWARK_HINT_KEY = 'ts_bulwark_hint_seen'
  * shown again to a player who already chose, it is a menu.
  */
 export const WEAPON_PICK_KEY = 'ts_weapon_pick'
+
+/**
+ * The stage-1 boss has handed over its launcher (`BOSS_REWARD_STAGE`).
+ *
+ * Written the moment the reveal goes up, before the tap: the gift is given
+ * whether or not the player touches the card. Persisted for the same reasons as
+ * `WEAPON_PICK_KEY` — `startStage` re-arms the launcher on every attempt at the
+ * next stage, so a reload or a wipe does not take back a reward already shown.
+ */
+export const BOSS_REWARD_KEY = 'ts_boss_reward'
 
 // ─── The idle treasure chest ────────────────────────────────────────────────
 //

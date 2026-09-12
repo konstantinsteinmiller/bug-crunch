@@ -42,7 +42,11 @@ export type FxEvent =
    *  `-N` gate DOWN by one, which is the same clock costing the player instead
    *  of paying them. `hostile` is which of the two just happened; the mixer and
    *  the renderer both need it, because they must not celebrate. */
-  | { kind: 'gateTick'; x: number; y: number; value: number; hostile?: boolean }
+  // `value` is what the door now reads (it pitches the tick); `step` is what
+  // this tick actually added to it — the stage's pump step, a tenth on a
+  // scale door, or less than either when the cap clipped it. The number that
+  // flies up is the STEP, so a `+3` door does not print `+1` three times.
+  | { kind: 'gateTick'; x: number; y: number; value: number; step: number; hostile?: boolean }
   /** The crowd ran through a gate. `gain` is the change in squad size: positive
    *  for `add` / `mul`, NEGATIVE for the `div` and `sub` doors. */
   | { kind: 'gatePass'; x: number; y: number; op: GateOp; value: number; gain: number }
@@ -243,7 +247,23 @@ export type FxEvent =
   | { kind: 'bossBoltHit'; x: number; y: number; radius: number }
   /** A summoner spent one of its waves. `wave` is which — the last one should
    *  land differently from the first, because it is the last. */
-  | { kind: 'summonWave'; x: number; y: number; count: number; wave: number }
+  /**
+   * `flank` is true when the wave came up at the two RAILS instead of in a line
+   * ahead of the crowd — the summoner's second verb (see `FLANK_INSET`).
+   *
+   * ONE event either way, and that is a decision rather than an economy: `wave`
+   * is what every spec measuring the wall counts (`SUMMON_WAVES_MAX`), and a
+   * flanks wave logged as two events would read as the budget running out twice
+   * as fast. `x` therefore stays the crowd's own centre for both shapes — the
+   * point between the two packs — and the renderer reads `flank` to decide
+   * whether to burst there or at the rails.
+   */
+  | {
+      kind: 'summonWave'; x: number; y: number
+      count: number
+      wave: number
+      flank: boolean
+    }
   /**
    * A single body clawing up beside a summoner whose wall is spent and whose
    * crowd is down to a handful — the mercy trickle that lets a decided fight
@@ -252,6 +272,106 @@ export type FxEvent =
    * trickle logged as a wave would read as the wall never ending.
    */
   | { kind: 'summonFlank'; x: number; y: number }
+  /*
+   * ─── The second verbs ─────────────────────────────────────────────────────
+   *
+   * Same contract as every cast above — pushed at the START of the wind-up
+   * carrying the exact seconds until the damage lands — with one difference that
+   * is worth stating out loud because it inverts what a mark on the ground has
+   * meant in this game up to now.
+   *
+   * `shockCast` and `wardCast` paint ground the player is supposed to GET TO.
+   * Every other mark here says "not here"; these two say "here". The renderer
+   * has to make that unmistakable — a shock drawn in the meteor's own red would
+   * be read as a slam with a strange middle, and a player who read it that way
+   * would run out of the one place that is safe. See `drawCasts`.
+   */
+  /**
+   * The meteor's ring of fire: everything between `eye` and `outer` burns, and
+   * the disc inside `eye` does not.
+   *
+   * Both radii ride on the event because both are read by the kill
+   * (`inShockBand`), and a telegraph drawn from anything but the numbers the
+   * simulation bills against is the one lie this game will not tell.
+   */
+  | {
+      kind: 'shockCast'; x: number; y: number
+      eye: number
+      outer: number
+      ttl: number
+    }
+  /** …and it went off. Same two radii, so the scar sits exactly on the warning. */
+  | {
+      kind: 'bossShock'; x: number; y: number
+      eye: number
+      outer: number
+      /** Which swing of the fight it was, for `bossSlam`'s reason — the ring
+       *  events and the shock events are two subsequences of one sequence, and
+       *  only the swing number puts them back together. */
+      slam: number
+    }
+  /**
+   * The healer planted a ward, a full cast before the heal it belongs to.
+   *
+   * `ttl` is the seconds until the heal resolves, which is the whole cycle
+   * rather than a wind-up: the circle is on the road for the cast BEFORE the
+   * heal as well as during it, because the player has to dodge a bolt on the way
+   * to it. See `WARD_R`.
+   */
+  | { kind: 'wardCast'; x: number; y: number; radius: number; ttl: number }
+  /**
+   * …and the heal it was guarding resolved.
+   *
+   * `denied` is the share of the heal the crowd took off it, 0 to 1 — the graded
+   * coverage, not a verdict. The renderer needs the number rather than a boolean
+   * because "you denied a third of it" and "you denied all of it" are different
+   * things to say to a player, and a mechanic that reads as pass/fail when it is
+   * actually a gradient teaches people that it did not work.
+   */
+  | { kind: 'wardEnd'; x: number; y: number; radius: number; denied: number }
+  /**
+   * A burrower went under the road.
+   *
+   * The dive has no `ttl` and no geometry, and that is the fight: what follows is
+   * not an announced attack, it is a mound of earth following the crowd's own
+   * trail, drawn from the WORLD every frame by `drawBurrowMounds` for the same
+   * reason the roller's ball is — a thing that tracks cannot be described by an
+   * event pushed before it starts tracking. When the mound finally plants, THAT
+   * is announced, with the bomber's own `bombCast`, because at that point it is
+   * exactly a bomber's fuse.
+   */
+  | { kind: 'burrowDive'; x: number; y: number }
+  /*
+   * ─── The gaze ─────────────────────────────────────────────────────────────
+   *
+   * Four events, because the attack has four moments and the player has to be
+   * able to tell every one of them apart: the eye BEGINS to open (move now if
+   * you are going to), it IS open (stop), it saw you move (the beam), and it
+   * closed (you held).
+   *
+   * The opening carries both clocks — `ttl` to the moment moving becomes
+   * punishable and `watch` for how long it stays that way — so the renderer can
+   * draw the whole of the attack's timeline from the first frame, exactly as
+   * every cast above carries its seconds to impact.
+   */
+  /** The eye is opening over the boss. Moving is still free until `ttl`. */
+  | { kind: 'gazeCast'; x: number; y: number; ttl: number; watch: number }
+  /** …it is open. Any movement from here until `ttl` runs out is punished. */
+  | { kind: 'gazeWatch'; x: number; y: number; ttl: number }
+  /**
+   * It saw the crowd move, and fired down the crowd's column. `x`/`y` is where
+   * the crowd WAS when it moved (the beam finds it there), `fromX`/`fromY` the
+   * boss's eye, and `halfW` the beam's half-width — the kill reads the same
+   * number.
+   */
+  | {
+      kind: 'gazeStrike'; x: number; y: number
+      fromX: number; fromY: number
+      halfW: number
+    }
+  /** The eye shut. `kept` is true when the crowd held still the whole time — the
+   *  renderer's one chance to say "that was the answer". */
+  | { kind: 'gazeEnd'; x: number; y: number; kept: boolean }
   | { kind: 'grenadeThrow'; x: number; y: number }
   /** The player's grenade went off. */
   | { kind: 'grenade'; x: number; y: number }
@@ -259,6 +379,28 @@ export type FxEvent =
   | { kind: 'shieldUp'; x: number; y: number }
   /** …and ate a hit that would have taken a survivor. */
   | { kind: 'shieldSave'; x: number; y: number }
+  /*
+   * ─── The two late skills ──────────────────────────────────────────────────
+   *
+   * Each has a beginning, a middle and an end the player has to be able to tell
+   * apart without reading anything: the nova goes OUT from the crowd, the world
+   * holds, and the ice COMES OFF; the flare is thrown, burns, and bursts. The
+   * middles are drawn from the world every frame (`frostActive`, `getDecoy`) —
+   * these events are the three moments in between.
+   */
+  /** Everything hostile just froze. `seconds` is how long for, so the ring,
+   *  the screen's frost and the ice on every body can all count down one clock. */
+  | { kind: 'frostNova'; x: number; y: number; seconds: number }
+  /** A frozen body the crowd walked into came apart. */
+  | { kind: 'frostShatter'; x: number; y: number; big: boolean }
+  /** The freeze ran out: every body still standing sheds its ice at once. */
+  | { kind: 'frostThaw'; x: number; y: number }
+  /** The flare left the crowd's hands, bound for `tx`/`ty`. */
+  | { kind: 'decoyThrow'; x: number; y: number; tx: number; ty: number }
+  /** …it caught. From here the fight is looking at it, for `seconds`. */
+  | { kind: 'decoyLit'; x: number; y: number; seconds: number }
+  /** …and it burned down in a burst. `radius` is the hit the sim measured. */
+  | { kind: 'decoyBurst'; x: number; y: number; radius: number }
   /**
    * A rescue cage came apart. `count` is what actually got out — capped by
    * `MAX_SQUAD`, so the number the renderer prints is the number the crowd
@@ -319,7 +461,26 @@ export type FxEvent =
    */
   | { kind: 'bossRage'; x: number; y: number; stage: number }
   /** `radius` grows with every slam the boss has already thrown. */
-  | { kind: 'bossSlam'; x: number; y: number; radius: number; charged: boolean }
+  /**
+   * The boss's ring landed.
+   *
+   * `slam` is WHICH swing of the fight it was — the boss's own counter, the one
+   * `slamRadiusFor` and the charged-swing rotation are keyed to.
+   *
+   * It is on the event because the swings of a fight are no longer enumerated by
+   * the ring events it emits. From `BOSS_VARIANT_FROM_STAGE` a meteor spends
+   * some of its cycles on a shock or a gaze instead (`bossVerbPool`), so the third
+   * `bossSlam` of a fight can be the fourth SWING — and anything reading the
+   * pattern off the arrival order of these is measuring a sequence with holes in
+   * it. Two specs were doing exactly that, and both of them were right about the
+   * rule and wrong about the index.
+   */
+  | {
+      kind: 'bossSlam'; x: number; y: number
+      radius: number
+      charged: boolean
+      slam: number
+    }
   | { kind: 'bossDie'; x: number; y: number }
   | { kind: 'stageClear'; x: number; y: number }
   | { kind: 'wipe'; x: number; y: number }
@@ -1063,5 +1224,22 @@ export const resetVfx = (): void => {
   clearParticles()
   clearTexts()
   clearDecals()
+  fxQueue.length = 0
+}
+
+/**
+ * …or keep them, and move them: the handover that walks on from the boss.
+ *
+ * The next stage opens under the crowd (`advanceStage`), which re-bases the
+ * world by the crowd's own y — so the sparks still settling, the numbers still
+ * floating and the scorch marks of the fight shift by the same `dy` and stay on
+ * the ground they were made on. The queue is still dropped, exactly as
+ * `resetVfx` drops it: whatever the last tick asked for was placed in the old
+ * stage's coordinates, and nothing in it is worth a guess at translating.
+ */
+export const rebaseVfx = (dy: number): void => {
+  for (let i = 0; i < liveCount; i++) py[i]! -= dy
+  for (const t of texts) t.y -= dy
+  for (const d of decals) d.y -= dy
   fxQueue.length = 0
 }

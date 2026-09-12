@@ -10,6 +10,14 @@
 // portals now need. The indirection is one hop and keeps the scene unaware of
 // how many platforms are listening.
 //
+// ⚠️ PLAYGAMA is loaded the way every other call site loads it — a DYNAMIC
+// import behind the env flag (`main.ts`, `FLogoProgress.vue`). It has no alias
+// stub, so a static import here would pull its SDK loader into every other
+// portal's bundle. That makes its two calls asynchronous, so they are chained
+// on one promise: a handover's stop→start must reach the bridge in that order,
+// and by the time anyone is playing the module is already in the registry from
+// boot, so the chain resolves on the next microtask.
+//
 // ⚠️ POKI: the caller drives this from `watch(isLiveGameplay, …)`, and
 // `isLiveGameplay` is a computed over five reactive inputs — so a modal closing
 // in the same tick an ad opens emits a stop→start pair microseconds apart. On
@@ -86,7 +94,18 @@ export const isGameplayLive = (i: GameplayLiveInputs): boolean =>
  * arm collapses a repeat of the state it is already in, so callers may fire it
  * as often as their reactive source changes.
  */
+/**
+ * What the portals were last TOLD — not what the game is doing.
+ *
+ * `restartGameplayBracket` needs to know whether a play is still open from the
+ * portals' point of view, and the scene's own flag cannot answer that: during a
+ * handover it reads false for the single tick `phase` spends on 'clear', which
+ * no watcher ever observes.
+ */
+let reported = false
+
 export const syncGameplayLifecycle = (live: boolean): void => {
+  reported = live
   // Sprite baking rides the same edge. A monster frame costs up to ~12 ms and
   // cannot be sliced smaller, so it must never run while the player is playing;
   // every break this signal reports — the result screen, a modal, an ad, the
@@ -99,4 +118,70 @@ export const syncGameplayLifecycle = (live: boolean): void => {
     if (live) pokiGameplayStart()
     else pokiGameplayStop()
   }
+
+  syncPlaygamaGameplay(live)
 }
+
+/**
+ * Playgama's half of the fan-out, in order.
+ *
+ * Its certification asks for `gameplay_started` / `gameplay_stopped` around
+ * play, and until now nothing in the game called either: the two functions sat
+ * in `playgamaPlugin` unused, so that portal saw a session with no plays in it.
+ *
+ * Every call is appended to one promise chain rather than fired as it resolves,
+ * because a stop and the start after it would otherwise race — and a start that
+ * overtook its stop would leave the bridge believing the first play never
+ * ended. The plugin's own pair is idempotent, so a repeat of the state it is
+ * already in costs nothing.
+ */
+let playgamaChain: Promise<void> = Promise.resolve()
+
+const syncPlaygamaGameplay = (live: boolean): void => {
+  if (import.meta.env.VITE_APP_PLAYGAMA !== 'true') return
+  playgamaChain = playgamaChain
+    .then(async () => {
+      const m = await import('@/utils/playgamaPlugin')
+      if (live) m.playgamaGameplayStart()
+      else m.playgamaGameplayStop()
+    })
+    // A portal SDK that throws must never break the bracket for the others, and
+    // must never poison the chain for the next stage either.
+    .catch((e) => { console.warn('[playgama] gameplay signal failed', e) })
+}
+
+/** Test seam: settle the asynchronous arms. */
+export const __gameplayFanoutIdle = (): Promise<void> => playgamaChain
+
+/**
+ * A new stage began while the player never stopped playing.
+ *
+ * The road does not reset between stages any more (see "The road goes on" in
+ * `useSurvivalGame`): a cleared boss hands straight over to the next stage, and
+ * `phase` passes 'boss' → 'clear' → 'run' inside ONE tick. Nothing watching the
+ * live flag can see that, because it reads true on both sides — so the portals
+ * heard neither the end of the play the player finished nor the start of the one
+ * they are now in, and a career of twenty stages arrived as a single endless
+ * play. CrazyGames counts plays and playtime off those brackets, Poki grades its
+ * funnel on them, and a game that never sends a second start looks like a game
+ * nobody finished a level of.
+ *
+ * So a handover says it by hand: close the bracket, open the next. Every arm
+ * takes an immediate pair safely — CrazyGames' start/stop are idempotent off a
+ * flag, and `pokiGameplayStart` DEFERS (never drops) a start landing inside the
+ * SDK's 50 ms guard window rather than spending a bad event on it.
+ *
+ * Only for a handover with no screen in between. Where a result screen, a gift
+ * reveal or an ad separates the two stages the live flag really does change, and
+ * `syncGameplayLifecycle` already sends both halves.
+ */
+export const restartGameplayBracket = (): void => {
+  // Already closed — a result screen, a reveal, an ad or a hidden tab ended the
+  // play, and the flag that closed it will open the next one.
+  if (!reported) return
+  syncGameplayLifecycle(false)
+  syncGameplayLifecycle(true)
+}
+
+/** Test seam: forget what the portals were told. */
+export const __resetGameplayBracket = (): void => { reported = false }

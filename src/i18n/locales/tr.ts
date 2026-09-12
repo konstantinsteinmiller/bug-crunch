@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Hız',
     'incoming': 'Saldırı geliyor!',
     'dodge': 'Kaç',
+    'getIn': 'İçine gir',
+    'holdStill': 'Kıpırdama',
     'milestone': '{n} savaşçı!',
     'weaponActive': '{name} hazır',
+    'weaponsActive': '{a} + {b} hazır',
     'weaponLocked': '{name} kilitli — {total} kolun {n} tanesi vuruldu',
     'weaponGift': '{name} ileride — bedava, kol yok',
     'weaponFree': 'BEDAVA'
@@ -90,6 +93,10 @@ export default {
       'a': "İki kat atış hızı",
       'b': "Kapıları daha hızlı doldurur"
     }
+  },
+  'bossReward': {
+    'title': "Patron yenildi!",
+    'subtitle': "Bölüm {n} için bir hediye. Koşmaya devam!"
   },
   'result': {
     'stageClear': 'Bölüm tamamlandı!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'El Bombası',
 
-    'shield': 'Kalkan'
+    'shield': 'Kalkan',
 
+    'locked': 'Kilitli',
+
+    'unlocksAt': '{n}. bölümde açılır',
+
+    'frost': 'Buz Novası',
+
+    'decoy': 'Tuzak Fişeği',
+
+    'trialLabel': '{name} · ücretsiz dene',
+
+    'trialTag': 'Ücretsiz dene!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

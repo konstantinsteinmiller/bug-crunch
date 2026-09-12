@@ -12,6 +12,7 @@ import {
   type UpgradeId
 } from '@/use/useUpgrades'
 import { playFx } from '@/use/useGameAudio'
+import { stage } from '@/use/useSurvivalGame'
 
 /**
  * The between-runs shop.
@@ -90,6 +91,10 @@ interface Row {
 
 const rows = computed<Row[]>(() => {
   void version.value
+  // Squad's readout is priced in the stage's own doors, so it is read for the
+  // stage on screen: the one being played, or the one just finished on the
+  // result screen.
+  const at = stage.value
   return UPGRADE_ORDER.map((id) => {
     const level = upgradeLevel(id)
     const def = UPGRADES[id]
@@ -100,8 +105,8 @@ const rows = computed<Row[]>(() => {
       level,
       maxed,
       cost,
-      current: def.valueAt(level),
-      next: def.valueAt(Math.min(def.maxLevel, level + 1)),
+      current: def.valueAt(level, at),
+      next: def.valueAt(Math.min(def.maxLevel, level + 1), at),
       affordable: !maxed && coins.value >= cost
     }
   })

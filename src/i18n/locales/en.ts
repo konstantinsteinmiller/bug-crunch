@@ -49,6 +49,8 @@ export default {
     'fireRate': 'Rate',
     'incoming': 'Incoming attack!',
     'dodge': 'Dodge',
+    'getIn': 'Get in',
+    'holdStill': 'Hold still',
     // ─── The round-number badge ─────────────────────────────────────────────
     // A gold pill under the squad chip for 1.4 s when the crowd doubles past a
     // rung of the milestone ladder (25 / 50 / 100 / 200 / 400 …). It sits in a
@@ -64,6 +66,8 @@ export default {
     // clarity, not for brevity — nothing on screen depends on their length.
     // `{n}` / `{total}` are the levers pulled and the levers there are.
     'weaponActive': '{name} ready',
+    // Both guns at once — stage 2's gatling over the first boss's launcher.
+    'weaponsActive': '{a} + {b} ready',
     'weaponLocked': '{name} locked — {n} of {total} levers shot',
     // Stage 2's free box, which has no levers to count. It replaces the locked
     // wording there: a badge saying "locked — 0 of 0 levers shot" over the one
@@ -208,6 +212,15 @@ export default {
       'b': 'Pumps gates faster'
     }
   },
+  // ─── The first boss's gift ────────────────────────────────────────────────
+  // A one-card reveal the moment the stage-1 boss dies: the launcher it drops,
+  // up for three seconds at most. The title rides the iron ribbon, so keep it an
+  // exclamation of two or three words; the subtitle sits under it on one line
+  // of a phone. `{n}` is the stage the launcher is for.
+  'bossReward': {
+    'title': 'Boss defeated!',
+    'subtitle': 'A gift for Stage {n}. Keep running!'
+  },
   'result': {
     'stageClear': 'Stage Clear!',
     'wipedOut': 'Squad Wiped Out',
@@ -326,7 +339,14 @@ export default {
 
   'skills': {
     'grenade': 'Grenade',
-    'shield': 'Shield'
+    'shield': 'Shield',
+    'locked': 'Locked',
+    'unlocksAt': 'Unlocks at stage {n}',
+    'frost': 'Frost Nova',
+    'decoy': 'Decoy Flare',
+    'trialLabel': '{name} · free try',
+    'trialTag': 'Free try!',
+    'uses': '×{n}'
   },
   'upgrades': {
     'title': 'Upgrades',

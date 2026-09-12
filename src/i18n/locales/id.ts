@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Laju',
     'incoming': 'Serangan datang!',
     'dodge': 'Hindari',
+    'getIn': 'Masuk',
+    'holdStill': 'Diam',
     'milestone': '{n} pasukan!',
     'weaponActive': '{name} siap',
+    'weaponsActive': '{a} + {b} siap',
     'weaponLocked': '{name} terkunci — {n} dari {total} tuas ditembak',
     'weaponGift': '{name} di depan — gratis, tanpa tuas',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Laju tembak dua kali lipat",
       'b': "Memompa gerbang lebih cepat"
     }
+  },
+  'bossReward': {
+    'title': "Bos dikalahkan!",
+    'subtitle': "Hadiah untuk Level {n}. Terus berlari!"
   },
   'result': {
     'stageClear': 'Tahap selesai!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granat',
 
-    'shield': 'Perisai'
+    'shield': 'Perisai',
 
+    'locked': 'Terkunci',
+
+    'unlocksAt': 'Terbuka di level {n}',
+
+    'frost': 'Nova Beku',
+
+    'decoy': 'Suar Umpan',
+
+    'trialLabel': '{name} · coba gratis',
+
+    'trialTag': 'Coba gratis!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

@@ -219,7 +219,8 @@ const shop = (
       coins,
       levels: readLevels(graph),
       cost,
-      startSquad: graph.shop.startSquad.value,
+      startSquad: graph.shop.startSquadAt(stage),
+      squadPerLevel: graph.shop.squadPerLevel(stage),
       damage: graph.shop.unitDamage.value,
       fireRate: graph.shop.fireRate.value,
       coinMultiplier: graph.shop.coinMultiplier.value,
@@ -417,8 +418,18 @@ export interface StageProbeOptions {
  * It is also how the autobalancer gets tested: `challenge` and `failures` are
  * the two inputs, and holding everything else still is what turns "the streak
  * makes it harder" from a claim into a number.
+ *
+ * Each result also says which road weapon the crowd was holding when the run
+ * ended (`weapon`). A weapon is only handed out on the road and only cleared by
+ * `startStage`, so that is the gun that walked into the boss — and from stage 6
+ * the boss's melt floor is priced off the crowd's real firepower, weapon
+ * included, so a run that solved the lever puzzle meets a boss several times
+ * tankier than one that did not. Anything comparing boss health across runs
+ * has to know which of the two it is looking at.
  */
-export const probeStage = async (o: StageProbeOptions): Promise<RunResult[]> => {
+export const probeStage = async (
+  o: StageProbeOptions
+): Promise<Array<RunResult & { weapon: string | null }>> => {
   const graph = await newGraph()
   graph.state.__resetTowerState()
 
@@ -427,7 +438,7 @@ export const probeStage = async (o: StageProbeOptions): Promise<RunResult[]> => 
     for (let i = 0; i < want; i++) if (!graph.shop.applyUpgrade(id)) break
   }
 
-  const out: RunResult[] = []
+  const out: Array<RunResult & { weapon: string | null }> = []
   for (const seed of o.seeds) {
     // Reset the autobalancer's two inputs before EVERY seed: the previous run
     // ended in a clear or a wipe, and `finishRun` wrote both of them.
@@ -435,12 +446,13 @@ export const probeStage = async (o: StageProbeOptions): Promise<RunResult[]> => 
       [CHALLENGE_KEY]: o.challenge ?? 0,
       [FAILED_STAGES_KEY]: o.failures ? { [String(o.stage)]: o.failures } : {}
     })
-    out.push(playOne(graph, {
+    const r = playOne(graph, {
       stage: o.stage,
       policy: o.policy,
       seed,
       maxSeconds: o.maxSeconds ?? CAREER_MAX_SECONDS
-    }))
+    })
+    out.push({ ...r, weapon: graph.game.activeWeapon.value })
   }
   return out
 }

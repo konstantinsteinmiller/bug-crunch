@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Rate',
     'incoming': 'Angriff!',
     'dodge': 'Ausweichen',
+    'getIn': 'Rein da',
+    'holdStill': 'Stillhalten',
     'milestone': '{n} Mann stark!',
     'weaponActive': '{name} bereit',
+    'weaponsActive': '{a} + {b} bereit',
     'weaponLocked': '{name} gesperrt — {n} von {total} Hebeln getroffen',
     'weaponGift': '{name} voraus — gratis, keine Hebel',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Doppelte Feuerrate",
       'b': "Pumpt Tore schneller"
     }
+  },
+  'bossReward': {
+    'title': "Boss besiegt!",
+    'subtitle': "Ein Geschenk für Level {n}. Lauf weiter!"
   },
   'result': {
     'stageClear': 'Level geschafft!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granate',
 
-    'shield': 'Schild'
+    'shield': 'Schild',
 
+    'locked': 'Gesperrt',
+
+    'unlocksAt': 'Ab Level {n}',
+
+    'frost': 'Frostnova',
+
+    'decoy': 'Lockfackel',
+
+    'trialLabel': '{name} · gratis testen',
+
+    'trialTag': 'Gratis testen!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

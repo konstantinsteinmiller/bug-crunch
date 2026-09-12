@@ -107,7 +107,7 @@ describe('tower_state cloud hydrate → composable refresh', () => {
     const data = await seededCloud()
     await bootCloudOnly(data)
 
-    const { upgradeLevel, unitDamage, startSquad } = await import('@/use/useUpgrades')
+    const { upgradeLevel, unitDamage, startSquadAt } = await import('@/use/useUpgrades')
     expect(upgradeLevel('power')).toBe(3)
     expect(upgradeLevel('scavenge')).toBe(2)
     // And the derived run stats follow — otherwise the purchased content
@@ -117,7 +117,8 @@ describe('tower_state cloud hydrate → composable refresh', () => {
     const { UPGRADES } = await import('@/use/useUpgrades')
     expect(unitDamage.value).toBeCloseTo(UPGRADES.power.valueAt(3), 5)
     expect(unitDamage.value).toBeGreaterThan(UPGRADES.power.valueAt(0))
-    expect(startSquad.value).toBe(4)
+    // One Squad level, read on stage 1, where a level is one survivor.
+    expect(startSquadAt(1)).toBe(4)
   })
 
   it('refreshes user settings so the player keeps their language and volume', async () => {
@@ -138,8 +139,11 @@ describe('tower_state cloud hydrate → composable refresh', () => {
     game.startStage()
     expect(game.stage.value).toBe(14)
     // And the squad it opens with reflects the hydrated upgrade level, not the
-    // fresh-install default.
-    expect(game.squadCount.value).toBe(4)
+    // fresh-install default: one Squad level is three survivors on stage 14
+    // (`squadPerLevel`), on top of the three everyone starts with.
+    const { squadPerLevel } = await import('@/use/useUpgrades')
+    expect(squadPerLevel(14)).toBe(3)
+    expect(game.squadCount.value).toBe(3 + squadPerLevel(14))
 
     // Drain this module instance's pending persist timer. `vi.resetModules()`
     // gives the NEXT test fresh modules but cannot cancel a timer already

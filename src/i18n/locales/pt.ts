@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Ritmo',
     'incoming': 'Ataque a caminho!',
     'dodge': 'Desvie',
+    'getIn': 'Entre',
+    'holdStill': 'Parado',
     'milestone': '{n} em campo!',
     'weaponActive': '{name} pronto',
+    'weaponsActive': '{a} + {b} prontos',
     'weaponLocked': '{name} bloqueado — {n} de {total} alavancas atingidas',
     'weaponGift': '{name} à frente — grátis, sem alavancas',
     'weaponFree': 'GRÁTIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Cadência de tiro dobrada",
       'b': "Carrega portões mais rápido"
     }
+  },
+  'bossReward': {
+    'title': "Chefe derrotado!",
+    'subtitle': "Um presente para o nível {n}. Continue correndo!"
   },
   'result': {
     'stageClear': 'Fase concluída!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granada',
 
-    'shield': 'Escudo'
+    'shield': 'Escudo',
 
+    'locked': 'Bloqueado',
+
+    'unlocksAt': 'Desbloqueia no nível {n}',
+
+    'frost': 'Nova de gelo',
+
+    'decoy': 'Sinalizador isca',
+
+    'trialLabel': '{name} · teste grátis',
+
+    'trialTag': 'Teste grátis!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

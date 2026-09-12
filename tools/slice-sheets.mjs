@@ -33,6 +33,7 @@
  * aspect ratio does not match the index is REJECTED rather than best-guessed.
  */
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync,
   existsSync, readdirSync, statSync
@@ -82,6 +83,8 @@ const num = (name, fallback) => {
 }
 
 const DRY = flag('--dry')
+// Cut a painting even though its reference was redrawn since — see "The receipt".
+const STALE_OK = flag('--stale-ok')
 const OUT_ROOT = resolve(ROOT, opts['--out'] ?? 'public')
 const QUALITY = num('--quality', 0.92)
 const FORCE_SHEET = opts['--sheet'] ?? null
@@ -131,6 +134,15 @@ const FRAMES_OVERRIDE = num('--frames', null)
 // asked. A model handed a low, wide creature fills the air above it with another
 // row or two of the same cycle; the top rows are the cycle it was asked for.
 const TAKE_ROWS = num('--take-rows', null)
+// Cut a return that came back ruled like a comic strip, painting the rules out
+// first — see the border check below. Off by default: a ruled return usually
+// has captions inside the panels too, and those cannot be painted out.
+const DROP_BORDERS = flag('--drop-borders')
+// Flip the whole sheet before cutting, for a return that came back facing the
+// wrong way. Side-on creatures come back mirrored about half the time however
+// plainly the prompt says which way they face, and a flip is exact: the same
+// painting, the way the game's own walk faces.
+const MIRROR = flag('--mirror')
 const NO_CHROMA = flag('--no-chroma')
 const NO_TRIM = flag('--no-trim')
 const NO_AUTO_BG = flag('--no-auto-bg')
@@ -170,6 +182,17 @@ Slice repainted contact sheets back into drop-in bitmaps.
                    a 4x2): cut only the first n rows and play them as the
                    cycle. Use this when the extra rows repeat the cycle;
                    use --frames when they continue it.
+  --stale-ok       Slice a painting even though its reference was redrawn since it
+                   was painted. Off by default: the receipt in
+                   painted/.sliced.json is what stops a re-cut drawing quietly
+                   getting its OLD painting back.
+  --drop-borders   Cut a return that came back ruled like a comic strip, painting
+                   the rules out of the cut lines first. Refused by default —
+                   look at the return before using this, because a ruled one
+                   usually has captions inside the panels, and those stay.
+  --mirror         Flip every PANEL left-to-right before cutting, for a return
+                   that came back facing the wrong way (the panel order is kept,
+                   so the animation still runs forwards).
   --dry            Print the plan and write nothing.
 `)
   process.exit(0)
@@ -403,11 +426,84 @@ const safeTarget = (target) => {
   return rel && !rel.startsWith('..') && !rel.startsWith(sep) ? full : null
 }
 
+// ─── The receipt: what each painting was cut against ────────────────────────
+//
+// (Ported from the art-generation-pipeline skill's slicer.) A painting is a
+// snapshot of a DRAWING, and the drawing moves: when a design is re-cut, the
+// next slice anybody runs — for an unrelated sheet — would put the OLD painting
+// back over the corrected drawing, silently.
+//
+// So a successful slice leaves `painted/.sliced.json`: per painting, the
+// REVISION of the reference it was cut against (first 12 hex of a sha1 over the
+// clean exported sheet) and the painting's OWN hash. When the reference has
+// changed since, that painting is refused (`--stale-ok` overrides). The
+// painting's hash is what lets a re-roll saved under the old name through: a
+// line only ever describes the bytes it was written for.
+//
+// No receipt (a fresh clone, a first run) refuses nothing. `pnpm art:prompts`
+// reads the same file for `PAINT-STATUS.md`; a refused painting belongs in
+// `painted/retired/` (or `stale/`), with its sliced .webp files deleted.
+
+const RECEIPT = join(PAINTED, '.sliced.json')
+const receipt = (() => {
+  try {
+    const r = JSON.parse(readFileSync(RECEIPT, 'utf-8'))
+    return r && typeof r === 'object' ? (r.files ?? {}) : {}
+  } catch {
+    // Missing or corrupt: a receipt only ever ADDS a refusal, so the safe
+    // failure is to behave as if nothing had been sliced yet.
+    return {}
+  }
+})()
+const receiptNext = { ...receipt }
+
+/** The clean reference a painting was made from, if it is still on disk. */
+const referenceOf = (sheet) => {
+  const stem = sheet.stems?.[0]
+  if (!stem) return null
+  const p = join(ROOT, 'art-sheets', `${stem}.png`)
+  return existsSync(p) ? p : null
+}
+
+const revOf = (file) => createHash('sha1').update(readFileSync(file)).digest('hex').slice(0, 12)
+
+/** `{ ok }` to go ahead, `{ ok: false, why }` to refuse; a `warn` either way. */
+const freshness = (file, sheet) => {
+  const ref = referenceOf(sheet)
+  if (!ref) return { ok: true }
+  const rev = revOf(ref)
+  const own = revOf(file)
+  let seen = receipt[basename(file)]
+  // The same NAME with different bytes is a new painting the old line says
+  // nothing about.
+  if (seen?.painting && seen.painting !== own) seen = undefined
+  if (seen?.rev && seen.rev !== rev) {
+    return {
+      ok: false,
+      rev,
+      why: `the reference was REDRAWN after this was painted (${seen.rev} → ${rev}).`
+        + `\n    ${relative(ROOT, ref)} is not the picture this file was painted over any more.`
+        + '\n    Repaint it from the new sheet, or pass --stale-ok to cut it anyway.'
+    }
+  }
+  if (!seen && statSync(ref).mtimeMs > statSync(file).mtimeMs + 60_000) {
+    return {
+      ok: true, rev, own,
+      warn: `no receipt for this one yet, and ${basename(ref)} is newer than it.`
+        + ' If the drawing changed since it was painted, this cuts the OLD one — check it, or repaint.'
+    }
+  }
+  return { ok: true, rev, own }
+}
+
 let written = 0
 let skipped = 0
 // The sheets refused above for having more than one return in the input are
 // already counted, so the run exits non-zero and the tally names them.
 let failed = AMBIGUOUS.size
+// Creature walks written this run: each is the character a boss's death is
+// painted AS (`tools/art-models.mjs`), so its model is re-cut after the run.
+const cutWalks = new Set()
 
 try {
   let page = null
@@ -469,6 +565,18 @@ try {
     }
     // Reported once, up front, with every file that claims it.
     if (AMBIGUOUS.has(sheet.id)) continue
+
+    // A painting of a drawing that has since moved is not this drawing's
+    // painting — see "The receipt" above.
+    const fresh = freshness(file, sheet)
+    if (!fresh.ok && !STALE_OK) {
+      console.error(`\n✗ ${basename(file)} — ${fresh.why}`)
+      failed++
+      continue
+    }
+    if (!fresh.ok) console.warn(`\n  ! ${basename(file)} — ${fresh.why.split('\n')[0]} Slicing anyway (--stale-ok).`)
+    if (fresh.warn) console.warn(`  ! ${fresh.warn}`)
+    if (fresh.rev) receiptNext[basename(file)] = { sheet: sheet.id, rev: fresh.rev, painting: fresh.own ?? revOf(file), at: new Date().toISOString() }
 
     // The sheet may come back at a different resolution than it left at, which
     // is fine and expected. What is NOT fine is a different SHAPE: that means
@@ -657,13 +765,121 @@ try {
           const top = refs[0] ?? [0, 0, 0];
           const hex = '#' + top.map((v) => v.toString(16).padStart(2, '0')).join('');
           const isMagenta = top[1] < 70 && top[0] > 190 && top[2] > 190;
-          return JSON.stringify({ cols: colsN, rows: rowsN, W, H, hex, isMagenta });
+
+          // ── Painted panel edges ──
+          // How much of each NOMINAL cut line has dark ink on it. The fit above
+          // forgives a drawn divider on purpose (it reads the count through
+          // it), but a return drawn as a comic strip — ruled borders round every
+          // panel, a caption at the top of each — comes back with both inside
+          // the frames. A creature never runs the length of a cut; a rule does.
+          const dark = (k) => {
+            const i = k * 4;
+            if (d[i + 3] < 8) return false;
+            if (d[i + 1] < 70 && d[i] > 190 && d[i + 2] > 190) return false;
+            return d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 80;
+          };
+          const ink = (n, m, at, parts) => {
+            const out = [];
+            const win = Math.max(3, Math.round(n * 0.008));
+            for (let i = 1; i < parts; i++) {
+              const a0 = Math.round((n * i) / parts);
+              let hit = 0;
+              for (let b = 0; b < m; b++) {
+                for (let o = -win; o <= win; o++) {
+                  const a = a0 + o;
+                  if (a >= 0 && a < n && dark(at(a, b))) { hit++; break; }
+                }
+              }
+              out.push(+(hit / m).toFixed(3));
+            }
+            return out;
+          };
+          const inkV = ink(W, H, (x, y) => y * W + x, ${sheet.cols});
+          const inkH = ink(H, W, (y, x) => y * W + x, ${sheet.rows});
+          return JSON.stringify({ cols: colsN, rows: rowsN, W, H, hex, isMagenta, inkV, inkH });
         })()`,
         returnByValue: true
       })
       const got = seen.exceptionDetails ? null : JSON.parse(seen.result.value)
       const wantCols = sheet.cols
       const wantRows = sheet.rows
+
+      // Ruled like a comic strip: refused, because the rules and whatever was
+      // written between them (the painted deaths came back captioned "THE BLOW
+      // LANDS", "IT STAGGERS"…) would be cut into every frame.
+      const ruled = [...(got?.inkV ?? []), ...(got?.inkH ?? [])]
+      let dropBorders = false
+      if (ruled.some((f) => f > 0.7)) {
+        const shown = `dark ink along ${ruled.filter((f) => f > 0.7).length} of the ${ruled.length}`
+          + ` cut lines (${ruled.map((f) => `${Math.round(f * 100)}%`).join(', ')})`
+        if (!DROP_BORDERS) {
+          console.error(`  ✗ panel borders are painted on it — ${shown}.`)
+          console.error('    A return ruled like a comic strip carries the rules, and usually')
+          console.error('    captions, into every frame. Nothing was written — re-generate it,')
+          console.error('    or pass --drop-borders to paint the rules out and cut it anyway')
+          console.error('    (look at it first: a ruled return often has captions too).')
+          failed++
+          continue
+        }
+        // Salvage: the rules lie ON the cut lines, which is ground no panel may
+        // use, so painting a band of background over them costs nothing that
+        // belongs to a creature — and saves a good generation from its frame.
+        console.warn(`  ! panel borders painted on it — ${shown}. Painting them out (--drop-borders).`)
+        dropBorders = true
+      }
+
+      // The two repairs that are pure geometry, done in one pass over the
+      // sheet before anything is measured off it or cut out of it.
+      if (dropBorders || MIRROR) {
+        if (MIRROR) console.warn('  ! flipping every panel left-to-right (--mirror).')
+        const fixed = await send('Runtime.evaluate', {
+          expression: `(() => {
+            const img = globalThis.__sheet;
+            const W = img.naturalWidth ?? img.width, H = img.naturalHeight ?? img.height;
+            const cv = document.createElement('canvas');
+            cv.width = W; cv.height = H;
+            const c2 = cv.getContext('2d');
+            if (${MIRROR}) {
+              // Each PANEL is flipped where it lies: flipping the whole sheet
+              // would run the animation backwards.
+              const pw = W / ${sheet.cols}, ph = H / ${sheet.rows};
+              for (let r = 0; r < ${sheet.rows}; r++) {
+                for (let c = 0; c < ${sheet.cols}; c++) {
+                  c2.save();
+                  c2.translate(c * pw + pw, r * ph);
+                  c2.scale(-1, 1);
+                  c2.drawImage(img, c * pw, r * ph, pw, ph, 0, 0, pw, ph);
+                  c2.restore();
+                }
+              }
+            } else {
+              c2.drawImage(img, 0, 0);
+            }
+            if (${dropBorders}) {
+              c2.fillStyle = '#ff00ff';
+              const win = Math.max(3, Math.round(W * 0.008));
+              for (let i = 1; i < ${sheet.cols}; i++) c2.fillRect(Math.round(W * i / ${sheet.cols}) - win, 0, win * 2, H);
+              const winY = Math.max(3, Math.round(H * 0.008));
+              for (let i = 1; i < ${sheet.rows}; i++) c2.fillRect(0, Math.round(H * i / ${sheet.rows}) - winY, W, winY * 2);
+              // The box drawn round the whole sheet goes too, or its sides end
+              // up inside the first and last frame of each row.
+              c2.fillRect(0, 0, win, H);
+              c2.fillRect(W - win, 0, win, H);
+              c2.fillRect(0, 0, W, winY);
+              c2.fillRect(0, H - winY, W, winY);
+            }
+            cv.naturalWidth = W; cv.naturalHeight = H;
+            globalThis.__sheet = cv;
+            return 'ok';
+          })()`,
+          returnByValue: true
+        })
+        if (fixed.exceptionDetails) {
+          console.error('  ✗ could not rework the sheet — nothing was written.')
+          failed++
+          continue
+        }
+      }
 
       if (sheet.frames === 1) {
         // A still has no grid to verify — two posts with an open doorway
@@ -1680,7 +1896,16 @@ try {
           console.warn(`    ! frame${r.missing.length > 1 ? 's' : ''} ${r.missing.join(', ')}`
             + ` of ${r.frames} came back EMPTY — the walk will hitch there.`)
         }
-        const spread = (xs) => (xs?.length ? Math.max(...xs) - Math.min(...xs) : 0)
+        // A DEATH moves on purpose: it rears, drops, lands and lies down, so the
+        // three checks below — one feet line, one centre, one size — would all
+        // fire on a perfect return. What it owes instead is a last panel that
+        // reads as the body, and that is a look, not a number.
+        const death = sheet.artKind === 'death'
+        if (death) {
+          console.log('    · a death strip: bob / drift / size checks skipped — look at the'
+            + ' last panel in /playground, it is held on screen as the corpse.')
+        }
+        const spread = (xs) => (death || !xs?.length ? 0 : Math.max(...xs) - Math.min(...xs))
         // The feet must land on one line. This is the difference between a walk
         // and a hop, and it is the single most likely thing to be wrong.
         const foot = spread(r.feet)
@@ -1715,6 +1940,7 @@ try {
         mkdirSync(dirname(full), { recursive: true })
         writeFileSync(full, bytes)
         console.log(`  ✓ ${r.id.padEnd(26)} ${shown}`)
+        if (sheet.artKind === 'monster') cutWalks.add(sheet.id)
       }
       written++
 
@@ -1737,6 +1963,25 @@ try {
         }
         written++
       }
+    }
+  }
+
+  // The receipt records what was actually cut, so a dry run — or a run into a
+  // scratch `--out` — leaves it alone.
+  if (written && !DRY && OUT_ROOT === resolve(ROOT, 'public')) {
+    mkdirSync(PAINTED, { recursive: true })
+    writeFileSync(RECEIPT, `${JSON.stringify({ note: 'written by tools/slice-sheets.mjs — the reference revision each painting was cut against', files: receiptNext }, null, 2)}\n`, 'utf-8')
+  }
+
+  // A re-cut walk is a new look for the creature, and a death painted from the
+  // old model would come back as the old one. Only for a real cut into public/.
+  if (cutWalks.size && !DRY && OUT_ROOT === resolve(ROOT, 'public')) {
+    try {
+      const { writeModels } = await import('./art-models.mjs')
+      console.log('\ncharacter models (what each boss death is painted AS):')
+      await writeModels({ root: ROOT, only: [...cutWalks] })
+    } catch (e) {
+      console.warn(`\n  ! could not re-cut the character models (${e.message}) — run pnpm art:models`)
     }
   }
 

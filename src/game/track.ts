@@ -1,5 +1,9 @@
 import {
+  BARRICADE_H,
   BARRICADE_W,
+  BULWARK_R,
+  DIVIDER_H,
+  DIVIDER_HALF_W,
   ROCK_H,
   ROCK_W,
   BOSS_BASE_HP,
@@ -12,7 +16,7 @@ import {
   GATE3_LEAF_X,
   GATE_LEAF_HALF,
   GATE_LEAF_X,
-  GATE_MAX_VALUE, GATE_MUL_MAX, GATE_SCALE_STEP, GATE_SUB_MAX,
+  GATE_GROWTH_TRIM, GATE_MAX_VALUE, GATE_MUL_MAX, GATE_SCALE_STEP, GATE_SUB_MAX,
   MAX_SQUAD,
   START_SQUAD,
   earlyCrateHpMul, earlyMinibossHpMul, earlyObstacleKeep, earlyPackCap, earlyPackMul,
@@ -354,13 +358,45 @@ export const CAGE_BANK_LEAD = 6
 /**
  * The first stage that carries a cage.
  *
- * Stages 1–5 are the authored teaching arc — one idea each — and a sixth object
- * dropped into them buys nothing a first-time player can use and costs the one
- * thing those stages are for. Six is the stage the road already uses to start
- * introducing furniture (`PASSAGE_STAGE`), so a cage arrives with the rest of
- * the game's vocabulary rather than as an interruption to the tutorial.
+ * TWO, and it was six. The argument for six was that stages 1–5 are the
+ * authored teaching arc — one idea each — and a sixth object dropped into them
+ * costs the one thing those stages are for. The counter-argument, and the one
+ * this follows, is that a cage is not a sixth idea: it is a box, broken by the
+ * same rounds that break the crates the player met on stage 1, and what it pays
+ * is the same crowd the gates pay. It teaches nothing new, so it cannot crowd a
+ * lesson out — and the stages it now reaches are exactly the ones where a few
+ * extra bodies are a large share of a small squad, which is where a rescue reads
+ * as a rescue.
+ *
+ * Stage 1 stays clear. It is a thirty-second teach with its own crate wall
+ * (`TUTORIAL_CRATE_WALL`), and the first road a player ever sees should have
+ * one kind of box on it.
+ *
+ * What keeps the move from inflating the early economy is `CAGE_TAKES`: every
+ * cage stands in for one supply crate the stage would otherwise have carried.
  */
-export const CAGE_STAGE = 6
+export const CAGE_STAGE = 2
+
+/**
+ * …and the crate each cage takes the place of.
+ *
+ * A cage is a supply box that pays crowd instead of a stat, so it REPLACES one
+ * rather than joining them — otherwise every stage from 2 on gains a free box
+ * the difficulty curve was never priced against.
+ *
+ * The RATE crate, on arithmetic. At stage 2 a damage crate is `+1` on a base of
+ * one or two — half to all of the run's DPS in one box — and a rate crate is
+ * `CRATE_RATE_GAIN` on `BASE_FIRE_RATE`, about +29 %. A cage there frees three
+ * survivors into a squad of twenty to forty, roughly +10 %. Swapping the damage
+ * crate would cut the stage's supply by far more than the cage pays back;
+ * swapping the rate crate is the smaller trade, and the rate floor is the one
+ * with room in it (`MIN_RATE_CRATES` is three against damage's two).
+ *
+ * It is the rate crate NEAREST the cage that goes, so the cage reads as standing
+ * where a box would have been rather than as a box that vanished from somewhere
+ * else on the road.
+ */
+export const CAGE_TAKES: CrateKind = 'rate'
 
 /**
  * …and the first stage that carries an auto-shield box.
@@ -407,22 +443,35 @@ export const cageSurvivors = (stage: number): number =>
   Math.max(CAGE_RESCUE_BASE, Math.round(gateAddBase(stage) * CAGE_GATE_SHARE))
 
 /**
+ * What a cage costs to open, as a share of one barricade block on the same
+ * stage.
+ *
+ * Priced against the WALL rather than against a crate, and the reason is what
+ * the player is weighing. A crate is a quick box on the racing line; a cage is a
+ * detour off it, and the question it asks is "is this crowd worth the approach I
+ * am giving up" — which is only a question if opening it takes real fire. A
+ * barricade block is the game's own definition of "a thing you have to commit
+ * to shooting", and seven tenths of one is a cage that a crowd lined up on it
+ * opens inside the approach, and a crowd that only clips it with a few rounds
+ * does not.
+ */
+export const CAGE_WALL_SHARE = 0.7
+
+/**
  * HP of one cage.
  *
- * Priced as a HEAVY crate (`CRATE_TIER_SCALE.heavy`), and that is the entire
- * balance statement: a cage is not free crowd, it is crowd that costs about
- * twice what a supply box costs, so a run whose damage is behind cannot open it
- * in the window the approach gives them. Rolled off the damage curve rather
- * than the rate one because a cage pays neither stat and the cheaper of the two
- * curves is the honest baseline for a prop that is already the most expensive
- * thing on the shoulder.
+ * `CAGE_WALL_SHARE` of a barricade block, and — unlike the crates — NOT scaled
+ * by how far down the road it stands. The barricade it is measured against is
+ * not depth-priced either (`barricadeHp` is a function of the stage alone), so
+ * a depth factor here would quietly make "seven tenths of a wall" true at one
+ * end of the road and false at the other.
  *
  * No tier roll. A crate's tiers exist so a ROW of them reads as a row of
  * different questions; a cage is always alone, so a tier would be invisible
  * variance in the one number the player has to judge the detour by.
  */
 export const cageHp = (stage: number): number =>
-  Math.max(1, Math.round(crateHp(stage, 'damage') * CRATE_TIER_SCALE.heavy))
+  Math.max(1, Math.round(barricadeHp(stage) * CAGE_WALL_SHARE))
 
 /**
  * …and HP of one auto-shield box, at a standard crate's price.
@@ -670,9 +719,18 @@ export const minibossHpScale = (
  * that actually attacks the compounding is `canMul`'s new spacing clause: two
  * `×2` banks in a row was a free quadruple for anybody who could aim twice, and
  * that is now impossible.
+ *
+ * ─── …and the slope past stage 14 is a tenth shallower ─────────────────────
+ *
+ * Both slopes after the knee — the +0.55 a stage and the logarithm below — are
+ * scaled by `GATE_GROWTH_TRIM`, which is where the pump's step is trimmed too.
+ * The first fourteen stages are untouched: they have not taken a step past the
+ * knee yet, so they print exactly what they printed before.
  */
 export const gateAddBase = (stage: number): number => {
-  const authored = 3 + Math.floor(Math.min(stage, 14) * 0.9 + Math.max(0, stage - 14) * 0.55)
+  const authored = 3 + Math.floor(
+    Math.min(stage, 14) * 0.9 + Math.max(0, stage - 14) * 0.55 * GATE_GROWTH_TRIM
+  )
   if (stage <= 30) return Math.min(GATE_MAX_VALUE, authored)
   // ── The endless knee ──
   //
@@ -683,10 +741,13 @@ export const gateAddBase = (stage: number): number => {
   // pins the cap on additive payouts alone by stage 86 and every door past that
   // point lies about its payout.
   //
-  // 24 at stage 30 → 33 at 60 → 41 at 100 → 55 at 300. Still climbing at three
-  // hundred, and still honest.
-  const base = 3 + Math.floor(14 * 0.9 + 16 * 0.55)
-  return Math.min(GATE_MAX_VALUE, base + Math.floor(Math.log2(1 + (stage - 30) / 7) * 7.4))
+  // 23 at stage 30 → 31 at 40 → 38 at 60 → 46 at 100 → 58 at 300. Still
+  // climbing at three hundred, and still honest.
+  const base = 3 + Math.floor(14 * 0.9 + 16 * 0.55 * GATE_GROWTH_TRIM)
+  return Math.min(
+    GATE_MAX_VALUE,
+    base + Math.floor(Math.log2(1 + (stage - 30) / 7) * 7.4 * GATE_GROWTH_TRIM)
+  )
 }
 
 /**
@@ -1114,11 +1175,11 @@ export const PAIR_CROSSOVER_BANKS = 3
  * road to work it out. That is the whole feature: a pair whose gamble lane is
  * always better is not a decision, it is a reading test.
  *
- * At stage 22 (`gateAddBase` 20) it prints `−10 then ×2` against
- * `+22 then +18` — equal at 60 survivors, so a squad of 45 should take the adds
+ * At stage 22 (`gateAddBase` 19) it prints `−10 then ×2` against
+ * `+21 then +16` — equal at 57 survivors, so a squad of 45 should take the adds
  * and a squad of 90 should take the bill. The printed multiplier opens at
  * `gateMulOpen(2)` = 1.6 and pumps toward 2 under fire, so the real crossing is
- * a BAND from ~100 down to 60 rather than a point, which is if anything better:
+ * a BAND from ~90 down to 57 rather than a point, which is if anything better:
  * shooting the door is what moves it.
  *
  * ⚠ WHY THE FIRST ADD IS THE BIG ONE, and why it is floored at `base + 2`.
@@ -2538,13 +2599,9 @@ const cage = (b: Beat, y: number, x: number): void => {
     y: r2(y),
     cages: [{
       x: clampX(x),
-      // Depth-priced exactly as a crate is: the crowd is built on the road, so
-      // a prop at the far end meets a much bigger squad than one at the near
-      // end and has to cost more to stay the same decision. See
-      // `crateDepthFactor`.
-      hp: Math.max(1, Math.round(
-        cageHp(b.stage) * crateDepthFactor(y / Math.max(1, b.arenaY), b.stage)
-      )),
+      // Flat, not depth-priced — see `cageHp` for why a prop measured against a
+      // wall may not be scaled by a curve the wall itself does not use.
+      hp: cageHp(b.stage),
       hold: cageSurvivors(b.stage)
     }]
   })
@@ -4020,6 +4077,334 @@ const clearGateBands = (b: Beat): void => {
   }
 }
 
+// ─── Two rows with no road between them are one wall ────────────────────────
+//
+// `ensureRunnable` makes every barricade and every boulder rank promise the
+// same thing: a crowd at full size fits through it. The promise is made ROW BY
+// ROW, at the moment the row is built — and nothing ever asked what happens
+// when two rows end up standing in the same piece of road.
+//
+// On the endless stages they do. A motif's long `gauntlet` escalates with the
+// stage (`rails` deals `3 + step` rows) while the procedural body keeps dealing
+// its own hazards on its own beat clock, and the two interleave: stage 161 ends
+// up with two rails a tenth of a unit apart, which the player sees as one block
+// and pays twice the health for. Swept across stages 1-300 there are 145 blocks
+// drawn inside another block, and 28 pairs of rows whose MERGED gap is under a
+// crowd — as narrow as 3.00 against the 3.3 `trackShape.test.ts` asks of any
+// single row. A road can promise a way through and not have one.
+//
+// ── Bodies overlapping, and nothing looser ──
+//
+// The test is whether the two rows' bodies intersect — less than
+// `ROCK_H`/`BARRICADE_H` of half-depth between their centres, i.e. literally no
+// road between them. Anything looser would catch the beats that are SUPPOSED to
+// be read as a pair: `barricadeRow` deals a deep wall as ranks 1.7 apart whose
+// hole shifts by up to a slot, and `boulderField` as two ranks 3.2 apart whose
+// gaps are deliberately offset. Both are narrower merged than either rank is
+// alone, and both are the beat — the crowd has real road in which to change
+// its line. A pair with zero road between them has none.
+//
+// ── It drops blocks, it does not move rows ──
+//
+// Dropping is the repair this generator already uses for exactly this failure
+// (`ensureRunnable`), with the same tie-break, and it is the one repair that
+// cannot break anything decided earlier: a row that moved could land back in a
+// gate band, in one of the weapon puzzle's firing lanes, or on a prize placed
+// against its old position. A row that loses a block stays where every one of
+// those passes left it, and every guarantee they made was a MINIMUM distance —
+// which removing a block can only widen.
+//
+// The first row of a cluster is never touched. It is the one the player meets
+// first and the one an author placed; the blocks that go are the ones that
+// arrived on top of it.
+
+/** How deep on the road one obstacle row's body is. */
+const rowHalfDepth = (e: TrackEvent): number =>
+  e.kind === 'rocks' ? ROCK_H / 2 : BARRICADE_H / 2
+
+/** The rows this pass owns: everything solid except a passage rib, which is
+ *  authored to be an unbroken wall and whose ranks overlap on purpose. */
+const isObstacleRow = (e: TrackEvent): boolean =>
+  e.kind === 'barricade' || (e.kind === 'rocks' && !e.passage)
+
+type BlockLike = { x: number; w: number }
+
+/** Widest run of lane no block in `blocks` covers — `ensureRunnable`'s measure,
+ *  asked of a whole cluster rather than of one row. */
+const widestGapOf = (blocks: readonly BlockLike[]): number => {
+  const sorted = [...blocks].sort((p, q) => p.x - q.x)
+  let cursor = -LANE_HALF
+  let best = 0
+  for (const bl of sorted) {
+    const left = bl.x - bl.w / 2
+    if (left - cursor > best) best = left - cursor
+    cursor = Math.max(cursor, bl.x + bl.w / 2)
+  }
+  return Math.max(best, LANE_HALF - cursor)
+}
+
+/**
+ * Does `bl` share lane with anything in `kept`?
+ *
+ * Asked as "do the two bodies touch at all" rather than "is this one entirely
+ * behind that one", and the difference is 39 blocks across stages 1-300: a
+ * boulder at x=-3.75 and a wall block at the same x are the SAME piece of road
+ * to the crowd, and the wider of the two is not buried by the narrower — it
+ * pokes out by 7 cm either side and survives a containment test while still
+ * being drawn straight through its neighbour. There is no version of two boxes
+ * intersecting that is worth keeping: the player sees one prop, pays two
+ * healthbars for it, and the second one is contributing at most a few
+ * centimetres of lane that the first one does not already cover.
+ */
+const sharesLaneWith = (bl: BlockLike, kept: readonly BlockLike[]): boolean =>
+  kept.some((k) => Math.abs(k.x - bl.x) < k.w / 2 + bl.w / 2 - 1e-9)
+
+/**
+ * Repair one cluster of rows that share a piece of road.
+ *
+ * @returns the events left empty by the repair, for the caller to drop.
+ */
+const repairCluster = (cluster: readonly TrackEvent[]): TrackEvent[] => {
+  const first = cluster[0]
+  if (!first || first.kind === 'gates' || !('blocks' in first)) return []
+  const kept: BlockLike[] = [...(first as { blocks: BlockLike[] }).blocks]
+  const emptied: TrackEvent[] = []
+
+  for (let i = 1; i < cluster.length; i++) {
+    const row = cluster[i]!
+    if (!('blocks' in row)) continue
+    const blocks = (row as { blocks: BlockLike[] }).blocks
+    // The blocks drawn through a neighbour go first, and on their own terms
+    // rather than through the gap test: such a block opens next to no lane, so
+    // the widest-first rule below would never choose one however many of them
+    // there are.
+    let out = blocks.filter((bl) => !sharesLaneWith(bl, kept))
+    // …then the rest of the row, widest opening first and ties by index, until
+    // the whole cluster is runnable again. `ensureRunnable`'s rule, applied to
+    // the union instead of to one row.
+    while (out.length > 0 && widestGapOf([...kept, ...out]) < MIN_RUN_GAP) {
+      let bestIdx = 0
+      let bestGap = -1
+      for (let j = 0; j < out.length; j++) {
+        const gap = widestGapOf([...kept, ...out.filter((_, k) => k !== j)])
+        if (gap > bestGap) {
+          bestGap = gap
+          bestIdx = j
+        }
+      }
+      out = out.filter((_, k) => k !== bestIdx)
+    }
+    if (out.length === blocks.length) {
+      kept.push(...out)
+      continue
+    }
+    // Mutated in place rather than rebuilt, so a rib's `passage` and a rank's
+    // `field` survive the thinning — see `clearPuzzleColumns`, which thins the
+    // same events for the same reason.
+    ;(row as { blocks: BlockLike[] }).blocks = out
+    if (out.length === 0) emptied.push(row)
+    else kept.push(...out)
+  }
+  return emptied
+}
+
+/** Give every merged pair of obstacle rows a way through it again. */
+const clearMergedRows = (b: Beat): void => {
+  const rows = b.events.filter(isObstacleRow).sort((p, q) => p.y - q.y)
+  const emptied = new Set<TrackEvent>()
+  let i = 0
+  while (i < rows.length) {
+    let j = i
+    // Chained on CONSECUTIVE pairs: three rows in a row can each touch only the
+    // next, and all three are still one mass of road.
+    while (j + 1 < rows.length
+      && rows[j + 1]!.y - rows[j]!.y < rowHalfDepth(rows[j]!) + rowHalfDepth(rows[j + 1]!)) j++
+    if (j > i) for (const e of repairCluster(rows.slice(i, j + 1))) emptied.add(e)
+    i = j + 1
+  }
+  if (emptied.size === 0) return
+  b.events = b.events.filter((e) => !emptied.has(e))
+}
+
+// ─── Nothing stands inside anything else ────────────────────────────────────
+//
+// Every pass above keeps one PAIR of things apart for one reason — a boulder
+// out of a bank's reading band, a crate row off another crate row, a prize off
+// the centre line — and between them they left the simplest question about a
+// road unasked: is anything drawn standing inside anything else.
+//
+// Swept as axis-aligned bodies across the finished layouts of stages 1-300, the
+// answer was 28 pairs: a supply crate inside the weapon prize (stages 36, 90,
+// 100), inside a lever, its cover stone or the armour over the box (6, 18, 20,
+// 22, 26, 100, 150), and inside a boulder or a wall block (33, 35, 37, 50, 100,
+// 161, 175, 200). None of them is a balance question. Each one is a box with
+// another prop's sprite growing out of it, and a crate buried in a boulder
+// cannot be shot at all — the round stops on the rock in front of it.
+//
+// ── The crate is the thing that moves ──
+//
+// Everything a crate can clash with is placed RELATIVE to something the player
+// has to read: a lever to its cover stone, the box to its levers, a pillar to
+// its doors, a rescue to the bank it hangs off. A supply crate is the one prop
+// on the road whose exact position carries no second promise — it is a reward
+// you detour for, and it is still that reward a third of a unit away.
+//
+// ── Along the road first, and only then across it ──
+//
+// `y` is the axis every other rule in this file is written in, so a shift along
+// the road is re-checked against the gate bands and the ends of the road; `x`
+// is free of all of them, but it is the axis the player reads the DETOUR on.
+// So the smallest legal move wins and the row is tried first: a shove of 0.3
+// down the road beats a lateral 2.0 that walks a shoulder crate into the middle
+// of the lane.
+
+/** Daylight kept between a crate's body and whatever it was standing in.
+ *  Larger than `r2`'s half-step so the gap survives rounding, small enough that
+ *  the two props still read as neighbours. */
+const PROP_GAP = 0.06
+
+/** How far a crate may be moved to get out of something, on either axis. Past
+ *  this the beat it was placed for is a different beat, and the overlap is the
+ *  lesser of the two evils — `trackShape.test.ts` names any that survive. */
+const PROP_SHIFT_MAX = 2.4
+const PROP_SHIFT_STEP = 0.1
+
+/** One prop's footprint, as the player sees it: an axis-aligned body on the
+ *  road. Half-extents rather than a radius because most of them are not square
+ *  — a wall block is wide and shallow, a boulder rank wide and deep. */
+interface PropBox { x: number; y: number; hw: number; hh: number }
+
+/**
+ * Every body on the road a crate may not be standing inside of.
+ *
+ * Crates themselves are deliberately absent: they are what this pass moves, so
+ * their positions are read live off the event list instead (see `spotClear`),
+ * and a stale copy of one would let a moved crate be tested against where it
+ * used to be.
+ */
+const propBoxes = (b: Beat): PropBox[] => {
+  const out: PropBox[] = []
+  for (const e of b.events) {
+    switch (e.kind) {
+      case 'cages':
+        for (const c of e.cages) out.push({ x: c.x, y: e.y, hw: CAGE_R, hh: CAGE_R })
+        break
+      case 'bulwarks':
+        for (const w of e.bulwarks) out.push({ x: w.x, y: e.y, hw: BULWARK_R, hh: BULWARK_R })
+        break
+      case 'barricade':
+        for (const bl of e.blocks) {
+          out.push({ x: bl.x, y: e.y, hw: bl.w / 2, hh: BARRICADE_H / 2 })
+        }
+        break
+      case 'rocks':
+        for (const bl of e.blocks) out.push({ x: bl.x, y: e.y, hw: bl.w / 2, hh: ROCK_H / 2 })
+        break
+      case 'gates':
+        // The pillars only. A leaf is a doorway, and a crate standing in one is
+        // `clearGateBands`'s business — a readability rule rather than a
+        // geometry one.
+        for (const d of e.dividers) {
+          out.push({ x: d, y: e.y, hw: DIVIDER_HALF_W, hh: DIVIDER_H / 2 })
+        }
+        break
+      case 'weapon': {
+        const r = e.boxR ?? WEAPON_BOX_R
+        out.push({ x: e.box.x, y: e.box.y, hw: r, hh: r })
+        for (const l of e.levers) out.push({ x: l.x, y: l.y, hw: LEVER_R, hh: LEVER_R })
+        for (const st of e.stones) {
+          out.push({ x: st.x, y: st.y, hw: st.w / 2, hh: ROCK_H / 2 })
+        }
+        for (const g of e.guards) {
+          out.push({ x: g.x, y: e.guardY, hw: g.w / 2, hh: BARRICADE_H / 2 })
+        }
+        break
+      }
+      default:
+        break
+    }
+  }
+  return out
+}
+
+/**
+ * Could one crate of `row` stand at `x, y` without being inside anything?
+ *
+ * `skip` is the crate being placed — it is still in the event list, and a body
+ * is always inside itself.
+ */
+const spotClear = (
+  b: Beat, row: TrackEvent, skip: object, x: number, y: number, boxes: readonly PropBox[]
+): boolean => {
+  if (Math.abs(x) > LANE_HALF - CRATE_R) return false
+  for (const p of boxes) {
+    if (Math.abs(p.x - x) < p.hw + CRATE_R + PROP_GAP
+      && Math.abs(p.y - y) < p.hh + CRATE_R + PROP_GAP) return false
+  }
+  for (const e of b.events) {
+    if (e.kind !== 'crates') continue
+    for (const c of e.crates) {
+      if (c === skip) continue
+      // Its own row moves with it, so a row-mate is always at `y`.
+      const oy = e === row ? y : e.y
+      // Shoulder to shoulder on ONE row is a row, which is a shape this game
+      // uses on purpose — those two only have to not be inside each other. Two
+      // boxes on DIFFERENT rows are competing offers and owe each other real
+      // road; that is `CRATE_ROW_CLEAR`'s rule, restated here so a lateral nudge
+      // cannot quietly break it.
+      const clear = e === row ? CRATE_R * 2 + PROP_GAP : CRATE_ROW_CLEAR
+      if (Math.hypot(c.x - x, oy - y) < clear) return false
+    }
+  }
+  return true
+}
+
+/** Push every crate out of every body it is standing inside of. */
+const clearPropOverlaps = (b: Beat): void => {
+  const boxes = propBoxes(b)
+  const bands = gateBands(b, 'crates')
+  // The two ends of the road `clearGateBands` refuses to shove anything past,
+  // and for the same reasons.
+  const minY = 6
+  const maxY = b.arenaY - 4
+  const inBand = (y: number): boolean =>
+    bands.some((iv) => y - CRATE_R < iv[1] && y + CRATE_R > iv[0])
+
+  for (const row of b.events) {
+    if (row.kind !== 'crates') continue
+    const dirty = row.crates.filter((c) => !spotClear(b, row, c, c.x, row.y, boxes))
+    if (dirty.length === 0) continue
+
+    // ── The whole row, along the road ──
+    let moved = false
+    for (let d = PROP_SHIFT_STEP; d <= PROP_SHIFT_MAX + 1e-9 && !moved; d += PROP_SHIFT_STEP) {
+      for (const dir of [-1, 1]) {
+        const at = r2(row.y + dir * d)
+        if (at < minY || at > maxY || inBand(at)) continue
+        if (!row.crates.every((c) => spotClear(b, row, c, c.x, at, boxes))) continue
+        row.y = at
+        moved = true
+        break
+      }
+    }
+    if (moved) continue
+
+    // ── One box, across it ──
+    //
+    // Outward first: a crate sits on a shoulder to ask for a detour, and the
+    // road toward the centre line is the road the crowd is already running.
+    for (const c of dirty) {
+      const side = c.x < 0 ? -1 : 1
+      for (let d = PROP_SHIFT_STEP; d <= PROP_SHIFT_MAX + 1e-9; d += PROP_SHIFT_STEP) {
+        const away = r2(c.x + side * d)
+        if (spotClear(b, row, c, away, row.y, boxes)) { c.x = away; break }
+        const back = r2(c.x - side * d)
+        if (spotClear(b, row, c, back, row.y, boxes)) { c.x = back; break }
+      }
+    }
+  }
+}
+
 const nudgeClear = (b: Beat, y: number, minDist = 4.5): number => {
   let out = y
   for (let guard = 0; guard < 40; guard++) {
@@ -4414,8 +4799,19 @@ const clearPuzzleColumns = (b: Beat, y: number): void => {
     const e = b.events[i]!
     if (e.kind !== 'rocks' && e.kind !== 'barricade') continue
     if (e.kind === 'rocks' && e.passage) continue
+    // The BODY against the span, not the centre line. A span ends at the far
+    // edge of the thing it leads to (`puzzleSpans`), so a rank whose centre is
+    // half a unit past a lever still has a boulder standing in the lever — that
+    // is stages 90 and 300, where a rank at 404.51 wrapped a post at 403.5 and
+    // the centre test declared the column clear. It costs the road four
+    // boulders across stages 1-300, and they are those four: at the near end
+    // the extra reach is half a boulder on a seven-unit window, which never
+    // caught anything the centre test did not already catch.
+    const half = e.kind === 'rocks' ? ROCK_H / 2 : BARRICADE_H / 2
     const kept = e.blocks.filter(
-      (bl) => !spans.some(([x, lo, hi]) => e.y >= lo && e.y <= hi && inColumn(bl.x, bl.w, x))
+      (bl) => !spans.some(
+        ([x, lo, hi]) => e.y + half > lo && e.y - half < hi && inColumn(bl.x, bl.w, x)
+      )
     )
     if (kept.length === e.blocks.length) continue
     if (kept.length === 0) b.events.splice(i, 1)
@@ -4770,6 +5166,42 @@ const prizeSpotFree = (b: Beat, y: number, x: number): boolean => {
 }
 
 /**
+ * Take the `kind` crate nearest `y` off the road — the one a cage replaces.
+ *
+ * Runs AFTER `ensureSupplies`, deliberately, and that is the whole point of it:
+ * run before, the floor would simply top the crate back up and the cage would be
+ * an addition wearing a replacement's name. So a cage stage ships one `kind`
+ * crate under `minRateCrates`, on purpose, and the spec that pins the floor says
+ * so out loud (`trackShape.test.ts`).
+ *
+ * A crate inside a multi-crate event loses just that box; an event left empty
+ * is dropped, so nothing downstream ever streams a row with no boxes in it.
+ */
+const retireCrateNear = (b: Beat, y: number, kind: CrateKind): void => {
+  let bestEvent: Extract<TrackEvent, { kind: 'crates' }> | null = null
+  let bestIndex = -1
+  let bestGap = Number.POSITIVE_INFINITY
+  for (const e of b.events) {
+    if (e.kind !== 'crates') continue
+    for (let i = 0; i < e.crates.length; i++) {
+      if (e.crates[i]!.kind !== kind) continue
+      const gap = Math.abs(e.y - y)
+      if (gap < bestGap) {
+        bestGap = gap
+        bestEvent = e
+        bestIndex = i
+      }
+    }
+  }
+  if (!bestEvent) return
+  bestEvent.crates.splice(bestIndex, 1)
+  if (bestEvent.crates.length === 0) {
+    const at = b.events.indexOf(bestEvent)
+    if (at >= 0) b.events.splice(at, 1)
+  }
+}
+
+/**
  * Place the stage's rescue cage and its auto-shield box.
  *
  * ── The rule, in one sentence ──
@@ -4856,7 +5288,13 @@ const placeRescues = (b: Beat): void => {
   // requirement — was left with nothing: stage 8, the very stage the box
   // debuts on, shipped without one. Disjoint windows mean the two prizes can
   // never bid against each other for the same door.
-  place(0.4, 0.2, 0.52, (y, x) => cage(b, y, x))
+  let cageY: number | null = null
+  place(0.4, 0.2, 0.52, (y, x) => {
+    cage(b, y, x)
+    cageY = y
+  })
+  // …and it takes the place of one supply crate. See `CAGE_TAKES`.
+  if (cageY !== null) retireCrateNear(b, cageY, CAGE_TAKES)
   // The shield box sits late, and that placement IS the pickup's design: it is
   // insurance against the boss, so it has to be bought within sight of the
   // arena. Any earlier and the absorb is spent on a road hazard long before the
@@ -4997,6 +5435,17 @@ export const buildTrack = (stage: number, seed: number = stage): Track => {
   // anywhere else — cannot move a single other beat. See `Beat.prizeRng`.
   placeRescues(b)
 
+  // Two obstacle rows in the same piece of road are one wall, and the promise
+  // that there is a way through one was only ever made row by row. Before the
+  // crates are swept, because it takes blocks OFF the road and a crate has no
+  // reason to move out of something that is no longer there.
+  clearMergedRows(b)
+
+  // …and only now can the road be asked whether anything is drawn standing
+  // inside anything else: the puzzle and the two prizes are the last things
+  // placed, and both of them put bodies on shoulders crates were already using.
+  clearPropOverlaps(b)
+
   // Sorted by distance: the sim streams events in one forward pass and never
   // looks back. `Array.prototype.sort` is stable, so equal-y events keep the
   // order they were authored in and the track stays byte-identical per stage.
@@ -5093,7 +5542,7 @@ const squadAfter = (squad: number, leaf: GateLeaf, stage: number, payoutBonus: n
 /**
  * The biggest crowd this stage's doors can possibly hand a player.
  *
- * @param startSquad what the run opens with — `startSquad.value` from the shop,
+ * @param startSquad what the run opens with — `startSquadAt(stage)` from the shop,
  *                   NOT the bare `START_SQUAD`, so an upgraded save is measured
  *                   against the ceiling its own purchases raised.
  * @param payoutBonus `gatePayoutBonus.value`, for the same reason.

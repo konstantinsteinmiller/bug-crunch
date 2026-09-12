@@ -321,6 +321,41 @@ export const WEAPON_PICK_STAGE = 3
 /** The two cards on the reveal, in the order they are laid out. */
 export const WEAPON_PICK_CHOICES: readonly WeaponId[] = ['rocket', 'gatling']
 
+/**
+ * ─── The first boss pays out on the spot ────────────────────────────────────
+ *
+ * Measured in playtests: about a quarter of the players who killed the stage-1
+ * boss closed the game right there, even with the road already moving on under
+ * them. The kill is the natural end of a first session unless something new is
+ * handed over in the same breath — so the stage-1 boss drops a launcher, shown
+ * as a one-card reveal that closes itself, and the crowd walks on with it from
+ * the ground the boss fell on.
+ *
+ * It is the loaner pattern again (`WEAPON_PICK_STAGE`): persisted once shown
+ * (`BOSS_REWARD_KEY`), re-armed by `startStage` on every attempt at the stage
+ * AFTER this one, and cleared by the next stage like every other weapon.
+ *
+ * Stage 2's free gatling box (`WEAPON_GIFT_STAGE`) does NOT take it away: the
+ * gatling becomes the main gun and the launcher keeps firing beside it at its
+ * half power (`sideWeapon` in the sim) — two gifts on one road, overlaid.
+ */
+export const BOSS_REWARD_STAGE = 1
+export const BOSS_REWARD_WEAPON: WeaponId = 'rocket'
+
+/**
+ * …and it is a WEAKER launcher: half the damage per round, everything else the
+ * same.
+ *
+ * The salvo, the homing and the blast are the whole of what makes the launcher
+ * a toy worth coming back for, so those stay; the number is what comes off. At
+ * full power it would be a 3.3x firepower spike on stage 2, which is the road
+ * the trap and the elite are taught on — half keeps it a visible upgrade
+ * (~1.65x) without deleting the lesson. The stage-2 boss is priced off the
+ * run's real firepower (`fightModel` reads this too), so the climax stays the
+ * length it was.
+ */
+export const BOSS_REWARD_DAMAGE_MUL = 0.5
+
 /** A pick read back off a save blob is only a pick if it names a weapon. */
 export const isWeaponId = (v: unknown): v is WeaponId => v === 'rocket' || v === 'gatling'
 

@@ -5,7 +5,7 @@
 // so this file reads the one number that defines it rather than repeating it.
 // `survival.ts` imports back from here, but only `import type` — erased before
 // runtime — so there is no module cycle.
-import { CROWD_MAX_R, LANE_HALF } from '@/game/survival'
+import { CROWD_MAX_R, ELITE_HOLD_AHEAD, LANE_HALF, SLAM_RADIUS_GROWTH } from '@/game/survival'
 
 /**
  * ─── The threat pools ───────────────────────────────────────────────────────
@@ -37,8 +37,14 @@ import { CROWD_MAX_R, LANE_HALF } from '@/game/survival'
  * kind before meeting any of them twice.
  */
 
-/** Miniboss behaviours. `scythe` is the original: plant, wind up, sweep. */
-export type MinibossKind = 'scythe' | 'roller' | 'bomber' | 'gunner'
+/**
+ * Miniboss behaviours. `scythe` is the original: plant, wind up, sweep.
+ *
+ * The last two arrive later than the rest — see `MINIBOSS_TIER2_FROM_STAGE`.
+ */
+export type MinibossKind =
+  | 'scythe' | 'roller' | 'bomber' | 'gunner'
+  | 'warden' | 'burrower'
 
 /** Boss behaviours. `meteor` is the original: aim, drop a rock, slam. */
 export type BossKind = 'meteor' | 'claw' | 'healer' | 'summoner'
@@ -57,6 +63,75 @@ export const MINIBOSS_POOL: readonly MinibossKind[] = ['roller', 'bomber', 'gunn
 export const BOSS_POOL: readonly BossKind[] = ['claw', 'healer', 'summoner', 'meteor']
 
 /**
+ * ─── …and the tier the pool grows into ──────────────────────────────────────
+ *
+ * Four elites is enough variety to stop a stage being one fight, and it is not
+ * enough to stop a CAREER being four. A player who reaches stage 20 has met
+ * every elite the game has four times over, and the complaint that follows is
+ * not "this is hard", it is "I have seen this" — the same failure the pool was
+ * built to fix, arriving one rotation later.
+ *
+ * So the pool grows once more, and the two it grows by are deliberately the two
+ * questions the first four never ask:
+ *
+ *   WARDEN    where is the GAP. Every other attack in this game marks ground to
+ *             leave; this one marks the whole road except one slot and asks the
+ *             player to be IN it. It is the first hazard in the game whose
+ *             answer is a place to stand rather than a place to vacate, and that
+ *             inversion is worth a whole fight on its own.
+ *   BURROWER  which WAY are you going. The bomber commits to where the crowd was
+ *             and is answered by one lure and one crossing; this one tracks the
+ *             crowd for the whole of its dive and is answered by not stopping —
+ *             so the rails become the fight, because a crowd that runs out of
+ *             road has to turn around into the thing chasing it.
+ *
+ * ── Why stage 9, and why the number is derived ──
+ *
+ * `MINIBOSS_TIER2_FROM_STAGE` has to clear stage 5, and that is a BAKING
+ * constraint rather than a pacing preference. A miniboss's body is its fight
+ * (`MINIBOSS_DESIGN`), so a new kind means a new strip on the road — and the
+ * roster already carries both of these from stage 5 (`bonecap` arrives with the
+ * husks on stage 2, `skewer` with the flyers on stage 5). Opening the tier after
+ * that costs the loader exactly nothing, where opening it on stage 4 would add
+ * two strips to the one stage that has just started fielding variety at all.
+ *
+ * Nine rather than six is then the pacing half: the first tier's four kinds
+ * cycle once across stages 4-7 (see `minibossKindFor`), so a stage-9 road is the
+ * first one whose elites the player has genuinely learned — and a new question
+ * is a reward for having learned the old ones, not a replacement for them.
+ */
+export const MINIBOSS_TIER2_FROM_STAGE = 9
+
+/**
+ * The full pool, and the ORDER is load-bearing twice over.
+ *
+ * `minibossKindFor` walks a pool by stage and by the elite's index on the road,
+ * so a stage fields a WINDOW of it — three consecutive entries for most roads
+ * (see `placeMinibosses`), six only past stage 40. What sits where therefore
+ * decides both which fights open the tier and which fights share a road.
+ *
+ *   • THE LATE ARRIVALS GO FIRST, so stage 9 — the road the tier opens on —
+ *     fields the warden and the burrower together. A tier whose new fights turn
+ *     up four stages after it opened is a tier the player meets by accident.
+ *   • THE SCYTHE GOES THIRD, which is the least obvious entry here and the one
+ *     a future edit is most likely to undo. Three of the six kinds are
+ *     deliberately NOT a solid body for the whole of their fight — a roller
+ *     never is, an armed bomber stops being one, and a submerged burrower has no
+ *     body on the road at all — and with those three adjacent there are windows
+ *     that contain nothing else. A road whose every landmark can be walked
+ *     through for part of its fight is a road with no anchor on it: the crowd
+ *     never has to route around anything, and the stage reads as a series of
+ *     effects rather than as a series of fights. At index 2 the scythe or the
+ *     gunner lands in every window the rotation produces.
+ */
+export const MINIBOSS_POOL_LATE: readonly MinibossKind[] =
+  ['warden', 'burrower', 'scythe', 'roller', 'bomber', 'gunner']
+
+/** Which pool stage `stage` draws its elites from. */
+export const minibossPoolFor = (stage: number): readonly MinibossKind[] =>
+  stage >= MINIBOSS_TIER2_FROM_STAGE ? MINIBOSS_POOL_LATE : MINIBOSS_POOL
+
+/**
  * Which miniboss kind stage `stage` fields for its `index`-th elite.
  *
  * `index` matters because a stage can carry up to three (see `placeMinibosses`),
@@ -65,10 +140,15 @@ export const BOSS_POOL: readonly BossKind[] = ['claw', 'healer', 'summoner', 'me
  */
 export const minibossKindFor = (stage: number, index = 0): MinibossKind => {
   if (stage < THREAT_POOL_FROM_STAGE) return 'scythe'
-  const n = MINIBOSS_POOL.length
-  // Offset by the stage so consecutive stages do not open with the same one,
-  // and by the index so one road never repeats itself.
-  return MINIBOSS_POOL[(stage - THREAT_POOL_FROM_STAGE + index) % n] ?? 'scythe'
+  const pool = minibossPoolFor(stage)
+  // Counted from the stage the POOL opened rather than from a fixed four, so the
+  // tier's first road is the front of its own pool — see `MINIBOSS_POOL_LATE`.
+  // Offset by the stage so consecutive stages do not open with the same one, and
+  // by the index so one road never repeats itself.
+  const from = stage >= MINIBOSS_TIER2_FROM_STAGE
+    ? MINIBOSS_TIER2_FROM_STAGE
+    : THREAT_POOL_FROM_STAGE
+  return pool[(stage - from + index) % pool.length] ?? 'scythe'
 }
 
 /**
@@ -95,16 +175,32 @@ export const minibossKindFor = (stage: number, index = 0): MinibossKind => {
  *   • CINDERHOUND — burning, quick, throws itself forward. It plants the bomb
  *     and leaves. Fire is already its whole read.
  *   • RATTLEJACK — the light hound-weight body, for the ball that owns a lane.
+ *   • BONECAP — the mushroom IS the shield. A fungal cap slammed down across the
+ *     road is the one silhouette in the cast that reads as a wall with a gap in
+ *     it before anything has been telegraphed, which is exactly what the warden
+ *     needs the player to already suspect.
+ *   • SKEWER — the wyrmling, "almost entirely the pointy end". The only body in
+ *     the cast that a player would believe goes UNDER the road, and the only one
+ *     whose whole shape is the thing that comes back out of it.
  *
  * Kept beside the pool because they are one decision: adding a fifth kind means
  * adding a fifth body here, and a kind with no body of its own would silently
  * reuse another's and undo the lesson.
+ *
+ * Both late bodies are drawn from designs the ROSTER already carries by the
+ * stage their tier opens (`bonecap` with the husks, `skewer` with the flyers) —
+ * see `MINIBOSS_TIER2_FROM_STAGE`. That is not a coincidence to be tidied away
+ * later: it is why the tier costs the loader nothing, and `minibossIdentity`
+ * asserts it so a future re-body cannot quietly put a fresh strip in front of a
+ * stage-9 player.
  */
 export const MINIBOSS_DESIGN: Readonly<Record<MinibossKind, string>> = {
   scythe: 'snaggletusk',
   gunner: 'thornwick',
   bomber: 'cinderhound',
-  roller: 'rattlejack'
+  roller: 'rattlejack',
+  warden: 'bonecap',
+  burrower: 'skewer'
 }
 
 /** The body that always carries `kind`. */
@@ -124,7 +220,7 @@ export const minibossDesignFor = (kind: MinibossKind): string => MINIBOSS_DESIGN
 export const minibossDesignsFor = (stage: number): string[] =>
   stage < THREAT_POOL_FROM_STAGE
     ? [MINIBOSS_DESIGN.scythe]
-    : [...new Set(MINIBOSS_POOL.map((k) => MINIBOSS_DESIGN[k]))]
+    : [...new Set(minibossPoolFor(stage).map((k) => MINIBOSS_DESIGN[k]))]
 
 /** Which boss kind stage `stage` ends with. */
 export const bossKindFor = (stage: number): BossKind => {
@@ -709,14 +805,20 @@ export const enragedSpan = (span: number, pressure: number, floor: number): numb
 export const bossCharges = (kind: BossKind): boolean => kind === 'meteor' || kind === 'claw'
 
 /**
- * One charge every third cycle, and deliberately OUT OF PHASE with
- * `CHARGED_EVERY`.
+ * The lane charge's share of phase two: at most one swing in this many.
  *
- * Both are "every third", so run in phase they would want the same cycle every
- * time and — since a charged swing is committed a cycle before it is thrown, and
- * therefore always wins the tie — an enraged meteor would never charge at all.
- * Offset, the last third of a meteor fight reads charge / ordinary / charged,
- * which is three distinct beats rather than a metronome with two settings.
+ * It was a fixed cadence — one charge every third cycle, offset from
+ * `CHARGED_EVERY` so the two never wanted the same swing. The shuffle bag
+ * (`bossVerbPool`) retired the cadence and kept the SHARE, and the share is a
+ * ceiling rather than a quota for a measured reason: on the stages where phase
+ * two has only two attacks (the ring and the charge, stages 2-7), "equally
+ * often" would make every other swing a charge, and a charge is the one attack
+ * whose dodge takes the crowd off the boss's column for its whole 1.5-2.2 s
+ * wind-up. The weakest crowd the stage-1-5 adaptive bar is calibrated for — the
+ * twelve survivors the balance suite holds to a ten-second fight — measured
+ * 11.3 s at one charge in two, against its ceiling of 10. So `bossBag` pads a
+ * pool that small until the charge is one draw in `CHARGE_EVERY`, exactly the
+ * share every number downstream was priced at, now at a random position.
  */
 export const CHARGE_EVERY = 3
 
@@ -1326,3 +1428,1008 @@ export const SUMMON_MERCY_FLANK = 1.9
 // was removed rather than shipped as a branch nothing could reach. The spec
 // beside the trickle pins the emergent number instead, which is what would
 // actually catch a future ramp that floods the road.
+
+// ─── The late tier, and why it lives down here ────────────────
+//
+// The two elites `MINIBOSS_POOL_LATE` adds, and the second attack each of the
+// four boss kinds grows into. They sit at the BOTTOM of this file rather than
+// beside the fights they extend, and the reason is mechanical rather than
+// editorial: every one of them DERIVES its geometry from a number a section
+// above establishes (`CLAW_DODGE_MARGIN`, `CLAW_SPACING`, `BOLT_BLAST_R`,
+// `SUMMON_AHEAD`), and a module-level `const` that reads a `const` declared
+// later in the same file is a ReferenceError at import time rather than a lint
+// warning.
+//
+// Deriving rather than re-typing is the whole point of those references — see
+// `CLAW_SPACING` for what happens when a pocket the crowd has to fit inside is
+// drawn instead of computed — so the file order follows the arithmetic.
+
+// ─── warden ─────────────────────────────────────────────────────────────────
+//
+// It plants in front of the crowd and slams a row of stone slabs down across
+// the ENTIRE road, leaving one slot open. Everything in the slabs pays; the slot
+// costs nothing at all.
+//
+// ── The one attack in this game whose answer is a place to BE ──
+//
+// Every other hazard here marks ground to leave. The ring says "not this spot",
+// the rake says "not these three strips", the ball says "not this half", the
+// bomb says "not next to me" — and after four elites and four bosses a player
+// has learned one verb, which is *away*. The warden inverts it: the road is
+// lethal except one slot, so the input is not a flinch away from a mark, it is
+// aiming for one. It is also the cheapest new question the game can ask, because
+// the player already owns the whole vocabulary — a strip on the ground and a
+// countdown — and only the sign is different.
+//
+// ── Why it is slabs and not a wall with a hole ──
+//
+// The hole has to be READ, and read from the corner of an eye on a phone. A
+// solid bar with a notch in it is a bar; a row of separate teeth with one
+// missing is a gap, and the eye finds a missing tooth without being told to look
+// for one. It is also honest about the simulation: the kill test is the slabs
+// themselves (`inClawFurrow`, which is exactly what a row of strips is), so what
+// is drawn is what bills.
+
+/**
+ * Half-width of the open slot.
+ *
+ * DERIVED from the crowd's own disc, exactly as `CLAW_SPACING` is and for the
+ * identical reason: a slot the crowd cannot fit inside is not a hard attack, it
+ * is a tax with an arrow pointing at it. The claw's history is the whole
+ * argument — its furrows were first spaced at "what a claw looks like" and the
+ * pockets caught 37 % of a perfect dodge against 38 % of standing still.
+ *
+ * The margin is twice `CLAW_DODGE_MARGIN`, and the doubling is paid for by the
+ * one difference between this and a rake: a rake lands in the arena, where the
+ * crowd is stationary and lateral is the only axis there is. This lands on the
+ * ROAD, where the crowd is also creeping forward and the player is also reading
+ * gates, crates and whatever else the stage put in the same ten units of
+ * asphalt. The slack is for the second thing the player is doing.
+ */
+export const WARDEN_SLOT_MARGIN = 2 * CLAW_DODGE_MARGIN
+export const WARDEN_SLOT_HALF_W = CROWD_MAX_R + WARDEN_SLOT_MARGIN
+
+/**
+ * Half-width of one slab, and the gap between two of them.
+ *
+ * The pitch is barely wider than a slab, so the row reads as a wall: a tenth of
+ * a unit of daylight between neighbours against a crowd 3.3 across is not a hole
+ * anybody can hide in, and it is enough separation to see individual teeth. The
+ * one real hole in the row is the slot, and it is the only one.
+ */
+export const WARDEN_SLAB_HALF_W = 0.55
+export const WARDEN_SLAB_PITCH = 1.2
+
+/**
+ * Half the depth of the row, along the road.
+ *
+ * Sized to swallow two things at once, and the second is what makes it deeper
+ * than a rake's would need to be:
+ *
+ *   • the crowd's own depth (`CROWD_MAX_R * CROWD_SQUASH` is 1.19, and the rail
+ *     redistribution moves a slot up to 1.3 further back), so the row is a
+ *     purely LATERAL question — the same argument as `CLAW_HALF_DEPTH`;
+ *   • the ground the crowd covers WHILE the row is winding up. A holding elite
+ *     drags the road to a crawl rather than stopping it (`ELITE_DRAG_MIN`), so
+ *     over `WARDEN_TELEGRAPH` the squad creeps about a unit forward. The row is
+ *     painted where it was aimed and bills where it was painted, so the depth is
+ *     what keeps those two facts compatible: a shallower band would let a crowd
+ *     walk out of the bottom of its own telegraph and read as an attack that
+ *     missed for no reason.
+ */
+export const WARDEN_HALF_DEPTH = 2
+
+/**
+ * How far in front of the crowd it plants.
+ *
+ * `ELITE_HOLD_AHEAD`'s distance, not the gunner's stand-off, and that is because
+ * the row lands under the CROWD rather than travelling: there is no flight time
+ * to buy, so the fight wants the elite in the firing line where the crowd can
+ * answer it with damage as well as with position.
+ */
+export const WARDEN_PLANT_AHEAD = ELITE_HOLD_AHEAD
+
+/**
+ * How far to the side of the crowd the slot opens.
+ *
+ * It has to be a real move and it has to be a reachable one. `steerTo` clamps
+ * the crowd's centre to ±4.1, so a slot placed toward the middle of the road is
+ * always reachable from anywhere; placed 2.8 off the crowd it is always a move
+ * worth making, including from the centre line where the biggest available input
+ * is 4.1.
+ *
+ * The SIDE is the crowd's own far side (`wardenSlotX` picks it), so a player
+ * hugging a rail is sent across the road rather than nudged into it — being
+ * cornered should cost effort, and a slot that opened under a rail-hugger's feet
+ * would reward the one position that is otherwise a mistake.
+ */
+export const WARDEN_SLOT_OFFSET = 2.8
+
+/**
+ * Centre of the open slot, for a crowd whose centre is at `crowdX`.
+ *
+ * Clamped so the WHOLE slot is on the road: a slot half off the rail is a slot
+ * the crowd cannot get all of itself into, which turns a clean dodge into a
+ * graze for reasons the player cannot see. The slabs themselves are NOT clamped
+ * (see `wardenSlabXs`) — that asymmetry is deliberate and it is the same call
+ * `clawLaneXs` makes, one level down: the thing the player has to reach is kept
+ * reachable, and the thing they have to avoid is allowed to run off the edge of
+ * the world.
+ */
+export const wardenSlotX = (crowdX: number): number => {
+  const side = crowdX > 0 ? -1 : 1
+  const room = LANE_HALF - WARDEN_SLOT_HALF_W
+  return Math.max(-room, Math.min(room, crowdX + side * WARDEN_SLOT_OFFSET))
+}
+
+/**
+ * Every slab in a row whose slot is centred on `slotX`.
+ *
+ * Built OUTWARD FROM THE SLOT rather than tiled across the road and then holed,
+ * and that is the difference between a slot that is always the crowd's width and
+ * one whose width depends on where the tiling happened to land. The first slab
+ * on each side sits exactly one slab-half clear of the slot's edge, so the
+ * promise "the slot is `2 * WARDEN_SLOT_HALF_W` of clear road" is true by
+ * construction for every position on the road.
+ *
+ * Slabs whose whole body is off the road are dropped — they would bill nobody
+ * and draw nothing — but a slab hanging over a rail is kept, because the crowd
+ * cannot stand there either.
+ */
+export const wardenSlabXs = (slotX: number): number[] => {
+  const out: number[] = []
+  const first = WARDEN_SLOT_HALF_W + WARDEN_SLAB_HALF_W
+  for (const dir of [-1, 1]) {
+    for (let i = 0; ; i++) {
+      const x = slotX + dir * (first + i * WARDEN_SLAB_PITCH)
+      if (Math.abs(x) - WARDEN_SLAB_HALF_W > LANE_HALF) break
+      out.push(x)
+    }
+  }
+  return out.sort((a, b) => a - b)
+}
+
+/**
+ * Seconds between the row being announced and it landing.
+ *
+ * Priced off the move it asks for, which is the rule every wind-up in this game
+ * is set by. `SLAM_TELEGRAPH` is 1.0 s because a median 250 ms human then has
+ * 0.75 s to make a 3.4-unit move. This asks for at most `WARDEN_SLOT_OFFSET`
+ * less the slack the slot leaves — call it three units — so 0.95 s buys the same
+ * 0.7 s of steering after the same reaction latency.
+ *
+ * Deliberately NOT the elite telegraph. `ELITE_TELEGRAPH` is 0.3 s and its own
+ * note says why that is honest for a sweep: "there is no sliding out of this
+ * one, so the wind-up is not a dodge window — it is the tell that says the clock
+ * is running". This one IS a dodge window, so it is priced like one.
+ */
+export const WARDEN_TELEGRAPH = 0.95
+
+/**
+ * Seconds between rows.
+ *
+ * Against `ELITE_HOLD_MAX` = 3 that is two rows a fight, which is the budget the
+ * scythe's 1.5 s cadence and the gunner's 1.5 s reload both land on — two
+ * announced attacks is enough for the player to get the second one right after
+ * reading the first, and it is the number the whole elite roster is balanced at.
+ */
+export const WARDEN_RELOAD = 1.6
+
+/**
+ * Share of the current squad one row takes off whoever is in the slabs.
+ *
+ * Between the scythe's 0.2 and the roller's 0.3, and the position in that range
+ * is an argument about answerability rather than a feel:
+ *
+ *   • ABOVE the sweep, because a sweep spans the road and cannot be dodged at
+ *     all — its price is the price of an unanswerable hit, and this one has an
+ *     answer painted on the ground for the better part of a second.
+ *   • BELOW the ball, because the ball bills once per fight and this bills
+ *     twice. Two rows at 0.24 is 0.48 of a crowd against the ball's 0.3 and the
+ *     bomber's 0.5, which puts the warden's whole fight inside the band the
+ *     elite roster already occupies rather than at the top of it.
+ *
+ * Capped by `SWEEP_FRACTION_MAX` at the call site, like every other elite share,
+ * and passed through the onboarding cut and the stuck-player relief for the
+ * reason `BOMBER_FRACTION` records at length: those two are not difficulty
+ * knobs, and exempting one attack makes it the single thing on the road a
+ * struggling player gets no help against.
+ */
+export const WARDEN_FRACTION = 0.24
+
+// ─── burrower ───────────────────────────────────────────────────────────────
+//
+// It dives under the road, follows the crowd as a mound of moving earth, plants
+// itself, and comes back up.
+//
+// ── WHICH WAY ARE YOU GOING ──
+//
+// The bomber already asks a question about position, and the answer to it is one
+// lure and one crossing: it commits to where the crowd WAS and then cannot
+// change its mind, so the whole fight is decided in a single input. This one
+// never commits until the end, and what it follows is not the crowd — it is the
+// crowd HALF A SECOND AGO (`BURROWER_LAG`).
+//
+// That one decision is the entire fight, and everything good about it falls out
+// of the same sentence:
+//
+//   • a crowd that keeps moving is always ahead of its own past, so sustained
+//     motion in any direction is a clean escape and the player is rewarded for
+//     the thing this genre is about;
+//   • a crowd that STOPS is caught, because a stationary crowd's past is exactly
+//     where it is standing;
+//   • a crowd that REVERSES is caught worst of all, because it is running back
+//     down its own trail into the thing chasing it — and "do not turn around" is
+//     a lesson no other hazard in this game teaches.
+//
+// A pursuit at a fixed speed was the obvious first shape and it is a worse fight
+// on arithmetic alone. The road is 8.2 units of reachable width and a pursuer
+// converges on any crowd that is not at a full sprint, so the only survivable
+// answer is a maximal rail-to-rail run, every time, from wherever the player
+// happens to be: one input, executed perfectly, or eat it. A trail has no such
+// cliff — every unit of movement buys exactly its own unit of separation, so the
+// dodge is graded and the player is allowed to be partly right.
+
+/**
+ * How far behind the crowd the mound runs, in SECONDS — and LATERALLY only.
+ *
+ * A time and not a distance, which is what makes the whole fight legible: the
+ * mound is at a lateral position the player was actually standing at, so the
+ * separation they have bought is the distance they have covered — a quantity
+ * they can watch themselves producing rather than one they have to infer from a
+ * chase.
+ *
+ * Half a second is read off the crowd's own controls. `STEER_SPRING` settles a
+ * full-lane move in about a third of a second, so half a second is comfortably
+ * more than one deliberate input: a player who makes ONE decision has already
+ * bought their separation before the mound has finished arriving at the place
+ * they made it.
+ *
+ * ── Why the mound does NOT lag along the road ──
+ *
+ * It did, for one revision, and the fight did not exist. The road carries the
+ * crowd forward at `stageSpeed` whatever the player does, so half a second of
+ * lag along it is nearly three units of free separation that nobody chose — and
+ * measured, a crowd standing perfectly still took **zero** casualties from an
+ * eruption. The whole attack was answered by the road.
+ *
+ * There is also no decision in that axis to reward. The player steers left and
+ * right; forward is the game's own clock. So the mound follows the crowd's line
+ * along the road exactly (`stepBurrower` reads `anchorY` live) and lags only in
+ * the axis the player controls, which is the axis the question is asked in.
+ */
+export const BURROWER_LAG = 0.5
+
+/** …and how much of the crowd's path is remembered, which has to be at least
+ *  that. Kept as its own number because the trail is a shared facility and the
+ *  next thing to read it may want a longer memory than this one does. */
+export const CROWD_TRAIL_S = 1.2
+
+/**
+ * How fast it closes on the crowd before it dives, world units per second.
+ *
+ * Slower than the bomber's sprint, because the approach is not the threat here
+ * and should not read as one: a bomber's run at you IS its wind-up, where this
+ * one's attack does not begin until it is out of sight. It is still faster than
+ * the crowd runs, for the bomber's reason — an elite that could be outrun
+ * forwards would be answered by doing nothing.
+ */
+export const BURROWER_SPEED = 4.6
+
+/** How far in front of the crowd it dives. Just outside biting range, so the
+ *  dive happens in front of the player rather than on top of them. */
+export const BURROWER_DIVE_GAP = 3.4
+
+/**
+ * How long it spends following the trail before it plants, seconds.
+ *
+ * Long enough to be a chase the player can see and answer, short enough that it
+ * is never a hold: the road does not slow for a submerged burrower (see the drag
+ * loop in `stepAnchor`), so this is time the run is spending at full speed and
+ * it may not be a lot of it.
+ */
+export const BURROWER_TRACK_S = 1.2
+
+/**
+ * …and how long the mound sits still, announced, before it erupts.
+ *
+ * The lock is the telegraph, and it is the bomber's contract to the letter: one
+ * event at the moment it plants, carrying the exact seconds to the blast, and a
+ * ring on the ground that closes on the beat. It is shorter than `BOMBER_FUSE`'s
+ * full second because the player has already been given the whole of
+ * `BURROWER_TRACK_S` to be somewhere else — this fuse is the last chance rather
+ * than the only one.
+ *
+ * It also inherits the bomber's OTHER rule: a planted mound holds the road (see
+ * the drag loop in `stepAnchor`). `BOMBER_FUSE`'s note has the reason in its own
+ * words — "the crowd covers ~5.4 units a second, which is more than the blast is
+ * wide, so a bomber that let the road run would be dodged by the squad's own
+ * forward motion" — and it applies here with the ring already on the ground. A
+ * TRACKING mound does not hold, and must not: the crowd's lateral travel is
+ * bought with the road's speed, and a hazard that took away the only input that
+ * answers it would not be a hazard, it would be a tax.
+ */
+export const BURROWER_SURFACE_S = 0.6
+
+/** …and how long it stands there afterwards before it can dive again. Its
+ *  recovery is the shooting window, exactly as the bomber's approach is. */
+export const BURROWER_RECOVER = 0.9
+
+/**
+ * How many dives one burrower ever gets.
+ *
+ * ONE, and the number is a MEASUREMENT rather than a pacing choice — it was two
+ * for a revision and two is not reachable by anything this body could plausibly
+ * be.
+ *
+ * The arithmetic. An eruption comes up at the crowd's own line, so the body ends
+ * its dive level with the squad; it then owes `BURROWER_RECOVER` standing still,
+ * during which the road carries the crowd `stageSpeed` × 0.9 — about 5.4 units
+ * at stage 9 and 6.7 at the speed cap. To dive again it would have to make that
+ * back from BEHIND, against a crowd still running: catching up needs a walk
+ * faster than `stageSpeed`, which is 5.98 where the tier opens and 7.4 past
+ * stage 22. Instrumented across stages 9, 10, 15 and 22, a burrower with a
+ * budget of two spent exactly one on every single one of them — so the bound
+ * said two, the fight delivered one, and `bossHpMulFor`-style pricing off the
+ * printed number would have been pricing a beat that never happens.
+ *
+ * The fix could have been a sprint. It is not, because 7.5 units a second is a
+ * body that visibly outruns the road, and the fight this one is FOR — read the
+ * trail, keep moving — does not get better for being asked twice in nine
+ * seconds. One dive also puts it beside the two other one-shot elites (the ball
+ * rolls once, the bomb goes off once) rather than inventing a third shape.
+ *
+ * Spent, it does not vanish — it surfaces and walks like any other body, so
+ * killing it still pays its bounty. That is the difference between this and the
+ * bomber, which is consumed by its own blast: a player who answered the dive
+ * correctly should be left with something to shoot rather than with an empty
+ * road, because the answer costs them the whole width of it and they should be
+ * paid for the work.
+ */
+export const BURROWER_DIVES_MAX = 1
+
+/**
+ * Blast radius of the eruption, world units.
+ *
+ * Sized so clearing it entirely costs `BURROWER_BLAST_R + CROWD_MAX_R` = 3.85 of
+ * separation — which is `SLAM_RADIUS` + `CROWD_MAX_R` to within a tenth, i.e.
+ * the same lateral commitment the boss's slam has asked for since stage one.
+ * That is not a coincidence to be tuned away: the burrower is the elite that
+ * teaches movement, and the distance it teaches has to be the distance the rest
+ * of the game charges for.
+ */
+export const BURROWER_BLAST_R = 2.2
+
+/**
+ * Share of the current squad one eruption takes.
+ *
+ * Exactly the roller's weight, which is the right comparison twice over: both
+ * bill ONCE per fight (`BURROWER_DIVES_MAX`), and both are wholly avoidable by a
+ * player who reads them. `ROLLER_FRACTION`'s own note sets 0.3 as "slam weight
+ * … one connection, wholly avoidable, announced from further off than anything
+ * else in the game", and an eruption is that shape with the announcement made in
+ * two parts instead of one — a mound following the trail, then a ring on the
+ * ground.
+ *
+ * It was 0.24 while the budget was two dives, priced so the pair came to 0.48
+ * and sat between the ball's 0.3 and the bomb's 0.5. The second dive turned out
+ * to be unreachable (see `BURROWER_DIVES_MAX`), so the fight was quietly worth
+ * half of what it was priced at — which is the failure mode this file's whole
+ * habit of writing the arithmetic down exists to catch.
+ *
+ * Deliberately BELOW `BOMBER_FRACTION`'s ceiling, and the argument is the input
+ * each of them asks for. A bomb is answered by one lure and one crossing, so it
+ * can afford to be the most expensive thing on the road. An eruption is answered
+ * by MOVING for the whole of `BURROWER_TRACK_S`, on a road that is also asking
+ * the player to steer for gates and crates — and a hazard that demands
+ * continuous input has to be forgiving about the moments they spend looking at
+ * something else.
+ */
+export const BURROWER_FRACTION = 0.3
+
+
+// ─── The second verb ────────────────────────────────────────────────────────
+//
+// Four boss kinds is four fights, and four fights is not four HUNDRED fights.
+// The pool fixed "every stage ends the same way"; what it could not fix is that
+// each kind still shows the player everything it has inside its first four
+// seconds, and from the second time they meet it there is nothing left to learn.
+// The lane charge (`bossCharges`) was the first answer to that and it is only
+// half of one: it goes to two of the four kinds, and only in phase two, and only
+// once the fight has already turned.
+//
+// So every kind gets a SECOND ATTACK, and the four of them are chosen the same
+// way the kinds themselves were — one question each, and never a question
+// another attack in the game already asks:
+//
+//   meteor    SHOCK      a ring of fire with a hole in the middle of it. The one
+//                        attack in the game whose answer is to run INTO the
+//                        mark, which is the exact inverse of the verb the player
+//                        has spent the whole game learning.
+//   claw      CROSSRAKE  the rake, and then a second rake through its own
+//                        pockets. The pocket you chose becomes the furrow, so
+//                        the answer is not a position, it is a ROUTE.
+//   healer    WARD       the heal, contested. It plants the circle a full cycle
+//                        early and the heal is denied by however much of the
+//                        crowd is standing on it — the only fight in the game
+//                        that was pure arithmetic gets an input.
+//   summoner  FLANKS     the wave comes up at both rails instead of in front, so
+//                        the two packs converge and standing in the middle means
+//                        meeting both at once. The safe-feeling centre line is
+//                        the wrong answer.
+//
+// ── The one rule all four obey: a variant REPLACES a cycle ──
+//
+// None of them is an extra attack, and that is not a coincidence — it is the
+// only shape that does not silently re-price a fight somebody already balanced.
+// Every kind's damage is `share ÷ cadence`, and both terms are load-bearing:
+// `BOLT_SHARE_MUL` is 0.6 *because* the healer's loop is 1.7 s, `SUMMON_BUDGET`
+// prices the summoner's own health bar, and `enragedSpan`'s note records what
+// happened the two times a cycle was tightened without re-deriving its cost.
+//
+// So a variant lands on a cycle the fight was going to spend anyway, and it is
+// priced at exactly what the cycle it replaced was worth:
+//
+//   • the shock and the crossrake each spend ONE `bossHitShare` budget, the same
+//     single-swing price the lane charge is documented at — a crossrake's two
+//     passes share one budget rather than billing one each;
+//   • the ward spends a HEAL, whose price is already in the printed health bar
+//     (`bossHpMulFor`), and costs the crowd nothing at all;
+//   • the flanks wave spends a WAVE out of `SUMMON_BUDGET`, with the same body
+//     count, the same health share and the same walk-in distance. Only the x
+//     changes.
+//
+// A fight therefore has more to show and exactly as much to cost, which is the
+// whole difference between "more content" and "harder".
+
+/**
+ * The stage the second verbs open on, and it is DERIVED rather than picked.
+ *
+ * `bossKindFor` strides the pool so that stages 4-7 field claw, meteor, summoner
+ * and healer — every kind exactly once. Stage 8 is therefore the first fight in
+ * the game the player has met before, and a repeat is precisely where a new move
+ * belongs: it arrives as "this one does something else too" rather than as one
+ * more unfamiliar thing on a road already full of them.
+ *
+ * Reading it off the two constants that make that true keeps it true. A fifth
+ * boss kind pushes the whole rotation out by a stage, and a variant tier that
+ * opened before the rotation finished would show a player a kind's second attack
+ * before its first.
+ */
+export const BOSS_VARIANT_FROM_STAGE = THREAT_POOL_FROM_STAGE + BOSS_POOL.length
+
+/** Does this stage's boss have its second attack yet? */
+export const bossHasVariant = (stage: number): boolean =>
+  stage >= BOSS_VARIANT_FROM_STAGE
+
+export type BossVariant = 'shock' | 'crossrake' | 'ward' | 'flanks'
+
+/** The second attack each kind grows into. One each, permanently — a kind's
+ *  variant is as much a part of what it IS as its first attack. */
+export const bossVariantFor = (kind: BossKind): BossVariant => {
+  switch (kind) {
+    case 'meteor': return 'shock'
+    case 'claw': return 'crossrake'
+    case 'healer': return 'ward'
+    default: return 'flanks'
+  }
+}
+
+/**
+ * Does this variant ride the SWING clock, or its own?
+ *
+ * The shock and the crossrake are swings — they replace a cycle of the meteor's
+ * and the claw's slam machinery, are aimed by `aimBoss` and resolved by
+ * `throwBossAttack` like every swing before them. The ward and the flanks wave
+ * are not: the ward is an overlay on a heal the healer had already scheduled on
+ * its own 1.7 s cadence, and the flanks wave is a wave the summoner had already
+ * budgeted on its own. Both of those live in their kind's own step function,
+ * beside the clock that owns them.
+ *
+ * Derived from the VARIANT and not from the kind, even though the two sets
+ * happen to coincide with `bossCharges`'s. That coincidence is not a fact about
+ * variants — it is a fact about which kinds' fights are one swing — and a
+ * predicate that read the kind would be right today for a reason that has
+ * nothing to do with what it is being asked.
+ */
+export const variantOnSlamClock = (v: BossVariant): boolean =>
+  v === 'shock' || v === 'crossrake'
+
+
+// ─── shock: the ring with a hole in it ──────────────────────────────────────
+//
+// A wall of fire lands in a circle around a patch of clear ground, and the clear
+// ground is somewhere the crowd is NOT standing. Everything in the band pays;
+// the eye of it costs nothing.
+//
+// ── Why the eye never grows and never shrinks ──
+//
+// `SLAM_RADIUS_GROWTH` fattens the meteor's ring as a fight drags, and
+// `CLAW_FURROW_GROWTH` fattens the claw's furrows, and both are the same idea:
+// a long fight should squeeze the answer without ever removing it — which is why
+// `CLAW_SPACING` is derived from the widest a furrow ever gets.
+//
+// An eye cannot be squeezed at all, because it is not the hazard, it is the
+// ANSWER. A ring whose safe middle closed over the course of a fight would be an
+// attack that becomes unanswerable exactly when the player is losing, and the
+// player would have no way to see it happening — the mark looks the same. So the
+// band grows OUTWARD, at exactly the rate the meteor's own ring grows, and the
+// pocket is the one number in the attack that a long fight cannot touch.
+
+/**
+ * Radius of the safe eye.
+ *
+ * DERIVED from the crowd's disc, like every pocket in this game. The margin is
+ * the slack the player's aim is allowed: at 0.6 the crowd's centre has to arrive
+ * within 0.6 units of the mark's centre for a clean escape, which against the
+ * 2.6-unit move the attack asks for is a 23 % tolerance — and being outside it
+ * is a graze rather than a wipe, because the band is budgeted like every other
+ * big hit.
+ */
+export const SHOCK_EYE_MARGIN = 0.6
+export const SHOCK_EYE_R = CROWD_MAX_R + SHOCK_EYE_MARGIN
+
+/** Thickness of the burning band at the first shock, and how it fattens — the
+ *  meteor's own growth rate, because it is the meteor's own attack wearing a
+ *  different shape. */
+export const SHOCK_BAND = 1.6
+export const SHOCK_BAND_MAX = 2.4
+
+/** Outer radius of the band for a boss that has thrown `slams` swings. The ONE
+ *  definition, read by the kill and by the mark the telegraph paints — mirrors
+ *  `slamRadiusFor` and `clawFurrowHalfW`. */
+export const shockOuterR = (slams: number): number =>
+  SHOCK_EYE_R + Math.min(SHOCK_BAND_MAX, SHOCK_BAND + Math.max(0, slams) * SLAM_RADIUS_GROWTH)
+
+/**
+ * How far off the crowd the eye opens.
+ *
+ * The same size of decision the slam asks for, read off the same arithmetic:
+ * a slam's dodge is `SLAM_RADIUS + CROWD_MAX_R` = 3.4 units of lateral travel,
+ * and this asks for `SHOCK_OFFSET` less the eye's own slack — 2.6 − 0.6 = 2.0 of
+ * committed movement plus the accuracy. Smaller than a slam's, and deliberately:
+ * this one is a move TOWARD a mark, and a player aiming at something needs the
+ * distance to be short enough that they can still see where they are going.
+ */
+export const SHOCK_OFFSET = 2.6
+
+/**
+ * Centre of the eye, for a crowd whose centre is at `crowdX`.
+ *
+ * Placed on the crowd's FAR side, so it is always a real move — an eye that
+ * opened where the crowd already stood would be a free cycle, and a boss with a
+ * free cycle is a boss the player learns to ignore.
+ *
+ * Clamped so the eye stays inside the reach of `steerTo`, which stops the crowd
+ * at ±(LANE_HALF − 0.4): an unreachable answer is not an answer. The BAND is not
+ * clamped — it is allowed to run off the rails, exactly as `clawLaneXs` lets a
+ * furrow leave the road, because being cornered should cost options rather than
+ * bending the pattern back on-road for the player's convenience.
+ */
+export const shockEyeX = (crowdX: number): number => {
+  const side = crowdX > 0 ? -1 : 1
+  const room = LANE_HALF - 1.2
+  return Math.max(-room, Math.min(room, crowdX + side * SHOCK_OFFSET))
+}
+
+/** Is a body at `dx`/`dy` from the mark's centre inside the burning band? The
+ *  kill test and nothing else — the telegraph draws the same two radii. */
+export const inShockBand = (dx: number, dy: number, outer: number): boolean => {
+  const d2 = dx * dx + dy * dy
+  return d2 > SHOCK_EYE_R * SHOCK_EYE_R && d2 <= outer * outer
+}
+
+// ─── crossrake: the pocket moves ────────────────────────────────────────────
+
+/**
+ * How far the second rake is offset from the first.
+ *
+ * HALF THE SPACING, which is not a tuning choice — it is the only offset that
+ * makes the attack the thing it is. At half a spacing the second rake's furrows
+ * land exactly down the middle of the first rake's pockets, and its own pockets
+ * open exactly where the first rake's furrows were. So the ground that was safe
+ * becomes lethal and the ground that was lethal becomes safe, which turns two
+ * positions into one route.
+ *
+ * Any other offset gives a second rake whose pockets partly overlap the first's,
+ * and a player who stood in the overlap answers both passes by standing still —
+ * which is the attack costing two telegraphs and asking one question.
+ */
+export const CROSSRAKE_OFFSET = CLAW_SPACING / 2
+
+/**
+ * Seconds between the two passes.
+ *
+ * The move is `CROSSRAKE_OFFSET` — about 2.24 units — and the crowd settles a
+ * full-lane move in roughly a third of a second (`STEER_SPRING`), so 0.7 s is
+ * two reaction times plus the travel.
+ *
+ * What makes that enough is that BOTH passes are telegraphed at the cast, not
+ * one after the other: the player is shown six strips and two countdowns at the
+ * start of the wind-up, so the 0.7 s is spent EXECUTING a route they have
+ * already had the whole wind-up to plan. A second rake announced only when the
+ * first one landed would be 0.7 s of reading and deciding as well, which is the
+ * 0.62-second telegraph `SLAM_TELEGRAPH`'s note measured at a 0 % clear rate.
+ */
+export const CROSSRAKE_GAP_S = 0.7
+
+// ─── ward: the heal, contested ──────────────────────────────────────────────
+//
+// The healer is the one fight in the game with no input in it. Its whole
+// identity is a bar that goes back up, the answer is DPS, and a player either
+// brought enough or did not — which is a fine thing for a game to ask once and a
+// strange thing for it to ask forever.
+//
+// So from `BOSS_VARIANT_FROM_STAGE` the heal comes with a circle on the road, and
+// the heal is reduced by however much of the crowd is standing in it. Nothing
+// about the healer's arithmetic moves: it is the same cast on the same cadence
+// putting back the same `HEAL_FRACTION`, and `bossHpMulFor` still prices the bar
+// for `HEAL_EXPECTED` heals.
+//
+// ── Which means a good player is now paid, and that is the point ──
+//
+// The printed bar keeps its discount, so denying a heal makes the fight shorter
+// than the price sheet assumed. That is not an oversight to be corrected with a
+// compensating multiplier — it is the entire reward. The healer's surcharge was
+// always paid by the player who could not out-damage it; the ward is the first
+// version of the fight where the player who READS it can decline to pay.
+//
+// ── Why it is graded and not a switch ──
+//
+// Coverage is the share of the SQUAD standing on the circle, so a crowd half on
+// it denies half the heal. Every other percentage attack in this game is graded
+// the same way, for the same reason: a binary check on a 2.6-unit move made
+// under fire is a coin flip on where the last bolt pushed the player, and it
+// would read as the mechanic not working rather than as a miss.
+
+/**
+ * Radius of the ward.
+ *
+ * Big enough to hold the crowd whole, plus the same kind of slack the shock's
+ * eye gets — but the crowd does not have to fit inside it, because coverage is
+ * graded. What the radius really sets is how much of a big squad can be on the
+ * circle at once, and a full-size crowd (`CROWD_MAX_R`) fitting exactly is the
+ * honest answer: a player who arrives dead centre with a huge squad denies the
+ * whole heal, and one who clips the edge denies a slice of it.
+ */
+export const WARD_R = CROWD_MAX_R + 0.5
+
+/**
+ * How far off the crowd the ward is planted.
+ *
+ * The shock's distance, for the shock's reason: it is a move toward a mark, so
+ * it has to be short enough to aim at. It is the same input twice in one game
+ * on purpose — the ward is where the player LEARNS that a mark can be a
+ * destination, in a fight where getting it wrong costs seconds rather than
+ * survivors, and the shock is where that lesson is charged for.
+ */
+export const WARD_OFFSET = SHOCK_OFFSET
+
+/**
+ * Centre of the ward, for a crowd whose centre is at `crowdX`.
+ *
+ * The eye's own placement rule, and it must stay that way: two marks that mean
+ * "stand here" and are reached differently would be two mechanics wearing one
+ * costume.
+ */
+export const wardX = (crowdX: number): number => shockEyeX(crowdX)
+
+// ─── flanks: the wave from both rails ───────────────────────────────────────
+
+/**
+ * How far in from the rails a flank wave claws its way up.
+ *
+ * Far enough in that a body is fully on the road (the crowd's own edge clamp is
+ * `LANE_HALF - UNIT_R`), and no further: the whole content of the attack is that
+ * the two packs are as far apart as the road allows, so that where the player
+ * stands decides whether they meet them one at a time or both at once.
+ */
+export const FLANK_INSET = 0.9
+
+/** Where the two packs come up, in world x. */
+export const flankXs = (): number[] => [
+  -(LANE_HALF - FLANK_INSET),
+  LANE_HALF - FLANK_INSET
+]
+
+/**
+ * How far up the road a flank wave comes up, as a multiple of `SUMMON_AHEAD`.
+ *
+ * ONE, and the fact that this is not a free parameter is the reason the variant
+ * costs nothing. `SUMMON_AHEAD`'s note prices the whole archetype off the walk:
+ * "4.8 units at husk speed, against a crowd whose front rank sits 1.2 units
+ * ahead of its own centre, is about 2.1 s from the ground opening to the first
+ * bite". Moving the flanks closer or further would re-price that clock, and the
+ * summoner's budget — which is what its printed health bar is derived from —
+ * assumes it.
+ *
+ * The bodies do arrive from a diagonal rather than from straight ahead, so their
+ * true walk is a little longer than a line wave's. That is the attack: a player
+ * standing on one rail has bought time against the far pack with the road's own
+ * geometry rather than with a number somebody tuned.
+ */
+export const FLANK_AHEAD_MUL = 1
+
+// ─── The third verb: the gaze ───────────────────────────────────────────────
+//
+// Every attack in this game asks the player to MOVE. The ring, the rake, the
+// bolt, the charge, the shock, the crossrake, the flanks — and on the road the
+// sweep, the ball, the bomb, the bolt, the slot and the trail. Twelve questions
+// with one verb between them, and a player who has learned that verb has, in a
+// real sense, learned the whole game: when something lights up, go.
+//
+// The gaze is the one attack whose answer is to STOP. The boss plants, an eye
+// opens over it, and for as long as the eye is open any movement of the crowd is
+// punished — a beam straight down the column the crowd is standing in. A crowd
+// that holds still costs nothing at all, and keeps shooting a boss that is not
+// throwing anything else.
+//
+// ── Why it is a real question and not a free window ──
+//
+// Because it is the only one that fights the player's own reflex. Every other
+// telegraph in this game has trained the thumb to flinch the moment something
+// lights up, and the gaze lights up exactly like everything else. The skill is
+// the SETTLE: the eye opens while the player may still be finishing a dodge from
+// the attack before, and the whole of `GAZE_OPEN` is the time they get to let the
+// crowd come to rest. A player who is still dragging when the eye finishes
+// opening pays for it.
+//
+// It also turns the other attacks into better questions. A healer bolt already
+// in the air when the eye opens is a genuine dilemma — eat the bolt, or break
+// the gaze to step out of it — and a summoner's pack walking in while the eye is
+// open is the one moment in that fight where standing still is expensive too.
+// None of that is scripted; it falls out of the gaze pausing the boss's own
+// clock rather than replacing it (see `stepBoss`).
+//
+// ── Why one shared verb and not one per kind ──
+//
+// Because it is taught on stage 1 (`GAZE_TEACH_LAST_STAGE`), where every boss is
+// a meteor, and a lesson that only applied to meteors would be a lesson the
+// player un-learns the first time a claw stares at them. One verb, the same body
+// language on every boss, so the eye means the same thing wherever it opens.
+
+/**
+ * The stage the gaze joins the rotation for good.
+ *
+ * The same tier as the second verbs (`BOSS_VARIANT_FROM_STAGE`), and for the
+ * same reason stated from the other side: stage 8 is the first REPEAT of every
+ * kind, and a kind that comes back with two new things to say is worth meeting
+ * twice. Opening the third verb any earlier would put it into a fight whose first
+ * verb the player is still learning.
+ */
+export const GAZE_FROM_STAGE = BOSS_VARIANT_FROM_STAGE
+
+/** Is the gaze in this stage's rotation? The teaching fights are asked
+ *  separately — see `GAZE_TEACH_LAST_STAGE`. */
+export const bossHasGaze = (stage: number): boolean => stage >= GAZE_FROM_STAGE
+
+/**
+ * The one early look at it, and where it stops being offered.
+ *
+ * The gaze is thrown ONCE before the tier opens: on the stage-1 boss's guard
+ * phase, or — if that boss died before it had the chance to throw it — on the
+ * stage-2 boss's first. After that it is not seen again until stage 8, where it
+ * joins the rotation for real.
+ *
+ * ── Why the guard phase ──
+ *
+ * It is the one beat in a stage-1 fight the simulation GUARANTEES. `damageBoss`
+ * clamps the bar at every gate, so no squad, however strong, can carry the boss
+ * past it — which means "the boss had the chance to throw it" is a question
+ * about whether the crowd survived to the gate, not about how hard it hit. It is
+ * also the loudest moment in the fight and the one the player is already
+ * watching: the boss plants, roars and goes untouchable. The eye opening there
+ * is the lesson arriving where the attention already is.
+ *
+ * ── Why a stage-2 fallback at all ──
+ *
+ * A stage-1 run can end before the gate — a wiped crowd, a quit — and a teaching
+ * beat that a bad first run can skip is a teaching beat half the players never
+ * get. Stage 2 is the last chance rather than a second showing: the flag is set
+ * the moment the eye has actually opened (`GAZE_TAUGHT_KEY` in the simulation),
+ * so a player who saw it on stage 1 does not see it again on stage 2.
+ */
+export const GAZE_TEACH_LAST_STAGE = 2
+
+/**
+ * Seconds for the eye to open — the wind-up, during which moving is still free.
+ *
+ * Sized off the thing the player has to do in it, which is STOP. `STEER_SPRING`
+ * settles the crowd's anchor in about a third of a second once the thumb comes
+ * off, so a player who reacts at a median 250 ms and lifts their thumb is at rest
+ * by roughly 0.6 s — and 0.9 leaves them a margin on top of that for having been
+ * mid-dodge when the eye began to open, which is the case the attack is built to
+ * catch but not to guarantee.
+ */
+export const GAZE_OPEN = 0.9
+
+/**
+ * …and how long it stays open, during which moving is punished.
+ *
+ * Long enough to feel like holding your breath, short enough that it is never a
+ * wait. It also sets the shape of the pause the gaze puts into the fight: the
+ * boss's own attack clock is FROZEN for exactly this long (see `stepBoss`), so
+ * nothing else the boss does can land inside the window — the one thing that
+ * would turn "hold still" into a choice between two hits with no way out.
+ */
+export const GAZE_WATCH = 1.1
+
+/**
+ * How far the crowd may drift while the eye is open before it counts as moving,
+ * in world units of anchor travel.
+ *
+ * Not zero, and the reason is the thumb rather than the crowd. The anchor only
+ * moves when the steering target moves, so a crowd whose player has let go is
+ * perfectly still — but a thumb resting on the glass is not, and a gaze that
+ * fired on a two-pixel tremor would read as the attack cheating. A third of a
+ * unit is under a fifth of the crowd's own width: nothing a player does on
+ * purpose, nothing a resting thumb does by accident.
+ */
+export const GAZE_TOLERANCE = 0.3
+
+/**
+ * Half-width of the beam the eye fires down the crowd's column.
+ *
+ * Sized to swallow the crowd whole, deliberately. Every other lane in this game
+ * is sized so the crowd can stand BESIDE it (`CHARGE_HALF_W` has the
+ * inequality), because every other lane is a thing to get out of. This one is
+ * not a thing to get out of — it is a consequence, the answer was to not have
+ * moved — so it hits the crowd wherever the crowd has moved TO, and its price is
+ * the one budget every big attack shares (`bossHitShare`), not the geometry.
+ */
+export const GAZE_STRIKE_HALF_W = CROWD_MAX_R + 0.35
+
+// ─── No fixed rotation: the attack bag ──────────────────────────────────────
+//
+// A fight used to be a schedule. `CHARGED_EVERY`, `CHARGE_EVERY` and a third
+// every-third for the variant partitioned the swings by residue, so a stage-9
+// meteor threw
+// its attacks in the same order on every attempt and a player who had fought it
+// twice could recite it. That was a deliberate choice — the rest of this file is
+// built on "a stage is a pure function of its number, so it can be LEARNED" —
+// and for a boss with three verbs it turned out to be the wrong one: what the
+// player learned was the order, not the attacks.
+//
+// So each fight draws its attacks from a SHUFFLE BAG. Every attack the boss has
+// is in the bag once; the bag is shuffled, drawn from until empty, and refilled.
+// Two properties fall out of that and they are the whole requirement:
+//
+//   EQUAL   across a fight, every attack is thrown equally often — never more
+//           than one apart, at any point in the fight. A random pick per swing
+//           would not promise that: a coin can come up heads five times, and a
+//           meteor that threw five rings in a row would be the old metronome
+//           with worse manners.
+//   FRESH   the order is shuffled per ATTEMPT (`bossPatternSeed`), so a retry
+//           is not a replay.
+//
+// ── What is still learnable, and what is not ──
+//
+// The SET of attacks is still a pure function of the stage — which kind, which
+// verbs, from which stage — and every attack still carries its full telegraph.
+// What the player can no longer learn is the ORDER, which is the thing that had
+// stopped being a fight. The balance rule survives too: an attack costs what it
+// costs whichever slot of the bag it lands in, so a fight's total price is set
+// by how many of each it throws, and the bag holds that count constant.
+
+/** The attacks a boss can draw. `primary` is the kind's own attack (the ring,
+ *  the rake, the bolt, the line wave); `variant` its second verb; `charge` the
+ *  phase-two lane charge. */
+export type BossVerb = 'primary' | 'variant' | 'gaze' | 'charge'
+
+/**
+ * Every attack this fight can draw, right now.
+ *
+ * The pool changes exactly once in a fight — at the phase-two turn, when the
+ * lane charge joins it for the two kinds that have one — and the simulation
+ * rebuilds the bag when it does, so the charge is counted into the equal share
+ * from the moment it exists rather than crammed into the tail of the bag that
+ * was already running.
+ *
+ * What is NOT in it, and why:
+ *   • the HEAL. The healer's every-third is a regeneration rate with two hand-
+ *     measured safeties on it (`HEAL_MIN_GAP_S`, `HEAL_MAX_CASTS`), and a heal
+ *     drawn from a bag would be a heal whose gap is decided by a shuffle. It
+ *     keeps its own schedule; the bag decides what the OTHER casts are. The ward
+ *     rides on the heal, so it stays out with it.
+ *   • the CHARGED RING. It is the meteor's ring at double size, not a different
+ *     attack, and it keeps its own every-`CHARGED_EVERY` count — over RINGS
+ *     rather than over swings, so the bag does not dilute it into rarity.
+ */
+export const bossVerbPool = (kind: BossKind, stage: number, enraged: boolean): BossVerb[] => {
+  const pool: BossVerb[] = ['primary']
+  const variant = bossVariantFor(kind)
+  // The ward is the healer's variant and it rides on the heal (see above), so
+  // it is the one second verb that never enters the bag.
+  if (bossHasVariant(stage) && variant !== 'ward') pool.push('variant')
+  if (bossHasGaze(stage)) pool.push('gaze')
+  if (enraged && bossCharges(kind)) pool.push('charge')
+  return pool
+}
+
+/**
+ * What goes into one bag, given the pool.
+ *
+ * The pool itself, one of each — which is the whole of "equally often" — with
+ * one exception, and it only ever binds on a small pool: the lane charge may
+ * never be more than one draw in `CHARGE_EVERY`. A pool with fewer attacks than
+ * that (the stage 2-7 phase two, `{primary, charge}`) is padded with repeats of
+ * its OTHER attacks until the charge is exactly one in `CHARGE_EVERY`. See
+ * `CHARGE_EVERY` for the measurement.
+ *
+ * From stage 8 phase two carries four attacks, so the charge is already one in
+ * four and nothing is padded: the rule costs the richer fights nothing.
+ */
+export const bossBag = (pool: readonly BossVerb[]): BossVerb[] => {
+  if (!pool.includes('charge') || pool.length >= CHARGE_EVERY) return [...pool]
+  const rest = pool.filter((v) => v !== 'charge')
+  const out: BossVerb[] = ['charge']
+  for (let i = 0; out.length < CHARGE_EVERY && rest.length > 0; i++) {
+    out.push(rest[i % rest.length]!)
+  }
+  return out
+}
+
+/**
+ * A small, fast, seedable PRNG — mulberry32.
+ *
+ * Its own stream, and never `Math.random()`, for the reason the track generator
+ * learned the hard way (`Beat.pairRng`): several sim specs pin `Math.random` to a
+ * fixed sequence and read the whole run off it, so a single extra draw per boss
+ * swing would silently re-roll every summon's spawn jitter and every elite's
+ * sweep direction that came after it. A private stream moves nothing else.
+ */
+export const mulberry32 = (seed: number): (() => number) => {
+  let a = seed >>> 0
+  return (): number => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * The seed for one attempt at one boss.
+ *
+ * Mixed from the stage, a per-session count of boss fights started, and a salt.
+ * The count is what makes a retry a different fight; the salt is what makes a
+ * reload a different session. The simulation passes a salt of 0 under test, so
+ * every spec that measures a fight measures the same one on every run — which is
+ * the difference between a spec and a coin flip.
+ */
+export const bossPatternSeed = (stage: number, attempt: number, salt: number): number => {
+  let h = Math.imul(stage ^ 0x9e3779b9, 0x85ebca6b) >>> 0
+  h = Math.imul(h ^ (attempt + 0x632be5ab), 0xc2b2ae35) >>> 0
+  h = Math.imul(h ^ salt, 0x27d4eb2f) >>> 0
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/**
+ * A fresh, shuffled bag of `pool`.
+ *
+ * Fisher–Yates, then one rule on top: a bag may not OPEN with the attack the last
+ * one closed on, when the pool is big enough for that to be avoidable without
+ * making the order predictable. With three or more attacks the swap leaves the
+ * order random. With two it would not — the only legal bag after `[a, b]` would
+ * be `[a, b]` again, forever — so a two-attack bag is allowed to repeat across
+ * its boundary, which is what random looks like with two things.
+ */
+export const shuffleBag = (
+  pool: readonly BossVerb[], rng: () => number, last: BossVerb | null
+): BossVerb[] => {
+  const bag = bossBag(pool)
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const t = bag[i]!
+    bag[i] = bag[j]!
+    bag[j] = t
+  }
+  if (bag.length >= 3 && last !== null && bag[0] === last) {
+    const j = 1 + Math.floor(rng() * (bag.length - 1))
+    const t = bag[0]!
+    bag[0] = bag[j]!
+    bag[j] = t
+  }
+  return bag
+}

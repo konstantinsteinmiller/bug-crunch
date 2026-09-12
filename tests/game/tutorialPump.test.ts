@@ -152,7 +152,8 @@ const play = (graph: Graph, o: {
         rocks: game.getRocks(),
         foes: game.getFoes(),
         pickups: game.getPickups(),
-        boss: game.getBoss()
+        boss: game.getBoss(),
+        incoming: game.incomingThreat()
       }
       const target = o.policy.decide(view)
       if (Number.isFinite(target)) game.steerTo(target)

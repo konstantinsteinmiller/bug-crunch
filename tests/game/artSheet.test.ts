@@ -357,3 +357,122 @@ describe('the prompts carry the clauses that decide whether a return is usable',
     expect(promptForStill(mul)).toContain('never magenta')
   })
 })
+
+// ─── Boss deaths ────────────────────────────────────────────────────────────
+//
+// The one sheet that is not a loop: eight panels from the kill to the body,
+// played once and held. What these pin is the contract with the two other
+// parties — the slicer (a grid it can cut blindly, an id no walk answers to)
+// and the renderer (the walk's scale and feet line, the probe path it asks for
+// at 80 % of the road) — and the three things the prompt exists to prevent.
+describe('boss deaths', () => {
+  it('paints one for every body a boss can wear, under images/deaths/', async () => {
+    const { bossDesigns } = await import('@/game/foes')
+    const { BOSS_DEATHS } = await import('@/game/artSheet')
+    expect(BOSS_DEATHS.map((d) => d.design).sort()).toEqual([...bossDesigns()].sort())
+    for (const d of BOSS_DEATHS) {
+      expect(d.target).toBe(`${ART_FOLDERS.death}/${d.design}.webp`)
+      // Its own id: the walk of the same design answers to the bare one, and
+      // the slicer keys sheets by id.
+      expect(d.id).toBe(`death-${d.design}`)
+      expect(WALKS.some((w) => w.id === d.id || w.file === d.file)).toBe(false)
+    }
+  })
+
+  it('is a 4 x 2 grid at 21:9, on the walk panel\'s height and the runtime\'s aspect', async () => {
+    const { BOSS_DEATHS, DEATH_POSES, MONSTER_PANEL_H } = await import('@/game/artSheet')
+    const { DEATH_FRAME_ASPECT } = await import('@/game/monsterSprites')
+    expect(DEATH_POSES.upright).toHaveLength(8)
+    expect(DEATH_POSES.side).toHaveLength(8)
+    for (const d of BOSS_DEATHS) {
+      expect([d.cols, d.rows, d.frames]).toEqual([4, 2, 8])
+      expect(d.w).toBe(d.cols * d.panelW)
+      expect(d.h).toBe(d.rows * d.panelH)
+      expect(d.w * 9).toBe(d.h * 21)
+      // Same height as the walk panel: the creature is the same size to the
+      // pixel, so the cut at the kill cannot pop.
+      expect(d.panelH).toBe(MONSTER_PANEL_H)
+      // …and the shape the renderer slices the strip by.
+      expect(d.panelW / d.panelH).toBeCloseTo(DEATH_FRAME_ASPECT, 2)
+    }
+  })
+
+  it('goes onto its back upright and onto its flank side-on, and lands to the LEFT on screen', async () => {
+    const { BOSS_DEATHS, DEATH_POSES } = await import('@/game/artSheet')
+    // The last panel is the body the game keeps: it must say how it lies, with
+    // the limbs spread — a body at attention reads as a standing one turned over.
+    expect(DEATH_POSES.upright[7]).toMatch(/on its back, spread out/)
+    expect(DEATH_POSES.side[7]).toMatch(/on its flank with its legs stretched out/)
+    // …and that it lies the way panel 7 left it: one return flipped the body
+    // end for end between the two, so the held corpse snapped round.
+    for (const last of [DEATH_POSES.upright[7], DEATH_POSES.side[7]]) {
+      expect(last).toMatch(/same place as panel 7/)
+      expect(last).toMatch(/NOT turned round/)
+    }
+    for (const d of BOSS_DEATHS) {
+      // A side-on body collapses along the ground; tipping it a quarter turn
+      // stood it on its rump in the first layout.
+      expect(d.stance).toBe(d.faces === 'front' ? 'upright' : 'side')
+      expect(d.fall).toBe(d.faces === 'left' ? 1 : -1)
+      // The field mirrors a left-facer; the strip is never mirrored again.
+      const mirror = d.faces === 'left' ? -1 : 1
+      expect(d.fall * mirror).toBe(-1)
+    }
+  })
+
+  it('asks for a real fall, the painted creature, and nothing a child should not see', async () => {
+    const { BOSS_DEATHS, promptForDeath } = await import('@/game/artSheet')
+    for (const d of BOSS_DEATHS) {
+      const p = promptForDeath(d)
+      expect(p).toContain(`${d.file}.png`)
+      // The CHARACTER is attached, not described: one frame of the creature's
+      // walk as the game shows it. A death painted from words alone came back
+      // as a different creature, and the swap at the kill is then a costume
+      // change. `tools/art-models.mjs` writes it at the same path.
+      expect(d.model).toBe(`models/${d.design}.png`)
+      // The character first, the layout second and for poses only.
+      expect(p).toContain(`IMAGE 1 — \`${d.model}\` — THE CHARACTER`)
+      expect(p).toContain(`IMAGE 2 — \`${d.file}.png\` — THE ANIMATION`)
+      expect(p.indexOf('IMAGE 1')).toBeLessThan(p.indexOf('IMAGE 2'))
+      expect(p).toMatch(/PROPORTIONS/)
+      // The layout is the drawn fall now (monsterKit's "Dying"), not a plank
+      // tipped over, so the painter follows it rather than being warned off it.
+      expect(p).toContain('FOLLOW ITS POSES')
+      expect(p).not.toContain('DO NOT COPY')
+      expect(p).toMatch(/NO blood/)
+      expect(p).toMatch(/NO puddle/)
+      expect(p).toContain('EXACTLY 8 panels')
+      expect(p).toContain(`${d.w} x ${d.h}`)
+      expect(p).toContain(BACKGROUND_RULE)
+      // Every panel named, in order.
+      for (let i = 1; i <= 8; i++) expect(p).toContain(`· panel ${i}:`)
+    }
+  })
+
+  it('says who each boss is in words, and hands it no gear its walk does not hold', async () => {
+    const { BOSS_DEATHS, DEATH_IDENTITY, DEATH_POSES, promptForDeath } = await import('@/game/artSheet')
+    // The panel lines are shared by every boss, so they name no gear at all:
+    // "anything it was holding flies out" got a sword and shield painted in.
+    // And no ALL-CAPS headings — those came back as captions in the panels.
+    for (const line of [...DEATH_POSES.upright, ...DEATH_POSES.side]) {
+      expect(line).not.toMatch(/weapon|sword|shield|holding|club|mace/i)
+      expect(line.slice(0, 12)).toBe(line.slice(0, 12).toLowerCase())
+    }
+    for (const d of BOSS_DEATHS) {
+      const who = DEATH_IDENTITY[d.design]
+      expect(who, `${d.design} needs a DEATH_IDENTITY line`).toBeDefined()
+      const p = promptForDeath(d)
+      expect(p).toContain(who!.looks)
+      if (who!.holds) {
+        expect(p).toContain(who!.holds)
+        expect(p).toMatch(/flies loose at the blow/)
+      } else {
+        expect(p).toMatch(/carries NOTHING/)
+        expect(p).not.toMatch(/flies loose/)
+      }
+      // Nothing that reads as a caption to paint, and no panel edges.
+      expect(p).toMatch(/NO panel borders/)
+      expect(p).toMatch(/Never write them, or any other words, in the image/)
+    }
+  })
+})

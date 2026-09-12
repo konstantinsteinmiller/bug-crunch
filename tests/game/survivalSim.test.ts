@@ -197,7 +197,7 @@ describe('a +N gate is a decision about TIME, not about firepower', () => {
 
   it('steps bigger and ticks faster once the doors are big — against the real sim', async () => {
     // The constants are pinned in `gatePump.test.ts`; this is the proof that
-    // `stepGates` actually spends them. A stage-46 door prints `+36`, so the
+    // `stepGates` actually spends them. A stage-46 door prints `+34`, so the
     // old flat `+1 per 500 ms` was a ninth of it across a full approach and the
     // bank had stopped being a decision.
     const game = await importGame()
@@ -206,7 +206,7 @@ describe('a +N gate is a decision about TIME, not about firepower', () => {
 
     expect(steps.length, 'stage 46 never streamed an additive leaf to pump').toBeGreaterThan(0)
     for (const step of steps) expect(step).toBe(gatePumpStep(46))
-    expect(gatePumpStep(46)).toBe(4)
+    expect(gatePumpStep(46)).toBe(3)
     for (const gap of gaps) {
       expect(Math.abs(gap - gateTickMs('add', 46))).toBeLessThanOrEqual(STEP_MS + 4)
     }

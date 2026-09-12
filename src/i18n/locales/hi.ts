@@ -31,8 +31,11 @@ export default {
     'fireRate': 'दर',
     'incoming': 'हमला आ रहा है!',
     'dodge': 'बचें',
+    'getIn': 'अंदर जाएँ',
+    'holdStill': 'रुको',
     'milestone': '{n} की सेना!',
     'weaponActive': '{name} तैयार',
+    'weaponsActive': '{a} + {b} तैयार',
     'weaponLocked': '{name} लॉक — {total} में से {n} लीवर दागे गए',
     'weaponGift': '{name} आगे — मुफ़्त, कोई लीवर नहीं',
     'weaponFree': 'मुफ़्त'
@@ -90,6 +93,10 @@ export default {
       'a': "दोगुनी फायर दर",
       'b': "गेट तेज़ी से बढ़ाता है"
     }
+  },
+  'bossReward': {
+    'title': "बॉस हार गया!",
+    'subtitle': "स्टेज {n} के लिए तोहफ़ा। दौड़ते रहो!"
   },
   'result': {
     'stageClear': 'चरण पूरा!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'ग्रेनेड',
 
-    'shield': 'ढाल'
+    'shield': 'ढाल',
 
+    'locked': 'लॉक है',
+
+    'unlocksAt': 'स्टेज {n} पर खुलेगा',
+
+    'frost': 'फ्रॉस्ट नोवा',
+
+    'decoy': 'छल फ़्लेयर',
+
+    'trialLabel': '{name} · मुफ़्त आज़माएँ',
+
+    'trialTag': 'मुफ़्त आज़माएँ!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

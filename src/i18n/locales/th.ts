@@ -31,8 +31,11 @@ export default {
     'fireRate': 'อัตรา',
     'incoming': 'การโจมตีกำลังมา!',
     'dodge': 'หลบ',
+    'getIn': 'เข้าไป',
+    'holdStill': 'อยู่นิ่ง',
     'milestone': 'ทีม {n} คน!',
     'weaponActive': '{name} พร้อม',
+    'weaponsActive': '{a} + {b} พร้อม',
     'weaponLocked': '{name} ถูกล็อก — ยิงคันโยกแล้ว {n} จาก {total}',
     'weaponGift': '{name} อยู่ข้างหน้า — ฟรี ไม่มีคันโยก',
     'weaponFree': 'ฟรี'
@@ -90,6 +93,10 @@ export default {
       'a': "อัตรายิงสองเท่า",
       'b': "ปั๊มประตูเร็วขึ้น"
     }
+  },
+  'bossReward': {
+    'title': "ล้มบอสได้แล้ว!",
+    'subtitle': "ของขวัญสำหรับด่าน {n} วิ่งต่อไป!"
   },
   'result': {
     'stageClear': 'ผ่านด่าน!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'ระเบิดมือ',
 
-    'shield': 'โล่'
+    'shield': 'โล่',
 
+    'locked': 'ล็อกอยู่',
+
+    'unlocksAt': 'ปลดล็อกที่ด่าน {n}',
+
+    'frost': 'โนวาน้ำแข็ง',
+
+    'decoy': 'พลุล่อ',
+
+    'trialLabel': '{name} · ลองฟรี',
+
+    'trialTag': 'ลองฟรี!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

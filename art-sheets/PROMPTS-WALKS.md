@@ -9,9 +9,12 @@ whole job is that it comes back as one subject and not eight.
 Drop results in `art-sheets/painted/`, keeping the `walk-<id>` in the name,
 then run `pnpm slice-sheets`. The slicer cuts the grid by proportion, so an
 off-size return is fine as long as the panels are where the grid says.
+Each prompt is a fenced block — the preview's copy button takes all of it —
+and `pnpm art:desk` can run the whole loop from these blocks.
 
-# grumpling — Grumpling  (images/monsters/grumpling.webp)
+## Grumpling  (walk-grumpling.png → images/monsters/grumpling.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -131,11 +134,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# bonecap — Bonecap  (images/monsters/bonecap.webp)
+## Bonecap  (walk-bonecap.png → images/monsters/bonecap.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -255,11 +260,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# snaggletusk — Snaggletusk  (images/monsters/snaggletusk.webp)
+## Snaggletusk  (walk-snaggletusk.png → images/monsters/snaggletusk.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -379,11 +386,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# wispling — Wispling  (images/monsters/wispling.webp)
+## Wispling  (walk-wispling.png → images/monsters/wispling.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -503,11 +512,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# marrowknight — Marrow Knight  (images/monsters/marrowknight.webp)
+## Marrow Knight  (walk-marrowknight.png → images/monsters/marrowknight.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -627,11 +638,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# nibbler — Nibbler  (images/monsters/nibbler.webp)
+## Nibbler  (walk-nibbler.png → images/monsters/nibbler.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -751,11 +764,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# cinderhound — Cinderhound  (images/monsters/cinderhound.webp)
+## Cinderhound  (walk-cinderhound.png → images/monsters/cinderhound.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -875,11 +890,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# blorp — Blorp  (images/monsters/blorp.webp)
+## Blorp  (walk-blorp.png → images/monsters/blorp.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -999,11 +1016,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# thornwick — Thornwick  (images/monsters/thornwick.webp)
+## Thornwick  (walk-thornwick.png → images/monsters/thornwick.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1123,11 +1142,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# rattlejack — Rattlejack  (images/monsters/rattlejack.webp)
+## Rattlejack  (walk-rattlejack.png → images/monsters/rattlejack.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1247,11 +1268,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# dustmoth — Dustmoth  (images/monsters/dustmoth.webp)
+## Dustmoth  (walk-dustmoth.png → images/monsters/dustmoth.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1371,11 +1394,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# skewer — Skewer  (images/monsters/skewer.webp)
+## Skewer  (walk-skewer.png → images/monsters/skewer.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1495,11 +1520,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# gloomcrow — Gloomcrow  (images/monsters/gloomcrow.webp)
+## Gloomcrow  (walk-gloomcrow.png → images/monsters/gloomcrow.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a WALK CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1619,11 +1646,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 720 pixels (16:9, landscape). If your tool has
 an aspect-ratio control, set it to 16:9 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# teal — Survivor (teal)  (images/heroes/teal.webp)
+## Survivor (teal)  (walk-hero-teal.png → images/heroes/teal.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a RUN CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1764,11 +1793,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 640 pixels (2:1, landscape). If your tool has
 an aspect-ratio control, set it to 2:1 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# amber — Survivor (amber)  (images/heroes/amber.webp)
+## Survivor (amber)  (walk-hero-amber.png → images/heroes/amber.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a RUN CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -1909,11 +1940,13 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 640 pixels (2:1, landscape). If your tool has
 an aspect-ratio control, set it to 2:1 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```
 
 ---
 
-# violet — Survivor (violet)  (images/heroes/violet.webp)
+## Survivor (violet)  (walk-hero-violet.png → images/heroes/violet.webp)
 
+```text
 WHAT COMES BACK IS A SPRITE SHEET, NOT A PORTRAIT.
 Repaint a RUN CYCLE. The attached sheet is 4 columns x 2 rows
 = EXACTLY 8 panels, read left to right along the top row and then the
@@ -2054,3 +2087,4 @@ BEFORE YOU CALL IT FINISHED, count and check:
 OUTPUT: one image, 1280 x 640 pixels (2:1, landscape). If your tool has
 an aspect-ratio control, set it to 2:1 — a square return crushes the grid
 and cannot be cut. No labels, captions, numbers or watermarks.
+```

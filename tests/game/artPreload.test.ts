@@ -205,10 +205,13 @@ describe('tiers 1 and 2', () => {
   })
 
   it('fetches the rocket only for the stages whose box holds it', async () => {
-    // Stage 1: no box, no pick yet, and the pick is two stages away.
+    // Stage 1: no box and no pick yet — but its boss drops the launcher the next
+    // road is run with (`BOSS_REWARD_STAGE`), so the round is wanted already.
+    // Tier 1 only: the splash still never holds for it (see tier 0 above).
     stage = 1
     let m = await load(true)
-    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(false)
+    expect(has(m.earlyArtWants(), 'round', 'rocket')).toBe(true)
+    expect(has(m.criticalArtWants(), 'round', 'rocket')).toBe(false)
     // Stage 2: the weapon choice comes at the end of this road and stage 3
     // starts the instant a card is tapped — so the rocket is fetched in case.
     stage = 2
@@ -368,5 +371,25 @@ describe('tiers 1 and 2', () => {
     expect(requested).toHaveLength(1)
     expect(requested[0]).toContain(`${early[0]![1]}.webp`)
     void p
+  })
+})
+
+describe('the boss\'s death, fetched late', () => {
+  it('names the stage\'s own boss, at 80 % of the road', async () => {
+    const m = await load(true)
+    const { bossDesign } = await import('@/game/foes')
+    for (const s of [1, 2, 3, 6, 16]) expect(m.deathArtWant(s)).toEqual(['death', bossDesign(s)])
+    expect(m.deathArtDue(0.79)).toBe(false)
+    expect(m.deathArtDue(m.DEATH_ART_FROM)).toBe(true)
+    expect(m.DEATH_ART_FROM).toBe(0.8)
+  })
+
+  it('rides none of the tiers — no splash, no early fetch, no idle sweep', async () => {
+    for (const s of [1, 2, 6]) {
+      stage = s
+      const m = await load(true)
+      const tiers = [...m.criticalArtWants(), ...m.earlyArtWants(), ...m.allArtWants()]
+      expect(tiers.some(([kind]) => kind === 'death'), `stage ${s}`).toBe(false)
+    }
   })
 })

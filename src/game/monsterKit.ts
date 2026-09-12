@@ -682,3 +682,272 @@ export const pivot = (pts: Pt[], cx: number, cy: number, a: number, mirror = 1):
       cy + lx * Math.sin(a) + y * Math.cos(a)
     ] as Pt
   })
+
+// ─── Dying ──────────────────────────────────────────────────────────────────
+//
+// A boss's death, DRAWN — the joints move, the body goes down, and what is left
+// lies on the road with its arms spread. It replaced a walk frame rolled over
+// by ninety degrees, which read as exactly that: a standing creature, turned on
+// its side. The same drawing is the reference the painted death strips are
+// painted over (`artSheet.BOSS_DEATHS`) and the in-game fallback until they
+// exist (`monsterSprites.deathFrames`), so all three agree about the pose.
+//
+// It keeps the cast's one animation rule: parts MOVE, shapes never change. A
+// dying creature is its own walking body with different joint targets and one
+// transform over the whole of it.
+//
+// Every design reads the death through `dyingAt()` rather than a new argument,
+// so a `draw(ctx, S, t)` that has not learned to die simply draws its walk.
+
+let dyingK: number | null = null
+
+/** Draw `fn` as the death at `k`: 0 is the killing blow, 1 the body lying still. */
+export const drawDeath = (k: number, fn: () => void): void => {
+  const prev = dyingK
+  dyingK = Math.max(0, Math.min(1, k))
+  try { fn() } finally { dyingK = prev }
+}
+
+/** The death being drawn right now, or `null` for the living cycle. */
+export const dyingAt = (): number | null => dyingK
+
+/**
+ * Which way an upright body goes over, as drawn: to the panel's LEFT. One side
+ * for the whole front-on cast, so the painted strips and the goo under them
+ * agree without a per-design table (`monsterSprites.deathFallSide`).
+ */
+export const UPRIGHT_FALL = -1 as const
+
+const seg = (k: number, a: number, b: number): number => Math.max(0, Math.min(1, (k - a) / (b - a)))
+/** How far `k` is through the stretch `a..b` of a death, clamped 0..1 — for a
+ *  design's own beat (a dropped sword, a last spark) timed against the shared ones. */
+export const deathSpan = seg
+const easeOut = (x: number): number => 1 - (1 - x) ** 3
+const smooth = (x: number): number => x * x * (3 - 2 * x)
+const mix = (a: number, b: number, w: number): number => a + (b - a) * w
+
+/**
+ * The beats of a death, each 0..1, timed so eight evenly spaced panels land on
+ * the eight moments the prompt names: the blow, the stagger, the knees going,
+ * the fall, the impact, the bounce, the settling and the body.
+ */
+export interface DeathBeats {
+  k: number
+  /** The blow's recoil — full at the first panel, gone by the third. */
+  recoil: number
+  /** Knees giving way. */
+  buckle: number
+  /** Going over onto the ground. */
+  fall: number
+  /** The rebound off the ground, up and back down. */
+  bounce: number
+  /** Limbs coming to rest where they landed. */
+  settle: number
+  /** The light going out: eyes shutting, glow dimming, limbs slack. */
+  lifeless: number
+}
+
+export const deathBeats = (k: number): DeathBeats => ({
+  k,
+  recoil: 1 - easeOut(seg(k, 0, 0.3)),
+  buckle: easeOut(seg(k, 0.08, 0.36)),
+  fall: smooth(seg(k, 0.28, 0.6)),
+  bounce: Math.sin(Math.PI * seg(k, 0.6, 0.82)),
+  settle: easeOut(seg(k, 0.7, 1)),
+  lifeless: easeOut(seg(k, 0.5, 0.95))
+})
+
+/**
+ * Where a hand goes, from its shoulder, and where the elbow bends.
+ *
+ * The angle is measured from hanging straight down, outward positive: 0 is
+ * hanging, π/2 straight out to the side, π straight up. Flung up and out at the
+ * blow; windmilling through the stagger, the two arms half a swing apart so one
+ * is always up while the other is down; thrown wide as the body goes over; and
+ * spread flat on the ground at the end — NOT a matched pair, because a body
+ * that lands symmetrical reads as posed.
+ *
+ * The rest angles are for a body that went over to `UPRIGHT_FALL`: the arm on
+ * that side lands flung down toward the feet, the other up past the shoulder,
+ * so once the body lies on its diagonal one points down the screen and one up
+ * it — and neither lies hidden under the head.
+ */
+export const deathArm = (
+  D: DeathBeats, side: -1 | 1, reach: number
+): { hand: Pt; elbow: Pt; open: number } => {
+  // Up and OUT rather than overhead: an arm flung straight up disappears behind
+  // the head on half the cast, and the blow has to read on the first panel.
+  const flung = side > 0 ? 2.15 : 1.95
+  const wind = seg(D.k, 0.04, 0.42)
+  const flail = 1.45 + 0.8 * Math.sin(Math.PI * 2 * wind * 1.2 + (side > 0 ? 0 : Math.PI))
+  const under = side === UPRIGHT_FALL
+  const spread = under ? 1.05 : 1.8
+  let a = mix(flung, flail, easeOut(seg(D.k, 0.02, 0.2)))
+  a = mix(a, spread, D.fall)
+  // The slap: arms bounce up off the road with the body, then lie flat.
+  a += 0.22 * D.bounce * (under ? -0.6 : 1)
+  // `reach` is the arm's whole length, shoulder to wrist, and the bones keep it
+  // — thrown out nearly straight, crooked as the knees go, lying almost
+  // straight once it is limp. The hand's distance picks the elbow, as IK does.
+  const r = reach * (0.94 - 0.2 * D.buckle * (1 - D.fall) + 0.04 * D.settle)
+  const hand: Pt = [side * Math.sin(a) * r, Math.cos(a) * r]
+  // Elbows bend toward the ground: the perpendicular that points down.
+  let px = -hand[1]
+  let py = hand[0]
+  if (py < 0) { px = -px; py = -py }
+  const l = Math.hypot(px, py) || 1
+  const bend = Math.sqrt(Math.max(0, (reach / 2) ** 2 - (r / 2) ** 2))
+  const elbow: Pt = [hand[0] / 2 + (px / l) * bend, hand[1] / 2 + (py / l) * bend]
+  return { hand, elbow, open: Math.max(D.lifeless, 0.35 * D.recoil) }
+}
+
+/** The angle a hand points along its forearm — for a hand drawn as its own part. */
+export const deathHandAngle = (A: { hand: Pt; elbow: Pt }): number =>
+  Math.atan2(A.hand[1] - A.elbow[1], A.hand[0] - A.elbow[0])
+
+/**
+ * Where a leg's foot goes, from where it stood, and how far the hip drops.
+ * The knees give (the hip drops and the limb's own IK buckles it outward), then
+ * the legs splay on the road; the bounce lifts the feet for a frame.
+ */
+export const deathLeg = (D: DeathBeats, side: -1 | 1, S: number): { foot: Pt; hipDrop: number } => ({
+  // Splayed wide in a V once it is down — a body lying with its feet together
+  // is a body lying to attention.
+  foot: [side * (0.08 * D.buckle + 0.26 * D.fall) * S, (0.06 * D.fall - 0.07 * D.bounce) * S],
+  // Gone again once it is down: lying, the legs are straight, and a drop left
+  // in would slide the whole upper body down its own length, off its shadow.
+  hipDrop: (0.22 * D.buckle * (1 - D.fall)) * S
+})
+
+/** The head's roll on its neck, radians: snapped back by the blow, then
+ *  dropping on over the way the body fell as the light goes — limp, and at an
+ *  angle no living neck holds. */
+export const deathLoll = (D: DeathBeats, lean: -1 | 1 = UPRIGHT_FALL): number =>
+  -lean * 0.22 * D.recoil + lean * (0.14 * D.buckle + 0.32 * D.lifeless)
+
+/** How shut the eyes are: open with the blow, closing as the light goes out. */
+export const deathLid = (D: DeathBeats, living = 0): number => Math.max(living, D.lifeless)
+
+/** How far a lying body's middle comes to rest above the feet line, in S —
+ *  enough that the limbs it lands on fit above the panel's bottom edge. */
+export const LYING_REST = 0.62
+
+/** How much the ground foreshortens a body lying on it, as a height factor. */
+const LYING_FLAT = 0.6
+
+/**
+ * An UPRIGHT body going down — the whole figure.
+ *
+ * A stagger first: it rocks on its feet under the blow and back while the knees
+ * go. Then it goes over sideways and lands on its BACK, lying on a diagonal
+ * across the ground it stood on — the legs kicked out from under it, so it
+ * turns about its middle rather than about its feet, which is also what keeps
+ * the body inside the spot it died on rather than beside it. Lying down, it is
+ * seen the way the ground is: foreshortened, flatter than it is long.
+ *
+ * That flattening is what makes it LIE rather than float: the old corpse was
+ * the walk frame turned ninety degrees and read as a standing creature on its
+ * side. The limbs are the other half — spread out by `deathArm`/`deathLeg`.
+ *
+ * `mid` is the middle of the body in the drawing's units (feet at +1), and
+ * `rest` how far above the feet line that middle comes to lie — higher for a
+ * body whose limbs reach far. Applies to `ctx`; call between a save and a
+ * restore, before the body.
+ */
+export const fallOntoBack = (
+  ctx: CanvasRenderingContext2D, S: number, D: DeathBeats,
+  lean: -1 | 1 = UPRIGHT_FALL, mid = 0, rest = LYING_REST, feet = 1.0
+): void => {
+  const rock = lean * Math.sin(Math.PI * 2 * seg(D.k, 0.04, 0.44)) * 0.13 * (1 - D.fall)
+  const lie = D.fall * (1 - 0.12 * D.bounce)
+  // Short of a quarter turn, so it lies askew: square across the road reads as
+  // laid out, and a diagonal as dropped.
+  const tip = lean * 1.0 * lie
+  const drop = feet - rest - mid
+  ctx.translate(0, (mid + drop * D.fall) * S)
+  ctx.scale(1, 1 - (1 - LYING_FLAT) * lie)
+  ctx.rotate(tip)
+  ctx.translate(0, (feet - mid) * S)
+  ctx.rotate(rock)
+  // The blow jolts it up onto its toes for a moment — stretched about the
+  // feet, which stay planted, and only a little, since the tallest of the cast
+  // already fill their frames.
+  ctx.scale(1, 1 + 0.03 * D.recoil)
+  ctx.translate(0, -feet * S)
+}
+
+/** How far a side-on body's middle comes to rest above the feet line, in S —
+ *  low, with room under it for the legs it lies with stretched out. */
+export const FLANK_REST = 0.42
+
+/**
+ * A SIDE-ON body going down — rears at the blow, pitches onto its knees as the
+ * front legs go, then keels over onto its far flank.
+ *
+ * Lying on its flank, its side faces the sky, so the camera sees the whole
+ * profile laid flat on the road: squashed toward its own middle rather than
+ * toward its feet, with the middle brought right down to the ground. What
+ * makes it read as DOWN rather than resting is the legs — stretched out stiff
+ * (`deathFlankFoot`), where a resting animal tucks them under.
+ *
+ * `headDir` is the side the head is drawn on (−1 left), `mid` the middle of
+ * the body and `hind` how far behind the middle the hind feet stand, which is
+ * what it rears up about.
+ */
+export const fallOntoFlank = (
+  ctx: CanvasRenderingContext2D, S: number, D: DeathBeats, headDir: -1 | 1,
+  mid = 0.4, hind = 0.35, ground = 1.0
+): void => {
+  // Positive turns the head end UP when the head is drawn on the left.
+  const pitch = -headDir * 0.2 * D.recoil + headDir * (0.14 * D.buckle * (1 - D.fall) + 0.09 * D.fall)
+  const lie = D.fall * (1 - 0.14 * D.bounce)
+  const px = -headDir * hind * S
+  ctx.translate(0, (mid + (ground - FLANK_REST - mid) * D.fall) * S)
+  ctx.scale(1, 1 - (1 - LYING_FLAT) * lie)
+  ctx.translate(0, -mid * S)
+  ctx.translate(px, ground * S)
+  ctx.rotate(pitch)
+  ctx.translate(-px, -ground * S)
+}
+
+/**
+ * Where a side-on leg's foot goes while dying: lifted as the knee folds, then
+ * thrown out STRAIGHT at full length — the front legs forward, the hind legs
+ * back — and the whole leg kicks on the bounce. `len` is the leg's length hip
+ * to foot and `splay` spreads a far leg from its near twin, so the pair does
+ * not lie as one.
+ */
+export const deathFlankFoot = (
+  D: DeathBeats, hip: Pt, stood: Pt, len: number, front: boolean, headDir: -1 | 1, splay = 0
+): Pt => {
+  const dir = front ? headDir : -headDir
+  // Well out past the body's own outline: a leg that stays under the belly is
+  // a beast lying down to rest.
+  const a = (front ? 1.08 : 0.98) + splay
+  const reach = len * 0.98
+  const stiff: Pt = [hip[0] + dir * Math.sin(a) * reach, hip[1] + Math.cos(a) * reach]
+  const fold = -0.3 * len * D.buckle * (1 - D.fall)
+  return [mix(stood[0], stiff[0], D.fall), mix(stood[1] + fold, stiff[1], D.fall) - 0.1 * len * D.bounce]
+}
+
+/**
+ * The shadow a dying body throws: from under its feet to under all of it. For
+ * an upright body (`lean` given) it follows the corpse onto its diagonal; a
+ * side-on one (`lean` 0) just spreads along the ground where it lies.
+ */
+export const deathShadow = (
+  ctx: CanvasRenderingContext2D, S: number, D: DeathBeats, w: number,
+  lean: -1 | 0 | 1 = UPRIGHT_FALL, y = 1.02, a = 0.28, lying = LYING_REST
+): void => {
+  ctx.save()
+  ctx.globalAlpha = a * (1 + 0.3 * D.fall)
+  // Under the middle of the corpse (`fallOntoBack` rests it `lying` above the
+  // feet line, `fallOntoFlank` FLANK_REST), a touch toward the camera as a
+  // shadow on the ground is.
+  const rest = lean ? lying - 0.05 : FLANK_REST - 0.12
+  const cy = (y - (y - 1 + rest) * D.fall) * S
+  ctx.translate(0, cy)
+  ctx.rotate(-lean * 0.36 * D.fall)
+  fillShape(ctx, blob(0, 0, (w + (lean ? 0.6 : 0.2) * D.fall) * S, (0.1 + (lean ? 0.26 : 0.1) * D.fall) * S, 21, 0.14), '#20141c')
+  ctx.restore()
+}

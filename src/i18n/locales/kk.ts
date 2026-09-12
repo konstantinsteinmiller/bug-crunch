@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Қарқын',
     'incoming': 'Шабуыл келеді!',
     'dodge': 'Жалтар',
+    'getIn': 'Ішіне',
+    'holdStill': 'Қимылдама',
     'milestone': '{n} жауынгер!',
     'weaponActive': '{name} дайын',
+    'weaponsActive': '{a} + {b} дайын',
     'weaponLocked': '{name} құлыпталған — {total} тұтқаның {n} атылды',
     'weaponGift': '{name} алда — тегін, иінтіректерсіз',
     'weaponFree': 'ТЕГІН'
@@ -90,6 +93,10 @@ export default {
       'a': "Екі есе жылдам ату",
       'b': "Қақпаларды тезірек толтырады"
     }
+  },
+  'bossReward': {
+    'title': "Бос жеңілді!",
+    'subtitle': "{n}-деңгейге сыйлық. Жүгіре бер!"
   },
   'result': {
     'stageClear': 'Кезең өтті!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Граната',
 
-    'shield': 'Қалқан'
+    'shield': 'Қалқан',
 
+    'locked': 'Жабық',
+
+    'unlocksAt': '{n}-деңгейде ашылады',
+
+    'frost': 'Мұзды нова',
+
+    'decoy': 'Алдамшы алау',
+
+    'trialLabel': '{name} · тегін',
+
+    'trialTag': 'Тегін сынап көр!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

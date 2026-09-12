@@ -26,6 +26,12 @@
  *   --concurrency <n>    parallel files (default: half the cores, max 8)
  *   --max-effort         webp: one extra encode at libwebp effort 6 for the
  *                        chosen quality (~3% smaller, ~20x slower per encode)
+ *   --only <files>       compress just these files (comma-separated, or the
+ *                        flag repeated) instead of walking <dir>; they must
+ *                        sit under <dir>, which still decides the backup path
+ *   --fresh              the files on disk are NEW originals (a re-slice just
+ *                        wrote them): retire any backup they have instead of
+ *                        compressing from it — see processFile
  *   --json <file>        write the per-file report as JSON
  *   --quiet              only print the summary
  *
@@ -50,7 +56,7 @@
  * bigger or visibly worse — the worst case is "kept as is".
  */
 import { readdir, readFile, writeFile, stat, mkdir, copyFile, access } from 'node:fs/promises'
-import { join, extname, basename, dirname, relative, resolve } from 'node:path'
+import { join, extname, basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { availableParallelism } from 'node:os'
 import sharp from 'sharp'
@@ -103,6 +109,8 @@ const options = {
     'max-quality': { type: 'string' },
     concurrency: { type: 'string' },
     'max-effort': { type: 'boolean', default: false },
+    only: { type: 'string', multiple: true },
+    fresh: { type: 'boolean', default: false },
     json: { type: 'string' },
     quiet: { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
@@ -124,7 +132,7 @@ if (process.env.npm_config_user_agent?.startsWith('npm/')) {
   }
 }
 if (opt.help || !positionals[0]) {
-  console.log('usage: compress-images <dir> [--dry-run] [--force] [--no-backup] [--backup-dir <dir>] [--ext png,jpg,webp] [--min-ssim 0.98] [--min-psnr 36] [--max-alpha-err 6] [--quality n] [--png-quality n] [--jpeg-quality n] [--webp-quality n] [--min-quality 50] [--max-quality 95] [--max-effort] [--concurrency n] [--json report.json] [--quiet]')
+  console.log('usage: compress-images <dir> [--dry-run] [--force] [--no-backup] [--backup-dir <dir>] [--ext png,jpg,webp] [--min-ssim 0.98] [--min-psnr 36] [--max-alpha-err 6] [--quality n] [--png-quality n] [--jpeg-quality n] [--webp-quality n] [--min-quality 50] [--max-quality 95] [--max-effort] [--only a.webp,b.webp] [--fresh] [--concurrency n] [--json report.json] [--quiet]')
   process.exit(opt.help ? 0 : 1)
 }
 const ROOT = resolve(positionals[0])
@@ -351,8 +359,17 @@ async function processFile(file) {
   const fmt = fmtOf(file)
   const rel = relative(ROOT, file) || basename(file)
   const backup = backupPathFor(file)
-  const hasBackup = await exists(backup)
-  if (hasBackup && !opt.force) return { rel, status: 'skip', note: 'already compressed (backup exists; --force to redo)' }
+  let hasBackup = await exists(backup)
+  // --fresh: the file on disk is a NEW original — the slicer just re-cut it —
+  // so a backup is the PREVIOUS original. Skipping (the default) would ship the
+  // new art uncompressed; --force would compress the OLD art back over it,
+  // because it reads the backup as the pristine source. Retire the old one:
+  // the new file becomes the backup, and a later --force stays correct.
+  if (opt.fresh && hasBackup) {
+    if (opt['dry-run'] || opt['no-backup']) hasBackup = false
+    else await copyFile(file, backup)
+  }
+  if (hasBackup && !opt.force && !opt.fresh) return { rel, status: 'skip', note: 'already compressed (backup exists; --force to redo)' }
 
   const srcPath = hasBackup ? backup : file
   const src = await readFile(srcPath)
@@ -395,7 +412,23 @@ if (!(await stat(ROOT).catch(() => null))?.isDirectory()) {
   process.exit(1)
 }
 const files = []
-for await (const f of walk(ROOT)) files.push(f)
+if (opt.only) {
+  for (const p of opt.only.flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean)) {
+    const full = resolve(p)
+    const rel = relative(ROOT, full)
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
+      console.error(`--only ${p} is not under ${ROOT}`)
+      process.exit(1)
+    }
+    if (!(await stat(full).catch(() => null))?.isFile()) {
+      console.error(`--only ${p}: no such file`)
+      process.exit(1)
+    }
+    if (exts.has(extname(full).slice(1).toLowerCase()) && !isBackup(full)) files.push(full)
+  }
+} else {
+  for await (const f of walk(ROOT)) files.push(f)
+}
 if (!files.length) {
   console.log(`no ${[...exts].join('/')} files under ${ROOT}`)
   process.exit(0)

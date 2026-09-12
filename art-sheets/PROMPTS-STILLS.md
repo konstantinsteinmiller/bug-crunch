@@ -8,9 +8,12 @@ beside it. There is no grid to preserve here, which is the whole point.
 Drop results in `art-sheets/painted/`, keeping the `still-<kind>-<id>` in
 the name, then run `pnpm slice-sheets`. Every return is measured against
 its reference and normalised onto it.
+Each prompt is a fenced block — the preview's copy button takes all of it —
+and `pnpm art:desk` can run the whole loop from these blocks.
 
-# crate-damage — Supply crate (damage)  (images/props/crate-damage.webp)
+## Supply crate (damage)  (still-prop-crate-damage.png → images/props/crate-damage.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -89,11 +92,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# crate-rate — Supply crate (rate)  (images/props/crate-rate.webp)
+## Supply crate (rate)  (still-prop-crate-rate.png → images/props/crate-rate.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -172,11 +177,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# barricade — Barricade block  (images/props/barricade.webp)
+## Barricade block  (still-prop-barricade.png → images/props/barricade.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -244,11 +251,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# boulder-1 — Boulder (1 of 3)  (images/props/boulder-1.webp)
+## Boulder (1 of 3)  (still-prop-boulder-1.png → images/props/boulder-1.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -325,11 +334,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# boulder-2 — Boulder (2 of 3)  (images/props/boulder-2.webp)
+## Boulder (2 of 3)  (still-prop-boulder-2.png → images/props/boulder-2.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -406,11 +417,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# boulder-3 — Boulder (3 of 3)  (images/props/boulder-3.webp)
+## Boulder (3 of 3)  (still-prop-boulder-3.png → images/props/boulder-3.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -487,11 +500,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# barrel — Powder keg  (images/props/barrel.webp)
+## Powder keg  (still-prop-barrel.png → images/props/barrel.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -571,11 +586,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# pillar — Divider pillar  (images/props/pillar.webp)
+## Divider pillar  (still-prop-pillar.png → images/props/pillar.webp)
 
+```text
 Paint ONE game sprite in a single portrait, 1:2.22 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -654,11 +671,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# coin — Coin  (images/props/coin.webp)
+## Coin  (still-prop-coin.png → images/props/coin.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -735,11 +754,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# weapon-box — Weapon case (shut)  (images/props/weapon-box.webp)
+## Weapon case (shut)  (still-prop-weapon-box.png → images/props/weapon-box.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -818,11 +839,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# weapon-box-open — Weapon case (open)  (images/props/weapon-box-open.webp)
+## Weapon case (open)  (still-prop-weapon-box-open.png → images/props/weapon-box-open.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -901,11 +924,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# guard-plate — Weapon-case armour plate  (images/props/guard-plate.webp)
+## Weapon-case armour plate  (still-prop-guard-plate.png → images/props/guard-plate.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -984,11 +1009,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# lever-post — Lever housing  (images/props/lever-post.webp)
+## Lever housing  (still-prop-lever-post.png → images/props/lever-post.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 2:1 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1067,11 +1094,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# lever-arm — Lever arm  (images/props/lever-arm.webp)
+## Lever arm  (still-prop-lever-arm.png → images/props/lever-arm.webp)
 
+```text
 Paint ONE game sprite in a single portrait, 9:16 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1156,11 +1185,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# frame-add — Gate frame — the door that pays  (images/gates/frame-add.webp)
+## Gate frame — the door that pays  (still-gate-frame-add.png → images/gates/frame-add.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 21:9 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1264,11 +1295,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# frame-sub — Gate frame — the door that bills  (images/gates/frame-sub.webp)
+## Gate frame — the door that bills  (still-gate-frame-sub.png → images/gates/frame-sub.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 21:9 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1372,11 +1405,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# frame-mul — Gate frame — the multiplier  (images/gates/frame-mul.webp)
+## Gate frame — the multiplier  (still-gate-frame-mul.png → images/gates/frame-mul.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 21:9 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1480,11 +1515,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# frame-div — Gate frame — the trap  (images/gates/frame-div.webp)
+## Gate frame — the trap  (still-gate-frame-div.png → images/gates/frame-div.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 21:9 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1588,11 +1625,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# tracer — The crowd's round  (images/rounds/tracer.webp)
+## The crowd's round  (still-round-tracer.png → images/rounds/tracer.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -1680,11 +1719,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# bolt-gunner — The gunner's round  (images/rounds/bolt-gunner.webp)
+## The gunner's round  (still-round-bolt-gunner.png → images/rounds/bolt-gunner.webp)
 
+```text
 Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
 landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
@@ -1820,11 +1861,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object, painted 8 times as 8 moments of one loop. Not variants,
   not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# bolt-boss — The healer's bolt  (images/rounds/bolt-boss.webp)
+## The healer's bolt  (still-round-bolt-boss.png → images/rounds/bolt-boss.webp)
 
+```text
 Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
 landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
@@ -1960,11 +2003,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object, painted 8 times as 8 moments of one loop. Not variants,
   not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# roller — The rolling boulder  (images/rounds/roller.webp)
+## The rolling boulder  (still-round-roller.png → images/rounds/roller.webp)
 
+```text
 Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
 landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
@@ -2154,11 +2199,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object, painted 8 times as 8 moments of one loop. Not variants,
   not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# meteor — The boss's rock  (images/rounds/meteor.webp)
+## The boss's rock  (still-round-meteor.png → images/rounds/meteor.webp)
 
+```text
 Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
 landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
@@ -2296,11 +2343,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object, painted 8 times as 8 moments of one loop. Not variants,
   not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# bomb — The bomber's charge  (images/rounds/bomb.webp)
+## The bomber's charge  (still-round-bomb.png → images/rounds/bomb.webp)
 
+```text
 Repaint an 8-frame ANIMATION LOOP of one game sprite, as a single
 landscape, 2:1 sheet of 4 x 2 panels.
 The attached reference is exactly what to paint, at exactly the size and
@@ -2434,11 +2483,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object, painted 8 times as 8 moments of one loop. Not variants,
   not a comparison, not a turnaround, not a before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# grenade — The player's grenade  (images/rounds/grenade.webp)
+## The player's grenade  (still-round-grenade.png → images/rounds/grenade.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2519,11 +2570,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# rocket — The launcher's rocket  (images/rounds/rocket.webp)
+## The launcher's rocket  (still-round-rocket.png → images/rounds/rocket.webp)
 
+```text
 Paint ONE game sprite in a single portrait, 9:16 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2613,11 +2666,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# muzzle — Muzzle flash  (images/fx/muzzle.webp)
+## Muzzle flash  (still-fx-muzzle.png → images/fx/muzzle.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2702,11 +2757,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# smoke — Smoke puff  (images/fx/smoke.webp)
+## Smoke puff  (still-fx-smoke.png → images/fx/smoke.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2788,11 +2845,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# scorch — Scorch mark  (images/fx/scorch.webp)
+## Scorch mark  (still-fx-scorch.png → images/fx/scorch.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 1.82:1 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2870,11 +2929,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ring-shock — Shockwave ring  (images/fx/ring-shock.webp)
+## Shockwave ring  (still-fx-ring-shock.png → images/fx/ring-shock.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -2959,11 +3020,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ring-heat — Slam telegraph ring  (images/fx/ring-heat.webp)
+## Slam telegraph ring  (still-fx-ring-heat.png → images/fx/ring-heat.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3048,11 +3111,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ring-heal — Heal ring  (images/fx/ring-heal.webp)
+## Heal ring  (still-fx-ring-heal.png → images/fx/ring-heal.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3137,11 +3202,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# shield — Shield dome  (images/fx/shield.webp)
+## Shield dome  (still-fx-shield.png → images/fx/shield.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3226,11 +3293,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# guard — Boss guard barrier  (images/fx/guard.webp)
+## Boss guard barrier  (still-fx-guard.png → images/fx/guard.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3315,11 +3384,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# crest-shield — Shield crest  (images/fx/crest-shield.webp)
+## Shield crest  (still-fx-crest-shield.png → images/fx/crest-shield.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3396,11 +3467,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# crest-guard — Guard crest  (images/fx/crest-guard.webp)
+## Guard crest  (still-fx-crest-guard.png → images/fx/crest-guard.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3477,11 +3550,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ridge-far — Far ridge  (images/bg/ridge-far.webp)
+## Far ridge  (still-bg-ridge-far.png → images/bg/ridge-far.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 4.00:1 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3553,11 +3628,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ridge-near — Near ridge  (images/bg/ridge-near.webp)
+## Near ridge  (still-bg-ridge-near.png → images/bg/ridge-near.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 4.00:1 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3629,11 +3706,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# crown — Elite crown  (images/ui/crown.webp)
+## Elite crown  (still-ui-crown.png → images/ui/crown.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3710,11 +3789,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# ribbon — Result banner  (images/ui/ribbon.webp)
+## Result banner  (still-ui-ribbon.png → images/ui/ribbon.webp)
 
+```text
 Paint ONE game sprite in a single landscape, 21:9 image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3794,11 +3875,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# chest — The idle treasure chest  (images/ui/chest.webp)
+## The idle treasure chest  (still-ui-chest.png → images/ui/chest.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3876,11 +3959,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# forge — The upgrade forge  (images/ui/forge.webp)
+## The upgrade forge  (still-ui-forge.png → images/ui/forge.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -3958,11 +4043,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# skill-grenade — The grenade skill  (images/ui/skill-grenade.webp)
+## The grenade skill  (still-ui-skill-grenade.png → images/ui/skill-grenade.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -4040,11 +4127,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# skill-shield — The shield skill  (images/ui/skill-shield.webp)
+## The shield skill  (still-ui-skill-shield.png → images/ui/skill-shield.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -4122,11 +4211,265 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# weapon-card-rocket — The launcher card  (images/ui/weapon-card-rocket.webp)
+## Alarm — dodge  (still-ui-warn-away.png → images/ui/warn-away.webp)
 
+```text
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The incoming-attack alarm: a heavy hazard sign, an upward-pointing triangle of battered iron plate with a thick dark bevelled rim, chipped paint and a few scratches, and a bold near-black exclamation mark punched through the middle of it — a tapering bar above a round dot. A sign bolted to a battlefield, not a tidy interface decal. Its plate is painted a bright WARNING AMBER-ORANGE (about #FFB32E) — a hazard lamp, hot and saturated. THE PLATE IS THE ONE HOT ACCENT OF THIS IMAGE: paint it at full strength, the brightest thing in the frame, bright enough to name the colour instantly at a glance. The style rule about desaturated low-key colour applies to the iron rim, the grime and the shadows — NOT to the plate. A plate that has gone grey, brown, black or muddy is a failed image; only the RIM, the bang and the shadows are dark. One of a SET OF THREE identical signs that differ in NOTHING but that colour: the same triangle, the same rim, the same bang, the same wear in the same places. Bold shape and a hard silhouette, no fine detail — it is caught in the corner of the eye while the player is dodging — and the same layout as the reference: apex at the top, wide flat base, filling the frame edge to edge with magenta only in the two upper corners.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
+
+---
+
+## Alarm — get in  (still-ui-warn-into.png → images/ui/warn-into.webp)
+
+```text
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The incoming-attack alarm: a heavy hazard sign, an upward-pointing triangle of battered iron plate with a thick dark bevelled rim, chipped paint and a few scratches, and a bold near-black exclamation mark punched through the middle of it — a tapering bar above a round dot. A sign bolted to a battlefield, not a tidy interface decal. Its plate is painted a bright COLD SOUL-BLUE (about #6ECBFF) — a witch-light, luminous and saturated, not steel and not grey. THE PLATE IS THE ONE HOT ACCENT OF THIS IMAGE: paint it at full strength, the brightest thing in the frame, bright enough to name the colour instantly at a glance. The style rule about desaturated low-key colour applies to the iron rim, the grime and the shadows — NOT to the plate. A plate that has gone grey, brown, black or muddy is a failed image; only the RIM, the bang and the shadows are dark. One of a SET OF THREE identical signs that differ in NOTHING but that colour: the same triangle, the same rim, the same bang, the same wear in the same places. Bold shape and a hard silhouette, no fine detail — it is caught in the corner of the eye while the player is dodging — and the same layout as the reference: apex at the top, wide flat base, filling the frame edge to edge with magenta only in the two upper corners.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
+
+---
+
+## Alarm — hold still  (still-ui-warn-still.png → images/ui/warn-still.webp)
+
+```text
+Paint ONE game sprite in a single square (1:1) image.
+The attached reference is exactly what to paint, at exactly the size and
+position it is drawn at. Match both.
+
+WHAT IT IS: The incoming-attack alarm: a heavy hazard sign, an upward-pointing triangle of battered iron plate with a thick dark bevelled rim, chipped paint and a few scratches, and a bold near-black exclamation mark punched through the middle of it — a tapering bar above a round dot. A sign bolted to a battlefield, not a tidy interface decal. Its plate is painted a strong MID-TONE AMETHYST PURPLE — unmistakably PURPLE at a glance, saturated like a gemstone (midtone about #A855F7, its lit edge about #C77DFF, its shadow a deeper purple about #6B21A8). Two failed attempts to avoid: a plate so dark it reads as black or ash, and a plate so pale it reads as white or lavender. The purple is the plate only — the rim, the bang and the shadows stay near-black. THE PLATE IS THE ONE HOT ACCENT OF THIS IMAGE: paint it at full strength, the brightest thing in the frame, bright enough to name the colour instantly at a glance. The style rule about desaturated low-key colour applies to the iron rim, the grime and the shadows — NOT to the plate. A plate that has gone grey, brown, black or muddy is a failed image; only the RIM, the bang and the shadows are dark. One of a SET OF THREE identical signs that differ in NOTHING but that colour: the same triangle, the same rim, the same bang, the same wear in the same places. Bold shape and a hard silhouette, no fine detail — it is caught in the corner of the eye while the player is dodging — and the same layout as the reference: apex at the top, wide flat base, filling the frame edge to edge with magenta only in the two upper corners.
+
+STYLE — grim painted dark fantasy, like a plate from a gothic illustrated
+bestiary or the key art of a dungeon crawler. Match this in every panel:
+· INK FIRST. Heavy hand-drawn contour lines in near-black ink, jagged and
+  confident, thick on the shadow side and thin on the lit side, with
+  dry-brush breaks. The drawing must look DRAWN — scratchy linework showing
+  through the paint.
+· PAINTED, NOT RENDERED. Flat blocks of gouache-like paint inside the lines
+  with visible brushwork, rough cel-style shadow shapes and a little grain.
+  No airbrush, no smooth 3D shading, no plastic gloss.
+· DESATURATED, LOW-KEY colour: bone, ash grey, dried blood, rust, bruise
+  purple, swamp green, cold slate — with ONE hot accent per subject (ember
+  orange, sickly witch-green, cold soul-blue, tarnished gold). Deep shadows
+  that fall to black.
+· HIGH CONTRAST and cold. The light comes from the UPPER LEFT. Chiaroscuro:
+  most of every form in shadow, one edge picked out.
+· Gothic, grotesque, worn: cracked bone, rusted iron, torn cloth, wet stone,
+  candle-soot. Everything has been through something.
+· Menacing rather than cute — but the SILHOUETTE stays readable at 40 px, so
+  keep the big shapes simple and put the detail inside them.
+
+AVOID — this is exactly how earlier attempts went wrong:
+· NO cute, cozy, storybook, chibi or plush look. No rounded friendly faces,
+  no button eyes, no smiles.
+· NO candy-bright, saturated, neon or pastel colour. If it looks cheerful,
+  it is wrong.
+· NO glossy, plasticky, airbrushed mobile-game rendering. No smooth 3D
+  volume, no bevelled edges, no lens flares, no rim-lit chrome.
+· NO photorealism and no hyper-detailed fur or scales — this is paint, and it
+  is read at thumbnail size.
+· NO warm paper, parchment or sepia wash over the whole image. Warmth is an
+  accent, not a filter, and the ground is not part of the painting.
+· NO frames, borders, cards, vignettes, matting or paper background behind
+  the drawing. Nothing but flat magenta behind it, right up to its outline.
+· Keep the subject the same subject and silhouette it already has. This is a
+  restyle, not a redesign.
+
+SIZE AND PLACEMENT — this is the part that goes wrong.
+Do not enlarge it to fill the frame. The reference leaves air around the
+subject and that air is not waste — it is where the things drawn live around
+it go. Keep the subject the same fraction of the frame that the reference
+has it, in the same place.
+· Do not rotate it or change the viewing angle.
+· No cast shadow on the ground. The game draws its own.
+
+BACKGROUND — read this before anything else. It matters more than the style.
+Fill every pixel that is not the object itself with solid, flat, pure magenta
+#FF00FF. Treat it as a green-screen: one flat chroma-key colour, edge to edge.
+· EXACTLY #FF00FF — red 255, green 0, blue 255. Not pink, not rose, not dusty
+  pink, not mauve, not a soft or tinted version of it. Only the true colour can
+  be cut away cleanly; a near miss has to be flood-filled instead, and a flood
+  fill eats any pale paint it can reach.
+· NOT transparent. Transparency gets exported as a grey-and-white CHECKERBOARD
+  and then baked into the artwork as though the squares were paint.
+· NOT white, cream, black, parchment, paper, or any tinted or textured ground.
+· The object must NOT sit on a card, panel, sheet, badge, frame or rectangle of
+  any kind. The magenta must touch the outline of the object on every side.
+· No drop shadow onto the background, and no vignette.
+· The object itself must contain no magenta or hot pink.
+· The dark, desaturated palette above is for the OBJECT. The ground is not
+  part of the painting and is not toned down with it: it stays a vivid,
+  eye-hurting #FF00FF however dark everything else is. Dusty rose, pale pink
+  and mauve are the failure this whole clause is about.
+
+OUTPUT — read this twice, it is where every previous attempt failed:
+· ONE image, exactly 512 x 512 pixels — square (1:1).
+  If your tool has an aspect-ratio control, set it to match. Returns have
+  come back at the tool's default ratio before, which overrides this line —
+  the setting wins, so change the setting.
+· ONE object. Not two, not a comparison, not variants side by side, not a
+  before-and-after pair.
+· No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
+
+---
+
+## The launcher card  (still-ui-weapon-card-rocket.png → images/ui/weapon-card-rocket.webp)
+
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -4204,11 +4547,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# weapon-card-gatling — The gatling card  (images/ui/weapon-card-gatling.webp)
+## The gatling card  (still-ui-weapon-card-gatling.png → images/ui/weapon-card-gatling.webp)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -4286,11 +4631,13 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```
 
 ---
 
-# logo — Title logo  (images/logo/logo_512x512.png)
+## Title logo  (still-ui-logo.png → images/logo/logo_512x512.png)
 
+```text
 Paint ONE game sprite in a single square (1:1) image.
 The attached reference is exactly what to paint, at exactly the size and
 position it is drawn at. Match both.
@@ -4368,3 +4715,4 @@ OUTPUT — read this twice, it is where every previous attempt failed:
 · ONE object. Not two, not a comparison, not variants side by side, not a
   before-and-after pair.
 · No frame, border, card, label, caption, arrow, annotation or drop shadow.
+```

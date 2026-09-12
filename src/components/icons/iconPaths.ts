@@ -365,6 +365,41 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M12 2 4 5v6.5c0 4.6 3.2 8.4 8 10.5 4.8-2.1 8-5.9 8-10.5V5l-8-3Z',
     'M12 6.6 8 8.1v3.6c0 2.6 1.6 4.8 4 6.1 2.4-1.3 4-3.5 4-6.1V8.1l-4-1.5Z'
   ],
+  // Frost Nova: a six-armed ice crystal. A hexagonal hub, six pointed arms and a
+  // V of spurs on each, every sub-path wound the same way so the overlaps merge
+  // under nonzero rather than punching holes. Bold on purpose: 2.3-unit arms
+  // survive being 16 px tall, where a true snowflake's filigree turns to fuzz.
+  'snowflake': [
+    'M12 8.9L14.68 10.45L14.68 13.55L12 15.1L9.32 13.55L9.32 10.45Z',
+    'M10.85 10.5L10.85 2.7L12 1.1L13.15 2.7L13.15 10.5Z',
+    'M11.61 7.29L9.01 5.43L8.83 4.13L10.11 3.88L12.72 5.74Z',
+    'M11.28 5.74L13.89 3.88L15.17 4.13L14.99 5.43L12.39 7.29Z',
+    'M12.72 10.25L19.48 6.35L21.44 6.55L20.63 8.35L13.87 12.25Z',
+    'M15.88 9.31L16.2 6.12L17.23 5.32L18.09 6.31L17.78 9.49Z',
+    'M17.06 8.25L19.97 9.58L20.4 10.81L19.19 11.31L16.27 9.98Z',
+    'M13.87 11.75L20.63 15.65L21.44 17.45L19.48 17.65L12.72 13.75Z',
+    'M16.27 14.02L19.19 12.69L20.4 13.19L19.97 14.42L17.06 15.75Z',
+    'M17.78 14.51L18.09 17.69L17.23 18.68L16.2 17.88L15.88 14.69Z',
+    'M13.15 13.5L13.15 21.3L12 22.9L10.85 21.3L10.85 13.5Z',
+    'M12.39 16.71L14.99 18.57L15.17 19.87L13.89 20.12L11.28 18.26Z',
+    'M12.72 18.26L10.11 20.12L8.83 19.87L9.01 18.57L11.61 16.71Z',
+    'M11.28 13.75L4.52 17.65L2.56 17.45L3.37 15.65L10.13 11.75Z',
+    'M8.12 14.69L7.8 17.88L6.77 18.68L5.91 17.69L6.22 14.51Z',
+    'M6.94 15.75L4.03 14.42L3.6 13.19L4.81 12.69L7.73 14.02Z',
+    'M10.13 12.25L3.37 8.35L2.56 6.55L4.52 6.35L11.28 10.25Z',
+    'M7.73 9.98L4.81 11.31L3.6 10.81L4.03 9.58L6.94 8.25Z',
+    'M6.22 9.49L5.91 6.31L6.77 5.32L7.8 6.12L8.12 9.31Z'
+  ],
+  // Decoy Flare: a flare stick held up and to the right, its end a starburst,
+  // two sparks thrown clear. Tilted rather than upright because an upright stick
+  // with a flame on it is a candle; the burst is wound WITH the stick so the
+  // neck where they meet stays solid.
+  'flare': [
+    'M9.04 11.38L10.03 11.14L12.59 13.13L12.59 14.15L5.8 22.55L3.92 21.59L2.54 20Z',
+    'M13.38 5.4L13.45 9.12L15.87 8.32L14.27 10.31L17.73 11.68L14.01 11.74L14.81 14.17L12.82 12.57L11.45 16.03L11.39 12.31L8.96 13.1L10.56 11.12L7.1 9.75L10.82 9.68L10.03 7.26L12.02 8.86Z',
+    'M19.6 12.5L20.01 13.79L21.3 14.2L20.01 14.61L19.6 15.9L19.19 14.61L17.9 14.2L19.19 13.79Z',
+    'M6.4 2.3L6.76 3.44L7.9 3.8L6.76 4.16L6.4 5.3L6.04 4.16L4.9 3.8L6.04 3.44Z'
+  ],
   'flame': [
     'M12 2c1.5 3.5.5 5.5-1 7-1.7 1.7-3 3.2-3 5.5A5.5 5.5 0 0 0 13.5 20 5.5 5.5 0 0 0 19 14.5c0-3.5-2.5-5-3.5-7.5-.6 1-1.3 1.6-2 2 .3-2.4-.6-4.9-1.5-7Z'
   ],
@@ -383,6 +418,15 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
   // A shell with swept fins and a flame under it. The flame is a separate
   // sub-path wound the same way, so it merges into the body rather than
   // outlining against it.
+  // The incoming-attack alarm: a hazard triangle with the bang punched through
+  // it. Bar and dot are wound counter-clockwise against the triangle's
+  // clockwise outline — holes, not a second fill on top of it.
+  'warning': [
+    'M12 2.6 22.2 20.4H1.8Z',
+    'M10.9 8.6v6.4h2.2V8.6Z',
+    'M12 16.35a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 1 0 0-2.5Z'
+  ],
+
   'rocket': [
     'M12 1.6c2.3 2.2 3.5 5 3.5 8.2v4.5h-7V9.8c0-3.2 1.2-6 3.5-8.2Zm0 4.2a1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z',
     'M8.5 11.4 5.2 15a2 2 0 0 0-.5 1.3v2.1l3.8-2.2v-4.8Zm7 0 3.3 3.6a2 2 0 0 1 .5 1.3v2.1l-3.8-2.2v-4.8Z',

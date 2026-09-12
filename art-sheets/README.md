@@ -49,9 +49,73 @@ did too. The reference now draws a back-view run (the swing boot folding up
 with its sole showing, a flight moment between strides) and the prompt names
 what each panel is.
 
-The key sheets (`key-walks.png`, `key-stills.png`) are the human contact sheet:
-every reference at thumbnail size with its name and target. Nothing is ever
-written inside a panel — text inside a frame is text a model will repaint.
+**Boss deaths** — `death-<design>.png`, one per body a boss can wear (the
+roster comes from `bossDesigns()` in `foes.ts`). A 4 × 2 grid of 420 × 360
+panels (1680 × 720, **21:9**): the walk panel's height, so the creature is the
+same size to the pixel, and wider, because a body lying down is as long as it
+stood tall. Eight panels from the killing blow to the body lying still — played
+ONCE across the death beat, the last panel held as the corpse the next stage
+opens beside. Lands at `public/images/deaths/<design>.webp`.
+
+The reference IS the animation: the game draws the fall with the same rigs that
+walk (`monsterKit`'s "Dying" — `drawDeath`, `deathBeats`, `fallOntoBack`,
+`fallOntoFlank`). Upright bodies are jolted onto their toes, stagger with the
+arms windmilling, buckle at the knees and go over onto their BACK, lying on a
+diagonal with arms and legs spread; side-on beasts rear, pitch onto their knees
+and keel over onto their FLANK with the legs stretched out stiff. Anything held
+(a sword) flies loose. The prompt tells the painter to follow those poses and
+names every panel's moment in words. It is also written for children: no blood,
+wounds or liquid (the game paints its own violet pool under the body); defeat is
+the pose and the lights going out. `pnpm art:export -- --deaths` writes only
+these (plus the index).
+
+**Every death goes out with a CHARACTER MODEL** — `models/<design>.png`, one
+frame of the creature's walk exactly as the game shows it (cut from the sliced
+painted strip in `public/images/monsters/`, or from the drawn walk while that is
+unpainted). The death is swapped in over that creature at the kill, and a painter
+given only the layout and words invents a new one: the first grumpling death came
+back as a lanky skeletal ghoul with a knife (it is parked in `painted/stale/`).
+The model goes FIRST (image 1, the character) and the layout second (image 2,
+poses only), and the prompt says who the creature is in words as well:
+`DEATH_IDENTITY` in `artSheet.ts` — its proportions spelled out, its marks, and
+what it holds (or that it holds nothing). Written from the painted models, so
+a repainted walk means rewriting its line. What the grumpling rounds taught:
+- **Words beat pictures.** "Anything it was holding flies out of its hand" got a
+  sword and shield painted into the bonecap; "gremlin-imp" got a lanky goblin.
+- **"Chibi / super-deformed" sets the body; the style lock sets the look.**
+  Without the first the head shrinks, without the second it turns glossy.
+- **Headings become captions.** ALL-CAPS panel titles came back as text with
+  ruled borders round every panel. The slicer now refuses a return with dark
+  ink along its cut lines.
+- **It is a roll.** With this prompt about one generation in two is right. Compare
+  each return with the model (the desk's "Image 1" tab) and re-roll; the desk
+  keeps every earlier painting in `painted/replaced/`.
+- **A body unlike a person's needs its own fall.** The shared panel lines talk
+  about knees, hips and hands, and the treant came back as a lanky wooden man
+  because of it. `DEATH_IDENTITY.body` says how that one goes down instead ("it
+  falls the way a tree is felled…").
+- **Side-on creatures come back mirrored about half the time**, whatever the
+  prompt says. Two returns in seven also came back ruled like comic strips.
+  Neither is worth a re-roll: `pnpm slice-sheets <painting> --mirror` flips every
+  panel in place (the order, so the animation, is kept) and `--drop-borders`
+  paints the rules out of the cut lines. Look at the return first — a ruled one
+  often has captions too, and those stay.
+
+`pnpm art:models` writes the models (trimmed to the figure, 640 px tall),
+`pnpm art:prompts` checks them, and the slicer re-cuts one whenever it cuts that
+creature's walk. The heading of each death block names both images in attach
+order, the reference last (`models/x.png + death-x.png → …`).
+
+The game asks for a death strip when the stage is **80 % run** — never on the
+splash, never in the idle sweep — and until one exists it plays the same fall,
+drawn: `monsterSprites.monsterDeathFrame` bakes it behind the walk strips in the
+idle breaks (a boss ahead), and a kill that beats the baker bakes its panel on
+the spot.
+
+The key sheets (`key-walks.png`, `key-stills.png`, `key-deaths.png` — the last
+panel, the body) are the human contact sheet: every reference at thumbnail size
+with its name and target. Nothing is ever written inside a panel — text inside a
+frame is text a model will repaint.
 
 ## The box is the contract
 
@@ -106,8 +170,8 @@ emitter.
 
 ## The prompts
 
-`PROMPTS-WALKS.md` and `PROMPTS-STILLS.md` carry one ready-to-paste block per
-sheet, generated from the manifest (`src/game/artSheet.ts`) so every sheet
+`PROMPTS-WALKS.md`, `PROMPTS-STILLS.md` and `PROMPTS-DEATHS.md` carry one
+ready-to-paste block per sheet, generated from the manifest (`src/game/artSheet.ts`) so every sheet
 briefs the same style and the same background contract. The order of the
 blocks is load-bearing — what comes back, what it must not be, what it is, the
 style lock, the layout, the magenta rule, a count-and-check list, the exact
@@ -170,7 +234,23 @@ What the slicer does for you, and what it refuses to guess about:
 * writes the logo as PNG at the two sizes the PWA manifest reads;
 * warns on a JPEG, a non-magenta ground, a dropped frame, feet that drift
   between frames, a creature redrawn at different scales, and a subject that
-  came back as a solid card.
+  came back as a solid card;
+* **keeps a receipt** (`painted/.sliced.json`): per painting, the revision of
+  the reference it was cut against and the painting's own hash. A painting of
+  a drawing that has since been RE-CUT is refused (`--stale-ok` overrides) —
+  park it in `painted/retired/` and delete the `.webp` files cut from it, or
+  the old silhouette ships for exactly the drawables that were painted.
+
+**2b · Compress what it wrote** — the slicer writes uncompressed WebP, and the
+backups in `public-backup/` predate the new cut, so compress it FROM ITSELF:
+
+```
+pnpm compress-folder public/images --max-effort --backup-dir public-backup --fresh \
+     --only public/images/deaths/grumpling.webp,public/images/deaths/bonecap.webp
+```
+
+`--force` would compress the OLD art back over the new one; `--fresh --only`
+is the one to use after any re-slice. The Art Desk does both steps for you.
 
 **3 · Look at it in motion**, in `/playground` (dev only): every drawable
 through the game's own painters, with a dashed box around what each is
@@ -180,9 +260,10 @@ is only ever wrong *relative* to the drawing it stands in for.
 **4 · Measure what the eye misses:**
 
 ```
-python tools/measure-art.py strips public/images/monsters       # eaten frames
-python tools/measure-art.py pairs public/images/props --ref-prefix still-prop-
-python tools/measure-art.py pairs public/images/rounds --ref-prefix still-round-
+pnpm art:measure cells                          # every sliced strip vs the fit its sheet recorded
+pnpm art:measure cells --sheet death-grumpling  # one sheet
+pnpm art:measure strips public/images/monsters  # eaten frames (deaths: --aspect 1.1667)
+pnpm art:status                                 # which drop-ins are on disk, per kind
 ```
 
 **5 · Turn it on:**
@@ -211,11 +292,47 @@ boss they meet on stage 9.
 ## Regenerating
 
 ```
+pnpm art:prompts                           # PROMPTS-*.md + PAINT-STATUS.md + models/ — no browser, a second
+pnpm art:prompts --check                   # CI: exit 1 if a prompt document or a model is out of date
+pnpm art:models                            # only the character models the deaths are painted AS
 pnpm dev                                   # port 2050
-open http://localhost:2050/#/art-sheets    # click "Export all sheets"
-pnpm art:export                            # or headless, in a private Chrome
+open http://localhost:2050/#/art-sheets    # click "Export all sheets" (or "Export boss deaths")
+pnpm art:export                            # or headless, in a private Chrome (-- --deaths)
 ```
+
+`art:export` only when the **drawing** changed — it re-renders the references
+and re-measures the fits. `art:prompts` after anything else, including after
+every slice: `PAINT-STATUS.md` (✓ sliced · ! repaint · ? painted, no receipt ·
+· to paint) is a report and goes out of date the moment a painting lands. Both
+routes render the manifest's `promptDocs()`, so they write the same bytes
+(`tests/game/artDesk.test.ts` holds it); the manifest loads under plain Node
+through `tools/ts-resolve.mjs`, which is why nothing it imports may reach the
+renderer (`game/artBoxes.ts` holds the two boxes it needs).
 
 Everything animated is frozen at a fixed phase, so a re-export is
 byte-identical unless the art actually changed — a diff here means something in
 the renderer moved.
+
+## The Art Desk
+
+```
+pnpm art:desk                              # http://127.0.0.1:5178
+```
+
+A local page that runs the loop except the painting (the art-generation-pipeline
+skill's `DESK.md`). Search any sprite, **Copy image, then prompt** (key `b`),
+paste both at Gemini, press its download button — the desk files the download
+from `~/Downloads` under the right name, slices it and compresses exactly what
+was cut (`art-desk.config.json` adds this project's `--max-effort`). Or queue the
+**To paint** jobs and let it drive gemini.google.com in its own signed-in
+window, 90–150 s apart and capped per day (`playwright-core`).
+
+A **death** job is painted from two images, and the desk sends both: the queue
+attaches `models/<design>.png` and then the layout (and refuses to send a job
+with only one of them), and **Copy 2 images, then prompt** copies image 1, then
+image 2 and then the prompt, one each time you come back to the desk's window.
+A desk server started before this format existed cannot read the new headings —
+restart it.
+A job whose model is missing is refused with the hint to run `pnpm art:models`.
+One limit left: the desk looks for parked paintings in `painted/stale/`, where
+this project has also used `painted/retired/` (`art:prompts` reads both).

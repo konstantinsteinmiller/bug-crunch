@@ -31,8 +31,11 @@ export default {
     'fireRate': 'Tempo',
     'incoming': 'Nadchodzi atak!',
     'dodge': 'Unik',
+    'getIn': 'Wejdź',
+    'holdStill': 'Stój',
     'milestone': '{n} w szeregu!',
     'weaponActive': '{name} gotowy',
+    'weaponsActive': '{a} + {b} gotowe',
     'weaponLocked': '{name} zablokowany — trafiono {n} z {total} dźwigni',
     'weaponGift': '{name} przed tobą — za darmo, bez dźwigni',
     'weaponFree': 'GRATIS'
@@ -90,6 +93,10 @@ export default {
       'a': "Dwa razy szybszy ogień",
       'b': "Szybciej pompuje bramy"
     }
+  },
+  'bossReward': {
+    'title': "Boss pokonany!",
+    'subtitle': "Prezent na poziom {n}. Biegnij dalej!"
   },
   'result': {
     'stageClear': 'Etap ukończony!',
@@ -158,8 +165,21 @@ export default {
 
     'grenade': 'Granat',
 
-    'shield': 'Tarcza'
+    'shield': 'Tarcza',
 
+    'locked': 'Zablokowane',
+
+    'unlocksAt': 'Od poziomu {n}',
+
+    'frost': 'Mroźna nowa',
+
+    'decoy': 'Raca-wabik',
+
+    'trialLabel': '{name} · darmowa próba',
+
+    'trialTag': 'Darmowa próba!',
+
+    'uses': '×{n}'
   },
 
   'upgrades': {

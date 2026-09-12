@@ -328,7 +328,8 @@ export const playOne = (graph: Graph, o: RunOptions): RunResult => {
         rocks: game.getRocks(),
         foes: game.getFoes(),
         pickups: game.getPickups(),
-        boss: game.getBoss()
+        boss: game.getBoss(),
+        incoming: game.incomingThreat()
       }
 
       const target = o.policy.decide(view)
@@ -575,7 +576,8 @@ export const probe = async (o: ProbeOptions): Promise<ProbeResult> => {
         rocks: game.getRocks(),
         foes: game.getFoes(),
         pickups: game.getPickups(),
-        boss: game.getBoss()
+        boss: game.getBoss(),
+        incoming: game.incomingThreat()
       })
       if (Number.isFinite(target)) game.steerTo(target)
       game.step(STEP_MS)

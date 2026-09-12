@@ -2,6 +2,7 @@ import { stageDesigns, rosterDesigns, bossDesign, arenaKit } from '@/game/foes'
 import { THREAT_POOL_FROM_STAGE, minibossKindFor, bossKindFor, SUMMON_DESIGN } from '@/game/threats'
 import { OUTFITS } from '@/game/heroSprites'
 import {
+  BOSS_REWARD_STAGE, BOSS_REWARD_WEAPON,
   WEAPON_PICK_STAGE, isWeaponId, stageHasWeapon, stageHasWeaponGift, weaponForStage
 } from '@/game/weapons'
 import { WEAPON_PICK_KEY } from '@/keys'
@@ -102,11 +103,26 @@ const threatWants = (stage: number): ArtWant[] => {
   if (boss === 'healer') wants.push(['round', 'bolt-boss'], ['fx', 'ring-heal'])
   if (boss === 'summoner') wants.push(['monster', SUMMON_DESIGN])
   if (stage >= THREAT_POOL_FROM_STAGE) {
-    for (const index of [0, 1]) {
+    // THREE indices, because a road fields three elites from stage 6
+    // (`placeMinibosses`). It walked two, which under-preloaded the last
+    // landmark's round by one slot — and from `MINIBOSS_TIER2_FROM_STAGE` the
+    // pool is six kinds wide, so which kind lands on which index moved and the
+    // gap started biting. The cost of the extra slot is at most one round
+    // sprite; the cost of missing one is a round that draws as the procedural
+    // fallback on the frame it is fired.
+    for (const index of [0, 1, 2]) {
       const kind = minibossKindFor(stage, index)
       if (kind === 'roller') wants.push(['round', 'roller'])
       if (kind === 'bomber') wants.push(['round', 'bomb'])
       if (kind === 'gunner') wants.push(['round', 'bolt-gunner'])
+      // A burrower's eruption IS a bomber's fuse and blast — it announces with
+      // `bombCast` and lands with `bombBlast` (see `stepBurrower`), so it wants
+      // the same round. Listing it beside the bomber rather than folding the two
+      // together, because they are two fights that happen to share a sprite and
+      // the day one of them gets its own, this is the line that changes.
+      if (kind === 'burrower') wants.push(['round', 'bomb'])
+      // The warden has no round at all: its row is drawn from the claw's own
+      // ground telegraph (`rakeCast`), which every boss stage already carries.
     }
   }
   if (arenaKit(stage).barrels > 0) wants.push(['prop', 'barrel'])
@@ -172,7 +188,10 @@ const weaponPickWants = (stage: number): ArtWant[] => {
   }
   const rocketNext = stage === WEAPON_PICK_STAGE - 1 && pick !== 'gatling'
   const rocketNow = stage === WEAPON_PICK_STAGE && pick === 'rocket'
-  if (rocketNext || rocketNow) wants.push(['round', 'rocket'])
+  // …and the stage-1 boss's launcher: dropped at the end of stage 1 and fired
+  // for the whole of the next, so both roads want its round.
+  const bossGift = stage <= BOSS_REWARD_STAGE + 1 && BOSS_REWARD_WEAPON === 'rocket'
+  if (rocketNext || rocketNow || bossGift) wants.push(['round', 'rocket'])
   return wants
 }
 
@@ -251,6 +270,11 @@ export const earlyArtWants = (): ArtWant[] => {
     // The optional beat on the shoulder, ahead of the boss because it is the
     // one thing the player has to NOTICE.
     ...weaponPuzzleWants(stage),
+    // The alarm the corner wears the first time anything winds up an attack.
+    // Three small files, and the badge is the one mark on the screen a player
+    // is meant to catch WITHOUT looking at it — so it may not arrive late and
+    // change shape under them mid-fight.
+    ['ui', 'warn-away'], ['ui', 'warn-into'], ['ui', 'warn-still'],
     // The thing at the end of the road, and everything it throws.
     ['monster', bossDesign(stage)],
     ...threatWants(stage),
@@ -359,3 +383,25 @@ export const preloadRemainingArt = async (): Promise<void> => {
 
 /** Test seam: forget that the tiers have run. */
 export const __resetArtPreload = (): void => { started = false }
+
+// ─── The boss's death, fetched late on purpose ──────────────────────────────
+//
+// A death strip is the one painting in the game that is only ever seen at the
+// END of a stage, once per stage, for about a second — and it is one of the
+// heaviest (eight wide panels). So it rides none of the tiers above: not the
+// splash, which would hold a first-time player for a file they will not see
+// for a minute, and not the idle sweep, which would fetch the whole boss roster
+// for a player on stage 1. It is asked for when the road is `DEATH_ART_FROM`
+// run — late enough to cost nothing on the way in, early enough that the
+// arena, the fight and the kill are all still ahead of it. Through the ordinary
+// probe, so a copy already fetched (this session or the HTTP cache's) is a
+// no-op, and a miss is the drawn topple the renderer always had.
+
+/** How far down the road the boss's death strip is asked for. */
+export const DEATH_ART_FROM = 0.8
+
+/** The boss death that stage `n` ends on, as the probe asks for it. */
+export const deathArtWant = (stage: number): ArtWant => ['death', bossDesign(stage)]
+
+/** Is it time to ask? */
+export const deathArtDue = (progress01: number): boolean => progress01 >= DEATH_ART_FROM

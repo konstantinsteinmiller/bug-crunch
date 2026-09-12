@@ -6,7 +6,7 @@
         GameIcon.stage-banner__icon(:name="unlock.icon")
         div.stage-banner__unlock-text
           span.stage-banner__unlock-name {{ unlock.label }}
-          span.stage-banner__unlock-tag {{ t('flow.unlocked') }}
+          span.stage-banner__unlock-tag {{ unlock.tag ?? t('flow.unlocked') }}
       //- What is coming. Only when nothing has just been handed over — the
       //- gift and the promise on one banner would be two things to read in
       //- 1.7 seconds, and the gift is the one that matters.
@@ -50,8 +50,10 @@ const { t } = useI18n()
 interface Props {
   show: boolean
   stage: number
-  /** Something the player just earned, announced on the same beat. */
-  unlock: { icon: GameIconName; label: string } | null
+  /** Something the player just earned, announced on the same beat. `tag`
+   *  replaces the "Unlocked!" under it — the free Frost Nova is not an unlock,
+   *  it is a try, and saying otherwise would promise a button that goes away. */
+  unlock: { icon: GameIconName; label: string; tag?: string } | null
   /** The next rung of the ladder, when nothing was just unlocked. */
   next?: { icon: GameIconName; text: string } | null
   /** A headline other than "Stage N". */
