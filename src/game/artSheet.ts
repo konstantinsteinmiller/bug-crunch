@@ -15,7 +15,7 @@ import { BANNER } from '@/game/uiArt'
 /**
  * ─── Art sheet manifest ─────────────────────────────────────────────────────
  *
- * Survivalist draws everything procedurally, which is wonderful for payload and
+ * splatix draws everything procedurally, which is wonderful for payload and
  * useless for one specific job: handing the art to somebody — or something —
  * that paints. There is no folder of PNGs to send. This module describes the
  * REFERENCE SHEETS that bake the whole cast out of the renderer, so the art can
@@ -1147,7 +1147,7 @@ export const STILLS: StillSpec[] = [
     'The stage-3 weapon choice\'s GATLING GUN card: a six-barrelled rotary gun of gunmetal and brass seen three-quarters from the front-left, barrels pointing to the upper right and mid-spin, a cold soul-blue glow between the barrels and a spray of brass casings falling from the breech. Speed and volume: this is the fast option, so everything about it should look like it is already moving. Bold silhouette read at 100 px, the same layout as the reference — the weapon diagonal across the frame, filling about nine tenths of it.',
     { maxEdge: 256 }),
   still('ui', 'logo', 'Title logo',
-    'The game\'s title logo: the single word SURVIVALIST in carved bone-and-black-iron dark-fantasy lettering, cracked and chipped, a faint ember glow at the edges. Spelled exactly S-U-R-V-I-V-A-L-I-S-T, in one line, readable at 192 px. Centred, filling about nine tenths of the width.',
+    'The game\'s title logo: the single word splatix in carved bone-and-black-iron dark-fantasy lettering, cracked and chipped, a faint ember glow at the edges. Spelled exactly S-U-R-V-I-V-A-L-I-S-T, in one line, readable at 192 px. Centred, filling about nine tenths of the width.',
     {
       // The file IS the PWA's 512 icon, so 512 is exact rather than a cap the
       // slicer's 256 default may lower.

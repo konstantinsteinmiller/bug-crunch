@@ -3,7 +3,7 @@ import { prependBaseUrl } from '@/utils/function'
 /**
  * ─── Art contract ───────────────────────────────────────────────────────────
  *
- * Survivalist ships with ZERO gameplay bitmaps of its own making: the cast is
+ * splatix ships with ZERO gameplay bitmaps of its own making: the cast is
  * hand-inked vector art baked to frame strips at runtime, and the road, the
  * gates, the crates and every effect are Canvas 2D. That keeps the download
  * tiny, makes the art crisp at any DPR, and means the game is playable the

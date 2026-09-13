@@ -7,7 +7,7 @@
  *   pnpm art:prompts --check    # exits 1 if a prompt document is out of date (CI)
  *
  * From the art-generation-pipeline skill (`templates/art-prompts.mjs`), adapted
- * to Survivalist: the index is `{ walks: [...] }` with a `fit` per entry, and
+ * to splatix: the index is `{ walks: [...] }` with a `fit` per entry, and
  * the sheets are the manifest's walks, stills and boss deaths (`sheetRows()`).
  *
  * The bench (`/#/art-sheets`) writes the same documents on export — both routes

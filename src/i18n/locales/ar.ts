@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'إلغاء',
   'close': 'إغلاق',
   'ok': 'حسناً',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'سقط الزعيم!',
+    'wasted': 'مُهدَر',
+    'cause': {
+      'foe': 'اجتاحتك الوحوش',
+      'elite': 'سحقك زعيم صغير',
+      'barricade': 'ارتطمت بالحواجز',
+      'crate': 'ارتطمت بالصناديق',
+      'divider': 'اصطدمت بالفواصل',
+      'trap': 'وقعت في الفخاخ',
+      'slam': 'سحقك الزعيم'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'إنجاز!',
     'rallied': 'نفَس ثانٍ',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'أدر هاتفك',
-    'body': 'لعبة Survivalist تُلعب عموديًا.'
+    'body': 'لعبة splatix تُلعب عموديًا.'
   },
   'license': { 'denied': 'تم رفض الوصول: يرجى شراء ترخيص.' }
 }

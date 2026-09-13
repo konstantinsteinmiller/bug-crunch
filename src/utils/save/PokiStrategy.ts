@@ -25,7 +25,7 @@ import type { HydrateState, LocalStorageAccessor, SaveStrategy } from './types'
 //
 //   1. **< 1 MB after gzip.** Poki switches cloud gamesave OFF for a player
 //      whose payload exceeds it, with no warning and nothing the game can
-//      detect. Survivalist's `tower_state` blob is well inside that today
+//      detect. splatix's `tower_state` blob is well inside that today
 //      (single-digit KB), but anything that starts caching per-wave history or
 //      replay data would need a `poki_ignore`-prefixed key so the wrapper skips
 //      it.

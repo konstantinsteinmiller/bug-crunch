@@ -74,6 +74,19 @@ export const BEST_PROGRESS_KEY = 'ts_best_progress'
 export const MILESTONES_KEY = 'ts_milestones'
 
 /**
+ * Has the player been taught what the grenade button is?
+ *
+ * Set the first time a grenade is thrown — by the lesson on the first miniboss
+ * (`game/grenadeTutorial.ts`) or by a player who worked the button out on their
+ * own, which is the same fact and must not be taught twice.
+ *
+ * Written the instant it happens rather than at the end of the stage: somebody
+ * who is taught this and then closes the tab has been taught, and meeting the
+ * same full stop again on the next launch would read as the game not noticing.
+ */
+export const GRENADE_TAUGHT_KEY = 'ts_grenade_taught'
+
+/**
  * The autobalancer's handicap: how many stages the player has cleared in a row.
  *
  * Every clear makes the next stage a little harder; a single loss resets it to
@@ -297,7 +310,7 @@ export const EXPEDITION_KEY = 'ts_expedition_day'
 /**
  * The player's stable leaderboard id — the primary key of their row.
  *
- * Mirrored to a standalone `survivalist_uid` localStorage entry OUTSIDE this
+ * Mirrored to a standalone `splatix_uid` localStorage entry OUTSIDE this
  * prefix (see `usePlayerIdentity.ts`), because a hydrate from an older cloud
  * blob can hand the game a save with no id in it and the game would mint a
  * second one.

@@ -4,7 +4,7 @@ import useUser from '@/use/useUser'
 import useSounds from '@/use/useSound'
 
 /**
- * ─── Survivalist audio ──────────────────────────────────────────────────────
+ * ─── splatix audio ──────────────────────────────────────────────────────
  *
  * Two sources, one entry point (`playFx`):
  *

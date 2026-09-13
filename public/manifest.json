@@ -1,6 +1,6 @@
 {
-  "name": "Survivalist",
-  "short_name": "Survivalist",
+  "name": "splatix",
+  "short_name": "splatix",
   "description": "Shoot the gates to grow them, run your crowd through, and turn three survivors into an army before the boss turns them into dust.",
   "display": "standalone",
   "display_override": [

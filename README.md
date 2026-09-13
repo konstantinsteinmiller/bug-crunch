@@ -1,4 +1,4 @@
-# Survivalist
+# splatix
 
 A mobile-first 2D **crowd runner**. You steer one thing — a squad of survivors
 that runs up the lane on its own — and everything else follows from where you
@@ -8,7 +8,7 @@ so every survivor hits harder, thread the barricades, and kill the monsters
 coming down the lane before they eat anyone. At the end of every stage something
 much bigger is waiting.
 
-WIP: [playable demo](https://konstantinsteinmiller.github.io/survivalist/)
+WIP: [playable demo](https://konstantinsteinmiller.github.io/splatix/)
 
 Built with Vue 3 + TypeScript + Canvas 2D, shipping to CrazyGames, Playgama,
 GamePix, GameMonetize, GameDistribution, Glitch.fun, itch.io, Wavedash and

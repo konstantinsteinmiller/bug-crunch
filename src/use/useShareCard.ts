@@ -206,7 +206,7 @@ export const shareCardOffered: ComputedRef<boolean> = computed(
 /** The file the card is shared as. ASCII, lower case, no locale: it becomes a
  *  filename on somebody's phone and on somebody's desktop. */
 const fileNameFor = (stage: number): string =>
-  `survivalist-stage-${Math.max(0, Math.trunc(stage) || 0)}.jpg`
+  `splatix-stage-${Math.max(0, Math.trunc(stage) || 0)}.jpg`
 
 /** The player closed the share sheet. Nothing failed, and nothing may be
  *  demoted for it — cancelling is the most common outcome of a share. */

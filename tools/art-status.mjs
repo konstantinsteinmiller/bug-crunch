@@ -6,7 +6,7 @@
  *   pnpm art:status -- --all     # list every id, present or not
  *
  * From the art-generation-pipeline skill (`templates/art-status.mjs`), adapted
- * to Survivalist: the runtime catalogue (`ART_CATALOGUE`) lists the STILLS,
+ * to splatix: the runtime catalogue (`ART_CATALOGUE`) lists the STILLS,
  * while the strips are keyed by ids the renderer takes from the game itself —
  * monster designs, survivor outfits, and the boss roster for deaths — so those
  * are read from the same sources here.

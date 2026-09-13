@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'Annuleren',
   'close': 'Sluiten',
   'ok': 'Ok',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'Baas geveld!',
+    'wasted': 'Afgemaakt',
+    'cause': {
+      'foe': 'Overlopen door monsters',
+      'elite': 'Een minibaas brak je',
+      'barricade': 'Op barricades gereden',
+      'crate': 'Op kratten gereden',
+      'divider': 'De scheidingen geraakt',
+      'trap': 'In vallen gelopen',
+      'slam': 'De baas verpletterde je'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'Mijlpaal!',
     'rallied': 'Tweede adem',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'Draai je telefoon',
-    'body': 'Survivalist speel je staand.'
+    'body': 'splatix speel je staand.'
   },
   'license': { 'denied': 'Toegang geweigerd: koop een licentie.' }
 }

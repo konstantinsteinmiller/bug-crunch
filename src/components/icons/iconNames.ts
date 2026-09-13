@@ -31,7 +31,7 @@ export const GAME_ICON_NAMES = [
   'plus', 'minus', 'left', 'right', 'up', 'down',
   // Game nouns
   'coin', 'gem', 'heart', 'flask', 'wheel', 'gift', 'fullscreen', 'share',
-  // ── Survivalist's own run nouns ────────────────────────────────────────────
+  // ── splatix's own run nouns ────────────────────────────────────────────
   // The five stats this game is actually about, added to the shared set because
   // they were previously re-traced per component: `squad`, `bolt` and `rate`
   // existed as byte-identical `d` strings in BOTH `RunHud.vue` and

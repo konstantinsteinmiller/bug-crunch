@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url'
  * Deliberately NOT read from `VITE_LEADERBOARD_URL`: the builds that need this
  * are precisely the builds that set that variable to empty.
  */
-export const DEFAULT_SOURCE = 'https://survivalist-leaderboard.hyperg8.workers.dev'
+export const DEFAULT_SOURCE = 'https://splatix-leaderboard.hyperg8.workers.dev'
 
 export const SNAPSHOT_FILE = resolve(
   fileURLToPath(new URL('../data/leaderboard-snapshot.json', import.meta.url))

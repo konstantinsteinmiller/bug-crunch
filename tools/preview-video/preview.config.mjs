@@ -1,5 +1,5 @@
 /**
- * ─── Survivalist preview-video configuration ────────────────────────────────
+ * ─── splatix preview-video configuration ────────────────────────────────
  *
  *   pnpm preview:video                          # every format, both scenarios
  *   pnpm preview:video --formats 10s            # one deliverable
@@ -44,7 +44,7 @@ const PURE = process.argv.join(' ').includes('feed=pure')
 export default {
   // The port-ownership check. Twenty-odd games in this folder run their dev
   // server on 2050 and every one of them answers a fetch perfectly happily.
-  title: 'Survivalist',
+  title: 'splatix',
 
   // The DEV server, not a production build: `window.__preview` and the feed
   // flag are both `import.meta.env.DEV` only.

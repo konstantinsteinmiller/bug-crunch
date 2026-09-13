@@ -28,7 +28,7 @@ import { WEAPON_BOX_R } from '@/game/weapons'
 /**
  * `/art-sheets` — the reference bench.
  *
- * Survivalist has no art folder. Every monster, prop and effect is a few
+ * splatix has no art folder. Every monster, prop and effect is a few
  * hundred canvas operations, which is exactly what you want in a bundle and
  * exactly what you cannot hand to somebody who paints. This screen bakes the
  * whole cast onto the sheets described in `artSheet.ts` and writes them into
@@ -497,9 +497,9 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       let px = S * 0.2
       ctx.font = `900 ${px}px Angry, sans-serif`
       const want = S * 0.9
-      const got = ctx.measureText('SURVIVALIST').width
+      const got = ctx.measureText('splatix').width
       if (got > want) { px *= want / got; ctx.font = `900 ${px}px Angry, sans-serif` }
-      ctx.fillText('SURVIVALIST', cx, cy)
+      ctx.fillText('splatix', cx, cy)
       break
     }
   }

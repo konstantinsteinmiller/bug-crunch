@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'Cancelar',
   'close': 'Cerrar',
   'ok': 'Ok',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': '¡Jefe abatido!',
+    'wasted': 'Liquidado',
+    'cause': {
+      'foe': 'Arrollado por monstruos',
+      'elite': 'Un minijefe te rompió',
+      'barricade': 'Chocaste con barricadas',
+      'crate': 'Chocaste con cajas',
+      'divider': 'Rozaste los separadores',
+      'trap': 'Atrapado en trampas',
+      'slam': 'El jefe te aplastó'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': '¡Hito!',
     'rallied': 'Segundo aire',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'Gira tu teléfono',
-    'body': 'Survivalist se juega en vertical.'
+    'body': 'splatix se juega en vertical.'
   },
   'license': { 'denied': 'Acceso denegado: adquiere una licencia.' }
 }

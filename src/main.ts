@@ -51,7 +51,7 @@ const bootstrap = async () => {
   // `setVConsoleMounter` so vConsole stays out of the main chunk
   // and off the hot path.
   //
-  // Why this matters: survivalist's main bundle ballooned by ~250KB
+  // Why this matters: splatix's main bundle ballooned by ~250KB
   // gzipped when vConsole was statically imported. CrazyGames flagged
   // the regression. Putting the dynamic-import here fixes it without
   // breaking the trigger paths.
@@ -71,7 +71,7 @@ const bootstrap = async () => {
     import.meta.env.VITE_APP_NATIVE === 'true'
     || import.meta.env.VITE_APP_INCLUDE_VCONSOLE === 'true'
   ) {
-    // vConsole removed from this project (was a survivalist native-build
+    // vConsole removed from this project (was a splatix native-build
     // dependency). To restore on-device debugging, reintroduce the
     // `vconsole` package and wire it back to `setVConsoleMounter`.
     bootstrapVConsoleFromUrl()

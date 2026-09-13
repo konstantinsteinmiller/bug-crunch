@@ -1,5 +1,5 @@
 /**
- * ─── Survivalist leaderboard ────────────────────────────────────────────────
+ * ─── splatix leaderboard ────────────────────────────────────────────────
  *
  * A Cloudflare Worker over one D1 table. Two routes:
  *

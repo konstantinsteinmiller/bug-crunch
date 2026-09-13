@@ -135,7 +135,7 @@ const ART_SHEET_DIR = resolve(fileURLToPath(new URL('./art-sheets', import.meta.
 const SAFE_SHEET_NAME = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,79}$/
 
 const artSheetsPlugin = (): Plugin => ({
-  name: 'survivalist-art-sheets',
+  name: 'splatix-art-sheets',
   apply: 'serve',
   // The sheets land inside the project root, so without this the dev server
   // watches its own output: the first PNG written triggers a full page reload,
@@ -261,7 +261,7 @@ const readSnapshotFile = (file: string): LeaderboardSnapshotFile | null => {
  *   target bakes the real snapshot as the bottom rung of its offline ladder.
  */
 const leaderboardSnapshotPlugin = (seeded: boolean): Plugin => ({
-  name: 'survivalist-leaderboard-snapshot',
+  name: 'splatix-leaderboard-snapshot',
   buildStart() {
     if (seeded) {
       // Nothing to fetch: the seed is generated from a curve, committed, and

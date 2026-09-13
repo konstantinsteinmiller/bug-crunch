@@ -99,13 +99,13 @@ afterEach(() => {
 const RUN = {
   stage: 24,
   peakSquad: 186,
-  title: 'Survivalist',
+  title: 'splatix',
   recordLabel: 'New record!',
   stageWord: 'Stage',
   squadWord: 'Squad',
   rankValue: '#1130',
   rankOf: 'of 2345',
-  text: 'I reached stage 24 in Survivalist. Think you can go deeper?'
+  text: 'I reached stage 24 in splatix. Think you can go deeper?'
 }
 
 // ─── The three gates ────────────────────────────────────────────────────────
@@ -186,9 +186,9 @@ describe('sharing a card', () => {
     expect(calls.length).toBe(1)
     const files = calls[0]!.files!
     expect(files.length).toBe(1)
-    expect(files[0]!.name).toBe('survivalist-stage-24.jpg')
+    expect(files[0]!.name).toBe('splatix-stage-24.jpg')
     expect(files[0]!.type).toBe('image/jpeg')
-    expect(calls[0]!.title).toBe('Survivalist')
+    expect(calls[0]!.title).toBe('splatix')
     expect(calls[0]!.text).toContain('24')
   })
 
@@ -247,7 +247,7 @@ describe('sharing a card', () => {
     }) as typeof document.createElement
     try {
       await expect(m.shareRunCard(RUN)).resolves.toBe(true)
-      expect(clicked).toEqual(['survivalist-stage-24.jpg'])
+      expect(clicked).toEqual(['splatix-stage-24.jpg'])
     } finally {
       document.createElement = stubbed
     }

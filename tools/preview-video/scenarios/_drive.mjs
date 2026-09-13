@@ -1,5 +1,5 @@
 /**
- * ─── Driving Survivalist ────────────────────────────────────────────────────
+ * ─── Driving splatix ────────────────────────────────────────────────────
  *
  * Everything game-specific lives here, so the scenario modules read as beat
  * sheets. `record.mjs` and `lib/` are the skill's, copied verbatim; this file,

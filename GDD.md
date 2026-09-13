@@ -1,293 +1,329 @@
-# Survivalist — game design document
-
-## One line
-
-A vertical crowd runner: shoot the gates to make them worth more, run your squad
-through them, and turn three survivors into two hundred before the boss at the
-end of the stage takes them apart.
-
-## The loop
-
-```
-steer  →  hold fire on a gate  →  COMMIT to one leaf  →  run through  →  crowd changes
-   ↑                                                                        ↓
-   └── break green crates (+damage) · break blue crates (+fire rate)
-       dodge everything solid · kill the pack · kill the miniboss
-                                                                            ↓
-                                          boss  →  stage clear  →  coins  →  upgrades
-```
-
-Every decision in the game is the same decision, asked at a different speed:
-**keep shooting this, or move now — and to which side?** Standing still on a
-`+N` gate makes it worth more and lets the monsters walk into you. Taking the
-`×3` instead of the `+18` is worth it only if your crowd is already big. And you
-cannot have both: there is a pillar between the leaves and it kills.
-
-## Core rules
-
-| Rule | Value | Where |
-| --- | --- | --- |
-| Squad starts at | 3 survivors (+1 per Squad upgrade level) | `game/survival.ts` |
-| Crowd radius | capped at **1.65** — fits through one gate leaf (half-width 2.05) when aimed, clips the pillar when not | `CROWD_MAX_R` |
-| Auto-run speed | 5.1 u/s, +0.11 per stage, capped at 7.4 | `stageSpeed()` |
-| Damage | `squad × damage × fireRate` DPS; 14 visible tracer streams | `SHOOTERS` |
-| Fire rate | starts at **1.9** shots/s and rises **only** from blue crates (+0.55 each, three per stage, cap 6.5) — the one stat a run must earn | `BASE_FIRE_RATE` |
-| Gun range | rounds die **15 % of the screen short of the top edge** (10.8 units ahead of the crowd). Nothing off-screen can be shot, so obstacles arrive intact and a gate has to be approached before it can be pumped | `BULLET_RANGE` |
-| Reach (shop) | +3 %/level to **+30 % at level 10**, clamped at the top of the screen (13.7 u). The only track that buys TIME rather than force — every extra unit is more seconds of fire on each gate, crate and wall before the crowd reaches it — and the clamp is what stops the upgrade re-introducing "obstacles deleted above the camera" as a reward | `RANGE_PER_LEVEL`, `effectiveBulletRange()` |
-| Gate growth | **+1 per 500 ms of sustained fire**, lost after 400 ms of silence, `add` **and `sub`** leaves | `GATE_TICK_MS` |
-| `-N` doors | the mirror of `+N`, and the point is that the crowd fires FORWARD automatically: aim at a `-N` while you approach and the bill grows. The skill is *shoot the door you are not taking* | `GateOp.sub` |
-| Dilemma banks | `÷N` against `-N` — every door hostile, no right answer, only a cheaper wrong one. A division is cheap for a small crowd and ruinous for a big one; a subtraction is the other way round. One per stage from stage 4, never back to back, never the closing bank | `legalise()` rule 6 |
-| Gate bank | two or **three** doors + a lethal pillar between each pair; no two doors may ever be worth the same | `track.bank()` |
-| Gate claim | **one bank, one door.** The door holding the most survivors claims the bank and pays in full; every other offer is destroyed on the spot, pillars included | `claimBank()` |
-| Gate payout | `add`: `+N`; `mul`: `×N` on the survivors that went through; `div`: **kills** all but `1/N` of them; `sub`: takes `N` off the top | `claimBank()` |
-| Trap rungs | `÷2` from stage 2, **`÷3` from stage 4**, `÷5` from stage 6. Three rungs, because `÷2` is absorbable and `÷5` ends runs — the middle one is where a hard choice lives, and it is the value most often paired against a `-N` | `rollDiv()` |
-| No back-to-back multipliers | `×2` then `×2` is a free quadruple for anyone who can aim twice. A multiplier now always lands on a crowd the player had to keep alive through something else first | `canMul()` |
-| Funnel | the crowd squeezes to fit the door it is aimed at and spills back out after — which is what lets a bank have three narrow doors instead of two wide ones | `funnelRadius()` |
-| Passages | every **3rd–4th** bank (rolled, so it cannot be counted) grows a rib of unbreakable stone back down the road out of its pillar, splitting the approach into one corridor per door. Both offers are in plain sight the whole way in — that is the split second being sold — but once the crowd is in a corridor the other door is behind a wall it cannot shoot. Two-door banks only, from stage 6 | `passage()`, `PASSAGE_SECONDS` |
-| …and the corridor squeezes | the crowd funnels to fit the corridor exactly as it funnels for a door. The rib is only as wide as the pillar it grows from, so it takes nothing off the safe band a bank already had — but the pillar GRINDS and the rib KILLS, and a 0.35-wide band is not one a player can hold against that. Squeezing restores a ±0.4 window | `passageFit()`, `PASSAGE_FIT_MARGIN` |
-| Solid = lethal | **whoever touches a wall or a boulder dies, that frame** — no rate, no grace — and the rest of the swarm streams past on both sides. The bill is the LINE you ran, not the seconds you spent: clip an edge and lose the handful that clipped it, drive the middle of the crowd through and lose the column | `crushAgainst()` |
-| …except the two that grind | a gate **pillar** and an unbroken **crate** still cost `squad × fraction` a second and shove the rest clear. Deliberate: a pillar is a blade between two doors the player is aiming AT (a lethal one deletes a zero-input run at 67 % of stage 1 — the onboarding floor), and a crate is a REWARD the player was invited to chase | `grindAgainst()` |
-| Monsters knock a rank down | every foe is **solid** — no survivor ever stands inside a sprite — and running squarely into one **kills every second survivor that hits it**. Not all of them: a wall stands still, so a lethal wall is a question about your line, but a monster HOMES on the crowd, so all-or-nothing contact would be an undodgeable ~half of the squad against a designed bite of 0.4–1.8 % | `collideFoe()` |
-| …bounded twice, on purpose | the survivors of a collision get **10 frames of immunity** (per SURVIVOR — a pack shoulder to shoulder cannot bill the same body six times in one instant), and each monster can only knock a rank down **once per 0.6 s** (per MONSTER — one creep walking through the crowd's whole depth takes a rank, not a column). Without the second bound the body bills a fresh unprotected rank on every frame of its walk, which is the wall rule by another route | `FOE_COLLIDE_IFRAMES_MS`, `FOE_COLLIDE_CD` |
-| …and only the core kills | the whole body **pushes**, the middle **60 %** of it kills. Clip a flank and you are shoved aside; run into it squarely and your leading rank pays. A creep's contact box is 0.69 against a crowd 1.65 in radius, so "the edge of the shadow" is a very generous definition of running into something — and at the full body a competent no-ads career walls at stage 4 | `FOE_COLLIDE_CORE` |
-| Bite vs body | the two do not double-bill and are not the same event. The **mouth** reaches `FOE_REACH + UNIT_R` (further than the body), takes `max(flat 1–5, squad × 0.4–1.8 %)` and is metered by `biteCd`; the **body** takes half of what runs into it. Immunity covers the body only — a bite is an attack, not a collision | `stepFoes()` |
-| Boulders | **cannot be shot** — they eat the round and shrug. Two ranks with OFFSET gaps, so the crowd commits to a line and then has to change it. The one hazard whose difficulty does not decay as damage grows, which is what keeps steering a skill at stage 25 | `boulderField()` |
-| Crate tiers | every box prints its HP. **light 0.6× / standard 1× / heavy 2.1×** — a heavy crate is deliberately out of reach of an unupgraded squad, so it is walked past once and cracked open two upgrades later | `crateTierFor()`, `crateTierHp()` |
-| Monsters pay | a dead monster **drops loose coins** where it fell, on top of its bounty. Drops must be driven over, so the pack in your lane pays and the one you steered around does not — and Scavenging finally has a customer who fights | `FOE_COIN_DROP_PER_BOUNTY` |
-| Rounds pierce gates | a doorway is not armour — fire passes through a gate to whatever stands behind it, and still charges the gate on the way | `resolveBullet()` |
-| Walls pay | a barricade block shot down drops **2–4 loose coins**, so removing one is a question rather than pure cost | `spillCoins()` |
-| Coin magnet | starts at **0.55** past the crowd's own body — the trails are a route, not scenery — and is what the Scavenging track sells, to **+3.4** at level 10 | `COIN_MAGNET_BASE`, `coinMagnetBonus` |
-| Foes | 5 archetypes (creep / husk / hound / brute / flyer), introduced across stages 1–7 | `game/foes.ts` |
-| Bite | the LARGER of the archetype's flat cost (1–5) and a **share of the whole crowd** (0.4–1.8 %) — a brute frightens thirty survivors and is still worth fearing at a thousand | `biteShareFor()` |
-| Minibosses | 1 from stage 2, 2 from stage 6; ~13 % / ~15 % of the end boss's health | `track.minibossHp()` |
-| Miniboss hold | it **plants and blocks the road** `ELITE_HOLD_AHEAD` in front of the crowd instead of walking through it, for up to `ELITE_HOLD_MAX` = 4.5 s, then breaks off | `stepFoes()`, `stepAnchor()` |
-| Miniboss clearance | the generator guarantees **12 units of clear road behind** every elite — clearance is asymmetric, because only the road behind eats the approach | `nudgeClearElite()` |
-| Miniboss sweep | the block is a fight, not a wait: **0.3 s** wind-up, then an arc across the **whole lane** reaching 4.3 u down the road, taking **a fifth of the current squad**. Every **1.5 s**, alternating direction | `ELITE_TELEGRAPH`, `ELITE_SWEEP_CD`, `ELITE_SWEEP_FRACTION`, `ELITE_SWEEP_REACH` |
-| …and why it is not dodgeable | deliberate. The boss asks *where are you standing*; the elite asks *how hard do you hit*. A lane-wide arc has no safe side, so the only answer is DPS — and the 4.5 s leash is what keeps it survivable (three sweeps, ~half the squad left) | `ELITE_HOLD_MAX` |
-| Boss | One per stage, slams **where the crowd is** on a **1.0 s** telegraph, capped at **31 %** of the squad | `stepBoss()` |
-| Boss guard | at **66 %** and **33 %** health it plants, becomes untouchable and swings — overkill is forfeited, so no amount of DPS skips the climax | `damageBoss()` |
-| Boss rage | every swing thrown brings the next one **0.17 s sooner** (floor 0.95 s) and **0.07 u wider** (ceiling 2.55 u) — a long fight is a losing fight | `stepBoss()` |
-| Charged swing | **every third slam** is charged: **double the radius**, a **1.7×** wind-up, and an aim that leads the crowd's drift at 0.8 instead of 0.35. A perfect dodger takes 0 % of ordinary slams — this is the swing that does not accept that answer. The RADIUS is doubled and not the damage: the toll is `squad × slamShare` off whoever is inside the ring, so the radius decides whether it lands and the share decides what it costs once it has | `CHARGED_EVERY`, `slamRadiusFor()` |
-| Stage length | `120 + 9 × stage` world units (~35–50 s) | `stageLength()` |
-| Failure | Squad reaches 0 → wipe; still pays out coins scaled by progress | `wipeReward()` |
-| Retry relief | a stage that has beaten you comes back softer, and softer again each time: 80 % → 72 % → 66 % → 62 % enemy health, and a slam that takes 40 % less | `reliefFor()` |
-| Autobalancer | every stage cleared in a row makes the next one 13 % harder (health) plus denser packs and costlier bites, up to 30; **one loss wipes the streak entirely** | `challengeFactor()` |
-
-## Difficulty
-
-The curve is carried by five independent knobs rather than one multiplier, so it
-can be tuned finely and so failure always has a legible cause:
-
-1. **Enemy health** — `foeHpScale` (+34 %/stage) and `bossHpScale` (×1.55/stage
-   to stage 12, then +12 %/stage).
-2. **Density** — `packSize`, `beatGap` and the arrangement table in `track.ts`.
-3. **Routing pressure** — trap-gate frequency (`trapChance`), barricade gap
-   width, and how far off the line the crates sit (`CRATE_DETOUR_X`).
-4. **The player's own arc** — fire rate starts crawling, so a run that skips the
-   blue crates is measurably weaker at the boss than one that took the detours.
-   This is the main lever that *punishes suboptimal play* rather than punishing
-   the player for being on a high stage.
-5. **The autobalancer**, which is the one that tracks the PLAYER rather than
-   the stage. A streak of clears winds the next stage up a little at a time; a
-   single loss wipes the streak completely, so the handicap can never be the
-   reason somebody is stuck. Underneath it, minibosses break the stage into
-   winnable chunks, and a stage that has beaten the player comes back softer
-   each time it does — 80 % → 72 % → 66 % → 62 % enemy health, plus a slam that
-   takes 40 % less of the squad. (Health alone did nothing measurable:
-   14 of 15 simulated retries moved the clear rate by exactly zero, because most
-   of a failing run's losses are slams, which enemy HP never touches.) Neither
-   makes a good run easier; both stop a bad one becoming a wall.
-
-Balance is measured, not guessed: `tests/sim/` drives the real simulation with
-five scripted player policies (optimal / good / average / careless / coin-trail)
-and reports clear rate, time-to-clear, peak squad, DPS at the boss and
-cause-of-death per stage. `tests/sim/REPORT.md` carries the current numbers.
-
-Where it stands (10 seeds per cell):
-
-| stage | optimal | good | average | careless |
-| --- | --- | --- | --- | --- |
-| 1 | 100 % | 100 % | **100 %** | 0 % |
-| 2 | 100 % | 100 % | 80 % | 0 % |
-| 3 | 100 % | 100 % | 60 % | 0 % |
-| 4 | 100 % | 80 % | 100 % | 0 % |
-| 5 | 100 % | 100 % | 100 % | 0 % |
-
-A sloppy player gets stage 1 and then has to actually play; a player who never
-touches the screen reaches the stage-1 boss and loses to it, every time. The
-spread between playing well and playing badly is **1.8×–5.8× DPS at the boss**,
-and it comes almost entirely from crates rather than from squad size — the gates
-hand roughly the same crowd to everybody.
-
-### The whole campaign, and what it took to make it a campaign
-
-Thirty-stage careers were then simulated end to end — every scripted policy
-against every purchasing strategy, carrying the save between stages — and the
-first pass returned a flat verdict: **every player who touched the screen
-cleared all thirty stages, on any strategy, including buying nothing at all.**
-From stage 8 onward the boss died before it swung once. The cause was structural
-rather than numerical: the crowd grows *exponentially* through gates while the
-road's toll was *absolute*, so the outcome of every late stage was settled
-before it started.
-
-Three rules closed it, and the same careers were re-measured after:
-
-* **The bite is a share** (`biteShareFor`) — a monster costs what it was
-  authored to cost, or a slice of the crowd, whichever is worse.
-* **The boss guards** at 66 % and 33 % (`damageBoss`) — overkill is forfeited,
-  so the climax always happens.
-* **The boss rages** — each swing shortens and widens the next, turning "not
-  enough damage" from *slow* into *fatal*.
-
-| what changed | before | after |
-| --- | --- | --- |
-| a competent player who never spends a coin | clears all 30 | **walls at 13** |
-| an average player who never spends a coin | clears all 30 | **walls at 10** |
-| "buy only scavenging" | ties the best strategy | **walls at 13** |
-| boss swings thrown, stage 8+ | 0 | **2–9** |
-| slams as a cause of death | early stages only | **top cause on most stages** |
-| a full career | 31–33 runs for 30 stages | **31–45**, losses scattered throughout |
-
-A perfect-play policy still clears everything with an empty wallet, which is the
-intended ceiling: the game is beatable by skill alone and the shop is what lets
-everybody else get there.
-
-### The road has no end
-
-Stages 1–5 are hand-authored, 6–30 are the measured campaign, and **there is no
-stage 31 in the sense of a wall** — the generator has always answered any number
-handed to it. What it did not do was keep *scaling*: measured across stages
-1–300, fourteen separate knobs hit a hard cap somewhere between stage 17 and
-stage 34, so a stage-100 road was a stage-34 road with more enemy health on it.
-
-Endless means the knobs never stop moving, and that every promise the road makes
-stays true at depth:
-
-| knob | used to stop at | now |
-| --- | --- | --- |
-| `gateAddBase` | linear forever → overran `MAX_SQUAD` by stage 86 | logarithmic knee past stage 30, every step past stage 14 trimmed a tenth (`GATE_GROWTH_TRIM`): 23 at stage 30 → 31 at 40 → 38 at 60 → 46 at 100 → 58 at 300 |
-| `gatePumpStep` | +1 a tick per 15-stage band, forever | +0.9 a band, floored: +2 from stage 17, +3 from 34, +4 from 50 (was 15 / 30 / 45) |
-| `packSize` | 16, reached at stage 19 | linear to 22, then log toward a **screen** limit of 34 |
-| `beatGap` | flat 7 from stage 30 — every deep stage beat-for-beat identical | keeps closing toward 5.2 (6.0 at stage 100) |
-| `maxTriples` / `mulLeaves` / `mulThrees` | flat from stages 22 / 6 / 8 | grow with the number of banks a stage actually has, so the *ratio* holds |
-| `MAX_SQUAD` | 1 600 — a thirty-stage ceiling | **4 000**, and the log knee is what keeps doors honest past it |
-| `GATE_MAX_VALUE` | 99 — banks printed **two identical doors from stage 161** | 999 |
-| pack / wall beat weights | floors reached at stages 34 / 32, then crowded out by hazards | floors drift up with the stage |
-
-The honest limit, stated rather than hidden: no finite `MAX_SQUAD` survives an
-unbounded sum. The theoretical best-case additive total first crosses 4 000
-around **stage 280** — hours of unbroken play, and a figure that ignores
-attrition, so a real run never approaches it.
-
-The multipliers are a different story, and an open one: past stage 60 the
-multiplier budget (`mulLeaves`, `mulThrees`) puts four to eight `×N` doors on a
-road, and a perfect run pins `MAX_SQUAD` at roughly 55–65 % of every stage from
-61 to 130, trim or no trim. The trim was measured not to move that point; a
-generator-side ceiling on late multipliers was, and is the next lever if the
-late roads still run out of decisions.
-
-## Progression
-
-* **In-run:** squad size, per-survivor damage and fire rate — all three reset
-  every stage, all three built entirely from what the player does on the road.
-* **Between runs:** five coin-bought tracks (Squad / Firepower / Fire Rate /
-  Reach / Scavenging). Deliberately five, not forty: the meta exists to make the
-  *next* attempt feel different within thirty seconds.
-* **…and three of them never max.** Squad, Firepower and Scavenging are
-  uncapped, because a road with no last stage cannot have a shop with a last
-  level: measured, a benchmark career reached stage 80 with **every track maxed
-  and 893 063 coins unspent**. Fire Rate and Reach stay capped, and that is a
-  rule rather than an omission — both are bounded by something physical (the
-  bullet budget, the camera), so an endless level on either would sell a number
-  that cannot move. The endless tail is priced *gentler* than the authored head
-  (×1.16 a level against ×1.38–1.55): continuing the authored slope would put
-  level 21 tens of stages away, and "endless" would mean "locked".
-* **Squad is priced in doors.** A level starts the run a sixth of the stage's
-  own `+N` door ahead (`squadPerLevel`: +1 on stages 1–6, +2 from 7, +5 at 40,
-  +8 at 100) — one survivor a level was nothing once a stage-40 door paid 40–50.
-  Its second half, a share of every `+N` door's payout, adds a tenth less each
-  level in whole percents (4, 4, 3, 3, 3, 2 … %) and stops at **+37 %** from
-  level 20; the old flat +4 % a level had doors paying 2.2× at level 30.
-* **The gift ladder (stages 1–4):** the opening stages hand over without a
-  result screen (through stage 3) and each banner names the NEXT gift. The
-  stage-1 boss **drops a launcher on the spot** — a one-card reveal that closes
-  itself within three seconds, at half the launcher's damage, re-armed on every
-  attempt at stage 2 (`BOSS_REWARD_STAGE`; a quarter of playtesters quit at the
-  first kill). Stage 2's free gatling box then ADDS to it rather than replacing
-  it: gatling as the main gun, the half-power launcher still firing beside it
-  (`sideWeapon`), both on the badge. Stage 2's
-  clear opens a two-card reveal — **launcher or gatling, the player's own for
-  stage 3** (`WEAPON_PICK_STAGE`); stage 3's clear hands over the **shield**;
-  from stage 4 a weapon is on the road every other stage (`WEAPON_STAGE`). The
-  HUD carries the promise as a chip beside the stage number and marks the box
-  and the elites on the progress rail. A first-session wipe past 75 % of stages
-  2–3 is **rallied** once per stage instead of ended; stage 4 keeps the floor.
-* **Standing:** highest stage ever reached, posted to a global board, with squad
-  size as the tie-breaking second column. Read once per page load, written only
-  when the player beats their own posted record — the board is a decoration on a
-  game that works perfectly without it, and every failure path ends in "no rank
-  shown".
-* **The road goes on:** a cleared stage never reloads the level. The next road
-  opens under the crowd — same column, the survivors it keeps standing where
-  they stood (the rest fall back in a puff: every stage still opens on the
-  shop's squad), and the boss they killed lying a few steps ahead. A retry
-  reopens on that same ground; a fresh page load starts clean.
-* **Persistence:** one `tower_state` blob, one localStorage key, mirrored to
-  whichever platform cloud the build targets. The stage number alone rebuilds
-  the layout, so a reload resumes exactly where the player was.
-
-## Art direction
-
-Hand-inked cel art, drawn procedurally and baked to frame strips at runtime —
-**zero gameplay bitmaps ship with the game**. One shared vocabulary
-(`inkArt.ts` / `monsterKit.ts`) means the survivors and the monsters look like
-one artist drew them: one ink colour, one key light, three line weights, three
-tone cuts.
-
-* Survivors are drawn **from behind** (pack, shoulders, bobbing hood) — the only
-  angle a vertical runner ever shows, and the only one that reads at 30 px.
-* Monsters come from the 13-design cast in `monsters.ts`, baked by
-  `monsterSprites.ts`. A boss's death is drawn by the same rigs, not by turning
-  a walk frame over: it staggers with its arms flailing, buckles, and goes down
-  onto its back with its limbs spread (a side-on beast onto its flank, legs out
-  stiff) — the fall the painted death strips are painted over.
-* The lane never changes hue; only the sky does, one palette per stage, so the
-  thing the player reads every frame keeps its contrast.
-
-## Feel (the non-negotiables)
-
-* Gate ticks play a **rising pentatonic ladder** — pumping a gate is audibly
-  winding something up.
-* A gate pass costs a beat of **slow motion** (0.45× for ~150 ms), a white
-  flash, a 40-particle burst and a screen shake scaled by the haul.
-* Every hit flashes its target white by re-blitting its own sprite additively.
-* Losing survivors turns the frame edges red and plays a short falling cry —
-  the crowd has to feel like people, or the numbers mean nothing.
-* Target 60 fps on mid-tier Android: pooled particles in typed arrays, baked
-  sprite strips, one canvas, DPR clamped to 2, quality tiers driven by a rolling
-  FPS average.
-
-## Deliberately not in the game
-
-Battle pass, achievements wall, daily-login calendar, daily missions,
-rewarded-video buttons, treasure chest. They were removed because every one of
-them puts a screen between the player and the road. Interstitials remain at the
-natural break (between stages, ad **before** the result screen).
+# GAME DESIGN DOCUMENT (GDD)
+# **SPLATIX**
+*Target Audience: Ages 6–15 | Genre: Top-Down 2D Action / Arcade Stomper | Platform: Mobile (iOS/Android), PC, Nintendo Switch*
 
 ---
 
-## Standard requirements block
+## 1. Executive Summary & Core Concept
 
-> In GENERAL for all work: Do your work on a high-fidelity basis, don't do just
-> good enough. Make the interactions feel good, add vfx juice where applicable
-> (optimize to not overload the CPU/GPU). Don't take shortcuts. After planning,
-> write the plan into `game-implementation-plan.md` to continue from if a
-> session ends unexpectedly.
-> The game starts right into the first scene, no main menu.
-> Fully responsive: all mobile orientations, min portrait 320×658px, tablet and
-> desktop up to fullscreen. No fixed px where avoidable — use %, vw/vh. Respect
-> safe-area insets. Images are not selectable/draggable like normal web content
-> but must allow drag and click events for game logic.
-> Optimize for web-game standards: fast jump into gameplay (hot-path loading),
-> delay uncritical assets until after first paint.
-> Save ALL state variables in one object named `<game>_state`.
+### 1.1 Elevator Pitch
+**SPLATIX** is a high-energy, 2D top-down arcade action game where players control a giant foot/shoe overhead to stomp, slide, and squish swarms of quirky cartoon bugs and squishy targets. Built around the satisfying tactile feedback of vivid splash animations and punchy audio design, *SPLATFOOT* expands simple bug-squishing into a deep, engaging arcade experience featuring reactive enemy AI, customizable footwear loadouts, combo mechanics, and interactive stage hazards.
+
+### 1.2 Core Pillars
+1. **Sensory Juice & Tactile Satisfaction**: Every stomp delivers visual, audio, and haptic feedback. Vibrant multi-colored goo, popping eye-balls, screen-shake, and comic-book visual effects make squishing irresistible.
+2. **Dynamic Stomp Combat**: Moving beyond 1-hit kills. Enemies dodge under foot shadows, wear helmets, split into multiple pieces, drop armor, or punish naive stomp spammers.
+3. **Footwear Mastery**: A locker full of distinct shoes, boots, slippers, and skates—each transforming movement speed, stomp radius, special abilities, and interactions with specific bug types.
+4. **Kid-Friendly Cartoon Humor**: Bright, high-contrast art style, googly-eyed insects, silly death reactions, and customizable juice colors (including a non-gory "Neon Slime Mode" for younger/sensitive players).
+
+---
+
+## 2. Target Audience & Safety Guidelines
+
+### 2.1 Demographics & Play Habits (Ages 6–15)
+* **Ages 6–9**: Focus on immediate tactile fun, simple tap controls, vibrant colors, unlocking funny slippers (e.g., Bunny Slippers), and short 1-minute arcade bursts.
+* **Ages 10–15**: Focus on combo multipliers, perfectionist 3-star level ratings, gear optimization, boss fight strategy, high-score leaderboards, and twitch-reaction dodges.
+
+### 2.2 Safety & Tone Regulations
+* **Visuals**: Zero realistic gore or blood. All insect fluids are rendered as vibrant slime, jam, neon ooze, or confetti.
+* **Options Toggle**: "Juice Style" settings allow switching between **Cartoon Ooze** (default colorful slime), **Confetti & Candy** (piñata style), and **Bubble Pop** (soap bubbles).
+* **Kid-Safe Monetization**: No aggressive paywalls, loot boxes, or deceptive dark patterns. Unlocks are earned strictly through gameplay achievements, stars, and level progression.
+
+---
+
+## 3. Player Character & Foot Mechanics
+
+### 3.1 Perspective & Camera
+* **Viewpoint**: Pure 2D top-down overhead perspective looking directly down onto floors, picnic tables, garden grass, and kitchen tiles.
+* **Player Representation**: Only the bottom of the shoe/foot (and lower leg/ankle) is visible when hovering and stomping.
+* **Target Cursor**: The player controls the position of the foot. A dynamic **Foot Shadow** projects onto the ground below, giving visual cues on height, stomp radius, and landing timing.
+
+### 3.2 Core Movement & Stomp Mechanics
+
+| Mechanic | Input Action | Description & Execution | Strategy / Gameplay Role |
+| :--- | :--- | :--- | :--- |
+| **Hover / Shadow Track** | Drag Finger / Mouse Move / Thumbstick | Moves the shadow cursor across the floor. Shadow shrinks as foot descends. | Telegraphed to fast bugs; fast bugs react if shadow lingers over them too long. |
+| **Quick Tap Stomp** | Tap Screen / Click / RT Button | Rapid down-and-up stomp. Low recovery delay. | Ideal for fast single-hit bugs (Ants, Fleas) and maintaining high combo chains. |
+| **Heavy Impact Slam** | Hold & Release / Double Tap | Foot raises higher and slams down with huge shockwave radius. | Cracks heavy armor, stuns adjacent enemies, breaks crates; has a 1-second recovery animation. |
+| **Slide / Skater Drag** | Stomp + Drag across screen | Foot lands and slides along the floor, crushing bugs in a line. | Requires specialized shoes (Roller Skates / Ice Skates) or slippery surfaces (Honey/Butter). |
+| **Heel Click / Pivot Spin** | Double-tap in place | Heel stays fixed while toe sweeps in a 360° circle. | Sweeps away tiny surrounding swarms in panic situations. |
+
+---
+
+## 4. Footwear System & Progression Loadout
+
+Players unlock and upgrade various shoes in the **Locker Room**. Each shoe alters stats and introduces active/passive perks:
+
+```
+                          [ SHOE STAT MATRIX ]
++-------------------+-------------+---------------+---------------+--------------------+
+| Shoe Type         | Speed (1-5) | Impact Radius | Armor Piercing| Unique Ability     |
++-------------------+-------------+---------------+---------------+--------------------+
+| Classic Sneaker   |     3       |      Medium   |     Low       | Balanced All-Round |
+| Steel-Toed Boot   |     1       |      Huge     |     MAX       | Crushes Spikes     |
+| Bunny Slipper     |     5       |      Small    |     Zero      | Silent Footsteps   |
+| Roller Skate      |     4       |      Narrow   |     Medium    | Continuous Drag    |
+| Cleat Boot        |     3       |      Small    |     High      | Punctures Shells   |
+| Electric Sock     |     4       |      Medium   |     Low       | Static Shock Wave  |
++-------------------+-------------+---------------+---------------+--------------------+
+```
+
+### 4.1 Detailed Footwear Profiles
+1. **Classic Sneaker (Starter)**:
+   * *Passive*: Standard balance. High responsiveness.
+   * *Juice Effect*: Classic squeaky rubber sound, square squeegee splat.
+2. **Steel-Toed Work Boot**:
+   * *Passive*: Immune to Spiky Caterpillars and Cactus Hazards. Heavy stomps create a shockwave that stuns bugs in a 3-tile radius.
+   * *Trade-off*: Slow movement speed and longer stomp cooldown.
+3. **Bunny Slippers (Stealth)**:
+   * *Passive*: "Silent Tread" — Fast dodging bugs (Fleas, Crickets) do NOT detect the hover shadow until impact.
+   * *Trade-off*: Cannot damage Armored Beetles without multiple consecutive hits.
+4. **Roller Skates (Speed Drag)**:
+   * *Passive*: Enables the "Roll-Over" mechanic—swipe across the screen to roll in a line, squishing weak bugs sequentially without lifting the foot.
+   * *Juice Effect*: Leaves continuous tire-track splat lines across the board.
+5. **Electric Athletic Sock**:
+   * *Passive*: Building up distance generates static electricity. Releasing a stomp triggers a chain-lightning shock that hits adjacent bugs.
+
+---
+
+## 5. Insect & Target Bestiary (Enemies)
+
+To maintain depth and variety, insects feature distinct behaviors, health bars, movement patterns, and evasion mechanics.
+
+```
+       [ INSECT BEHAVIOR & COUNTER SYSTEM ]
+
+     [ BASIC ANT ] ---------> Quick Tap ----------> [ 1-Hit Splat ]
+          |
+     [ BEETLE ] ------------> Heavy Slam ---------> [ Armor Crack -> Splat ]
+          |
+     [ FLEA/CRICKET ] ------> Feint / Stealth ----> [ Dodge Prediction ]
+          |
+     [ CENTIPEDE ] ---------> Multi-Segment -------> [ Segment Cut Stomp ]
+          |
+     [ SPIKY CATERPILLAR ] -> Steel Boot / Cleat --> [ Counter Risk ]
+```
+
+### 5.1 Enemy Taxonomy & Mechanics
+
+#### 1. Worker Ant (Tier 1 - Swarm / Fodder)
+* **HP**: 1
+* **Behavior**: Marches in straight predictable lines along sugar trails or toward fruit objectives.
+* **Juice Factor**: Bright neon-green / red splat, pops cleanly with satisfying high-pitch squish.
+* **Role**: Combo builder and gauge filler.
+
+#### 2. Armored Rhinoceros Beetle (Tier 2 - Heavy)
+* **HP**: 3 (Phase 1: Shell intact; Phase 2: Cracked Shell; Phase 3: Total Splat)
+* **Behavior**: Slow, steady movement. Shrugs off light tap stomps (causes a ricochet "CLANG" sound).
+* **Mechanic**: Requires a **Heavy Impact Slam** or **Steel-Toed Boot** to crack open. On Phase 2, its internal goo is exposed and squishes violently on the next hit.
+
+#### 3. Ninja Flea / Grasshopper (Tier 2 - Agile / Dodger)
+* **HP**: 1
+* **Behavior**: Senses the **Foot Shadow**. When the shadow enters its perimeter, a quick "ALERT!" icon appears over its head, and it leaps 3 inches away after 0.25 seconds.
+* **Counter Strategy**:
+  * *Feint Stomp*: Hover near it to trigger the jump, then stomp where it lands.
+  * *Bunny Slippers*: Eliminates shadow warning visual.
+  * *Slide Stomp*: Catch it mid-landing with a sliding boot.
+
+#### 4. Multi-Segment Centipede (Tier 3 - Tactical)
+* **HP**: 6 (1 HP per body segment)
+* **Behavior**: Wiggles in serpentine paths across the screen at high speeds.
+* **Mechanic**: Stomping the middle severs the centipede into two smaller independent centipedes that head toward screen edges.
+* **Strategy**: Stomp head-first to kill instantly, or segment by segment to maximize combo points.
+
+#### 5. Spiky Woolly Bear Caterpillar (Tier 3 - Hazard / Punisher)
+* **HP**: 1
+* **Behavior**: Crawls lazily.
+* **Mechanic**: Stomping with soft shoes (Sneakers, Socks, Slippers) causes the foot to take damage/knockback ("OUCH!"), resetting the active combo multiplier.
+* **Counter**: Stomp using **Steel-Toed Boots** or hit with an environmental hazard (e.g., rolling pin, water drop).
+
+#### 6. Stink Bug (Tier 2 - Disrupter)
+* **HP**: 1
+* **Behavior**: Wanders slowly.
+* **Mechanic**: If stomped directly, releases a purple haze cloud that obscures vision and slows foot movement for 3 seconds.
+* **Counter**: Bait near fire hydrants/fans or use precision Cleat punctures.
+
+#### 7. Golden Piñata Fly (Bonus Target)
+* **HP**: 5 (Rapid Taps)
+* **Behavior**: Zips around frantically in zig-zag patterns.
+* **Reward**: Drops shiny coins and explodes into multi-colored candy/confetti splats.
+
+---
+
+## 6. Core Gameplay Systems & Depth Mechanics
+
+### 6.1 Combo System ("Splat Chain")
+* **Mechanic**: Stomping bugs within **1.5 seconds** of each other builds the Combo Multiplier (x2, x3, x5, x10... MAX x50).
+* **Visual Polish**: With each combo tier, screen shake increases slightly, and comic text pop-ups appear (*SQUISH!*, *CRUNCH!*, *ULTRA SPLAT!*).
+* **Reset Condition**: Missing a stomp completely (hitting bare floor) or taking damage from a Spiky Caterpillar resets the combo counter to zero.
+
+### 6.2 The Juice Meter & Splat Fever Mode
+* **Juice Meter**: A vertical vial on the HUD fills with squished insect ooze as targets are stomped.
+* **Splat Fever Activation**: When full, tapping the **FEVER BUTTON** triggers a 10-second frenzy mode:
+  * Foot transforms into a colossal **Gilded Boot of Destruction**.
+  * All stomps produce screen-clearing shockwaves.
+  * Armored and Spiky bugs are instantly squished on impact.
+  * Disco lights and energetic upbeat music play.
+
+```
+       [ SQUISH ] ---> Fill Juice Vial ---> [ TRIGGER FEVER ] ---> [ SCREEN SHOCKWAVE ]
+```
+
+### 6.3 Environmental Mechanics & Interactive Hazards
+
+| Hazard / Prop | Interaction Mechanism | Effect on Bugs |
+| :--- | :--- | :--- |
+| **Honey / Syrup Puddles** | Foot steps on edge or bugs walk into it. | Traps bugs in place, making agile fleas unable to jump. Foot slides slightly. |
+| **Kitchen Magnets / Metal Traps**| Heavy stomp triggers switch. | Attracts armored beetles to one central point for a multi-squish setup. |
+| **Salt Shakers / Soap Bottles** | Stomp on bottle/shaker. | Causes salt/soap to burst outward, dissolving slimes and forcing bugs into panic sprint. |
+| **Lawn Mower / Ceiling Fan** | Periodic moving hazard across screen. | Timed crushing zone; bugs pushed into path are sliced into instant juice. |
+
+---
+
+## 7. Level Design & Progression Framework
+
+### 7.1 Stage Environments & Themes
+1. **The Picnic Blanket (World 1 - Kitchen & Garden)**: High sugar density, ants, flies, picnic tables, breadcrumbs, syrup traps.
+2. **The Overgrown Backyard (World 2 - Nature)**: Tall grass obscuring vision, caterpillars, beetles, muddy sliding paths.
+3. **The Dusty Attic (World 3 - Mystery)**: Cobwebs that slow the foot, centipedes, nocturnal glowing moths, trick flooring.
+4. **The Neon Arcade Floor (World 4 - Tech/Cyber)**: Slippery linoleum, sticky soda spills, mechanical robo-bugs, rapid conveyor belts.
+
+### 7.2 Level Structure & Star Rating System
+Each level is designed for 1-minute to 3-minute play sessions and rewards 1 to 3 Stars based on objectives:
+
+```
+[ LEVEL 2-4 OBJECTIVES ]
+⭐ Objective 1: Clear 40 Ants & 10 Beetles before time runs out (120s).
+⭐⭐ Objective 2: Reach a 15x Splat Combo.
+⭐⭐⭐ Objective 3: Complete level without taking spike damage from Caterpillars.
+```
+
+### 7.3 Boss Encounters
+Every world ends with an epic multi-stage Boss Fight featuring massive mutated boss insects:
+
+#### World 1 Boss: "Goliath Queen Ant"
+* **Phase 1**: Queen moves across screen spawning swarms of worker ants. Stomp her body 5 times while avoiding spawned guards.
+* **Phase 2**: Queen drops egg sacs across the table. Player must stomp egg sacs before they hatch into armored guards while Queen attempts to bite the foot.
+* **Phase 3**: Enraged Queen charges back and forth. Player must time a Heavy Impact Slam on her head during her charge wind-up.
+
+---
+
+## 8. Visual & Audio Design ("The Juice")
+
+### 8.1 Visual Pipeline & Splat Physics
+* **Particle Splatter Engine**: When an insect is crushed, a dynamic 2D splatter decal is generated on the floor geometry.
+  * Splat decal size is procedurally scaled based on foot speed and insect mass.
+  * Splat color matches insect color (Ants = Magenta/Red, Beetles = Emerald Green, Bees = Bright Yellow).
+* **Googly Eye & Shell Physics**: Small physics-based rigidbodies (eyeballs, armor shards, wings) shoot outward from the impact center and bounce/settle on the floor.
+* **Screen Shake & Zoom**: Micro screen shakes on normal stomps; heavy directional zoom-and-shake on Boss kills and 20+ combos.
+
+```
++-----------------------------------------------------------------------+
+|                        VISUAL JUICE PIPELINE                          |
+|                                                                       |
+| [ FOOT IMPACT ]                                                       |
+|       |                                                               |
+|       +---> 1. Deform/Squish Sprite Scale (0.1x Y-scale, 1.5x X-scale)|
+|       +---> 2. Spawn Radial Ooze Particle Burst                       |
+|       +---> 3. Apply Decal Stamp to Floor Canvas (Persistent)         |
+|       +---> 4. Eject Googly Eyes & Armor Fragments (Physics Rigidbodies)|
+|       +---> 5. Pop Comic Text ("SPLAT!") with Spring Scaling          |
+|       +---> 6. Camera Micro-Shake & Impulse Haptic Feedback           |
++-----------------------------------------------------------------------+
+```
+
+### 8.2 Sound Design Matrix
+* **Primary Stomp Sounds**:
+  * *Sneaker*: Punchy rubber squeak followed by wet squelch.
+  * *Boots*: Heavy metallic thud followed by explosive crunch.
+  * *Flip-Flop*: Sharp, loud slap!
+* **Squish Layering**: 3-layer audio system per stomp:
+  1. *Impact Layer*: Hard punch/thud sound.
+  2. *Juice Layer*: Wet squelch/pop (varied pitch by bug size).
+  3. *Debris Layer*: Cracking shell/crunch accent.
+* **Adaptive Music**: Dynamic background track speeds up as Combo Multiplier rises, shifting into high-tempo chiptune/funk during Fever Mode.
+
+---
+
+## 9. UI/UX & Controls
+
+### 9.1 HUD Layout (In-Game Screen)
+
+```
++-----------------------------------------------------------------------+
+| [SCORE: 045,200]    [COMBO: x12 🔥]          [TIME: 01:15]    [PAUSE] |
+|                                                                       |
+|  (Vial)                                                               |
+| [JUICE]                                                               |
+| [==== ]                                                               |
+| [==== ]                                                               |
+| [FEVER]                                                               |
+|                                                                       |
+|                            [ Foot Shadow ]                            |
+|                              ( O )                                    |
+|                                                                       |
+|               ~ ant ~       ~ beetle ~        ~ ant ~                 |
+|                                                                       |
+|                                                                       |
+| [ACTIVE PERK: STEEL BOOT]                        [SHOE SWAP BUTTON]   |
++-----------------------------------------------------------------------+
+```
+
+### 9.2 Control Schemes
+* **Mobile (Touch)**: Direct finger tracking for movement; tap to stomp; dual-finger pinch or active button for shoe special power.
+* **PC (Mouse & Keyboard)**: Mouse moves shadow cursor; Left Click = Quick Stomp; Right Click = Heavy Slam; Spacebar = Fever Mode.
+* **Console / Switch**: Left Thumbstick = Move Foot Shadow; A Button = Quick Stomp; ZR Trigger = Heavy Slam; X Button = Fever Mode.
+
+---
+
+## 10. Monetization, Retention & Accessibility
+
+### 10.1 Kid-Friendly Progression & Rewards
+* **Shoe Locker Unlockables**: Earned via Star Progression or In-Game Coins collected during Piñata levels.
+* **Splat Cosmetics**: Unlock custom goo colors (Rainbow Slime, Sparkle Glitter, Gold Dust) and shoe skins (Dragon Feet, Robo Shoes, Glowing Neon Soles).
+* **Daily Clean-Up Challenges**: "Squish 100 Ants", "Complete Level 3 without missing a stomp", "Reach x20 combo with Bunny Slippers".
+
+### 10.2 Accessibility Options
+* **Splat Style Selector**: Toggle between *Cartoon Slime*, *Confetti Piñata*, or *Bubble Pop* for squeamish players.
+* **Shadow Radius Indicator High-Vis**: Scalable indicator ring for players with visual impairments.
+* **Single-Tap Mode**: Auto-tracks nearest bug on tap for young players (Ages 6-7) who struggle with dual-stick/precise drag inputs.
+
+---
+
+## 11. Technical Specifications & Performance
+
+### 11.1 Decal Management & Rendering
+* **Texture Pooling**: Splat decals are baked onto a dynamic floor render-texture to maintain constant 60 FPS performance without lagging devices when hundreds of splats cover the board.
+* **Object Pooling**: Pre-instantiated pools for bug entities, splash particle systems, and floating comic text pop-ups.
+
+### 11.2 Entity Budget
+* **Max Active Bugs on Screen**: 150 simultaneous entities.
+* **Target Frame Rate**: 60 FPS on mobile devices (iPhone 11 / Android equivalents and Nintendo Switch).
+
+---
+
+## 12. Development Roadmap & Milestones
+
+```
++-----------------------------------------------------------------------+
+|                          DEVELOPMENT ROADMAP                          |
++-----------------------------------------------------------------------+
+| [PHASE 1: CORE PROTOTYPE]                                             |
+|  - Foot physics, Shadow indicator, Tap & Heavy Stomp controls         |
+|  - 3 Basic Bug Types (Ant, Beetle, Flea with dodge AI)                |
+|  - Particle Splatter engine & decaling prototype                      |
++-----------------------------------------------------------------------+
+| [PHASE 2: CONTENT & SHOE SYSTEM]                                      |
+|  - Implement 6 Shoe Types & Locker Progression UI                     |
+|  - Add Centipedes, Spiky Caterpillars, Stink Bugs                     |
+|  - Implement Combo & Fever Mode Systems                               |
++-----------------------------------------------------------------------+
+| [PHASE 3: WORLD BUILD & BOSS ENCOUNTERS]                              |
+|  - 4 Worlds (40 Levels total + 4 Boss Fights)                         |
+|  - Audio layer polish (3-layer squish sounds, dynamic music)          |
+|  - Accessibility toggles & Kid-Safe UI Polish                         |
++-----------------------------------------------------------------------+
+| [PHASE 4: TESTING & LAUNCH]                                           |
+|  - Kid focus group testing (Ages 6-9 and 10-15 cohorts)               |
+|  - Performance optimization (Decal texture baking, memory pooling)    |
+|  - Soft Launch & Global Release                                       |
++-----------------------------------------------------------------------+

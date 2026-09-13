@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'ยกเลิก',
   'close': 'ปิด',
   'ok': 'ตกลง',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'ล้มบอสได้!',
+    'wasted': 'จบเห่',
+    'cause': {
+      'foe': 'ถูกมอนสเตอร์ถล่ม',
+      'elite': 'มินิบอสเล่นงานคุณ',
+      'barricade': 'ชนแผงกั้น',
+      'crate': 'ชนลังไม้',
+      'divider': 'เกี่ยวแนวแบ่งถนน',
+      'trap': 'ติดกับดัก',
+      'slam': 'บอสทุบคุณจม'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'หมุดหมาย!',
     'rallied': 'ฮึดสู้อีกครั้ง',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'หมุนโทรศัพท์',
-    'body': 'Survivalist เล่นในแนวตั้ง'
+    'body': 'splatix เล่นในแนวตั้ง'
   },
   'license': { 'denied': 'ปฏิเสธการเข้าถึง: กรุณาซื้อไลเซนส์' }
 }

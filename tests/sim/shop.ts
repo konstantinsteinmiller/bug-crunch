@@ -322,7 +322,7 @@ export const value = (): BuyStrategy => ({
  * SCAVENGE FIRST — four levels of economy, then greedy DPS.
  *
  * The reflex every idle-game player brings with them ("buy the income first").
- * Whether it is right here is a real question: a Survivalist career is thirty
+ * Whether it is right here is a real question: a splatix career is thirty
  * stages long, which is either plenty of time for compounding or not nearly
  * enough, depending entirely on how steep the scavenge curve is.
  */

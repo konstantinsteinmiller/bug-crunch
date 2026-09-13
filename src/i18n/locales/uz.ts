@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'Bekor qilish',
   'close': 'Yopish',
   'ok': 'Ok',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'Boss quladi!',
+    'wasted': 'Tamom',
+    'cause': {
+      'foe': 'Maxluqlar bosib ketdi',
+      'elite': 'Miniboss sindirdi',
+      'barricade': 'To‘siqlarga urildingiz',
+      'crate': 'Yashiklarga urildingiz',
+      'divider': 'Ajratgichlarga ilindingiz',
+      'trap': 'Tuzoqqa tushdingiz',
+      'slam': 'Boss yanchib tashladi'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'Bosqich!',
     'rallied': 'Ikkinchi nafas',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'Telefonni burang',
-    'body': 'Survivalist tik holatda o‘ynaladi.'
+    'body': 'splatix tik holatda o‘ynaladi.'
   },
   'license': { 'denied': 'Kirish rad etildi: iltimos, litsenziya sotib oling.' }
 }

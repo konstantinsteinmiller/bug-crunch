@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'İptal',
   'close': 'Kapat',
   'ok': 'Tamam',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'Patron devrildi!',
+    'wasted': 'Bitti',
+    'cause': {
+      'foe': 'Canavarlar ezip geçti',
+      'elite': 'Bir minipatron devirdi',
+      'barricade': 'Barikatlara çarptın',
+      'crate': 'Sandıklara çarptın',
+      'divider': 'Ayırıcılara takıldın',
+      'trap': 'Tuzaklara yakalandın',
+      'slam': 'Patron seni ezdi'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'Dönüm noktası!',
     'rallied': 'İkinci nefes',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'Telefonu çevir',
-    'body': 'Survivalist dikey oynanır.'
+    'body': 'splatix dikey oynanır.'
   },
   'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' }
 }

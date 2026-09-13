@@ -59,7 +59,7 @@ const useCheats = () => {
 
   const { addCoins } = useTowerEconomy()
 
-  // Dev shortcuts, retargeted to Survivalist's runner: coins for the shop, and
+  // Dev shortcuts, retargeted to splatix's runner: coins for the shop, and
   // the three things a reviewer needs to reach a late stage in ten seconds —
   // survivors, damage, and a stage skip.
   //

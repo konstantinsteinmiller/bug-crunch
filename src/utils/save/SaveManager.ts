@@ -403,7 +403,7 @@ const shouldRunSanityGuard = (state: HydrateState, local: LocalStorageAccessor):
  * Read one field out of the consolidated `tower_state` blob, falling back to a
  * top-level key read.
  *
- * This indirection is load-bearing: Survivalist persists everything INSIDE one
+ * This indirection is load-bearing: splatix persists everything INSIDE one
  * localStorage entry, so a naive `local.get('ts_best_stage')` always returns
  * null and `localLooksFresh` would report "fresh" for every player — making the
  * boot-sanity guard fire (and cost 3 s of boot latency) on every single launch

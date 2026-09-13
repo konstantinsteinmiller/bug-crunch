@@ -59,7 +59,7 @@
 //    wins every race against the game's own boot — and an ad placement that
 //    SAMPLES readiness once, at boot, passes here and fires nothing on the
 //    portal, where the SDK is a cross-origin script with an ad stack to load.
-//    GameMonetize rejected survivalist for exactly that ("Ads should be shown
+//    GameMonetize rejected splatix for exactly that ("Ads should be shown
 //    the first time after the game loads") while this harness was green.
 //    `--sdk-delay` therefore defaults to a REALISTIC 1200 ms: slow enough that
 //    a sampled-once placement loses, which is the whole point. Set it to 0 only

@@ -20,7 +20,7 @@ import { callsOf, fingerprint, textsOf, stubCanvases, type StubCanvas } from '..
 const SPEC: ShareCardSpec = {
   stage: 24,
   peakSquad: 186,
-  title: 'Survivalist',
+  title: 'splatix',
   recordLabel: 'Neuer Rekord!',
   stageWord: 'Level',
   squadWord: 'Trupp',
@@ -87,7 +87,7 @@ describe('the words on the card are the caller\'s, in the caller\'s language', (
     const printed = textsOf(card().ops)
     expect(printed).toContain('NEUER REKORD!')
     expect(printed).toContain('LEVEL')
-    expect(printed).toContain('SURVIVALIST')
+    expect(printed).toContain('splatix')
     expect(printed).toContain('TRUPP')
     expect(printed).not.toContain('STAGE')
     expect(printed).not.toContain('SQUAD')
@@ -111,7 +111,7 @@ describe('the words on the card are the caller\'s, in the caller\'s language', (
     }
     // By a lot: at thumbnail size it is the only piece of type that survives.
     expect(sizeOf('24')).toBeGreaterThan(sizeOf('NEUER REKORD!') * 3)
-    expect(sizeOf('24')).toBeGreaterThan(sizeOf('SURVIVALIST') * 2)
+    expect(sizeOf('24')).toBeGreaterThan(sizeOf('splatix') * 2)
   })
 })
 
@@ -138,7 +138,7 @@ describe('the leaderboard line', () => {
     expect(printed.some((s) => s.startsWith('#'))).toBe(false)
     // …and the rest of the card is still there.
     expect(printed).toContain('24')
-    expect(printed).toContain('SURVIVALIST')
+    expect(printed).toContain('splatix')
   })
 })
 

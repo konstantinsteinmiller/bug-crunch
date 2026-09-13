@@ -1,5 +1,5 @@
 export default {
-  'gameName': 'Survivalist',
+  'gameName': 'splatix',
   'cancel': 'Hủy',
   'close': 'Đóng',
   'ok': 'OK',
@@ -122,6 +122,16 @@ export default {
     // The two seconds after a boss goes down, above its body. The kill is
     // what the whole stage was for, so this is sold as a reward.
     'bossFelled': 'Hạ gục trùm!',
+    'wasted': 'Toi đời',
+    'cause': {
+      'foe': 'Bị quái vật tràn ngập',
+      'elite': 'Trùm nhỏ hạ gục bạn',
+      'barricade': 'Đâm vào rào chắn',
+      'crate': 'Đâm vào thùng gỗ',
+      'divider': 'Vướng dải phân cách',
+      'trap': 'Sập bẫy',
+      'slam': 'Trùm nghiền nát bạn'
+    },
     // The every-fifth-stage lump the HUD chip counts down to.
     'milestone': 'Cột mốc!',
     'rallied': 'Hồi sức',
@@ -265,7 +275,7 @@ export default {
   // attack badge out at the edges where testers never looked.
   'portrait': {
     'title': 'Xoay điện thoại',
-    'body': 'Survivalist chơi ở chế độ dọc.'
+    'body': 'splatix chơi ở chế độ dọc.'
   },
   'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' }
 }

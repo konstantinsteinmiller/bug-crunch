@@ -34,8 +34,8 @@ export interface PlayerIdentity {
  * and the game would mint a second one, and the player would have two rows.
  * This copy exists to be the one thing a cloud round-trip cannot overwrite.
  */
-const DEVICE_UID_KEY = 'survivalist_uid'
-const DEVICE_NAME_KEY = 'survivalist_name'
+const DEVICE_UID_KEY = 'splatix_uid'
+const DEVICE_NAME_KEY = 'splatix_name'
 
 /** The shape the worker validates against. Keep the two in step. */
 const ID_RE = /^[a-zA-Z0-9_-]{8,64}$/

@@ -136,7 +136,7 @@ const probeSink = (): Sink | null => {
   // Poki — the only portal SDK in the set with a first-class custom event.
   const poki = w.PokiSDK
   if (poki && typeof poki.customEvent === 'function') {
-    return (event, props) => { poki.customEvent('survivalist', event, props) }
+    return (event, props) => { poki.customEvent('splatix', event, props) }
   }
 
   // GamePix publishes a generic reporter under a couple of spellings depending

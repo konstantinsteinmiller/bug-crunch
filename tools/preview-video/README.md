@@ -1,4 +1,4 @@
-# preview-video — Survivalist's clips, generated rather than filmed
+# preview-video — splatix's clips, generated rather than filmed
 
 ```bash
 pnpm preview:video                       # every format, both scenarios

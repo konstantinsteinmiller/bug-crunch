@@ -9,7 +9,7 @@
 // the player's actual keys. The blob lets the next hydrate score local vs.
 // remote and pick a winner deterministically without prompting.
 //
-// Score formula (Survivalist):
+// Score formula (splatix):
 //   bestStage           × 500
 // + totalUpgradeLevels  × 150
 // + runsPlayed          ×  10
