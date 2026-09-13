@@ -20,19 +20,20 @@
  * ── The two cuts ──
  *
  * `feed=preview` (the default) hides the HUD and the renderer's own readouts —
- * floating damage numbers, health bars, the elite's screen-edge marker — and
- * KEEPS the numbers painted on the world: the `×3` over a doorway and the HP on
- * a crate. A crowd runner is sold on exactly those, and no portal rule this
- * game ships against forbids the game's own playfield (CrazyGames bans logos,
- * promotional text, cursors and black bars — see the skill's
- * reference/portal-specs.md).
+ * the boss tell, the objective call-out, the off-screen alert markers — and
+ * KEEPS the comic words painted on the world: SQUISH!, CRUNCH!, SPLAT!, ULTRA
+ * SPLAT!. This game is sold on exactly those, they are art rather than
+ * interface, and no portal rule it ships against forbids a game's own playfield
+ * (CrazyGames bans logos, promotional text, cursors and black bars — see the
+ * skill's reference/portal-specs.md).
  *
  * `--url-param feed=pure` is the cut for a spec that says "no hardcoded text,
  * score counters, watermarks, UI or logos": the same feed, plus the recorder's
- * `fillText`/`strokeText` no-op over the whole page. Every number in this game
+ * `fillText`/`strokeText` no-op over the whole page. Every word this game paints
  * is canvas text, so that one lever reaches all of them — which is why the two
  * cuts are one URL parameter apart and why the game-side flag has no second
- * level (`src/game/previewFeed.ts`).
+ * level (`src/game/previewFeed.ts`). What is left is a shoe, a floor and a great
+ * many bugs bursting, which for this game is enough.
  *
  * Sniffed out of argv because `suppressCanvasText` is a config field rather
  * than a flag, and the two halves of the pure cut must never disagree: a run
@@ -61,7 +62,7 @@ export default {
     env: {
       // `.env` points the board at the PRODUCTION worker and its origin list is
       // open, so a localhost run posts real entries — a recorded run clears
-      // stages and would put "Runner…" rows on the live leaderboard. An
+      // levels and would put recorder rows on the live leaderboard. An
       // unreachable endpoint switches `reportRun` off at the source without
       // depending on an empty env var surviving a Windows spawn. Port 9 is
       // discard; nothing listens, the fetch fails immediately, and the board
@@ -94,7 +95,7 @@ export default {
     },
 
     // MP4 · H.264 · 30 s · 1920x1080 + 1080x1920. A different STORY, not a
-    // longer one: the whole back half of a stage, gates through boss.
+    // longer one: a whole level in miniature — chain, slam, Fever, boss.
     '30s': {
       durationMs: 30_000,
       orientations: {
@@ -148,18 +149,19 @@ export default {
   capture: 'virtual',
 
   // The clock pins WHEN each frame is sampled; this pins WHAT is drawn in it.
-  // This game pulls `Math.random` for muzzle flashes, blood, coin spray, crowd
-  // jitter and every spawn scatter — hundreds of times a frame in a firefight.
-  // `_drive.mjs` re-seeds from this value again at the top of every take, after
-  // the real-time staging has burned an unknowable number of draws.
+  // This game pulls `Math.random` for goo spray, splat decals, comic-word
+  // scatter, particle jitter and every spawn point — hundreds of times a frame
+  // during Fever. `_drive.mjs` re-seeds from this value again at the top of
+  // every take, after the real-time staging has burned an unknowable number of
+  // draws.
   seedRandom: 7,
 
   clean: {
     enabled: true,
-    // The arena canvas by name. `canvas` alone would also keep the coin-badge
+    // The board canvas by name. `canvas` alone would also keep the coin-badge
     // and share-card canvases the HUD mounts.
     keep: ['canvas.scene__canvas'],
-    // FALSE for the default cut: the gate values are the story. `--url-param
+    // FALSE for the default cut: the comic words are the story. `--url-param
     // feed=pure` flips both halves together — see PURE above.
     suppressCanvasText: PURE,
     urlParams: { feed: PURE ? 'pure' : 'preview' }

@@ -33,29 +33,29 @@ describe('SaveMergePolicy.computeMeta', () => {
   })
 
   it('counts bestStage * 500', () => {
-    const meta = computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: '7' }))
+    const meta = computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: '7' }))
     expect(meta.progressScore).toBe(7 * 500)
     expect(meta.maxStage).toBe(7)
   })
 
   it('floors bestStage at 0 for negative / garbage values', () => {
-    expect(computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: '0' })).progressScore).toBe(0)
-    expect(computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: '-3' })).progressScore).toBe(0)
-    expect(computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: 'abc' })).progressScore).toBe(0)
+    expect(computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: '0' })).progressScore).toBe(0)
+    expect(computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: '-3' })).progressScore).toBe(0)
+    expect(computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: 'abc' })).progressScore).toBe(0)
   })
 
   it('counts every upgrade level at 150 each', () => {
     const meta = computeMeta(reader({
-      [SAVE_KEYS.BEST_STAGE]: '1',
-      [SAVE_KEYS.UPGRADES]: upgradesJson({ power: 3, rate: 2, squad: 5 })
+      [SAVE_KEYS.BEST_LEVEL]: '1',
+      [SAVE_KEYS.LEVEL_STARS]: upgradesJson({ power: 3, rate: 2, squad: 5 })
     }))
     // 1*500 + 10 levels * 150
     expect(meta.progressScore).toBe(500 + 1500)
   })
 
   it('counts runs at 10 each so two equal-stage saves still break their tie', () => {
-    const a = computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: '4', [SAVE_KEYS.RUNS]: '12' }))
-    const b = computeMeta(reader({ [SAVE_KEYS.BEST_STAGE]: '4', [SAVE_KEYS.RUNS]: '3' }))
+    const a = computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: '4', [SAVE_KEYS.RUNS]: '12' }))
+    const b = computeMeta(reader({ [SAVE_KEYS.BEST_LEVEL]: '4', [SAVE_KEYS.RUNS]: '3' }))
     expect(a.progressScore).toBe(2000 + 120)
     expect(b.progressScore).toBe(2000 + 30)
     expect(a.progressScore).toBeGreaterThan(b.progressScore)
@@ -63,7 +63,7 @@ describe('SaveMergePolicy.computeMeta', () => {
 
   it('ignores negative / non-numeric upgrade values defensively', () => {
     const meta = computeMeta(reader({
-      [SAVE_KEYS.UPGRADES]: upgradesJson({
+      [SAVE_KEYS.LEVEL_STARS]: upgradesJson({
         power: -2, rate: 'broken', squad: 4, scavenge: NaN, extra: 3
       })
     }))
@@ -73,9 +73,9 @@ describe('SaveMergePolicy.computeMeta', () => {
 
   it('combines every term per the formula', () => {
     const meta = computeMeta(reader({
-      [SAVE_KEYS.BEST_STAGE]: '12',
+      [SAVE_KEYS.BEST_LEVEL]: '12',
       [SAVE_KEYS.RUNS]: '20',
-      [SAVE_KEYS.UPGRADES]: upgradesJson({ power: 5, rate: 5 })
+      [SAVE_KEYS.LEVEL_STARS]: upgradesJson({ power: 5, rate: 5 })
     }))
     expect(meta.progressScore).toBe(6000 + 1500 + 200)
     expect(meta.maxStage).toBe(12)
@@ -83,8 +83,8 @@ describe('SaveMergePolicy.computeMeta', () => {
 
   it('survives malformed JSON in the upgrades key', () => {
     const meta = computeMeta(reader({
-      [SAVE_KEYS.BEST_STAGE]: '3',
-      [SAVE_KEYS.UPGRADES]: '{not json'
+      [SAVE_KEYS.BEST_LEVEL]: '3',
+      [SAVE_KEYS.LEVEL_STARS]: '{not json'
     }))
     expect(meta.progressScore).toBe(3 * 500)
   })

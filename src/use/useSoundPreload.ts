@@ -2,8 +2,8 @@
 // with the critical path.
 //
 // Without this, every SFX pays its first-play decode cost the moment the
-// game fires it (grass-cut #1 stutters on the first mow, the chain-loop
-// silences for a beat on round start). The decode is cheap individually
+// game fires it (the first coin of a session stutters, the level-clear
+// fanfare silences for a beat). The decode is cheap individually
 // (1-5 ms per .ogg) but happens in a flurry of small bursts during the
 // opening seconds of gameplay — exactly when the player is forming a
 // first impression. Decoding everything once, on an idle callback,
@@ -24,20 +24,20 @@ import { loadAudioBuffer } from '@/use/useAssets'
 // parallel and fight for the AudioContext's decoder pool. Adding a new
 // SFX = add the basename here (no `.ogg`, no path prefix).
 const GAMEPLAY_SFX: ReadonlyArray<string> = [
-  'anchor-swap',
-  'obstacle-hit',
+  // Splatix synthesises its whole combat layer (see `useGameAudio`), so this
+  // list is only the handful of cues where a RECORDED sound is unmistakably
+  // better than a built one: the coin, the three celebration stings, the
+  // time-up sting, the unlock, and the modal chime.
   'coin-pickup',
-  'plastic-torn-1',
-  'plastic-torn-2',
-  'gravity',
-  'dodge',
-  'shrapnel',
+  'celebration-1',
+  'celebration-2',
+  'celebration-3',
+  'happy',
+  'level-up',
   'lose',
   'win',
-  'modal-open',
-  'level-up',
   'reward-continue',
-  'happy'
+  'modal-open'
 ]
 
 let preloadStarted = false

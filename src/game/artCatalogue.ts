@@ -3,48 +3,46 @@ import type { ArtKind } from '@/game/art'
 /**
  * ─── Every still the renderer can ask for, by kind ──────────────────────────
  *
- * The runtime side of the art manifest. `artSheet.ts` — the bench-side
- * manifest that exports the reference sheets and writes the prompts — is the
- * authority on what each of these IS; this is the list a boot-path module can
- * read without dragging the bench, the painters and the whole renderer in
- * behind it. A test holds the two in agreement.
+ * The runtime side of the art manifest. `artSheet.ts` — the bench-side manifest
+ * that exports the reference sheets and writes the prompts — is the authority on
+ * what each of these IS; this is the list a boot-path module can read without
+ * dragging the bench, the painters and the whole renderer in behind it. A test
+ * holds the two in agreement.
  *
- * Monsters and survivors are not here: their ids are the designs in
- * `monsters.ts` and the outfits in `heroSprites.ts`, and both modules are
- * already on the boot path. Nor are the boss deaths, which are keyed by the
- * same designs — the boss roster in `foes.ts` (`bossDesigns`) says which.
+ * Bugs are not here: their ids are the designs in `bugs.ts`, which is already on
+ * the boot path, and they are STRIPS rather than stills. Nor are the shoes,
+ * whose ids are the ones in `shoes.ts`, or the bosses, whose ids are in
+ * `bosses.ts` — all three modules are pure data and cheap to import.
  *
- * The logo is not here either. It is painted through the same pipeline but
- * never probed at run time — the manifest lists it with an explicit target
- * under `images/logo/`, where the PWA manifest and the portals read it.
+ * The logo is not here either. It is painted through the same pipeline but never
+ * probed at run time — the manifest lists it with an explicit target under
+ * `images/logo/`, where the PWA manifest and the portals read it.
  */
-export const ART_CATALOGUE: Record<Exclude<ArtKind, 'monster' | 'hero' | 'death'>, readonly string[]> = {
+export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, readonly string[]> = {
   prop: [
-    'crate-damage', 'crate-rate', 'barricade',
-    'boulder-1', 'boulder-2', 'boulder-3',
-    'barrel', 'pillar', 'coin',
-    // The weapon puzzle: the prize shut and open, the armour over it, and the
-    // lever that opens it — a housing and a swinging arm.
-    'weapon-box', 'weapon-box-open', 'guard-plate', 'lever-post', 'lever-arm'
+    // The seven floor objects, in the order a campaign meets them.
+    'crumbs', 'honey', 'salt', 'sweeper', 'magnet', 'cobweb', 'conveyor',
+    // The boss egg pod, and the coin the piñata fly drops.
+    'pod', 'coin'
   ],
-  gate: ['frame-add', 'frame-sub', 'frame-mul', 'frame-div'],
-  round: ['tracer', 'bolt-gunner', 'bolt-boss', 'roller', 'meteor', 'bomb', 'grenade', 'rocket'],
   fx: [
-    'muzzle', 'smoke', 'scorch',
-    'ring-shock', 'ring-heat', 'ring-heal',
-    'shield', 'guard', 'crest-shield', 'crest-guard'
+    // The three rings: a quick stomp's ripple, a slam's shockwave, and Fever's
+    // screen-clearing wave. One drawable each because they are drawn at wildly
+    // different sizes and a single ring stretched to all three reads wrong at
+    // the extremes.
+    'ring-stomp', 'ring-slam', 'ring-fever',
+    // The burst behind a comic word, the stink bug's haze, the salt cloud, and
+    // the spark a ricochet throws.
+    'burst', 'haze', 'salt-cloud', 'spark',
+    // The scorch a Fever stomp leaves, and the soft puff every particle bucket
+    // tints per emitter (greyscale by contract — see `artSheet.ts`).
+    'scorch', 'smoke'
   ],
-  // No road tile: painted cobbles read as objects under the crowd, and the
-  // procedural gravel stays. See `artSheet.ts`.
-  bg: ['ridge-far', 'ridge-near'],
-  // The crown is on the field; the rest are the DOM's — the result banner
-  // (nine-sliced by CSS), the idle chest on the wallet column, the shop's
-  // forge, the two skill buttons' icons and the two cards of the stage-3
-  // weapon choice, shown through `ArtIcon` and `FReward`. See `uiArt.ts`.
-  ui: [
-    'crown', 'ribbon', 'chest', 'forge', 'skill-grenade', 'skill-shield',
-    'weapon-card-rocket', 'weapon-card-gatling',
-    // The incoming-attack alarm, one drawable per state — see `uiArt.ts`.
-    'warn-away', 'warn-into', 'warn-still'
-  ]
+  // One seamless floor tile per world. The ids are keyed on the world NUMBER
+  // rather than its theme name so `floorArt` can build the id from the level
+  // without a lookup table that could drift out of step with `stages.ts`.
+  bg: ['floor-1', 'floor-2', 'floor-3', 'floor-4'],
+  // The DOM's own art — the result banner (nine-sliced by CSS) and the six HUD
+  // marks, shown through `ArtIcon` and `FReward`. See `uiArt.ts`.
+  ui: ['ribbon', 'locker', 'fever', 'star', 'timer', 'target', 'trophy']
 }

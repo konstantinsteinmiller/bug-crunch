@@ -1,5 +1,8 @@
+// IT bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Annulla',
   'close': 'Chiudi',
   'ok': 'Ok',
@@ -9,12 +12,9 @@ export default {
   'rewards': 'RICOMPENSE',
   'tip': 'Consiglio',
   'crazyGamesOnly': 'Questo gioco è disponibile solo su',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Avanti',
-    'replay': 'Riprova',
+    'replay': 'Rigioca',
     'back': 'Indietro',
     'play': 'Gioca',
     'pause': 'Pausa',
@@ -22,260 +22,256 @@ export default {
     'home': 'Home',
     'info': 'Info'
   },
-
   'hud': {
-    'stage': 'Livello {n}',
-    'best': 'Record {n}',
-    'boss': 'Boss',
-    'miniboss': 'Miniboss',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Livelli al prossimo bonus',
-    'fireRate': 'Ritmo',
-    'incoming': 'Attacco in arrivo!',
-    'dodge': 'Schiva',
-    'getIn': 'Entra',
-    'holdStill': 'Fermo',
-    'milestone': '{n} in campo!',
-    'weaponActive': '{name} pronto',
-    'weaponsActive': '{a} + {b} pronti',
-    'weaponLocked': '{name} bloccato — {n} di {total} leve colpite',
-    'weaponGift': '{name} più avanti — gratis, niente leve',
-    'weaponFree': 'GRATIS'
+    'score': 'Punti',
+    'time': 'Tempo',
+    'chain': 'Catena Splat: {n}',
+    'level': 'Livello {n}'
   },
-
-  'weapons': {
-    'rocket': 'Lanciarazzi',
-    'gatling': 'Gatling'
+  'worlds': {
+    'picnic': 'Tovaglia da picnic',
+    'backyard': 'Giardino selvatico',
+    'attic': 'Soffitta polverosa',
+    'arcade': 'Sala giochi al neon'
   },
-
-  'tutorial': {
-    'touch': 'Scorri per muovere la squadra',
-    'desktop': 'Muovi il mouse per guidare la squadra'
+  'bugs': {
+    'ant': 'Formiche',
+    'beetle': 'Scarabei',
+    'flea': 'Pulci',
+    'caterpillar': 'Bruchi',
+    'stinkbug': 'Cimici',
+    'centipede': 'Millepiedi',
+    'pinatafly': 'Mosche piñata',
+    'moth': 'Falene',
+    'robobug': 'Robo-insetti'
+  },
+  'bosses': {
+    'queenAnt': 'Regina Formica Golia',
+    'beetleKing': 'Re Scarabeo Spinoso',
+    'matriarch': 'Matriarca Millepiedi',
+    'roachPrime': 'Mecha-Scarafaggio Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Pesta il boss!',
+      'summon': 'Spazza via lo sciame!',
+      'pods': 'Schiaccia le uova!',
+      'charge': 'Tieni premuto e colpisci!',
+      'spin': 'Esci dal cerchio!',
+      'shield': 'Rompi lo scudo!',
+      'beam': 'Schiva il raggio!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Velocità',
+      'radius': 'Area di pestata',
+      'pierce': 'Perforazione'
+    },
+    'sneaker': {
+      'name': 'Scarpa classica',
+      'perk': 'Equilibrata e subito pronta.',
+      'trade': 'Non eccelle in niente.'
+    },
+    'steelBoot': {
+      'name': 'Scarpa antinfortunistica',
+      'perk': 'Le spine non ti feriscono. I colpi stordiscono tutt\'intorno.',
+      'trade': 'Pesante e lenta da sollevare.'
+    },
+    'bunnySlipper': {
+      'name': 'Pantofola coniglio',
+      'perk': 'Passo silenzioso: i saltatori non ti vedono arrivare.',
+      'trade': 'Non rompe nessun guscio.'
+    },
+    'rollerSkate': {
+      'name': 'Pattino a rotelle',
+      'perk': 'Pesta e continua a trascinare per arare un\'intera linea.',
+      'trade': 'Pestata molto stretta.'
+    },
+    'cleatBoot': {
+      'name': 'Scarpa con tacchetti',
+      'perk': 'I tacchetti bucano gusci e ghiandole.',
+      'trade': 'La pestata più piccola dell\'armadietto.'
+    },
+    'electricSock': {
+      'name': 'Calzino elettrico',
+      'perk': 'Ogni pestata manda fulmini ad altri tre insetti.',
+      'trade': 'I fulmini finiscono solo i deboli.'
+    }
+  },
+  'locker': {
+    'title': 'Armadietto',
+    'buy': 'Compra {n}',
+    'wear': 'Indossa',
+    'worn': 'Indossata',
+    'needStars': '{n} stelle in più',
+    'needCoins': '{n} monete in più'
+  },
+  'fever': {
+    'filling': 'Febbre Splat: {n}% piena',
+    'ready': 'Febbre Splat pronta — tocca per iniziare',
+    'running': 'Febbre Splat attiva'
+  },
+  'objectives': {
+    'clear': 'Supera il livello',
+    'combo': 'Raggiungi una catena ×{n}',
+    'noSpike': 'Non subire danni da spine',
+    'time': 'Finisci con {n}s di margine',
+    'accuracy': 'Centra il {n}% delle pestate',
+    'fever': 'Attiva la Febbre Splat {n}×',
+    'kind': 'Schiaccia {n} {bug}',
+    'feverKills': 'Schiaccia {n} in una Febbre',
+    'noMiss': 'Sbaglia al massimo {n} pestate',
+    'score': 'Fai {n} punti'
   },
   'hints': {
-    'move': { 'touch': 'Tocca per muoverti', 'desktop': 'Clicca per muoverti' },
-    'gate': { 'touch': 'Continua a sparare al cancello: +1 ogni mezzo secondo', 'desktop': 'Continua a sparare al cancello: +1 ogni mezzo secondo' },
-    'trap': { 'touch': 'I cancelli rossi RIDUCONO la squadra: prendi l’altro!', 'desktop': 'I cancelli rossi RIDUCONO la squadra: prendi l’altro!' },
-    'divider': { 'touch': 'Non toccare mai il pilastro tra i cancelli', 'desktop': 'Non toccare mai il pilastro tra i cancelli' },
-    'crate': { 'touch': 'Casse verdi: tutti colpiscono più forte', 'desktop': 'Casse verdi: tutti colpiscono più forte' },
-    'rate': { 'touch': 'Casse blu: tutti sparano più veloce', 'desktop': 'Casse blu: tutti sparano più veloce' },
-    'boss': { 'touch': 'Stai fuori dal cerchio rosso!', 'desktop': 'Stai fuori dal cerchio rosso!' },
-    'lever': { 'touch': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi', 'desktop': 'Colpisci ENTRAMBE le leve ai bordi: aprono la cassa delle armi' },
-    'guard': { 'touch': 'Scudo attivo: i tuoi colpi non lo feriscono ancora', 'desktop': 'Scudo attivo: i tuoi colpi non lo feriscono ancora' },
-    'cage': { 'touch': 'Spara alle gabbie: i prigionieri si uniscono alla squadra', 'desktop': 'Spara alle gabbie: i prigionieri si uniscono alla squadra' },
-    'shieldBox': { 'touch': 'Cassa scudo: aspetta, poi blocca un colpo grosso', 'desktop': 'Cassa scudo: aspetta, poi blocca un colpo grosso' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} sopravvissuti riscossi',
-    'unlocked': 'Sbloccato!',
-
-    'guardian': "Un angelo custode ti ha salvato!",
-
-    'guardianSub': "{n} sopravvissuti sono tornati",
-
-    'next': "Prossimo: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Scegli un'arma",
-    'nextStage': "prossimo livello",
-    'stagesAway': "tra {n} livelli"
-  },
-  'weaponPick': {
-    'title': "Scegli la tua arma",
-    'subtitle': "Tua per il livello {n}. Altre ti aspettano sulla strada.",
-    'take': "Prendila",
-    'rocket': {
-      'a': "Salva a ricerca",
-      'b': "Danno esplosivo"
+    'move': {
+      'touch': 'Tocca per muoverti',
+      'desktop': 'Clicca per muoverti'
     },
-    'gatling': {
-      'a': "Cadenza di fuoco doppia",
-      'b': "Carica i cancelli più in fretta"
+    'slam': {
+      'touch': 'Tieni premuto e rilascia per una pestata forte',
+      'desktop': 'Tieni premuto il tasto per una pestata forte'
+    },
+    'beetle': {
+      'touch': 'Gli scarabei hanno il guscio: tieni premuto e colpisci',
+      'desktop': 'Gli scarabei hanno il guscio: tieni premuto e colpisci'
+    },
+    'flea': {
+      'touch': 'Le pulci saltano: colpisci dove atterrano',
+      'desktop': 'Le pulci saltano: colpisci dove atterrano'
+    },
+    'spike': {
+      'touch': 'Non pestare quelli con le spine!',
+      'desktop': 'Non pestare quelli con le spine!'
+    },
+    'stink': {
+      'touch': 'Le cimici annebbiano lo schermo se schiacciate',
+      'desktop': 'Le cimici annebbiano lo schermo se schiacciate'
+    },
+    'fever': {
+      'touch': 'La fiala è piena — tocca la fiamma!',
+      'desktop': 'La fiala è piena — clicca la fiamma!'
+    },
+    'honey': {
+      'touch': 'Il miele blocca i saltatori',
+      'desktop': 'Il miele blocca i saltatori'
+    },
+    'web': {
+      'touch': 'Le ragnatele rallentano il tuo piede',
+      'desktop': 'Le ragnatele rallentano il tuo piede'
+    },
+    'belt': {
+      'touch': 'Il nastro trasporta gli insetti',
+      'desktop': 'Il nastro trasporta gli insetti'
+    },
+    'sweeper': {
+      'touch': 'La spazzatrice schiaccia insetti gratis',
+      'desktop': 'La spazzatrice schiaccia insetti gratis'
+    },
+    'boss': {
+      'touch': 'Tieni premuto e colpisci quando il boss carica',
+      'desktop': 'Tieni premuto e colpisci quando il boss carica'
+    },
+    'pods': {
+      'touch': 'Schiaccia le uova prima che si schiudano!',
+      'desktop': 'Schiaccia le uova prima che si schiudano!'
     }
-  },
-  'bossReward': {
-    'title': "Boss sconfitto!",
-    'subtitle': "Un regalo per il livello {n}. Continua a correre!"
   },
   'result': {
-    'stageClear': 'Livello superato!',
-    'wipedOut': 'Squadra annientata',
-    'reachedStage': 'Livello {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': 'Record {n}%',
-    'newReach': 'Mai così lontano!',
+    'cleared': 'Livello superato!',
+    'timeUp': 'Tempo scaduto!',
+    'upNext': 'Prossimo: {n}',
+    'retryLevel': 'Riproviamo?',
+    'campaignDone': 'Tutti i livelli superati!',
     'newRecord': 'Nuovo record!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Boss abbattuto!',
-    'wasted': 'Eliminato',
-    'cause': {
-      'foe': 'Travolto dai mostri',
-      'elite': 'Un miniboss ti ha spezzato',
-      'barricade': 'Finito sulle barricate',
-      'crate': 'Finito sulle casse',
-      'divider': 'Preso i separatori',
-      'trap': 'Caduto nelle trappole',
-      'slam': 'Il boss ti ha schiacciato'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Traguardo!',
-    'rallied': 'Secondo fiato',
-    'peakSquad': 'Squadra massima',
-    'kills': 'Eliminazioni',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Monete triplicate!',
-    'nextStage': 'Livello successivo',
+    'nextLevel': 'Livello successivo',
     'tryAgain': 'Riprova',
-    'upgrade': 'Potenzia',
-    'upgradeHint': 'Potenzia la squadra!',
+    'squishes': 'Insetti schiacciati',
+    'starsEarned': '{n} stelle su 3',
     'rankOf': 'su {n}',
-    'upNext': 'Prossimo: Livello {n}'
+    'worldUnlocked': '{n} sbloccato!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Condividi la partita',
-    'text': 'Sono arrivato al livello {n} in {game}. Riesci ad andare più lontano?'
-  },
-
   'leaderboard': {
     'title': 'Classifica',
-    'rank': '#',
+    'rank': 'Posizione',
     'player': 'Giocatore',
-    'stage': 'Livello',
-    'squad': 'Squadra',
-    'empty': 'Ancora nessun punteggio. Sii il primo!',
-    'failed': 'Classifica non raggiungibile.',
-    'loading': 'Caricamento…',
+    'score': 'Punti',
+    'level': 'Livello',
     'you': 'Tu',
-    'yourRank': 'Sei #{n}',
-    'of': 'su {n} giocatori'
+    'yourRank': 'Sei #{n} su {total}',
+    'of': 'su {n}',
+    'unranked': 'Supera un livello per entrare',
+    'loading': 'Caricamento classifica…',
+    'empty': 'Nessuno ha ancora fatto punti',
+    'failed': 'Classifica non raggiungibile'
   },
-
-  'chest': {
-    'label': 'Forziere',
-    'ready': 'Apri il forziere per {n} monete',
-    'filling': 'Forziere: si sta riempiendo',
-    'spent': 'Forziere: vuoto fino a domani'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Spedizione del giorno',
-    'hud': 'Spedizione',
-    'multiplier': '{n}×',
-    'available': 'Spedizione del giorno: la strada di oggi, monete triple',
-    'confirm': 'Inizia la spedizione',
-    'spent': 'Spedizione del giorno: nuova strada tra {time}',
-    'done': 'Torna domani',
-    'back': 'Torna alla campagna'
-  },
-
-  'skills': {
-
-    'grenade': 'Granata',
-
-    'shield': 'Scudo',
-
-    'locked': 'Bloccato',
-
-    'unlocksAt': 'Si sblocca al livello {n}',
-
-    'frost': 'Nova di gelo',
-
-    'decoy': 'Razzo esca',
-
-    'trialLabel': '{name} · prova gratis',
-
-    'trialTag': 'Prova gratis!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Potenziamenti',
-    'spotlight': 'Spendi!',
-    'level': 'Lv {n}',
-    'maxed': 'Max',
-    'names': {
-      'squad': 'Squadra',
-      'power': 'Potenza',
-      'rate': 'Cadenza',
-      'range': 'Gittata',
-      'scavenge': 'Recupero',
-      'grenade': 'Granata',
-      'shield': 'Scudo',
-      'rocket': 'Potenza razzi',
-      'gatling': 'Potenza Gatling'
-    },
-    'descriptions': {
-      'squad': 'Inizia ogni livello con più sopravvissuti.',
-      'power': 'Ogni sopravvissuto infligge più danni per colpo.',
-      'rate': 'Ogni sopravvissuto spara più velocemente.',
-      'range': 'La squadra apre il fuoco più avanti sulla strada.',
-      'scavenge': 'Guadagna più monete a ogni partita.',
-      'grenade': 'Lancia una granata per un colpo di danno pesante.',
-      'shield': 'Dimezza i danni alla squadra per qualche secondo.',
-      'rocket': 'I lanciarazzi che sblocchi in un livello fanno più danni.',
-      'gatling': 'Le Gatling che sblocchi in un livello fanno più danni.'
-    }
-  },
-
   'options': {
-    'title': 'Opzioni', 'general': 'Generale', 'audio': 'Audio', 'language': 'Lingua',
-    'difficulty': 'Difficoltà', 'soundEffects': 'Effetti sonori', 'music': 'Musica', 'musicTrack': 'Traccia musicale',
-    'musicTracks': { 'cozy': 'Armonia accogliente', 'trance': 'Tunnel trance' },
-    'haptics': 'Vibrazione', 'on': 'Attivo', 'off': 'Disattivo',
+    'title': 'Impostazioni',
+    'general': 'Generale',
+    'play': 'Gioco',
+    'audio': 'Audio',
     'close': 'Salva e chiudi',
-    'difficulties': { 'easy': 'Facile', 'medium': 'Media', 'hard': 'Difficile' },
+    'language': 'Lingua',
+    'difficulty': 'Difficoltà',
+    'soundEffects': 'Effetti sonori',
+    'music': 'Musica',
+    'musicTrack': 'Brano musicale',
+    'haptics': 'Vibrazione',
+    'on': 'Sì',
+    'off': 'No',
+    'difficulties': {
+      'easy': 'Facile',
+      'medium': 'Normale',
+      'hard': 'Difficile'
+    },
     'difficultyHints': {
-      'easy': 'Nemici più deboli e barricate più sottili.',
-      'medium': 'La partita standard.',
-      'hard': 'Nemici più duri e barricate più resistenti.'
-    }
+      'easy': 'Insetti più lenti e più tempo.',
+      'medium': 'Il gioco come è stato pensato.',
+      'hard': 'Insetti più veloci e campi più affollati.'
+    },
+    'musicTracks': {
+      'trance': 'Groove degli insetti',
+      'cozy': 'Picnic tranquillo'
+    },
+    'juiceStyle': 'Stile splat',
+    'juiceStyles': {
+      'ooze': 'Melma da cartone',
+      'confetti': 'Piñata di coriandoli',
+      'bubble': 'Bolle di sapone'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Melma colorata. Il gioco non cambia.',
+      'confetti': 'Gli insetti esplodono in coriandoli. Il gioco non cambia.',
+      'bubble': 'Gli insetti diventano bolle. Il gioco non cambia.'
+    },
+    'highVis': 'Cerchio di pestata grande',
+    'highVisHint': 'Un anello più spesso e luminoso dove cadrà il piede.',
+    'singleTap': 'Mira facile',
+    'singleTapHint': 'Tocca ovunque e il piede vola sull\'insetto più vicino.'
   },
-
-  'adsBlocked': {
-    'title': 'Impossibile mostrare l’annuncio',
-    'body': 'Abbiamo provato a mostrarti un video per farti ottenere la ricompensa, ma qualcosa nel tuo browser blocca gli annunci.',
-    'allowPrefix': 'Consenti gli annunci su',
-    'allowSuffix': '(o metti in pausa il blocco annunci per questo gioco) e riprova.',
-    'gotIt': 'Capito'
+  'loading': {
+    'boo': 'Bu!',
+    'laugh': 'Ih ih!',
+    'tooLong': 'Ancora in caricamento… controlli la connessione?'
   },
   'saveStatus': {
-    'restoredTitle': 'Salvataggio cloud ripristinato', 'restoredBody': '+{n} monete bonus per il recupero',
-    'tap': 'tocca', 'pausedTitle': 'Sincronizzazione in pausa',
-    'pausedBody': 'Stai giocando offline. I progressi sono salvati qui.',
-    'retry': 'Riprova', 'dismiss': 'ignora'
+    'restoredTitle': 'Progressi ripristinati',
+    'restoredBody': 'Abbiamo recuperato il salvataggio e aggiunto {n} monete.',
+    'pausedTitle': 'Salvataggio in pausa',
+    'pausedBody': 'Non riusciamo a raggiungere il servizio di salvataggio. I tuoi progressi sono al sicuro su questo dispositivo.',
+    'retry': 'Riprova',
+    'dismiss': 'Chiudi',
+    'tap': 'Tocca per chiudere'
   },
-  'loading': { 'tooLong': 'Il caricamento è troppo lento? Disattiva il blocco annunci e ricarica.', 'boo': 'Bu!', 'laugh': 'Ahahah!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Ruota il telefono',
-    'body': 'splatix si gioca in verticale.'
+  'adsBlocked': {
+    'title': 'Blocco pubblicità rilevato',
+    'body': 'Splatix è gratis grazie alla pubblicità. Disattiva il blocco e ricarica.',
+    'allowPrefix': 'Consenti le pubblicità su',
+    'allowSuffix': 'e ricarica la pagina.',
+    'gotIt': 'Capito'
   },
-  'license': { 'denied': 'Accesso negato: acquista una licenza.' }
+  'license': {
+    'denied': 'Non è stato possibile verificare questa copia'
+  }
 }

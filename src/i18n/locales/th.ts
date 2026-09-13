@@ -1,17 +1,17 @@
+// TH bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'ยกเลิก',
   'close': 'ปิด',
   'ok': 'ตกลง',
-  'continue': 'ดำเนินการต่อ',
+  'continue': 'ไปต่อ',
   'tapToContinue': 'แตะเพื่อไปต่อ',
   'clickToContinue': 'คลิกเพื่อไปต่อ',
   'rewards': 'รางวัล',
   'tip': 'เคล็ดลับ',
   'crazyGamesOnly': 'เกมนี้เล่นได้เฉพาะบน',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'ถัดไป',
     'replay': 'เล่นใหม่',
@@ -22,260 +22,256 @@ export default {
     'home': 'หน้าหลัก',
     'info': 'ข้อมูล'
   },
-
   'hud': {
-    'stage': 'ด่าน {n}',
-    'best': 'สถิติ {n}',
-    'boss': 'บอส',
-    'miniboss': 'มินิบอส',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'ด่านที่เหลือถึงโบนัสถัดไป',
-    'fireRate': 'อัตรา',
-    'incoming': 'การโจมตีกำลังมา!',
-    'dodge': 'หลบ',
-    'getIn': 'เข้าไป',
-    'holdStill': 'อยู่นิ่ง',
-    'milestone': 'ทีม {n} คน!',
-    'weaponActive': '{name} พร้อม',
-    'weaponsActive': '{a} + {b} พร้อม',
-    'weaponLocked': '{name} ถูกล็อก — ยิงคันโยกแล้ว {n} จาก {total}',
-    'weaponGift': '{name} อยู่ข้างหน้า — ฟรี ไม่มีคันโยก',
-    'weaponFree': 'ฟรี'
+    'score': 'คะแนน',
+    'time': 'เวลา',
+    'chain': 'คอมโบ Splat: {n}',
+    'level': 'ด่าน {n}'
   },
-
-  'weapons': {
-    'rocket': 'เครื่องยิงจรวด',
-    'gatling': 'ปืนแกตลิง'
+  'worlds': {
+    'picnic': 'ผ้าปิกนิก',
+    'backyard': 'สวนหลังบ้านรกครึ้ม',
+    'attic': 'ห้องใต้หลังคาฝุ่นจับ',
+    'arcade': 'อาร์เคดนีออน'
   },
-
-  'tutorial': {
-    'touch': 'ปัดเพื่อขยับหน่วยของคุณ',
-    'desktop': 'ขยับเมาส์เพื่อบังคับหน่วยของคุณ'
+  'bugs': {
+    'ant': 'มด',
+    'beetle': 'ด้วง',
+    'flea': 'หมัด',
+    'caterpillar': 'หนอนผีเสื้อ',
+    'stinkbug': 'มวนเหม็น',
+    'centipede': 'ตะขาบ',
+    'pinatafly': 'แมลงวันปีญาตา',
+    'moth': 'ผีเสื้อกลางคืน',
+    'robobug': 'หุ่นแมลง'
+  },
+  'bosses': {
+    'queenAnt': 'ราชินีมดโกไลแอธ',
+    'beetleKing': 'ราชาด้วงหนามหลัง',
+    'matriarch': 'ราชินีตะขาบ',
+    'roachPrime': 'เมก้าแมลงสาบไพรม์'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'เหยียบบอสเลย!',
+      'summon': 'เคลียร์ฝูงให้หมด!',
+      'pods': 'บี้ไข่ให้แตก!',
+      'charge': 'กดค้างแล้วกระทืบ!',
+      'spin': 'ออกจากวงเร็ว!',
+      'shield': 'กระทืบให้โล่แตก!',
+      'beam': 'หลบลำแสง!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'ความเร็ว',
+      'radius': 'ขอบเขตเหยียบ',
+      'pierce': 'เจาะเกราะ'
+    },
+    'sneaker': {
+      'name': 'รองเท้าผ้าใบคลาสสิก',
+      'perk': 'สมดุลดีและยกเท้าได้ไว',
+      'trade': 'ไม่เด่นเรื่องไหนเป็นพิเศษ'
+    },
+    'steelBoot': {
+      'name': 'บูทหัวเหล็ก',
+      'perk': 'หนามทำอะไรไม่ได้ กระทืบแล้วรอบข้างมึนงง',
+      'trade': 'หนักและยกช้า'
+    },
+    'bunnySlipper': {
+      'name': 'รองเท้าแตะกระต่าย',
+      'perk': 'ย่างเท้าเงียบ — แมลงกระโดดไม่ทันรู้ตัว',
+      'trade': 'ทุบเปลือกไม่แตกเลยสักนิด'
+    },
+    'rollerSkate': {
+      'name': 'โรลเลอร์สเกต',
+      'perk': 'เหยียบแล้วลากต่อเพื่อไถทั้งแถว',
+      'trade': 'ขอบเขตเหยียบแคบมาก'
+    },
+    'cleatBoot': {
+      'name': 'รองเท้าปุ่มสตั๊ด',
+      'perk': 'ปุ่มสตั๊ดเจาะทั้งเปลือกและถุงกลิ่น',
+      'trade': 'ขอบเขตเล็กที่สุดในตู้'
+    },
+    'electricSock': {
+      'name': 'ถุงเท้าไฟฟ้า',
+      'perk': 'ทุกครั้งที่เหยียบ ไฟจะแลบใส่แมลงอีกสามตัว',
+      'trade': 'ไฟแลบเก็บได้แค่ตัวอ่อนแอ'
+    }
+  },
+  'locker': {
+    'title': 'ตู้เก็บของ',
+    'buy': 'ซื้อ {n}',
+    'wear': 'ใส่',
+    'worn': 'กำลังใส่',
+    'needStars': 'ขาดอีก {n} ดาว',
+    'needCoins': 'ขาดอีก {n} เหรียญ'
+  },
+  'fever': {
+    'filling': 'Splat ฟีเวอร์: {n}%',
+    'ready': 'Splat ฟีเวอร์พร้อม — แตะเพื่อเริ่ม',
+    'running': 'Splat ฟีเวอร์กำลังทำงาน'
+  },
+  'objectives': {
+    'clear': 'ผ่านด่านให้ได้',
+    'combo': 'ทำคอมโบ ×{n}',
+    'noSpike': 'อย่าโดนหนามทำร้าย',
+    'time': 'จบตอนเหลือ {n} วินาที',
+    'accuracy': 'เหยียบโดน {n}%',
+    'fever': 'เปิด Splat ฟีเวอร์ {n} ครั้ง',
+    'kind': 'บี้ {bug} {n} ตัว',
+    'feverKills': 'บี้ {n} ตัวในฟีเวอร์เดียว',
+    'noMiss': 'พลาดได้ไม่เกิน {n} ครั้ง',
+    'score': 'ทำให้ได้ {n} คะแนน'
   },
   'hints': {
-    'move': { 'touch': 'แตะเพื่อเคลื่อนที่', 'desktop': 'คลิกเพื่อเคลื่อนที่' },
-    'gate': { 'touch': 'ยิงประตูต่อไป: +1 ทุกครึ่งวินาที', 'desktop': 'ยิงประตูต่อไป: +1 ทุกครึ่งวินาที' },
-    'trap': { 'touch': 'ประตูแดงลดจำนวนคน — ไปอีกฝั่ง!', 'desktop': 'ประตูแดงลดจำนวนคน — ไปอีกฝั่ง!' },
-    'divider': { 'touch': 'อย่าชนเสาระหว่างประตูเด็ดขาด', 'desktop': 'อย่าชนเสาระหว่างประตูเด็ดขาด' },
-    'crate': { 'touch': 'ลังเขียว: ทุกคนตีแรงขึ้น', 'desktop': 'ลังเขียว: ทุกคนตีแรงขึ้น' },
-    'rate': { 'touch': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น', 'desktop': 'ลังน้ำเงิน: ทุกคนยิงเร็วขึ้น' },
-    'boss': { 'touch': 'อย่าอยู่ในวงแดง!', 'desktop': 'อย่าอยู่ในวงแดง!' },
-    'lever': { 'touch': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ', 'desktop': 'ยิงคันโยกทั้งสองข้างถนน — มันจะเปิดกล่องอาวุธ' },
-    'guard': { 'touch': 'โล่ขึ้นแล้ว — ยิงยังไม่เข้า', 'desktop': 'โล่ขึ้นแล้ว — ยิงยังไม่เข้า' },
-    'cage': { 'touch': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ', 'desktop': 'ยิงกรง — นักโทษจะเข้าร่วมกองของคุณ' },
-    'shieldBox': { 'touch': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง', 'desktop': 'กล่องโล่ — รอไว้ แล้วกันหมัดหนักได้หนึ่งครั้ง' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': 'แลกผู้รอดชีวิต {n} คน',
-    'unlocked': 'ปลดล็อกแล้ว!',
-
-    'guardian': "เทวดาผู้พิทักษ์ช่วยคุณไว้!",
-
-    'guardianSub': "ผู้รอดชีวิต {n} คนกลับมาแล้ว",
-
-    'next': "ต่อไป: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "เลือกอาวุธ",
-    'nextStage': "ด่านถัดไป",
-    'stagesAway': "อีก {n} ด่าน"
-  },
-  'weaponPick': {
-    'title': "เลือกอาวุธของคุณ",
-    'subtitle': "ของคุณในด่าน {n} ยังมีอีกรออยู่บนถนน",
-    'take': "รับเลย",
-    'rocket': {
-      'a': "ชุดยิงนำวิถี",
-      'b': "ความเสียหายระเบิด"
+    'move': {
+      'touch': 'แตะเพื่อเคลื่อนที่',
+      'desktop': 'คลิกเพื่อเคลื่อนที่'
     },
-    'gatling': {
-      'a': "อัตรายิงสองเท่า",
-      'b': "ปั๊มประตูเร็วขึ้น"
+    'slam': {
+      'touch': 'กดค้างแล้วปล่อยเพื่อกระทืบแรง',
+      'desktop': 'กดปุ่มค้างเพื่อกระทืบแรง'
+    },
+    'beetle': {
+      'touch': 'ด้วงมีเปลือก — กดค้างแล้วกระทืบ',
+      'desktop': 'ด้วงมีเปลือก — กดค้างแล้วกระทืบ'
+    },
+    'flea': {
+      'touch': 'หมัดกระโดดหนี — เหยียบตรงที่มันลง',
+      'desktop': 'หมัดกระโดดหนี — เหยียบตรงที่มันลง'
+    },
+    'spike': {
+      'touch': 'อย่าเหยียบตัวที่มีหนาม!',
+      'desktop': 'อย่าเหยียบตัวที่มีหนาม!'
+    },
+    'stink': {
+      'touch': 'มวนเหม็นทำจอมัวเมื่อถูกบี้',
+      'desktop': 'มวนเหม็นทำจอมัวเมื่อถูกบี้'
+    },
+    'fever': {
+      'touch': 'ขวดเต็มแล้ว — แตะที่เปลวไฟ!',
+      'desktop': 'ขวดเต็มแล้ว — คลิกที่เปลวไฟ!'
+    },
+    'honey': {
+      'touch': 'น้ำผึ้งตรึงตัวที่ชอบกระโดด',
+      'desktop': 'น้ำผึ้งตรึงตัวที่ชอบกระโดด'
+    },
+    'web': {
+      'touch': 'ใยแมงมุมทำให้เท้าช้าลง',
+      'desktop': 'ใยแมงมุมทำให้เท้าช้าลง'
+    },
+    'belt': {
+      'touch': 'สายพานพาแมลงเลื่อนไป',
+      'desktop': 'สายพานพาแมลงเลื่อนไป'
+    },
+    'sweeper': {
+      'touch': 'เครื่องกวาดบี้แมลงให้ฟรี',
+      'desktop': 'เครื่องกวาดบี้แมลงให้ฟรี'
+    },
+    'boss': {
+      'touch': 'กดค้างแล้วกระทืบตอนบอสตั้งท่า',
+      'desktop': 'กดค้างแล้วกระทืบตอนบอสตั้งท่า'
+    },
+    'pods': {
+      'touch': 'บี้ไข่ก่อนที่มันจะฟัก!',
+      'desktop': 'บี้ไข่ก่อนที่มันจะฟัก!'
     }
-  },
-  'bossReward': {
-    'title': "ล้มบอสได้แล้ว!",
-    'subtitle': "ของขวัญสำหรับด่าน {n} วิ่งต่อไป!"
   },
   'result': {
-    'stageClear': 'ผ่านด่าน!',
-    'wipedOut': 'หน่วยถูกกวาดล้าง',
-    'reachedStage': 'ด่าน {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': 'สถิติ {n}%',
-    'newReach': 'ไกลที่สุด!',
+    'cleared': 'ผ่านด่าน!',
+    'timeUp': 'หมดเวลา!',
+    'upNext': 'ถัดไป: {n}',
+    'retryLevel': 'ลองอีกรอบไหม?',
+    'campaignDone': 'ผ่านครบทุกด่านแล้ว!',
     'newRecord': 'สถิติใหม่!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'ล้มบอสได้!',
-    'wasted': 'จบเห่',
-    'cause': {
-      'foe': 'ถูกมอนสเตอร์ถล่ม',
-      'elite': 'มินิบอสเล่นงานคุณ',
-      'barricade': 'ชนแผงกั้น',
-      'crate': 'ชนลังไม้',
-      'divider': 'เกี่ยวแนวแบ่งถนน',
-      'trap': 'ติดกับดัก',
-      'slam': 'บอสทุบคุณจม'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'หมุดหมาย!',
-    'rallied': 'ฮึดสู้อีกครั้ง',
-    'peakSquad': 'หน่วยใหญ่สุด',
-    'kills': 'สังหาร',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'เหรียญคูณสาม!',
-    'nextStage': 'ด่านถัดไป',
+    'nextLevel': 'ด่านถัดไป',
     'tryAgain': 'ลองอีกครั้ง',
-    'upgrade': 'อัปเกรด',
-    'upgradeHint': 'อัปเกรดหน่วยของคุณ!',
+    'squishes': 'แมลงที่บี้ได้',
+    'starsEarned': '{n} จาก 3 ดาว',
     'rankOf': 'จาก {n}',
-    'upNext': 'ต่อไป: ด่าน {n}'
+    'worldUnlocked': 'ปลดล็อก {n} แล้ว!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'แชร์ผลการเล่น',
-    'text': 'ฉันไปถึงด่าน {n} ใน {game} แล้ว คุณไปได้ไกลกว่านี้ไหม?'
-  },
-
   'leaderboard': {
     'title': 'กระดานผู้นำ',
-    'rank': '#',
+    'rank': 'อันดับ',
     'player': 'ผู้เล่น',
-    'stage': 'ด่าน',
-    'squad': 'หน่วย',
-    'empty': 'ยังไม่มีสถิติ มาเป็นคนแรกสิ',
-    'failed': 'เชื่อมต่อกระดานผู้นำไม่ได้',
-    'loading': 'กำลังโหลด…',
+    'score': 'คะแนน',
+    'level': 'ด่าน',
     'you': 'คุณ',
-    'yourRank': 'คุณอยู่อันดับ #{n}',
-    'of': 'จาก {n} คน'
+    'yourRank': 'คุณอยู่อันดับ #{n} จาก {total}',
+    'of': 'จาก {n}',
+    'unranked': 'ผ่านสักด่านเพื่อขึ้นกระดาน',
+    'loading': 'กำลังโหลดกระดาน…',
+    'empty': 'ยังไม่มีใครทำคะแนนเลย',
+    'failed': 'เชื่อมต่อกระดานผู้นำไม่ได้'
   },
-
-  'chest': {
-    'label': 'หีบสมบัติ',
-    'ready': 'เปิดหีบสมบัติรับ {n} เหรียญ',
-    'filling': 'หีบสมบัติกำลังเติม',
-    'spent': 'หีบสมบัติว่างจนถึงพรุ่งนี้'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'การเดินทางประจำวัน',
-    'hud': 'เดินทาง',
-    'multiplier': '{n}×',
-    'available': 'การเดินทางประจำวัน — เส้นทางของวันนี้ เหรียญสามเท่า',
-    'confirm': 'เริ่มการเดินทาง',
-    'spent': 'การเดินทางประจำวัน — เส้นทางใหม่ในอีก {time}',
-    'done': 'พรุ่งนี้มาใหม่',
-    'back': 'กลับสู่แคมเปญ'
-  },
-
-  'skills': {
-
-    'grenade': 'ระเบิดมือ',
-
-    'shield': 'โล่',
-
-    'locked': 'ล็อกอยู่',
-
-    'unlocksAt': 'ปลดล็อกที่ด่าน {n}',
-
-    'frost': 'โนวาน้ำแข็ง',
-
-    'decoy': 'พลุล่อ',
-
-    'trialLabel': '{name} · ลองฟรี',
-
-    'trialTag': 'ลองฟรี!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'อัปเกรด',
-    'spotlight': 'ใช้เลย!',
-    'level': 'Lv {n}',
-    'maxed': 'สูงสุด',
-    'names': {
-      'squad': 'หน่วย',
-      'power': 'พลังยิง',
-      'rate': 'อัตรายิง',
-      'range': 'ระยะยิง',
-      'scavenge': 'เก็บของ',
-      'grenade': 'ระเบิดมือ',
-      'shield': 'โล่',
-      'rocket': 'พลังจรวด',
-      'gatling': 'พลังแกตลิง'
-    },
-    'descriptions': {
-      'squad': 'เริ่มทุกด่านด้วยผู้รอดชีวิตมากขึ้น',
-      'power': 'ผู้รอดชีวิตแต่ละคนสร้างดาเมจต่อนัดมากขึ้น',
-      'rate': 'ผู้รอดชีวิตแต่ละคนยิงเร็วขึ้น',
-      'range': 'หน่วยของคุณเปิดฉากยิงได้ไกลขึ้นบนถนน',
-      'scavenge': 'รับเหรียญมากขึ้นทุกรอบ',
-      'grenade': 'ขว้างระเบิดเพื่อสร้างความเสียหายหนัก',
-      'shield': 'ลดความเสียหายที่หน่วยได้รับครึ่งหนึ่งชั่วครู่',
-      'rocket': 'เครื่องยิงจรวดที่ปลดล็อกในด่านสร้างความเสียหายมากขึ้น',
-      'gatling': 'ปืนแกตลิงที่ปลดล็อกในด่านสร้างความเสียหายมากขึ้น'
-    }
-  },
-
   'options': {
-    'title': 'ตัวเลือก', 'general': 'ทั่วไป', 'audio': 'เสียง', 'language': 'ภาษา',
-    'difficulty': 'ความยาก', 'soundEffects': 'เอฟเฟกต์เสียง', 'music': 'เพลง', 'musicTrack': 'แทร็กเพลง',
-    'musicTracks': { 'cozy': 'ท่วงทำนองอบอุ่น', 'trance': 'อุโมงค์ทรานซ์' },
-    'haptics': 'การสั่น', 'on': 'เปิด', 'off': 'ปิด',
+    'title': 'ตั้งค่า',
+    'general': 'ทั่วไป',
+    'play': 'การเล่น',
+    'audio': 'เสียง',
     'close': 'บันทึกและปิด',
-    'difficulties': { 'easy': 'ง่าย', 'medium': 'ปานกลาง', 'hard': 'ยาก' },
+    'language': 'ภาษา',
+    'difficulty': 'ความยาก',
+    'soundEffects': 'เสียงเอฟเฟกต์',
+    'music': 'เพลง',
+    'musicTrack': 'แทร็กเพลง',
+    'haptics': 'สั่น',
+    'on': 'เปิด',
+    'off': 'ปิด',
+    'difficulties': {
+      'easy': 'ง่าย',
+      'medium': 'ปกติ',
+      'hard': 'ยาก'
+    },
     'difficultyHints': {
-      'easy': 'ศัตรูอ่อนลงและแนวกั้นบางลง',
-      'medium': 'รอบมาตรฐาน',
-      'hard': 'ศัตรูแกร่งขึ้นและแนวกั้นหนาขึ้น'
-    }
+      'easy': 'แมลงช้าลงและเวลามากขึ้น',
+      'medium': 'เกมตามที่ออกแบบไว้',
+      'hard': 'แมลงเร็วขึ้นและสนามแน่นขึ้น'
+    },
+    'musicTracks': {
+      'trance': 'จังหวะแมลง',
+      'cozy': 'ปิกนิกสบาย ๆ'
+    },
+    'juiceStyle': 'สไตล์การกระเด็น',
+    'juiceStyles': {
+      'ooze': 'เมือกการ์ตูน',
+      'confetti': 'ปีญาตาคอนเฟตติ',
+      'bubble': 'ฟองสบู่'
+    },
+    'juiceStyleHints': {
+      'ooze': 'เมือกสีสดใส ตัวเกมเหมือนเดิม',
+      'confetti': 'แมลงแตกเป็นคอนเฟตติ ตัวเกมเหมือนเดิม',
+      'bubble': 'แมลงกลายเป็นฟองสบู่ ตัวเกมเหมือนเดิม'
+    },
+    'highVis': 'วงเหยียบใหญ่',
+    'highVisHint': 'วงหนาและสว่างขึ้นตรงจุดที่เท้าจะลง',
+    'singleTap': 'เล็งง่าย',
+    'singleTapHint': 'แตะตรงไหนก็ได้ แล้วเท้าจะพุ่งไปหาแมลงที่ใกล้ที่สุด'
   },
-
-  'adsBlocked': {
-    'title': 'ไม่สามารถแสดงโฆษณาได้',
-    'body': 'เราพยายามแสดงวิดีโอเพื่อให้คุณได้รับรางวัล แต่มีบางอย่างในเบราว์เซอร์กำลังบล็อกโฆษณา',
-    'allowPrefix': 'โปรดอนุญาตโฆษณาบน',
-    'allowSuffix': '(หรือหยุดตัวบล็อกโฆษณาสำหรับเกมนี้) แล้วลองอีกครั้ง',
-    'gotIt': 'เข้าใจแล้ว'
+  'loading': {
+    'boo': 'บู๊!',
+    'laugh': 'ฮิ ฮิ!',
+    'tooLong': 'ยังโหลดอยู่… ลองเช็กสัญญาณไหม?'
   },
   'saveStatus': {
-    'restoredTitle': 'กู้คืนเซฟบนคลาวด์แล้ว', 'restoredBody': '+{n} เหรียญโบนัสสำหรับการกู้คืน',
-    'tap': 'แตะ', 'pausedTitle': 'หยุดซิงก์คลาวด์ชั่วคราว',
-    'pausedBody': 'กำลังเล่นออฟไลน์ ความคืบหน้าถูกบันทึกไว้ที่นี่',
-    'retry': 'ลองใหม่', 'dismiss': 'ปิด'
+    'restoredTitle': 'กู้คืนความคืบหน้าแล้ว',
+    'restoredBody': 'เรากู้เซฟของคุณคืนมาและเพิ่มให้อีก {n} เหรียญ',
+    'pausedTitle': 'หยุดบันทึกชั่วคราว',
+    'pausedBody': 'ติดต่อบริการบันทึกไม่ได้ ความคืบหน้าของคุณยังปลอดภัยบนเครื่องนี้',
+    'retry': 'ลองใหม่',
+    'dismiss': 'ปิด',
+    'tap': 'แตะเพื่อปิด'
   },
-  'loading': { 'tooLong': 'โหลดนานเกินไป? ลองปิดตัวบล็อกโฆษณาแล้วรีเฟรช', 'boo': 'บู๊!', 'laugh': 'ฮ่าฮ่าฮ่า!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'หมุนโทรศัพท์',
-    'body': 'splatix เล่นในแนวตั้ง'
+  'adsBlocked': {
+    'title': 'พบตัวบล็อกโฆษณา',
+    'body': 'Splatix เล่นฟรีได้เพราะโฆษณา กรุณาปิดตัวบล็อกแล้วโหลดหน้าใหม่',
+    'allowPrefix': 'อนุญาตโฆษณาบน',
+    'allowSuffix': 'แล้วโหลดหน้าใหม่',
+    'gotIt': 'เข้าใจแล้ว'
   },
-  'license': { 'denied': 'ปฏิเสธการเข้าถึง: กรุณาซื้อไลเซนส์' }
+  'license': {
+    'denied': 'ไม่สามารถยืนยันสำเนานี้ได้'
+  }
 }

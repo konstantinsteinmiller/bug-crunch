@@ -1,17 +1,17 @@
+// TR bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'İptal',
   'close': 'Kapat',
   'ok': 'Tamam',
   'continue': 'Devam',
-  'tapToContinue': 'Devam etmek için dokun',
-  'clickToContinue': 'Devam etmek için tıkla',
+  'tapToContinue': 'Devam için dokun',
+  'clickToContinue': 'Devam için tıkla',
   'rewards': 'ÖDÜLLER',
   'tip': 'İpucu',
   'crazyGamesOnly': 'Bu oyun yalnızca şurada mevcut:',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'İleri',
     'replay': 'Tekrar',
@@ -22,260 +22,256 @@ export default {
     'home': 'Ana ekran',
     'info': 'Bilgi'
   },
-
   'hud': {
-    'stage': 'Bölüm {n}',
-    'best': 'Rekor {n}',
-    'boss': 'Patron',
-    'miniboss': 'Mini Patron',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Sonraki bonusa kalan bölüm',
-    'fireRate': 'Hız',
-    'incoming': 'Saldırı geliyor!',
-    'dodge': 'Kaç',
-    'getIn': 'İçine gir',
-    'holdStill': 'Kıpırdama',
-    'milestone': '{n} savaşçı!',
-    'weaponActive': '{name} hazır',
-    'weaponsActive': '{a} + {b} hazır',
-    'weaponLocked': '{name} kilitli — {total} kolun {n} tanesi vuruldu',
-    'weaponGift': '{name} ileride — bedava, kol yok',
-    'weaponFree': 'BEDAVA'
+    'score': 'Puan',
+    'time': 'Süre',
+    'chain': 'Splat zinciri: {n}',
+    'level': 'Bölüm {n}'
   },
-
-  'weapons': {
-    'rocket': 'Roketatar',
-    'gatling': 'Gatling'
+  'worlds': {
+    'picnic': 'Piknik örtüsü',
+    'backyard': 'Bakımsız bahçe',
+    'attic': 'Tozlu tavan arası',
+    'arcade': 'Neon oyun salonu'
   },
-
-  'tutorial': {
-    'touch': 'Takımını hareket ettirmek için kaydır',
-    'desktop': 'Takımını yönlendirmek için fareyi oynat'
+  'bugs': {
+    'ant': 'Karıncalar',
+    'beetle': 'Böcekler',
+    'flea': 'Pireler',
+    'caterpillar': 'Tırtıllar',
+    'stinkbug': 'Kokarcalar',
+    'centipede': 'Kırkayaklar',
+    'pinatafly': 'Piñata sinekleri',
+    'moth': 'Güveler',
+    'robobug': 'Robo-böcekler'
+  },
+  'bosses': {
+    'queenAnt': 'Goliath Karınca Kraliçesi',
+    'beetleKing': 'Dikenli Böcek Kralı',
+    'matriarch': 'Kırkayak Ana',
+    'roachPrime': 'Meka-Hamamböceği Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Patrona bas!',
+      'summon': 'Sürüyü temizle!',
+      'pods': 'Yumurtaları ez!',
+      'charge': 'Basılı tut ve vur!',
+      'spin': 'Halkadan çık!',
+      'shield': 'Kalkanı kır!',
+      'beam': 'Işından kaç!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Hız',
+      'radius': 'Basma alanı',
+      'pierce': 'Zırh delme'
+    },
+    'sneaker': {
+      'name': 'Klasik spor ayakkabı',
+      'perk': 'Dengeli ve çabuk toparlanır.',
+      'trade': 'Hiçbir şeyde üstün değil.'
+    },
+    'steelBoot': {
+      'name': 'Çelik burunlu bot',
+      'perk': 'Dikenler sana işlemez. Vuruşlar çevredekileri sersemletir.',
+      'trade': 'Ağır ve yavaş kalkar.'
+    },
+    'bunnySlipper': {
+      'name': 'Tavşan terlik',
+      'perk': 'Sessiz adım — zıplayanlar geldiğini görmez.',
+      'trade': 'Hiçbir kabuğu kıramaz.'
+    },
+    'rollerSkate': {
+      'name': 'Paten',
+      'perk': 'Bas ve sürüklemeye devam et, koca bir çizgiyi sür.',
+      'trade': 'Çok dar basma alanı.'
+    },
+    'cleatBoot': {
+      'name': 'Krampon',
+      'perk': 'Kramponlar kabukları ve bezleri deler.',
+      'trade': 'Dolaptaki en küçük basma alanı.'
+    },
+    'electricSock': {
+      'name': 'Elektrikli çorap',
+      'perk': 'Her basış üç böceğe daha yıldırım gönderir.',
+      'trade': 'Yıldırımlar yalnızca zayıfları bitirir.'
+    }
+  },
+  'locker': {
+    'title': 'Dolap',
+    'buy': 'Satın al {n}',
+    'wear': 'Giy',
+    'worn': 'Giyili',
+    'needStars': '{n} yıldız daha',
+    'needCoins': '{n} altın daha'
+  },
+  'fever': {
+    'filling': 'Splat Ateşi: %{n} dolu',
+    'ready': 'Splat Ateşi hazır — başlamak için dokun',
+    'running': 'Splat Ateşi sürüyor'
+  },
+  'objectives': {
+    'clear': 'Bölümü bitir',
+    'combo': '×{n} zincire ulaş',
+    'noSpike': 'Dikenlerden hasar alma',
+    'time': '{n}sn kala bitir',
+    'accuracy': 'Basışlarının %{n} kadarını tutturt',
+    'fever': 'Splat Ateşi\'ni {n}× başlat',
+    'kind': '{n} {bug} ez',
+    'feverKills': 'Tek Ateş\'te {n} tane ez',
+    'noMiss': 'En fazla {n} basış ıskala',
+    'score': '{n} puan topla'
   },
   'hints': {
-    'move': { 'touch': 'Hareket için dokun', 'desktop': 'Hareket için tıkla' },
-    'gate': { 'touch': 'Kapıya ateş etmeye devam et: her yarım saniyede +1', 'desktop': 'Kapıya ateş etmeye devam et: her yarım saniyede +1' },
-    'trap': { 'touch': 'Kırmızı kapı ekibi AZALTIR — diğerine geç!', 'desktop': 'Kırmızı kapı ekibi AZALTIR — diğerine geç!' },
-    'divider': { 'touch': 'Kapılar arasındaki direğe asla dokunma', 'desktop': 'Kapılar arasındaki direğe asla dokunma' },
-    'crate': { 'touch': 'Yeşil sandık: herkes daha sert vurur', 'desktop': 'Yeşil sandık: herkes daha sert vurur' },
-    'rate': { 'touch': 'Mavi sandık: herkes daha hızlı ateş eder', 'desktop': 'Mavi sandık: herkes daha hızlı ateş eder' },
-    'boss': { 'touch': 'Kırmızı halkanın dışında kal!', 'desktop': 'Kırmızı halkanın dışında kal!' },
-    'lever': { 'touch': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar', 'desktop': 'Yol kenarındaki HER İKİ kolu da vur — silah sandığını açarlar' },
-    'guard': { 'touch': 'Kalkan açık — atışların henüz işlemiyor', 'desktop': 'Kalkan açık — atışların henüz işlemiyor' },
-    'cage': { 'touch': 'Kafeslere ateş et — tutsaklar takımına katılır', 'desktop': 'Kafeslere ateş et — tutsaklar takımına katılır' },
-    'shieldBox': { 'touch': 'Kalkan sandığı — bekler, sonra bir büyük darbeyi engeller', 'desktop': 'Kalkan sandığı — bekler, sonra bir büyük darbeyi engeller' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} hayatta kalan bozduruldu',
-    'unlocked': 'Açıldı!',
-
-    'guardian': "Bir koruyucu melek seni kurtardı!",
-
-    'guardianSub': "{n} hayatta kalan geri döndü",
-
-    'next': "Sırada: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Silah seç",
-    'nextStage': "sonraki bölüm",
-    'stagesAway': "{n} bölüm sonra"
-  },
-  'weaponPick': {
-    'title': "Silahını seç",
-    'subtitle': "Bölüm {n} için senin. Yolda daha fazlası bekliyor.",
-    'take': "Al",
-    'rocket': {
-      'a': "Güdümlü salvo",
-      'b': "Patlama hasarı"
+    'move': {
+      'touch': 'Hareket için dokun',
+      'desktop': 'Hareket için tıkla'
     },
-    'gatling': {
-      'a': "İki kat atış hızı",
-      'b': "Kapıları daha hızlı doldurur"
+    'slam': {
+      'touch': 'Basılı tut, bırak — güçlü vuruş',
+      'desktop': 'Düğmeyi basılı tut — güçlü vuruş'
+    },
+    'beetle': {
+      'touch': 'Böceklerin kabuğu var — tut ve vur',
+      'desktop': 'Böceklerin kabuğu var — tut ve vur'
+    },
+    'flea': {
+      'touch': 'Pireler zıplar — indikleri yere bas',
+      'desktop': 'Pireler zıplar — indikleri yere bas'
+    },
+    'spike': {
+      'touch': 'Dikenlilere basma!',
+      'desktop': 'Dikenlilere basma!'
+    },
+    'stink': {
+      'touch': 'Kokarcalar ezilince ekranı bulandırır',
+      'desktop': 'Kokarcalar ezilince ekranı bulandırır'
+    },
+    'fever': {
+      'touch': 'Şişe doldu — aleve dokun!',
+      'desktop': 'Şişe doldu — aleve tıkla!'
+    },
+    'honey': {
+      'touch': 'Bal zıplayanları yerinde tutar',
+      'desktop': 'Bal zıplayanları yerinde tutar'
+    },
+    'web': {
+      'touch': 'Örümcek ağları ayağını yavaşlatır',
+      'desktop': 'Örümcek ağları ayağını yavaşlatır'
+    },
+    'belt': {
+      'touch': 'Bant böcekleri taşır',
+      'desktop': 'Bant böcekleri taşır'
+    },
+    'sweeper': {
+      'touch': 'Süpürge böcekleri bedavaya ezer',
+      'desktop': 'Süpürge böcekleri bedavaya ezer'
+    },
+    'boss': {
+      'touch': 'Patron hazırlanırken tut ve vur',
+      'desktop': 'Patron hazırlanırken tut ve vur'
+    },
+    'pods': {
+      'touch': 'Yumurtaları çatlamadan ez!',
+      'desktop': 'Yumurtaları çatlamadan ez!'
     }
-  },
-  'bossReward': {
-    'title': "Patron yenildi!",
-    'subtitle': "Bölüm {n} için bir hediye. Koşmaya devam!"
   },
   'result': {
-    'stageClear': 'Bölüm tamamlandı!',
-    'wipedOut': 'Ekip yok edildi',
-    'reachedStage': 'Bölüm {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '%{n}',
-    'bestReach': 'Rekor %{n}',
-    'newReach': 'En uzağı!',
+    'cleared': 'Bölüm tamam!',
+    'timeUp': 'Süre doldu!',
+    'upNext': 'Sırada: {n}',
+    'retryLevel': 'Tekrar mı?',
+    'campaignDone': 'Tüm bölümler tamam!',
     'newRecord': 'Yeni rekor!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Patron devrildi!',
-    'wasted': 'Bitti',
-    'cause': {
-      'foe': 'Canavarlar ezip geçti',
-      'elite': 'Bir minipatron devirdi',
-      'barricade': 'Barikatlara çarptın',
-      'crate': 'Sandıklara çarptın',
-      'divider': 'Ayırıcılara takıldın',
-      'trap': 'Tuzaklara yakalandın',
-      'slam': 'Patron seni ezdi'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Dönüm noktası!',
-    'rallied': 'İkinci nefes',
-    'peakSquad': 'En büyük ekip',
-    'kills': 'Öldürme',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Altınlar üçe katlandı!',
-    'nextStage': 'Sonraki bölüm',
+    'nextLevel': 'Sonraki bölüm',
     'tryAgain': 'Tekrar dene',
-    'upgrade': 'Geliştir',
-    'upgradeHint': 'Takımını geliştir!',
-    'rankOf': '{n} içinde',
-    'upNext': 'Sırada: Bölüm {n}'
+    'squishes': 'Ezilen böcek',
+    'starsEarned': '3 yıldızdan {n} tanesi',
+    'rankOf': '/ {n}',
+    'worldUnlocked': '{n} açıldı!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Koşuyu paylaş',
-    'text': '{game} oyununda {n}. bölüme ulaştım. Daha ileri gidebilir misin?'
-  },
-
   'leaderboard': {
-    'title': 'Liderlik Tablosu',
-    'rank': '#',
+    'title': 'Sıralama',
+    'rank': 'Sıra',
     'player': 'Oyuncu',
-    'stage': 'Bölüm',
-    'squad': 'Ekip',
-    'empty': 'Henüz skor yok. İlk sen ol!',
-    'failed': 'Liderlik tablosuna ulaşılamadı.',
-    'loading': 'Yükleniyor…',
+    'score': 'Puan',
+    'level': 'Bölüm',
     'you': 'Sen',
-    'yourRank': 'Sıran #{n}',
-    'of': '{n} oyuncu içinde'
+    'yourRank': '{total} kişi içinde #{n} sıradasın',
+    'of': '/ {n}',
+    'unranked': 'Sıralamaya girmek için bir bölüm bitir',
+    'loading': 'Sıralama yükleniyor…',
+    'empty': 'Henüz kimse puan yapmadı',
+    'failed': 'Sıralamaya ulaşılamadı'
   },
-
-  'chest': {
-    'label': 'Hazine sandığı',
-    'ready': 'Sandığı {n} altın karşılığında aç',
-    'filling': 'Hazine sandığı doluyor',
-    'spent': 'Hazine sandığı yarına kadar boş'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Günlük Sefer',
-    'hud': 'Sefer',
-    'multiplier': '{n}×',
-    'available': 'Günlük sefer — bugünün yolu, üç kat madeni para',
-    'confirm': 'Seferi başlat',
-    'spent': 'Günlük sefer — yeni yol {time} sonra',
-    'done': 'Yarın gel',
-    'back': 'Kampanyaya dön'
-  },
-
-  'skills': {
-
-    'grenade': 'El Bombası',
-
-    'shield': 'Kalkan',
-
-    'locked': 'Kilitli',
-
-    'unlocksAt': '{n}. bölümde açılır',
-
-    'frost': 'Buz Novası',
-
-    'decoy': 'Tuzak Fişeği',
-
-    'trialLabel': '{name} · ücretsiz dene',
-
-    'trialTag': 'Ücretsiz dene!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Geliştirmeler',
-    'spotlight': 'Harca!',
-    'level': 'Sv {n}',
-    'maxed': 'Maks',
-    'names': {
-      'squad': 'Ekip',
-      'power': 'Ateş gücü',
-      'rate': 'Atış hızı',
-      'range': 'Menzil',
-      'scavenge': 'Toplayıcılık',
-      'grenade': 'El Bombası',
-      'shield': 'Kalkan',
-      'rocket': 'Roket Gücü',
-      'gatling': 'Gatling Gücü'
-    },
-    'descriptions': {
-      'squad': 'Her bölüme daha çok hayatta kalanla başla.',
-      'power': 'Her hayatta kalan atış başına daha çok hasar verir.',
-      'rate': 'Her hayatta kalan daha hızlı ateş eder.',
-      'range': 'Takımın yolda daha ileriden ateş açar.',
-      'scavenge': 'Her turdan daha çok altın kazan.',
-      'grenade': 'Ağır hasar için el bombası at.',
-      'shield': 'Birkaç saniye boyunca alınan hasarı yarıya indirir.',
-      'rocket': 'Bölümde açtığın roketatarlar daha çok hasar verir.',
-      'gatling': 'Bölümde açtığın Gatlingler daha çok hasar verir.'
-    }
-  },
-
   'options': {
-    'title': 'Seçenekler', 'general': 'Genel', 'audio': 'Ses', 'language': 'Dil',
-    'difficulty': 'Zorluk', 'soundEffects': 'Ses Efektleri', 'music': 'Müzik', 'musicTrack': 'Müzik Parçası',
-    'musicTracks': { 'cozy': 'Huzurlu Uyum', 'trance': 'Trance Tüneli' },
-    'haptics': 'Titreşim', 'on': 'Açık', 'off': 'Kapalı',
-    'close': 'Kaydet ve Kapat',
-    'difficulties': { 'easy': 'Kolay', 'medium': 'Orta', 'hard': 'Zor' },
+    'title': 'Ayarlar',
+    'general': 'Genel',
+    'play': 'Oyun',
+    'audio': 'Ses',
+    'close': 'Kaydet ve kapat',
+    'language': 'Dil',
+    'difficulty': 'Zorluk',
+    'soundEffects': 'Ses efektleri',
+    'music': 'Müzik',
+    'musicTrack': 'Müzik parçası',
+    'haptics': 'Titreşim',
+    'on': 'Açık',
+    'off': 'Kapalı',
+    'difficulties': {
+      'easy': 'Kolay',
+      'medium': 'Normal',
+      'hard': 'Zor'
+    },
     'difficultyHints': {
-      'easy': 'Daha zayıf düşmanlar ve ince barikatlar.',
-      'medium': 'Standart tur.',
-      'hard': 'Daha güçlü düşmanlar ve ağır barikatlar.'
-    }
+      'easy': 'Daha yavaş böcekler ve daha çok süre.',
+      'medium': 'Oyun tasarlandığı gibi.',
+      'hard': 'Daha hızlı böcekler ve daha kalabalık alan.'
+    },
+    'musicTracks': {
+      'trance': 'Böcek grooveu',
+      'cozy': 'Sakin piknik'
+    },
+    'juiceStyle': 'Splat tarzı',
+    'juiceStyles': {
+      'ooze': 'Çizgi film balçığı',
+      'confetti': 'Konfetili piñata',
+      'bubble': 'Sabun köpüğü'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Renkli balçık. Oyun aynı kalır.',
+      'confetti': 'Böcekler konfetiye dönüşür. Oyun aynı kalır.',
+      'bubble': 'Böcekler köpük olur. Oyun aynı kalır.'
+    },
+    'highVis': 'Büyük basma halkası',
+    'highVisHint': 'Ayağının ineceği yerde daha kalın, daha parlak bir halka.',
+    'singleTap': 'Kolay nişan',
+    'singleTapHint': 'Nereye dokunursan dokun, ayağın en yakın böceğe uçar.'
   },
-
-  'adsBlocked': {
-    'title': 'Reklam gösterilemedi',
-    'body': 'Ödülünü kazanabilmen için bir video göstermek istedik ama tarayıcındaki bir şey reklamları engelliyor.',
-    'allowPrefix': 'Lütfen şu adreste reklamlara izin ver:',
-    'allowSuffix': '(veya bu oyun için reklam engelleyiciyi duraklat) ve tekrar dene.',
-    'gotIt': 'Anladım'
+  'loading': {
+    'boo': 'Bö!',
+    'laugh': 'Hi hi!',
+    'tooLong': 'Hâlâ yükleniyor… bağlantını kontrol eder misin?'
   },
   'saveStatus': {
-    'restoredTitle': 'Bulut kaydı geri yüklendi', 'restoredBody': 'Kurtarma için +{n} bonus altın',
-    'tap': 'dokun', 'pausedTitle': 'Bulut eşitlemesi duraklatıldı',
-    'pausedBody': 'Çevrimdışı oynuyorsun. İlerlemen burada kaydediliyor.',
-    'retry': 'Yeniden dene', 'dismiss': 'kapat'
+    'restoredTitle': 'İlerleme geri geldi',
+    'restoredBody': 'Kaydını geri getirdik ve {n} altın ekledik.',
+    'pausedTitle': 'Kaydetme duraklatıldı',
+    'pausedBody': 'Kayıt servisine ulaşamıyoruz. İlerlemen bu cihazda güvende.',
+    'retry': 'Yeniden',
+    'dismiss': 'Kapat',
+    'tap': 'Kapatmak için dokun'
   },
-  'loading': { 'tooLong': 'Yükleme çok mu uzun sürüyor? Reklam engelleyiciyi kapatıp sayfayı yenile.', 'boo': 'Bö!', 'laugh': 'Hahaha!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Telefonu çevir',
-    'body': 'splatix dikey oynanır.'
+  'adsBlocked': {
+    'title': 'Reklam engelleyici bulundu',
+    'body': 'Splatix reklamlar sayesinde ücretsiz. Engelleyiciyi kapat ve sayfayı yenile.',
+    'allowPrefix': 'Şurada reklamlara izin ver:',
+    'allowSuffix': 've sayfayı yenile.',
+    'gotIt': 'Anladım'
   },
-  'license': { 'denied': 'Erişim reddedildi: lütfen bir lisans satın al.' }
+  'license': {
+    'denied': 'Bu kopya doğrulanamadı'
+  }
 }

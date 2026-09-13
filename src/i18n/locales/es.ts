@@ -1,5 +1,8 @@
+// ES bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Cancelar',
   'close': 'Cerrar',
   'ok': 'Ok',
@@ -9,9 +12,6 @@ export default {
   'rewards': 'RECOMPENSAS',
   'tip': 'Consejo',
   'crazyGamesOnly': 'Este juego solo está disponible en',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Siguiente',
     'replay': 'Repetir',
@@ -22,260 +22,256 @@ export default {
     'home': 'Inicio',
     'info': 'Info'
   },
-
   'hud': {
-    'stage': 'Nivel {n}',
-    'best': 'Récord {n}',
-    'boss': 'Jefe',
-    'miniboss': 'Minijefe',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Fases hasta el próximo bonus',
-    'fireRate': 'Ritmo',
-    'incoming': '¡Ataque entrante!',
-    'dodge': 'Esquiva',
-    'getIn': 'Entra',
-    'holdStill': 'Quieto',
-    'milestone': '¡{n} en pie!',
-    'weaponActive': '{name} listo',
-    'weaponsActive': '{a} + {b} listos',
-    'weaponLocked': '{name} bloqueado: {n} de {total} palancas disparadas',
-    'weaponGift': '{name} más adelante: gratis, sin palancas',
-    'weaponFree': 'GRATIS'
+    'score': 'Puntos',
+    'time': 'Tiempo',
+    'chain': 'Cadena Splat: {n}',
+    'level': 'Nivel {n}'
   },
-
-  'weapons': {
-    'rocket': 'Lanzacohetes',
-    'gatling': 'Ametralladora Gatling'
+  'worlds': {
+    'picnic': 'Manta de pícnic',
+    'backyard': 'Jardín salvaje',
+    'attic': 'Desván polvoriento',
+    'arcade': 'Arcade de neón'
   },
-
-  'tutorial': {
-    'touch': 'Desliza para mover tu escuadrón',
-    'desktop': 'Mueve el ratón para dirigir tu escuadrón'
+  'bugs': {
+    'ant': 'Hormigas',
+    'beetle': 'Escarabajos',
+    'flea': 'Pulgas',
+    'caterpillar': 'Orugas',
+    'stinkbug': 'Chinches',
+    'centipede': 'Ciempiés',
+    'pinatafly': 'Moscas piñata',
+    'moth': 'Polillas',
+    'robobug': 'Robobichos'
+  },
+  'bosses': {
+    'queenAnt': 'Hormiga Reina Goliat',
+    'beetleKing': 'Rey Escarabajo Espinoso',
+    'matriarch': 'Matriarca Ciempiés',
+    'roachPrime': 'Meca-Cucaracha Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': '¡Pisa al jefe!',
+      'summon': '¡Limpia el enjambre!',
+      'pods': '¡Aplasta los huevos!',
+      'charge': '¡Mantén pulsado y golpea!',
+      'spin': '¡Sal del círculo!',
+      'shield': '¡Rompe el escudo!',
+      'beam': '¡Esquiva el rayo!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Velocidad',
+      'radius': 'Área de pisada',
+      'pierce': 'Perforación'
+    },
+    'sneaker': {
+      'name': 'Zapatilla clásica',
+      'perk': 'Equilibrada y rápida de recuperar.',
+      'trade': 'No destaca en nada.'
+    },
+    'steelBoot': {
+      'name': 'Bota con punta de acero',
+      'perk': 'Las púas no te hacen nada. Los pisotones aturden alrededor.',
+      'trade': 'Pesada y lenta de levantar.'
+    },
+    'bunnySlipper': {
+      'name': 'Zapatilla de conejo',
+      'perk': 'Paso silencioso: los bichos saltarines no te ven venir.',
+      'trade': 'No puede romper ningún caparazón.'
+    },
+    'rollerSkate': {
+      'name': 'Patín',
+      'perk': 'Pisa y sigue arrastrando para arrasar una línea entera.',
+      'trade': 'Pisada muy estrecha.'
+    },
+    'cleatBoot': {
+      'name': 'Bota de tacos',
+      'perk': 'Los tacos atraviesan caparazones y glándulas.',
+      'trade': 'La pisada más pequeña del vestuario.'
+    },
+    'electricSock': {
+      'name': 'Calcetín eléctrico',
+      'perk': 'Cada pisotón lanza rayos a tres bichos más.',
+      'trade': 'Los rayos solo rematan a los débiles.'
+    }
+  },
+  'locker': {
+    'title': 'Vestuario',
+    'buy': 'Comprar {n}',
+    'wear': 'Poner',
+    'worn': 'Puesta',
+    'needStars': '{n} estrellas más',
+    'needCoins': '{n} monedas más'
+  },
+  'fever': {
+    'filling': 'Fiebre Splat: {n}% llena',
+    'ready': 'Fiebre Splat lista: toca para empezar',
+    'running': 'Fiebre Splat activa'
+  },
+  'objectives': {
+    'clear': 'Supera el nivel',
+    'combo': 'Llega a una cadena ×{n}',
+    'noSpike': 'No recibas daño de púas',
+    'time': 'Termina con {n}s de sobra',
+    'accuracy': 'Acierta el {n}% de tus pisotones',
+    'fever': 'Activa la Fiebre Splat {n}×',
+    'kind': 'Aplasta {n} {bug}',
+    'feverKills': 'Aplasta {n} en una Fiebre',
+    'noMiss': 'Falla como mucho {n} pisotones',
+    'score': 'Consigue {n} puntos'
   },
   'hints': {
-    'move': { 'touch': 'Toca para moverte', 'desktop': 'Haz clic para moverte' },
-    'gate': { 'touch': 'Sigue disparando a la puerta: +1 cada medio segundo', 'desktop': 'Sigue disparando a la puerta: +1 cada medio segundo' },
-    'trap': { 'touch': 'Las puertas rojas RESTAN gente: ¡ve por la otra!', 'desktop': 'Las puertas rojas RESTAN gente: ¡ve por la otra!' },
-    'divider': { 'touch': 'Nunca toques el pilar entre las puertas', 'desktop': 'Nunca toques el pilar entre las puertas' },
-    'crate': { 'touch': 'Cajas verdes: todos golpean más fuerte', 'desktop': 'Cajas verdes: todos golpean más fuerte' },
-    'rate': { 'touch': 'Cajas azules: todos disparan más rápido', 'desktop': 'Cajas azules: todos disparan más rápido' },
-    'boss': { 'touch': '¡Mantente fuera del círculo rojo!', 'desktop': '¡Mantente fuera del círculo rojo!' },
-    'lever': { 'touch': 'Dispara a las DOS palancas de los bordes: abren la caja de armas', 'desktop': 'Dispara a las DOS palancas de los bordes: abren la caja de armas' },
-    'guard': { 'touch': 'Escudo activo: tus disparos aún no le hacen daño', 'desktop': 'Escudo activo: tus disparos aún no le hacen daño' },
-    'cage': { 'touch': 'Dispara a las jaulas: los prisioneros se unen a tu escuadra', 'desktop': 'Dispara a las jaulas: los prisioneros se unen a tu escuadra' },
-    'shieldBox': { 'touch': 'Caja escudo: espera y bloquea un gran golpe', 'desktop': 'Caja escudo: espera y bloquea un gran golpe' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} supervivientes canjeados',
-    'unlocked': '¡Desbloqueado!',
-
-    'guardian': "¡Un ángel de la guarda te ha salvado!",
-
-    'guardianSub': "{n} supervivientes han vuelto",
-
-    'next': "A continuación: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Elige un arma",
-    'nextStage': "siguiente nivel",
-    'stagesAway': "en {n} niveles"
-  },
-  'weaponPick': {
-    'title': "Elige tu arma",
-    'subtitle': "Tuya en el nivel {n}. Hay más esperando en el camino.",
-    'take': "Elegir",
-    'rocket': {
-      'a': "Salva teledirigida",
-      'b': "Daño explosivo"
+    'move': {
+      'touch': 'Toca para mover',
+      'desktop': 'Haz clic para mover'
     },
-    'gatling': {
-      'a': "Doble cadencia de fuego",
-      'b': "Carga las puertas más rápido"
+    'slam': {
+      'touch': 'Mantén y suelta para un pisotón fuerte',
+      'desktop': 'Mantén el botón para un pisotón fuerte'
+    },
+    'beetle': {
+      'touch': 'Los escarabajos tienen caparazón: mantén y golpea',
+      'desktop': 'Los escarabajos tienen caparazón: mantén y golpea'
+    },
+    'flea': {
+      'touch': 'Las pulgas saltan: pisa donde aterrizan',
+      'desktop': 'Las pulgas saltan: pisa donde aterrizan'
+    },
+    'spike': {
+      'touch': '¡No pises a los que tienen púas!',
+      'desktop': '¡No pises a los que tienen púas!'
+    },
+    'stink': {
+      'touch': 'Las chinches nublan la pantalla al aplastarlas',
+      'desktop': 'Las chinches nublan la pantalla al aplastarlas'
+    },
+    'fever': {
+      'touch': '¡El frasco está lleno: toca la llama!',
+      'desktop': '¡El frasco está lleno: haz clic en la llama!'
+    },
+    'honey': {
+      'touch': 'La miel deja quietos a los saltarines',
+      'desktop': 'La miel deja quietos a los saltarines'
+    },
+    'web': {
+      'touch': 'Las telarañas frenan tu pie',
+      'desktop': 'Las telarañas frenan tu pie'
+    },
+    'belt': {
+      'touch': 'La cinta arrastra a los bichos',
+      'desktop': 'La cinta arrastra a los bichos'
+    },
+    'sweeper': {
+      'touch': 'La barredora aplasta bichos gratis',
+      'desktop': 'La barredora aplasta bichos gratis'
+    },
+    'boss': {
+      'touch': 'Mantén y golpea cuando el jefe se prepare',
+      'desktop': 'Mantén y golpea cuando el jefe se prepare'
+    },
+    'pods': {
+      'touch': '¡Aplasta los huevos antes de que eclosionen!',
+      'desktop': '¡Aplasta los huevos antes de que eclosionen!'
     }
-  },
-  'bossReward': {
-    'title': "¡Jefe derrotado!",
-    'subtitle': "Un regalo para el nivel {n}. ¡Sigue corriendo!"
   },
   'result': {
-    'stageClear': '¡Nivel superado!',
-    'wipedOut': 'Escuadrón aniquilado',
-    'reachedStage': 'Nivel {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n} %',
-    'bestReach': 'Mejor {n} %',
-    'newReach': '¡Tu mejor marca!',
+    'cleared': '¡Nivel superado!',
+    'timeUp': '¡Se acabó el tiempo!',
+    'upNext': 'A continuación: {n}',
+    'retryLevel': '¿Otra vez?',
+    'campaignDone': '¡Todos los niveles superados!',
     'newRecord': '¡Nuevo récord!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': '¡Jefe abatido!',
-    'wasted': 'Liquidado',
-    'cause': {
-      'foe': 'Arrollado por monstruos',
-      'elite': 'Un minijefe te rompió',
-      'barricade': 'Chocaste con barricadas',
-      'crate': 'Chocaste con cajas',
-      'divider': 'Rozaste los separadores',
-      'trap': 'Atrapado en trampas',
-      'slam': 'El jefe te aplastó'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': '¡Hito!',
-    'rallied': 'Segundo aire',
-    'peakSquad': 'Mayor escuadrón',
-    'kills': 'Bajas',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': '¡Monedas triplicadas!',
-    'nextStage': 'Siguiente nivel',
+    'nextLevel': 'Siguiente nivel',
     'tryAgain': 'Reintentar',
-    'upgrade': 'Mejorar',
-    'upgradeHint': '¡Mejora tu escuadrón!',
+    'squishes': 'Bichos aplastados',
+    'starsEarned': '{n} de 3 estrellas',
     'rankOf': 'de {n}',
-    'upNext': 'A continuación: Nivel {n}'
+    'worldUnlocked': '¡{n} desbloqueado!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Compartir partida',
-    'text': 'He llegado al nivel {n} en {game}. ¿Puedes llegar más lejos?'
-  },
-
   'leaderboard': {
     'title': 'Clasificación',
-    'rank': '#',
+    'rank': 'Puesto',
     'player': 'Jugador',
-    'stage': 'Nivel',
-    'squad': 'Escuadrón',
-    'empty': 'Aún no hay marcas. ¡Sé el primero!',
-    'failed': 'No se pudo cargar la clasificación.',
-    'loading': 'Cargando…',
+    'score': 'Puntos',
+    'level': 'Nivel',
     'you': 'Tú',
-    'yourRank': 'Eres #{n}',
-    'of': 'de {n} jugadores'
+    'yourRank': 'Eres el #{n} de {total}',
+    'of': 'de {n}',
+    'unranked': 'Supera un nivel para entrar',
+    'loading': 'Cargando la clasificación…',
+    'empty': 'Todavía no hay puntuaciones',
+    'failed': 'No se pudo cargar la clasificación'
   },
-
-  'chest': {
-    'label': 'Cofre del tesoro',
-    'ready': 'Abrir el cofre por {n} monedas',
-    'filling': 'Cofre del tesoro: llenándose',
-    'spent': 'Cofre del tesoro: vacío hasta mañana'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Expedición diaria',
-    'hud': 'Expedición',
-    'multiplier': '{n}×',
-    'available': 'Expedición diaria: la ruta de hoy, monedas triples',
-    'confirm': 'Iniciar expedición',
-    'spent': 'Expedición diaria: nueva ruta en {time}',
-    'done': 'Vuelve mañana',
-    'back': 'Volver a la campaña'
-  },
-
-  'skills': {
-
-    'grenade': 'Granada',
-
-    'shield': 'Escudo',
-
-    'locked': 'Bloqueado',
-
-    'unlocksAt': 'Se desbloquea en el nivel {n}',
-
-    'frost': 'Nova de escarcha',
-
-    'decoy': 'Bengala señuelo',
-
-    'trialLabel': '{name} · prueba gratis',
-
-    'trialTag': '¡Prueba gratis!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Mejoras',
-    'spotlight': '¡Gasta!',
-    'level': 'Nv {n}',
-    'maxed': 'Máx',
-    'names': {
-      'squad': 'Escuadrón',
-      'power': 'Potencia',
-      'rate': 'Cadencia',
-      'range': 'Alcance',
-      'scavenge': 'Carroñeo',
-      'grenade': 'Granada',
-      'shield': 'Escudo',
-      'rocket': 'Potencia de cohetes',
-      'gatling': 'Potencia Gatling'
-    },
-    'descriptions': {
-      'squad': 'Empieza cada nivel con más supervivientes.',
-      'power': 'Cada superviviente hace más daño por disparo.',
-      'rate': 'Cada superviviente dispara más rápido.',
-      'range': 'Tu escuadrón abre fuego más lejos en la carretera.',
-      'scavenge': 'Gana más monedas en cada partida.',
-      'grenade': 'Lanza una granada para un estallido de daño.',
-      'shield': 'Reduce a la mitad el daño a tu escuadrón unos segundos.',
-      'rocket': 'Los lanzacohetes que desbloquees en un nivel hacen más daño.',
-      'gatling': 'Las Gatling que desbloquees en un nivel hacen más daño.'
-    }
-  },
-
   'options': {
-    'title': 'Opciones', 'general': 'General', 'audio': 'Audio', 'language': 'Idioma',
-    'difficulty': 'Dificultad', 'soundEffects': 'Efectos de sonido', 'music': 'Música', 'musicTrack': 'Pista de música',
-    'musicTracks': { 'cozy': 'Armonía acogedora', 'trance': 'Túnel trance' },
-    'haptics': 'Vibración', 'on': 'Activado', 'off': 'Desactivado',
+    'title': 'Ajustes',
+    'general': 'General',
+    'play': 'Juego',
+    'audio': 'Audio',
     'close': 'Guardar y cerrar',
-    'difficulties': { 'easy': 'Fácil', 'medium': 'Media', 'hard': 'Difícil' },
+    'language': 'Idioma',
+    'difficulty': 'Dificultad',
+    'soundEffects': 'Efectos de sonido',
+    'music': 'Música',
+    'musicTrack': 'Pista musical',
+    'haptics': 'Vibración',
+    'on': 'Sí',
+    'off': 'No',
+    'difficulties': {
+      'easy': 'Fácil',
+      'medium': 'Normal',
+      'hard': 'Difícil'
+    },
     'difficultyHints': {
-      'easy': 'Enemigos más débiles y barricadas más finas.',
-      'medium': 'La partida estándar.',
-      'hard': 'Enemigos más duros y barricadas más resistentes.'
-    }
+      'easy': 'Bichos más lentos y más tiempo.',
+      'medium': 'El juego tal y como se diseñó.',
+      'hard': 'Bichos más rápidos y tableros más llenos.'
+    },
+    'musicTracks': {
+      'trance': 'Ritmo bicho',
+      'cozy': 'Pícnic tranquilo'
+    },
+    'juiceStyle': 'Estilo de splat',
+    'juiceStyles': {
+      'ooze': 'Baba de dibujos',
+      'confetti': 'Piñata de confeti',
+      'bubble': 'Pompas de jabón'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Baba de colores. El juego no cambia.',
+      'confetti': 'Los bichos estallan en confeti. El juego no cambia.',
+      'bubble': 'Los bichos se vuelven pompas. El juego no cambia.'
+    },
+    'highVis': 'Círculo de pisada grande',
+    'highVisHint': 'Un anillo más grueso y brillante donde caerá tu pie.',
+    'singleTap': 'Puntería fácil',
+    'singleTapHint': 'Toca donde sea y tu pie vuela al bicho más cercano.'
   },
-
-  'adsBlocked': {
-    'title': 'No se pudo mostrar el anuncio',
-    'body': 'Intentamos mostrarte un vídeo para que ganaras tu recompensa, pero algo en tu navegador bloquea los anuncios.',
-    'allowPrefix': 'Permite los anuncios en',
-    'allowSuffix': '(o pausa tu bloqueador para este juego) e inténtalo de nuevo.',
-    'gotIt': 'Entendido'
+  'loading': {
+    'boo': '¡Bu!',
+    'laugh': '¡Ji ji!',
+    'tooLong': 'Sigue cargando… ¿revisas tu conexión?'
   },
   'saveStatus': {
-    'restoredTitle': 'Guardado en la nube restaurado', 'restoredBody': '+{n} monedas de bonificación por la recuperación',
-    'tap': 'toca', 'pausedTitle': 'Sincronización pausada',
-    'pausedBody': 'Jugando sin conexión. Tu progreso se guarda aquí.',
-    'retry': 'Reintentar', 'dismiss': 'descartar'
+    'restoredTitle': 'Progreso restaurado',
+    'restoredBody': 'Hemos recuperado tu partida y añadido {n} monedas.',
+    'pausedTitle': 'Guardado en pausa',
+    'pausedBody': 'No podemos contactar con el servicio de guardado. Tu progreso está a salvo en este dispositivo.',
+    'retry': 'Reintentar',
+    'dismiss': 'Descartar',
+    'tap': 'Toca para cerrar'
   },
-  'loading': { 'tooLong': '¿La carga tarda demasiado? Desactiva tu bloqueador de anuncios y recarga.', 'boo': '¡Bu!', 'laugh': '¡Jajaja!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Gira tu teléfono',
-    'body': 'splatix se juega en vertical.'
+  'adsBlocked': {
+    'title': 'Bloqueador de anuncios detectado',
+    'body': 'Splatix es gratis gracias a los anuncios. Desactiva tu bloqueador y recarga.',
+    'allowPrefix': 'Permite anuncios en',
+    'allowSuffix': 'y recarga la página.',
+    'gotIt': 'Entendido'
   },
-  'license': { 'denied': 'Acceso denegado: adquiere una licencia.' }
+  'license': {
+    'denied': 'No se ha podido verificar esta copia'
+  }
 }

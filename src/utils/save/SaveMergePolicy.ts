@@ -25,8 +25,8 @@
 //   - if remote wins and local had ANY progress (score > 0), the player
 //     gets bonus coins = winner.maxStage × 50 to soften the loss
 
-import { BEST_STAGE_KEY, COINS_KEY, UPGRADES_KEY, RUNS_KEY } from '@/keys'
-import { STATE_KEY } from '@/use/useTowerState'
+import { BEST_LEVEL_KEY, COINS_KEY, LEVEL_STARS_KEY, RUNS_KEY } from '@/keys'
+import { STATE_KEY } from '@/use/useSplatixState'
 
 /** Where the meta blob is stored in localStorage / on the remote backend.
  *  NOT prefixed with `__save_internal__` — this key needs to round-trip
@@ -115,7 +115,7 @@ const safeJson = <T>(v: string | null, fallback: T): T => {
  * Compute a fresh meta blob from the current localStorage snapshot.
  * Pure — no side effects.
  */
-/** Pull a sub-field out of the consolidated `tower_state` blob if present.
+/** Pull a sub-field out of the consolidated `splatix_state` blob if present.
  *  Falls through to a top-level read for back-compat with any pre-migration
  *  snapshot that still has individual keys (e.g. the score formula was just
  *  invoked between BlobStorage construction and the first migration write). */
@@ -138,23 +138,24 @@ export const computeMeta = (
   read: SnapshotReader,
   savedAt: string = new Date().toISOString()
 ): SaveMeta => {
-  // `bestStage` is 0 for a player who has never cleared a stage, so a brand-new
+  // `bestLevel` is 0 for a player who has never cleared a level, so a brand-new
   // local snapshot scores 0 and can never beat a real cloud save on a tie.
-  const bestStage = Math.max(0, safeInt(readField(read, BEST_STAGE_KEY), 0))
+  const bestStage = Math.max(0, safeInt(readField(read, BEST_LEVEL_KEY), 0))
   const runs = Math.max(0, safeInt(readField(read, RUNS_KEY), 0))
 
-  // Upgrades are stored as a flat `{ id: level }` record. Summing the levels
-  // (rather than counting the tracks) makes a deeply-invested save beat a
-  // broadly-dabbled one, which is the right tie-break for a meta this small.
-  const upgrades = safeJson<Record<string, number>>(readField(read, UPGRADES_KEY), {})
-  let upgradeLevels = 0
-  for (const v of Object.values(upgrades)) {
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) upgradeLevels += v
+  // Stars are stored as a flat `{ [levelId]: 0..3 }` record. Summing them
+  // (rather than counting the levels touched) makes a save that three-starred
+  // ten levels beat one that one-starred twenty, which is the right tie-break:
+  // the star is what unlocks the worlds and prices the shoes.
+  const stars = safeJson<Record<string, number>>(readField(read, LEVEL_STARS_KEY), {})
+  let starTotal = 0
+  for (const v of Object.values(stars)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) starTotal += v
   }
 
   const progressScore =
     bestStage * 500
-    + upgradeLevels * 150
+    + starTotal * 150
     + runs * 10
 
   return { savedAt, progressScore, schemaVersion: SCHEMA_VERSION, maxStage: bestStage }
@@ -240,7 +241,7 @@ export const applyBonusCoins = (read: SnapshotReader, bonus: number): string => 
   return String(current + Math.max(0, bonus))
 }
 
-/** Bonus-coin path: read the sub-field from tower_state if it exists. */
+/** Bonus-coin path: read the sub-field from splatix_state if it exists. */
 export const readCoinTotal = (read: SnapshotReader): number => {
   return safeInt(readField(read, COINS_KEY), 0)
 }
@@ -257,14 +258,14 @@ export const readCoinTotal = (read: SnapshotReader): number => {
  * misleading picture of what the game stores.
  *
  * Single-blob model: every persisted gameplay value lives inside the
- * `tower_state` localStorage entry (see `useTowerState.ts`). The cloud
+ * `splatix_state` localStorage entry (see `useSplatixState.ts`). The cloud
  * therefore mirrors exactly TWO keys — the state blob and the meta blob.
  *
- * Individual `ts_*` field keys are also accepted as payload so any stray
+ * Individual `sx_*` field keys are also accepted as payload so any stray
  * per-key write (defensive, or a mid-migration snapshot from an older client)
  * round-trips safely instead of being silently dropped.
  */
-const PAYLOAD_PREFIXES = ['ts_'] as const
+const PAYLOAD_PREFIXES = ['sx_'] as const
 
 export const isPayloadKey = (key: string): boolean => {
   if (key === META_KEY) return true
@@ -277,8 +278,8 @@ export const isPayloadKey = (key: string): boolean => {
 
 // Re-exported so tests / other modules don't have to re-declare them.
 export const SAVE_KEYS = {
-  BEST_STAGE: BEST_STAGE_KEY,
+  BEST_LEVEL: BEST_LEVEL_KEY,
   COINS: COINS_KEY,
-  UPGRADES: UPGRADES_KEY,
+  LEVEL_STARS: LEVEL_STARS_KEY,
   RUNS: RUNS_KEY
 } as const

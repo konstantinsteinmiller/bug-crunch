@@ -166,7 +166,7 @@ onUnmounted(() => {
   opacity: 0
 
 .brawl-text
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  text-shadow: 0.13em 0.13em 0 #000, -0.045em -0.045em 0 #000, 0.045em -0.045em 0 #000, -0.045em 0.045em 0 #000, 0.045em 0.045em 0 #000
 
 // ─── The reveal ──────────────────────────────────────────────────────────────
 //
@@ -286,6 +286,17 @@ onUnmounted(() => {
   align-items: center
   overflow-y: auto
   overscroll-behavior: contain
+
+  // No native scrollbar. On Windows the classic bar — track, thumb and two
+  // arrow buttons — paints a strip of desktop chrome down the side of a result
+  // screen, and it is the first thing the eye finds. The content still scrolls
+  // by drag and wheel; it is the furniture that goes.
+  scrollbar-width: none
+  -ms-overflow-style: none
+
+  &::-webkit-scrollbar
+    width: 0
+    height: 0
 
   // Centred with AUTO MARGINS rather than `justify-content: center`. On a
   // scroll container, centred flex content that overflows is clipped at the

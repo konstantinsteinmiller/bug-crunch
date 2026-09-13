@@ -1,281 +1,277 @@
+// AR bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'إلغاء',
   'close': 'إغلاق',
   'ok': 'حسناً',
   'continue': 'متابعة',
-  'tapToContinue': 'اضغط للمتابعة',
+  'tapToContinue': 'المس للمتابعة',
   'clickToContinue': 'انقر للمتابعة',
   'rewards': 'المكافآت',
   'tip': 'نصيحة',
   'crazyGamesOnly': 'هذه اللعبة متاحة فقط على',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'التالي',
     'replay': 'إعادة',
     'back': 'رجوع',
-    'play': 'تشغيل',
+    'play': 'العب',
     'pause': 'إيقاف مؤقت',
     'menu': 'القائمة',
     'home': 'الرئيسية',
     'info': 'معلومات'
   },
-
   'hud': {
-    'stage': 'المرحلة {n}',
-    'best': 'الأفضل {n}',
-    'boss': 'الزعيم',
-    'miniboss': 'زعيم صغير',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'المراحل حتى المكافأة التالية',
-    'fireRate': 'معدل',
-    'incoming': 'هجوم قادم!',
-    'dodge': 'تفادَ',
-    'getIn': 'ادخل',
-    'holdStill': 'اثبت',
-    'milestone': '{n} مقاتل!',
-    'weaponActive': '{name} جاهز',
-    'weaponsActive': '{a} + {b} جاهزان',
-    'weaponLocked': '{name} مقفل — تمت إصابة {n} من {total} رافعات',
-    'weaponGift': '{name} في الأمام — مجاني، بلا روافع',
-    'weaponFree': 'مجاني'
+    'score': 'النقاط',
+    'time': 'الوقت',
+    'chain': 'سلسلة Splat: {n}',
+    'level': 'المستوى {n}'
   },
-
-  'weapons': {
-    'rocket': 'قاذف صواريخ',
-    'gatling': 'رشاش غاتلينغ'
+  'worlds': {
+    'picnic': 'بساط النزهة',
+    'backyard': 'الحديقة المتشابكة',
+    'attic': 'العلّية المغبرّة',
+    'arcade': 'صالة النيون'
   },
-
-  'tutorial': {
-    'touch': 'اسحب لتحريك فريقك',
-    'desktop': 'حرّك الفأرة لتوجيه فريقك'
+  'bugs': {
+    'ant': 'النمل',
+    'beetle': 'الخنافس',
+    'flea': 'البراغيث',
+    'caterpillar': 'اليرقات',
+    'stinkbug': 'البق النتن',
+    'centipede': 'أم أربعة وأربعين',
+    'pinatafly': 'ذباب البينياتا',
+    'moth': 'العث',
+    'robobug': 'الحشرات الآلية'
+  },
+  'bosses': {
+    'queenAnt': 'ملكة النمل جوليات',
+    'beetleKing': 'ملك الخنافس الشوكي',
+    'matriarch': 'أم أربعة وأربعين الكبرى',
+    'roachPrime': 'الصرصور الآلي برايم'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'ادعس الزعيم!',
+      'summon': 'نظّف السرب!',
+      'pods': 'اسحق البيض!',
+      'charge': 'اضغط مطوّلاً ثم اضرب!',
+      'spin': 'اخرج من الدائرة!',
+      'shield': 'اضرب لتكسر الدرع!',
+      'beam': 'تفادَ الشعاع!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'السرعة',
+      'radius': 'مساحة الدعس',
+      'pierce': 'اختراق الدرع'
+    },
+    'sneaker': {
+      'name': 'حذاء رياضي كلاسيكي',
+      'perk': 'متوازن ويعود جاهزاً بسرعة.',
+      'trade': 'لا يتفوق في أي شيء تحديداً.'
+    },
+    'steelBoot': {
+      'name': 'بوت بمقدمة فولاذية',
+      'perk': 'الأشواك لا تؤذيك، والضربات تُدوّخ كل ما حولك.',
+      'trade': 'ثقيل وبطيء الرفع.'
+    },
+    'bunnySlipper': {
+      'name': 'شبشب الأرنب',
+      'perk': 'خطوة صامتة — الحشرات القافزة لا تشعر بك.',
+      'trade': 'لا يكسر أي صدفة إطلاقاً.'
+    },
+    'rollerSkate': {
+      'name': 'حذاء التزلج',
+      'perk': 'ادعس واستمر بالسحب لتجرف خطاً كاملاً.',
+      'trade': 'مساحة دعس ضيقة جداً.'
+    },
+    'cleatBoot': {
+      'name': 'حذاء بمسامير',
+      'perk': 'المسامير تخترق الأصداف وغدد الرائحة.',
+      'trade': 'أصغر مساحة دعس في الخزانة.'
+    },
+    'electricSock': {
+      'name': 'الجورب الكهربائي',
+      'perk': 'كل دعسة ترسل برقاً إلى ثلاث حشرات أخرى.',
+      'trade': 'البرق يُجهز على الضعيفة فقط.'
+    }
+  },
+  'locker': {
+    'title': 'الخزانة',
+    'buy': 'اشترِ بـ {n}',
+    'wear': 'ارتدِ',
+    'worn': 'مرتدى',
+    'needStars': 'تحتاج {n} نجوم أخرى',
+    'needCoins': 'تحتاج {n} عملة أخرى'
+  },
+  'fever': {
+    'filling': 'حُمّى Splat: {n}%',
+    'ready': 'حُمّى Splat جاهزة — المس للبدء',
+    'running': 'حُمّى Splat جارية'
+  },
+  'objectives': {
+    'clear': 'أنهِ المستوى',
+    'combo': 'حقّق سلسلة ×{n}',
+    'noSpike': 'لا تتأذَّ من الأشواك',
+    'time': 'أنهِ وبقي {n} ثانية',
+    'accuracy': 'أصب {n}% من دعساتك',
+    'fever': 'فعّل حُمّى Splat {n} مرات',
+    'kind': 'اسحق {n} من {bug}',
+    'feverKills': 'اسحق {n} في حُمّى واحدة',
+    'noMiss': 'لا تُخطئ أكثر من {n} دعسات',
+    'score': 'احصد {n} نقطة'
   },
   'hints': {
-    'move': { 'touch': 'اضغط للتحرك', 'desktop': 'انقر للتحرك' },
-    'gate': { 'touch': 'واصل إطلاق النار على البوابة: ‎+1 كل نصف ثانية', 'desktop': 'واصل إطلاق النار على البوابة: ‎+1 كل نصف ثانية' },
-    'trap': { 'touch': 'البوابة الحمراء تُنقص فريقك: خذ الأخرى!', 'desktop': 'البوابة الحمراء تُنقص فريقك: خذ الأخرى!' },
-    'divider': { 'touch': 'لا تلمس العمود بين البوابتين', 'desktop': 'لا تلمس العمود بين البوابتين' },
-    'crate': { 'touch': 'الصناديق الخضراء: الجميع يضرب أقوى', 'desktop': 'الصناديق الخضراء: الجميع يضرب أقوى' },
-    'rate': { 'touch': 'الصناديق الزرقاء: الجميع يطلق أسرع', 'desktop': 'الصناديق الزرقاء: الجميع يطلق أسرع' },
-    'boss': { 'touch': 'ابتعد عن الدائرة الحمراء!', 'desktop': 'ابتعد عن الدائرة الحمراء!' },
-    'lever': { 'touch': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح', 'desktop': 'أطلق على كلتا الرافعتين على حافتي الطريق — تفتحان صندوق السلاح' },
-    'guard': { 'touch': 'الدرع مرفوع — نيرانك لا تؤذيه بعد', 'desktop': 'الدرع مرفوع — نيرانك لا تؤذيه بعد' },
-    'cage': { 'touch': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك', 'desktop': 'حطّم الأقفاص — الأسرى ينضمّون إلى فريقك' },
-    'shieldBox': { 'touch': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة', 'desktop': 'صندوق الدرع — ينتظر ثم يصدّ ضربة كبيرة' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': 'تم صرف {n} ناجيًا',
-    'unlocked': 'تم الفتح!',
-
-    'guardian': "أنقذك ملاك حارس!",
-
-    'guardianSub': "عاد {n} من الناجين",
-
-    'next': "التالي: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "اختر سلاحًا",
-    'nextStage': "المرحلة التالية",
-    'stagesAway': "بعد {n} مراحل"
-  },
-  'weaponPick': {
-    'title': "اختر سلاحك",
-    'subtitle': "لك في المرحلة {n}. المزيد بانتظارك على الطريق.",
-    'take': "خذه",
-    'rocket': {
-      'a': "وابل موجّه",
-      'b': "ضرر انفجاري"
+    'move': {
+      'touch': 'المس للتحرك',
+      'desktop': 'انقر للتحرك'
     },
-    'gatling': {
-      'a': "ضعف معدل الإطلاق",
-      'b': "يشحن البوابات أسرع"
+    'slam': {
+      'touch': 'اضغط مطوّلاً ثم أفلت لضربة قوية',
+      'desktop': 'اضغط الزر مطوّلاً لضربة قوية'
+    },
+    'beetle': {
+      'touch': 'الخنافس لها أصداف — اضغط مطوّلاً ثم اضرب',
+      'desktop': 'الخنافس لها أصداف — اضغط مطوّلاً ثم اضرب'
+    },
+    'flea': {
+      'touch': 'البراغيث تقفز — اضرب حيث تهبط',
+      'desktop': 'البراغيث تقفز — اضرب حيث تهبط'
+    },
+    'spike': {
+      'touch': 'لا تدعس ذوات الأشواك!',
+      'desktop': 'لا تدعس ذوات الأشواك!'
+    },
+    'stink': {
+      'touch': 'البق النتن يُشوّش الشاشة عند سحقه',
+      'desktop': 'البق النتن يُشوّش الشاشة عند سحقه'
+    },
+    'fever': {
+      'touch': 'القارورة امتلأت — المس اللهب!',
+      'desktop': 'القارورة امتلأت — انقر اللهب!'
+    },
+    'honey': {
+      'touch': 'العسل يُثبّت الحشرات القافزة',
+      'desktop': 'العسل يُثبّت الحشرات القافزة'
+    },
+    'web': {
+      'touch': 'بيوت العنكبوت تُبطئ قدمك',
+      'desktop': 'بيوت العنكبوت تُبطئ قدمك'
+    },
+    'belt': {
+      'touch': 'الحزام يحمل الحشرات معه',
+      'desktop': 'الحزام يحمل الحشرات معه'
+    },
+    'sweeper': {
+      'touch': 'الكنّاسة تسحق الحشرات مجاناً',
+      'desktop': 'الكنّاسة تسحق الحشرات مجاناً'
+    },
+    'boss': {
+      'touch': 'اضغط مطوّلاً واضرب عندما يستعد الزعيم',
+      'desktop': 'اضغط مطوّلاً واضرب عندما يستعد الزعيم'
+    },
+    'pods': {
+      'touch': 'اسحق البيض قبل أن يفقس!',
+      'desktop': 'اسحق البيض قبل أن يفقس!'
     }
-  },
-  'bossReward': {
-    'title': "هزمت الزعيم!",
-    'subtitle': "هدية للمرحلة {n}. واصل الركض!"
   },
   'result': {
-    'stageClear': 'اجتزت المرحلة!',
-    'wipedOut': 'أُبيد الفريق',
-    'reachedStage': 'المرحلة {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}٪',
-    'bestReach': 'الأفضل {n}٪',
-    'newReach': 'أبعد من أي وقت!',
+    'cleared': 'تم اجتياز المستوى!',
+    'timeUp': 'انتهى الوقت!',
+    'upNext': 'التالي: {n}',
+    'retryLevel': 'نعيدها؟',
+    'campaignDone': 'اجتزت كل المستويات!',
     'newRecord': 'رقم قياسي جديد!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'سقط الزعيم!',
-    'wasted': 'مُهدَر',
-    'cause': {
-      'foe': 'اجتاحتك الوحوش',
-      'elite': 'سحقك زعيم صغير',
-      'barricade': 'ارتطمت بالحواجز',
-      'crate': 'ارتطمت بالصناديق',
-      'divider': 'اصطدمت بالفواصل',
-      'trap': 'وقعت في الفخاخ',
-      'slam': 'سحقك الزعيم'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'إنجاز!',
-    'rallied': 'نفَس ثانٍ',
-    'peakSquad': 'أكبر فريق',
-    'kills': 'القتلى',
-    'tripleCoins': '×3',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'تضاعفت العملات ثلاث مرات!',
-    'nextStage': 'المرحلة التالية',
-    'tryAgain': 'حاول مجددًا',
-    'upgrade': 'ترقية',
-    'upgradeHint': 'طوّر فريقك!',
+    'nextLevel': 'المستوى التالي',
+    'tryAgain': 'حاول مجدداً',
+    'squishes': 'الحشرات المسحوقة',
+    'starsEarned': '{n} من 3 نجوم',
     'rankOf': 'من {n}',
-    'upNext': 'التالي: المرحلة {n}'
+    'worldUnlocked': 'تم فتح {n}!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'شارك جولتك',
-    'text': 'وصلت إلى المرحلة {n} في {game}. هل تقدر تتجاوزني؟'
-  },
-
   'leaderboard': {
-    'title': 'لوحة الصدارة',
-    'rank': '#',
+    'title': 'لوحة المتصدرين',
+    'rank': 'الترتيب',
     'player': 'اللاعب',
-    'stage': 'المرحلة',
-    'squad': 'الفريق',
-    'empty': 'لا توجد نتائج بعد. كن الأول!',
-    'failed': 'تعذر الوصول إلى لوحة الصدارة.',
-    'loading': 'جارٍ التحميل…',
+    'score': 'النقاط',
+    'level': 'المستوى',
     'you': 'أنت',
-    'yourRank': 'ترتيبك #{n}',
-    'of': 'من {n} لاعب'
+    'yourRank': 'ترتيبك #{n} من {total}',
+    'of': 'من {n}',
+    'unranked': 'أنهِ مستوى لتدخل اللوحة',
+    'loading': 'جارٍ تحميل اللوحة…',
+    'empty': 'لم يسجّل أحد نقاطاً بعد',
+    'failed': 'تعذّر الوصول إلى لوحة المتصدرين'
   },
-
-  'chest': {
-    'label': 'صندوق الكنز',
-    'ready': 'افتح صندوق الكنز مقابل {n} عملة',
-    'filling': 'صندوق الكنز قيد الامتلاء',
-    'spent': 'صندوق الكنز فارغ حتى الغد'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'الرحلة اليومية',
-    'hud': 'رحلة',
-    'multiplier': '×{n}',
-    'available': 'الرحلة اليومية — طريق اليوم، عملات ثلاثية',
-    'confirm': 'ابدأ الرحلة',
-    'spent': 'الرحلة اليومية — طريق جديد بعد {time}',
-    'done': 'عد غدًا',
-    'back': 'العودة إلى الحملة'
-  },
-
-  'skills': {
-
-    'grenade': 'قنبلة',
-
-    'shield': 'درع',
-
-    'locked': 'مقفل',
-
-    'unlocksAt': 'يُفتح في المرحلة {n}',
-
-    'frost': 'نوفا الصقيع',
-
-    'decoy': 'شعلة الخداع',
-
-    'trialLabel': '{name} · تجربة مجانية',
-
-    'trialTag': 'تجربة مجانية!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'الترقيات',
-    'spotlight': 'أنفق!',
-    'level': 'مستوى {n}',
-    'maxed': 'الأقصى',
-    'names': {
-      'squad': 'الفريق',
-      'power': 'قوة النيران',
-      'rate': 'معدل الإطلاق',
-      'range': 'المدى',
-      'scavenge': 'التجميع',
-      'grenade': 'قنبلة',
-      'shield': 'درع',
-      'rocket': 'قوة الصواريخ',
-      'gatling': 'قوة الرشاش'
-    },
-    'descriptions': {
-      'squad': 'ابدأ كل مرحلة بعدد أكبر من الناجين.',
-      'power': 'كل ناجٍ يسبب ضررًا أكبر لكل طلقة.',
-      'rate': 'كل ناجٍ يطلق النار أسرع.',
-      'range': 'تفتح فرقتك النار من مسافة أبعد على الطريق.',
-      'scavenge': 'اكسب عملات أكثر في كل جولة.',
-      'grenade': 'ألقِ قنبلة لإحداث ضرر كبير.',
-      'shield': 'يقلّل الضرر على فريقك إلى النصف لبضع ثوانٍ.',
-      'rocket': 'قاذفات الصواريخ التي تفتحها في المرحلة تُلحق ضررًا أكبر.',
-      'gatling': 'رشاشات غاتلينغ التي تفتحها في المرحلة تُلحق ضررًا أكبر.'
-    }
-  },
-
   'options': {
-    'title': 'الخيارات', 'general': 'عام', 'audio': 'الصوت', 'language': 'اللغة',
-    'difficulty': 'الصعوبة', 'soundEffects': 'المؤثرات الصوتية', 'music': 'الموسيقى', 'musicTrack': 'المقطوعة',
-    'musicTracks': { 'cozy': 'انسجام هادئ', 'trance': 'نفق الترانس' },
-    'haptics': 'الاهتزاز', 'on': 'تشغيل', 'off': 'إيقاف',
-    'close': 'حفظ وإغلاق',
-    'difficulties': { 'easy': 'سهل', 'medium': 'متوسط', 'hard': 'صعب' },
+    'title': 'الإعدادات',
+    'general': 'عام',
+    'play': 'اللعب',
+    'audio': 'الصوت',
+    'close': 'احفظ وأغلق',
+    'language': 'اللغة',
+    'difficulty': 'الصعوبة',
+    'soundEffects': 'المؤثرات الصوتية',
+    'music': 'الموسيقى',
+    'musicTrack': 'المقطوعة',
+    'haptics': 'الاهتزاز',
+    'on': 'تشغيل',
+    'off': 'إيقاف',
+    'difficulties': {
+      'easy': 'سهل',
+      'medium': 'عادي',
+      'hard': 'صعب'
+    },
     'difficultyHints': {
-      'easy': 'أعداء أضعف وحواجز أرق.',
-      'medium': 'الجولة القياسية.',
-      'hard': 'أعداء أقوى وحواجز أثقل.'
-    }
+      'easy': 'حشرات أبطأ ووقت أطول.',
+      'medium': 'اللعبة كما صُمّمت.',
+      'hard': 'حشرات أسرع وساحة أكثر ازدحاماً.'
+    },
+    'musicTracks': {
+      'trance': 'إيقاع الحشرات',
+      'cozy': 'نزهة هادئة'
+    },
+    'juiceStyle': 'نمط البقعة',
+    'juiceStyles': {
+      'ooze': 'مخاط كرتوني',
+      'confetti': 'بينياتا قصاصات',
+      'bubble': 'فقاعات صابون'
+    },
+    'juiceStyleHints': {
+      'ooze': 'مخاط ملوّن. اللعبة نفسها لا تتغير.',
+      'confetti': 'الحشرات تنفجر قصاصات. اللعبة نفسها لا تتغير.',
+      'bubble': 'الحشرات تصير فقاعات. اللعبة نفسها لا تتغير.'
+    },
+    'highVis': 'حلقة دعس كبيرة',
+    'highVisHint': 'حلقة أسمك وأوضح في المكان الذي ستهبط عليه قدمك.',
+    'singleTap': 'تصويب سهل',
+    'singleTapHint': 'المس أي مكان فتطير قدمك إلى أقرب حشرة.'
   },
-
-  'adsBlocked': {
-    'title': 'تعذّر عرض الإعلان',
-    'body': 'حاولنا عرض مقطع فيديو لتحصل على مكافأتك، لكن شيئاً في متصفحك يحجب الإعلانات.',
-    'allowPrefix': 'يُرجى السماح بالإعلانات على',
-    'allowSuffix': '(أو أوقف مانع الإعلانات مؤقتاً لهذه اللعبة) ثم أعد المحاولة.',
-    'gotIt': 'فهمت'
+  'loading': {
+    'boo': 'بو!',
+    'laugh': 'هي هي!',
+    'tooLong': 'ما زال التحميل جارياً… تحقّق من اتصالك؟'
   },
   'saveStatus': {
-    'restoredTitle': 'تمت استعادة الحفظ السحابي', 'restoredBody': '+{n} عملة مكافأة للاستعادة',
-    'tap': 'اضغط', 'pausedTitle': 'تمت إيقاف المزامنة السحابية',
-    'pausedBody': 'تلعب دون اتصال. يتم حفظ تقدمك هنا.',
-    'retry': 'إعادة المحاولة', 'dismiss': 'إخفاء'
+    'restoredTitle': 'تمت استعادة التقدّم',
+    'restoredBody': 'أعدنا حفظك وأضفنا {n} عملة.',
+    'pausedTitle': 'الحفظ متوقف مؤقتاً',
+    'pausedBody': 'تعذّر الوصول إلى خدمة الحفظ. تقدّمك محفوظ بأمان على هذا الجهاز.',
+    'retry': 'أعد المحاولة',
+    'dismiss': 'تجاهل',
+    'tap': 'المس للإغلاق'
   },
-  'loading': { 'tooLong': 'التحميل يستغرق وقتاً طويلاً؟ عطّل مانع الإعلانات ثم أعد التحميل.', 'boo': 'بو!', 'laugh': 'هاهاها!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'أدر هاتفك',
-    'body': 'لعبة splatix تُلعب عموديًا.'
+  'adsBlocked': {
+    'title': 'تم رصد مانع إعلانات',
+    'body': 'Splatix مجانية بفضل الإعلانات. أوقف مانع الإعلانات ثم أعد تحميل الصفحة.',
+    'allowPrefix': 'اسمح بالإعلانات على',
+    'allowSuffix': 'ثم أعد تحميل الصفحة.',
+    'gotIt': 'فهمت'
   },
-  'license': { 'denied': 'تم رفض الوصول: يرجى شراء ترخيص.' }
+  'license': {
+    'denied': 'تعذّر التحقق من هذه النسخة'
+  }
 }

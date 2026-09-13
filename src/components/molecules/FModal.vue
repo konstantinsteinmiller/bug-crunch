@@ -227,7 +227,7 @@ const handleTabChange = (val: string | number): void => emit('update:activeTab',
   text-align: center
   font-size: clamp(0.95rem, 4.4vw, 1.85rem)
   line-height: 1.15
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  text-shadow: 0.13em 0.13em 0 #000, -0.045em -0.045em 0 #000, 0.045em -0.045em 0 #000, -0.045em 0.045em 0 #000, 0.045em 0.045em 0 #000
 
 .f-modal__frame-wrap
   position: relative
@@ -267,6 +267,23 @@ const handleTabChange = (val: string | number): void => emit('update:activeTab',
   padding-top: calc(var(--fmodal-header-overlap, 0px) + clamp(0.6rem, 2.4vw, 1.1rem))
   padding-bottom: clamp(0.4rem, 1.6vw, 0.75rem)
   padding-inline: clamp(0.5rem, 3vw, 1.5rem)
+
+  // A scrollbar in the game's own colours rather than the operating system's.
+  // The Windows default — a grey track with two arrow buttons — is a strip of
+  // desktop furniture down the side of a painted panel, and it is the first
+  // thing the eye finds on a screen that is meant to be read in one glance.
+  scrollbar-width: thin
+  scrollbar-color: #50aaff transparent
+
+  &::-webkit-scrollbar
+    width: 8px
+
+  &::-webkit-scrollbar-track
+    background: transparent
+
+  &::-webkit-scrollbar-thumb
+    border-radius: 999px
+    background: #50aaff
 
 .f-modal__footer
   flex-shrink: 0

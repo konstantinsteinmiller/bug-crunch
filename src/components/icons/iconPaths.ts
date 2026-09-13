@@ -305,184 +305,85 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M15.25 18.8A2.95 2.95 0 1 1 21.15 18.8A2.95 2.95 0 1 1 15.25 18.8Z'
   ],
 
-  // ── splatix's own run nouns ───────────────────────────────────────────
-  //
-  // Lifted VERBATIM out of `RunHud.vue` and `UpgradeModal.vue`, where the same
-  // three shapes lived twice as copy-pasted `d` strings. They are the five
-  // numbers this game reports — squad size, damage, fire rate, reach, streak —
-  // plus the skull that marks the end of a stage.
-  //
-  // They are drawn lighter than the 44 above (the clock ring is ~2 units, the
-  // reach rails 1.6) because they are read at HUD size in a coloured chip on a
-  // dark plate, not knocked out white on saturated plastic. That is the one
-  // context where a thin limb survives — so do NOT promote them onto a gold
-  // button without thickening them first.
+  // ── Splatix's own nouns ────────────────────────────────────────────
+  // Solid, bold, and legible at 16px in a HUD chip. Limbs are kept at or above
+  // ~2.3 units in the 24-unit box, which is the floor the contact sheet found:
+  // anything thinner greys into the candy-plastic gradient behind it.
 
-  // A CROWD, not a person: three head-and-shoulder silhouettes, the front one
-  // biggest and lowest, the two behind it smaller and higher, with a gutter of
-  // empty plate between every pair of shapes.
-  //
-  // It used to be two figures and the shoulder of a third, and it read as "a
-  // person": four of five first-time players could not say what the chip it
-  // fronts was counting. That is the same finding that deleted the other three
-  // stat chips, and this is the half of the fix that had to be drawn rather
-  // than removed — see `RunHud.vue`.
-  //
-  // Every gutter is at least 1.4 units wide, and that number is the whole trick.
-  // The HUD chip draws this at 14–20 px, where one unit is well under a physical
-  // pixel: the 0.6-unit gap the old drawing left between its front body and its
-  // back shoulder closed completely at that size and fused the two into one
-  // blob, which is exactly how a crowd glyph ends up reading as a single torso.
-  // Under about a pixel at 16 px it is not a gap, it is a smudge.
-  //
-  // Nothing overlaps anything, so unlike the old glyph there is no winding to
-  // reason about — nonzero cannot cancel a shape against one it never touches,
-  // whichever way round each was drawn. The weight is held close to the drawing
-  // it replaces (the two figures behind are thin crescents, and the lead figure
-  // is a shade smaller than the old one) because this glyph also fronts a shop
-  // row in `UpgradeModal.vue` beside `bolt`, `rate` and `range` — the note above
-  // about redrawing the five together is why the other four are untouched.
-  //
-  // ── Redrawn again once the chip grew ──
-  //
-  // The version above this one gave the two figures BEHIND the leader thin
-  // side-crescents — enough to say "there are more of them" at 16 px, and the
-  // most that fitted while four chips shared the row. The row is one chip now
-  // and it is drawn half again as large, so the crescents became the weak part
-  // of the drawing: at 23 px they read as bracket marks around a person rather
-  // than as two more people.
-  //
-  // They are whole figures now, each with its own head and its own shoulder
-  // line, and the leader sits lower and larger so the three heads land on three
-  // different lines. That stagger is what makes it a group rather than a row.
-  // Gutters are still at or above 1.4 units everywhere, for the reason in the
-  // note above, and nothing overlaps — so there is still no winding to reason
-  // about.
-  'squad': [
-    // The pair behind, mirrored about the middle so the glyph balances in a chip
-    // that has nothing else left in it to lean against.
-    'M4.9 3.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z',
-    'M4.9 10.1c1.1 0 2.1.25 2.9.72-1.3 1.15-2.1 2.72-2.1 4.58v.6H.9v-.6c0-3.0 1.75-5.3 4-5.3Z',
-    'M19.1 3.6a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z',
-    'M19.1 10.1c-1.1 0-2.1.25-2.9.72 1.3 1.15 2.1 2.72 2.1 4.58v.6h3.8v-.6c0-3.0-1.75-5.3-4-5.3Z',
-    // The leader: biggest, lowest, drawn last so it is the shape the eye lands on.
-    'M12 7.1a3.35 3.35 0 1 1 0 6.7 3.35 3.35 0 0 1 0-6.7Z',
-    'M12 15.1c3.3 0 5.9 2.25 5.9 5.6v1.7H6.1v-1.7c0-3.35 2.6-5.6 5.9-5.6Z'
+  // A bug from above: a three-lobe body, six legs and two antennae — the same
+  // silhouette `bugArt` draws the ant in, so the chip and the thing it counts
+  // are one object. Legs are wound WITH the body so they merge rather than
+  // punching holes under nonzero.
+  'bug': [
+    'M12 2.2a2.5 2.5 0 0 1 2.5 2.5A2.5 2.5 0 0 1 12 7.2a2.5 2.5 0 0 1-2.5-2.5A2.5 2.5 0 0 1 12 2.2Z',
+    'M12 7.6a2.3 2.3 0 0 1 2.3 2.3A2.3 2.3 0 0 1 12 12.2a2.3 2.3 0 0 1-2.3-2.3A2.3 2.3 0 0 1 12 7.6Z',
+    'M12 12.2c2.3 0 3.9 2.1 3.9 4.8S14.3 21.8 12 21.8s-3.9-2.1-3.9-4.8S9.7 12.2 12 12.2Z',
+    'M9.3 8.2 4.9 5.9l-1 1.9 4.4 2.3Zm5.4 0 4.4-2.3 1 1.9-4.4 2.3Z',
+    'M9.1 12.1 4.3 12l-.05 2.1 4.8.1Zm5.8 0 4.8-.1.05 2.1-4.8.1Z',
+    'M9.4 15.6 5.3 18.2l1.1 1.8 4.1-2.6Zm5.2 0 4.1 2.6-1.1 1.8-4.1-2.6Z',
+    'M10.6 2.6 8.9 0.9 7.5 2.3l1.7 1.7Zm2.8 0 1.7-1.7 1.4 1.4-1.7 1.7Z'
   ],
-  // Damage. One polygon, no holes — the classic bolt reads at any size.
+  // The Locker: a boot in profile, sole flat on the baseline, with a cuff and
+  // three lace rungs. Profile rather than the top-down view the game draws,
+  // because a shoe from above is an oval and an oval is not a glyph.
+  'boot': [
+    'M6.6 2.4h5.1a1.4 1.4 0 0 1 1.4 1.4v6.1c0 1.5.7 2.5 2 3.3l4.3 2.6a3 3 0 0 1 1.4 2.6v2.4a1.2 1.2 0 0 1-1.2 1.2H4.4a1.2 1.2 0 0 1-1.2-1.2V3.8a1.4 1.4 0 0 1 1.4-1.4Z',
+    'M3.2 17.1h17.6v2.1H3.2Z',
+    'M6.9 5.3h4.5v1.6H6.9Zm0 3.1h4.5V10H6.9Z'
+  ],
+  // The Splat Chain: a burst with a droplet centre. Eleven points, alternating
+  // long and short, which is the same jagged shape `uiArt.burstPath` draws
+  // behind the comic words — so the chip and the pop are one family.
+  'splat': [
+    'M12 1.4 13.9 5.6 18 3.4 17.2 8 21.8 8.4 18.4 11.6 22.4 14.2 17.8 15.4 19.6 19.8 15 18.8 14.4 23.2 11.4 19.8 8.6 22.9 8.4 18.4 4 19.7 5.2 15.3 1 14.8 4.2 11.8 1.2 8.6 5.7 8.1 4.4 3.8 8.7 5.2Z',
+    'M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z'
+  ],
+  // Accuracy: a crosshair. Ring, four ticks, solid pip — the pip is what stops
+  // it reading as `coin` at 16px.
+  'target': [
+    'M12 2.4A9.6 9.6 0 1 0 21.6 12 9.6 9.6 0 0 0 12 2.4Zm0 2.8A6.8 6.8 0 1 1 5.2 12 6.8 6.8 0 0 1 12 5.2Z',
+    'M10.8 0h2.4v5.2h-2.4Zm0 18.8h2.4V24h-2.4ZM0 10.8h5.2v2.4H0Zm18.8 0H24v2.4h-5.2Z',
+    'M12 9.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2Z'
+  ],
+  // The level clock. A SOLID disc with the face punched out of it, rather than a
+  // ring: at 16 px in a HUD chip an open ring reads as a crescent moon, which is
+  // exactly what the first pass shipped. The bezel notch at 12 o'clock and the
+  // two hands are counter-wound, so they cut through the disc under nonzero.
+  'clock': [
+    'M12 2.2A9.8 9.8 0 1 0 12 21.8 9.8 9.8 0 0 0 12 2.2Z',
+    'M12 5a7 7 0 1 1 0 14 7 7 0 0 1 0-14Z',
+    'M10.9 6.6h2.2v6.1h-2.2Z',
+    'M11.6 11.4h5.1v2.2h-5.1Z',
+    'M10.4 0.6h3.2v2.6h-3.2Z'
+  ],
+  // The Electric Sock's perk. One polygon, no holes — the classic bolt reads at
+  // any size.
   'bolt': [
     'M13 2 4 14h6l-1 8 9-12h-6l1-8Z'
   ],
-  // Fire rate: a clock whose ring is open at the top right, so it cannot be
-  // mistaken for `coin` in the same chip row.
-  //
-  // Ring 2.8 units (was 2.0) and hand 1.75–2.0 (was 1.0–1.35). The contact sheet
-  // is what caught it: at 16px the old ring greyed into its background and the
-  // hand vanished entirely, leaving a bare "C" in the HUD chip that reads as a
-  // moon. The hand's tip and root are both kept clear of the ring's inner edge —
-  // under nonzero winding a limb that crosses the band either fuses with it or
-  // punches a hole through it, depending on which way round it was drawn.
-  'rate': [
-    'M12 3a9 9 0 1 0 9 9h-2.8a6.2 6.2 0 1 1-6.2-6.2V3Zm.4 3.6v5.75l4.4 2.25.9-1.8-3.55-1.82V6.6h-1.75Z'
+  // Splat Fever.
+  'flame': [
+    'M12 2c1.5 3.5.5 5.5-1 7-1.7 1.7-3 3.2-3 5.5A5.5 5.5 0 0 0 13.5 20 5.5 5.5 0 0 0 19 14.5c0-3.5-2.5-5-3.5-7.5-.6 1-1.3 1.6-2 2 .3-2.4-.6-4.9-1.5-7Z'
   ],
-  // Reach: an arrow flying UP the lane between two rails — literally what the
-  // upgrade buys. A crosshair would read as accuracy, which this is not.
-  //
-  // Rails 2.6 units (was 1.6), for the same reason as `rate`: at 16px a 1.6-unit
-  // rail is one physical pixel, and it either aliased away or crawled.
-  'range': [
-    'M3.4 3H6v18H3.4zM18 3h2.6v18H18z',
-    'M12 2.6 8.4 7.2h2.4v9.1H9l3 4.6 3-4.6h-1.8V7.2h2.4L12 2.6Z'
+  // Lifetime squishes. Eyes are wound against the cranium, so they punch through
+  // it rather than sitting on it as a second fill.
+  'skull': [
+    'M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Zm-3 8.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1Z'
   ],
-  // Win streak. Kept clearly wider at the base than `bolt` is anywhere, since
-  // the two can share a HUD row.
-  // ── Active skills ──
-  // A round bomb with a lit fuse. Solid body, fuse wound clockwise into it so it
-  // reads as one shape, and a spark at the tip that survives being 16px tall.
-  'bomb': [
-    'M10.5 21a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z',
-    'M15.2 8.2c-.5-.6-1.1-1.1-1.8-1.5l1.1-1.6c.9-1.3 2.5-1.8 3.9-1.2l.6.3-.8 1.8-.6-.3c-.6-.3-1.3-.1-1.7.5l-.7 1Z',
-    'M19.4 2.6l1.9-.6-.6 1.9 1.9.6-1.9.6.6 1.9-1.9-.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6-.6-1.9 1.8.6Z'
-  ],
+
   // A heater shield with a raised boss. The centre band is wound the other way
   // so it punches through rather than sitting on top as a second fill.
   'shield': [
     'M12 2 4 5v6.5c0 4.6 3.2 8.4 8 10.5 4.8-2.1 8-5.9 8-10.5V5l-8-3Z',
     'M12 6.6 8 8.1v3.6c0 2.6 1.6 4.8 4 6.1 2.4-1.3 4-3.5 4-6.1V8.1l-4-1.5Z'
   ],
-  // Frost Nova: a six-armed ice crystal. A hexagonal hub, six pointed arms and a
-  // V of spurs on each, every sub-path wound the same way so the overlaps merge
-  // under nonzero rather than punching holes. Bold on purpose: 2.3-unit arms
-  // survive being 16 px tall, where a true snowflake's filigree turns to fuzz.
-  'snowflake': [
-    'M12 8.9L14.68 10.45L14.68 13.55L12 15.1L9.32 13.55L9.32 10.45Z',
-    'M10.85 10.5L10.85 2.7L12 1.1L13.15 2.7L13.15 10.5Z',
-    'M11.61 7.29L9.01 5.43L8.83 4.13L10.11 3.88L12.72 5.74Z',
-    'M11.28 5.74L13.89 3.88L15.17 4.13L14.99 5.43L12.39 7.29Z',
-    'M12.72 10.25L19.48 6.35L21.44 6.55L20.63 8.35L13.87 12.25Z',
-    'M15.88 9.31L16.2 6.12L17.23 5.32L18.09 6.31L17.78 9.49Z',
-    'M17.06 8.25L19.97 9.58L20.4 10.81L19.19 11.31L16.27 9.98Z',
-    'M13.87 11.75L20.63 15.65L21.44 17.45L19.48 17.65L12.72 13.75Z',
-    'M16.27 14.02L19.19 12.69L20.4 13.19L19.97 14.42L17.06 15.75Z',
-    'M17.78 14.51L18.09 17.69L17.23 18.68L16.2 17.88L15.88 14.69Z',
-    'M13.15 13.5L13.15 21.3L12 22.9L10.85 21.3L10.85 13.5Z',
-    'M12.39 16.71L14.99 18.57L15.17 19.87L13.89 20.12L11.28 18.26Z',
-    'M12.72 18.26L10.11 20.12L8.83 19.87L9.01 18.57L11.61 16.71Z',
-    'M11.28 13.75L4.52 17.65L2.56 17.45L3.37 15.65L10.13 11.75Z',
-    'M8.12 14.69L7.8 17.88L6.77 18.68L5.91 17.69L6.22 14.51Z',
-    'M6.94 15.75L4.03 14.42L3.6 13.19L4.81 12.69L7.73 14.02Z',
-    'M10.13 12.25L3.37 8.35L2.56 6.55L4.52 6.35L11.28 10.25Z',
-    'M7.73 9.98L4.81 11.31L3.6 10.81L4.03 9.58L6.94 8.25Z',
-    'M6.22 9.49L5.91 6.31L6.77 5.32L7.8 6.12L8.12 9.31Z'
-  ],
-  // Decoy Flare: a flare stick held up and to the right, its end a starburst,
-  // two sparks thrown clear. Tilted rather than upright because an upright stick
-  // with a flame on it is a candle; the burst is wound WITH the stick so the
-  // neck where they meet stays solid.
-  'flare': [
-    'M9.04 11.38L10.03 11.14L12.59 13.13L12.59 14.15L5.8 22.55L3.92 21.59L2.54 20Z',
-    'M13.38 5.4L13.45 9.12L15.87 8.32L14.27 10.31L17.73 11.68L14.01 11.74L14.81 14.17L12.82 12.57L11.45 16.03L11.39 12.31L8.96 13.1L10.56 11.12L7.1 9.75L10.82 9.68L10.03 7.26L12.02 8.86Z',
-    'M19.6 12.5L20.01 13.79L21.3 14.2L20.01 14.61L19.6 15.9L19.19 14.61L17.9 14.2L19.19 13.79Z',
-    'M6.4 2.3L6.76 3.44L7.9 3.8L6.76 4.16L6.4 5.3L6.04 4.16L4.9 3.8L6.04 3.44Z'
-  ],
-  'flame': [
-    'M12 2c1.5 3.5.5 5.5-1 7-1.7 1.7-3 3.2-3 5.5A5.5 5.5 0 0 0 13.5 20 5.5 5.5 0 0 0 19 14.5c0-3.5-2.5-5-3.5-7.5-.6 1-1.3 1.6-2 2 .3-2.4-.6-4.9-1.5-7Z'
-  ],
-  // Kills / the boss marker. Eyes are wound against the cranium, so they punch
-  // through it rather than sitting on it as a second fill.
-  'skull': [
-    'M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Zm-3 8.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1Z'
-  ],
 
-  // ── The two weapons ────────────────────────────────────────────────
-  // Drawn to be told apart in the corner of the eye at 16px, which rules out
-  // detail: one is a POINTED vertical mass, the other a BLUNT bundle of three.
-  // They are the same silhouettes `weaponGlyph` paints on the road, so the box
-  // the player shoots and the badge that appears afterwards are one object.
-  //
-  // A shell with swept fins and a flame under it. The flame is a separate
-  // sub-path wound the same way, so it merges into the body rather than
-  // outlining against it.
-  // The incoming-attack alarm: a hazard triangle with the bang punched through
-  // it. Bar and dot are wound counter-clockwise against the triangle's
-  // clockwise outline — holes, not a second fill on top of it.
+  // The incoming-hazard alarm: a triangle with the bang punched through it. Bar
+  // and dot are wound counter-clockwise against the triangle's clockwise
+  // outline — holes, not a second fill on top of it.
   'warning': [
     'M12 2.6 22.2 20.4H1.8Z',
     'M10.9 8.6v6.4h2.2V8.6Z',
     'M12 16.35a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 1 0 0-2.5Z'
-  ],
-
-  'rocket': [
-    'M12 1.6c2.3 2.2 3.5 5 3.5 8.2v4.5h-7V9.8c0-3.2 1.2-6 3.5-8.2Zm0 4.2a1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z',
-    'M8.5 11.4 5.2 15a2 2 0 0 0-.5 1.3v2.1l3.8-2.2v-4.8Zm7 0 3.3 3.6a2 2 0 0 1 .5 1.3v2.1l-3.8-2.2v-4.8Z',
-    'M10.2 16.2h3.6l-1.8 6-1.8-6Z'
-  ],
-  // Three barrels over a receiver, with a crank on the side. The barrels are
-  // one contour with two counter-wound slots between them, so the bundle reads
-  // as three tubes rather than as one slab at any size.
-  'gatling': [
-    'M4.6 4.2h14.8v9.2H4.6V4.2Zm4.1 1.6H6.9v6h1.8v-6Zm6.6 0h-1.8v6h1.8v-6Z',
-    'M3 14.6h18a1.4 1.4 0 0 1 1.4 1.4v1.6A1.4 1.4 0 0 1 21 19H3a1.4 1.4 0 0 1-1.4-1.4V16A1.4 1.4 0 0 1 3 14.6Z',
-    'M9.4 19.8h5.2v2.6H9.4v-2.6Z'
   ]
 }

@@ -3,16 +3,16 @@ import { acquireAppPause } from '@/use/useGamePause'
 
 // ─── UI modal-open signal ────────────────────────────────────────────────────
 //
-// Tracks how many blocking FModal dialogs (Upgrades, Options, Daily, Battle
-// Pass, Achievements, …) are currently open, and HALTS THE SIMULATION while
-// any of them is up.
+// Tracks how many blocking FModal dialogs (the Locker, Settings, the
+// Leaderboard, the result screen) are currently open, and HALTS THE SIMULATION
+// while any of them is up.
 //
-// The pause is not cosmetic. Every one of these menus is opened mid-siege — the
-// tech tree in particular is where the player goes to answer a wave that is
-// beating them — and letting enemies keep chewing the tower while the player
-// reads a menu punishes them for using the game's own systems. It also makes
-// the CrazyGames contract honest: `gameplayStop()` is meant to mean gameplay
-// actually stopped, not that a panel happens to be covering it.
+// The pause is not cosmetic. Every one of these is opened mid-level — the
+// Locker in particular is where a player goes to answer the bug that is beating
+// them — and letting the clock run and the board fill while they read a panel
+// punishes them for using the game's own systems. It also makes the CrazyGames
+// contract honest: `gameplayStop()` is meant to mean gameplay actually stopped,
+// not that a panel happens to be covering it.
 //
 // Two separate signals come out of this, deliberately:
 //   * `isAnyModalOpen` — the SDK-event signal, consumed by the gameplay

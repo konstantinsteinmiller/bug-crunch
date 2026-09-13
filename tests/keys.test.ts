@@ -6,33 +6,33 @@
 
 import { describe, expect, it } from 'vitest'
 import { SAVE_KEYS, isPayloadKey, META_KEY } from '@/utils/save/SaveMergePolicy'
-import { STATE_KEY } from '@/use/useTowerState'
+import { STATE_KEY } from '@/use/useSplatixState'
 
 describe('SAVE_KEYS values are stable', () => {
-  it('BEST_STAGE key is the literal "ts_best_stage"', () => {
-    expect(SAVE_KEYS.BEST_STAGE).toBe('ts_best_stage')
+  it('BEST_LEVEL key is the literal "sx_best_level"', () => {
+    expect(SAVE_KEYS.BEST_LEVEL).toBe('sx_best_level')
   })
-  it('COINS key is the literal "ts_coins"', () => {
-    expect(SAVE_KEYS.COINS).toBe('ts_coins')
+  it('COINS key is the literal "sx_coins"', () => {
+    expect(SAVE_KEYS.COINS).toBe('sx_coins')
   })
-  it('UPGRADES key is the literal "ts_upgrades"', () => {
-    expect(SAVE_KEYS.UPGRADES).toBe('ts_upgrades')
+  it('LEVEL_STARS key is the literal "sx_level_stars"', () => {
+    expect(SAVE_KEYS.LEVEL_STARS).toBe('sx_level_stars')
   })
-  it('RUNS key is the literal "ts_runs"', () => {
-    expect(SAVE_KEYS.RUNS).toBe('ts_runs')
+  it('RUNS key is the literal "sx_runs"', () => {
+    expect(SAVE_KEYS.RUNS).toBe('sx_runs')
   })
 })
 
 describe('the persisted surface is exactly one state blob plus the meta blob', () => {
   it('accepts the state blob and the meta blob', () => {
-    expect(STATE_KEY).toBe('tower_state')
+    expect(STATE_KEY).toBe('splatix_state')
     expect(isPayloadKey(STATE_KEY)).toBe(true)
     expect(isPayloadKey(META_KEY)).toBe(true)
   })
 
-  it('accepts stray per-field ts_* writes so nothing is silently dropped', () => {
+  it('accepts stray per-field sx_* writes so nothing is silently dropped', () => {
     expect(isPayloadKey(SAVE_KEYS.COINS)).toBe(true)
-    expect(isPayloadKey('ts_anything_new')).toBe(true)
+    expect(isPayloadKey('sx_anything_new')).toBe(true)
   })
 
   it('rejects foreign keys so ad-tech / dev scribbles never reach the cloud', () => {

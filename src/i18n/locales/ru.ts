@@ -1,17 +1,17 @@
+// RU bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Отмена',
   'close': 'Закрыть',
   'ok': 'Ок',
-  'continue': 'Продолжить',
-  'tapToContinue': 'Нажмите, чтобы продолжить',
-  'clickToContinue': 'Кликните, чтобы продолжить',
+  'continue': 'Дальше',
+  'tapToContinue': 'Нажми, чтобы продолжить',
+  'clickToContinue': 'Кликни, чтобы продолжить',
   'rewards': 'НАГРАДЫ',
-  'tip': 'Совет',
+  'tip': 'Подсказка',
   'crazyGamesOnly': 'Эта игра доступна только на',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Дальше',
     'replay': 'Заново',
@@ -22,260 +22,256 @@ export default {
     'home': 'Главная',
     'info': 'Инфо'
   },
-
   'hud': {
-    'stage': 'Этап {n}',
-    'best': 'Рекорд {n}',
-    'boss': 'Босс',
-    'miniboss': 'Мини-босс',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Этапов до следующего бонуса',
-    'fireRate': 'Темп',
-    'incoming': 'Атака!',
-    'dodge': 'Уклонись',
-    'getIn': 'Внутрь',
-    'holdStill': 'Замри',
-    'milestone': '{n} в строю!',
-    'weaponActive': '{name} готов',
-    'weaponsActive': '{a} + {b} готовы',
-    'weaponLocked': '{name} заблокирован — сбито рычагов: {n} из {total}',
-    'weaponGift': '{name} впереди — бесплатно, без рычагов',
-    'weaponFree': 'ДАРОМ'
+    'score': 'Очки',
+    'time': 'Время',
+    'chain': 'Серия Splat: {n}',
+    'level': 'Уровень {n}'
   },
-
-  'weapons': {
-    'rocket': 'Ракетомёт',
-    'gatling': 'Пулемёт Гатлинга'
+  'worlds': {
+    'picnic': 'Плед для пикника',
+    'backyard': 'Заросший двор',
+    'attic': 'Пыльный чердак',
+    'arcade': 'Неоновый зал'
   },
-
-  'tutorial': {
-    'touch': 'Проведите пальцем, чтобы двигать отряд',
-    'desktop': 'Двигайте мышью, чтобы вести отряд'
+  'bugs': {
+    'ant': 'Муравьи',
+    'beetle': 'Жуки',
+    'flea': 'Блохи',
+    'caterpillar': 'Гусеницы',
+    'stinkbug': 'Клопы-вонючки',
+    'centipede': 'Многоножки',
+    'pinatafly': 'Мухи-пиньяты',
+    'moth': 'Мотыльки',
+    'robobug': 'Робожуки'
+  },
+  'bosses': {
+    'queenAnt': 'Королева муравьёв Голиаф',
+    'beetleKing': 'Колючий Король Жуков',
+    'matriarch': 'Матриарх Многоножек',
+    'roachPrime': 'Меха-Таракан Прайм'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Топчи босса!',
+      'summon': 'Разберись с роем!',
+      'pods': 'Раздави яйца!',
+      'charge': 'Удерживай и бей!',
+      'spin': 'Уходи из круга!',
+      'shield': 'Пробей щит ударом!',
+      'beam': 'Уклонись от луча!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Скорость',
+      'radius': 'Площадь удара',
+      'pierce': 'Пробитие брони'
+    },
+    'sneaker': {
+      'name': 'Классический кед',
+      'perk': 'Сбалансированный и быстро готов снова.',
+      'trade': 'Ни в чём особо не силён.'
+    },
+    'steelBoot': {
+      'name': 'Ботинок со стальным носком',
+      'perk': 'Шипы тебе не страшны. Удары оглушают всё вокруг.',
+      'trade': 'Тяжёлый и медленно поднимается.'
+    },
+    'bunnySlipper': {
+      'name': 'Тапок-зайчик',
+      'perk': 'Бесшумный шаг — прыгуны тебя не заметят.',
+      'trade': 'Не пробивает панцирь вообще.'
+    },
+    'rollerSkate': {
+      'name': 'Ролик',
+      'perk': 'Наступи и тяни — распашет целую линию.',
+      'trade': 'Очень узкая площадь удара.'
+    },
+    'cleatBoot': {
+      'name': 'Бутса с шипами',
+      'perk': 'Шипы протыкают панцири и железы.',
+      'trade': 'Самая маленькая площадь в шкафчике.'
+    },
+    'electricSock': {
+      'name': 'Электроносок',
+      'perk': 'Каждый удар бьёт молнией ещё по трём насекомым.',
+      'trade': 'Молнии добивают только слабых.'
+    }
+  },
+  'locker': {
+    'title': 'Шкафчик',
+    'buy': 'Купить {n}',
+    'wear': 'Надеть',
+    'worn': 'Надето',
+    'needStars': 'Ещё {n} звёзд',
+    'needCoins': 'Ещё {n} монет'
+  },
+  'fever': {
+    'filling': 'Splat-лихорадка: {n}%',
+    'ready': 'Splat-лихорадка готова — нажми',
+    'running': 'Splat-лихорадка идёт'
+  },
+  'objectives': {
+    'clear': 'Пройди уровень',
+    'combo': 'Собери серию ×{n}',
+    'noSpike': 'Не получи урон от шипов',
+    'time': 'Закончи, когда осталось {n}с',
+    'accuracy': 'Попади {n}% ударов',
+    'fever': 'Запусти Splat-лихорадку {n}×',
+    'kind': 'Раздави {n} {bug}',
+    'feverKills': 'Раздави {n} за одну лихорадку',
+    'noMiss': 'Промахнись не больше {n} раз',
+    'score': 'Набери {n} очков'
   },
   'hints': {
-    'move': { 'touch': 'Нажмите, чтобы двигаться', 'desktop': 'Кликните, чтобы двигаться' },
-    'gate': { 'touch': 'Стреляйте в ворота: +1 каждые полсекунды', 'desktop': 'Стреляйте в ворота: +1 каждые полсекунды' },
-    'trap': { 'touch': 'Красные ворота УМЕНЬШАЮТ отряд — бегите в другие!', 'desktop': 'Красные ворота УМЕНЬШАЮТ отряд — бегите в другие!' },
-    'divider': { 'touch': 'Никогда не задевайте столб между воротами', 'desktop': 'Никогда не задевайте столб между воротами' },
-    'crate': { 'touch': 'Зелёные ящики: все бьют сильнее', 'desktop': 'Зелёные ящики: все бьют сильнее' },
-    'rate': { 'touch': 'Синие ящики: все стреляют быстрее', 'desktop': 'Синие ящики: все стреляют быстрее' },
-    'boss': { 'touch': 'Не стойте в красном круге!', 'desktop': 'Не стойте в красном круге!' },
-    'lever': { 'touch': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием', 'desktop': 'Сбей ОБА рычага по краям дороги — они откроют ящик с оружием' },
-    'guard': { 'touch': 'Щит поднят — выстрелы пока не пробивают', 'desktop': 'Щит поднят — выстрелы пока не пробивают' },
-    'cage': { 'touch': 'Стреляй по клеткам — пленные вступят в отряд', 'desktop': 'Стреляй по клеткам — пленные вступят в отряд' },
-    'shieldBox': { 'touch': 'Ящик щита — ждёт и блокирует один сильный удар', 'desktop': 'Ящик щита — ждёт и блокирует один сильный удар' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} выживших обменяно',
-    'unlocked': 'Открыто!',
-
-    'guardian': "Ангел-хранитель спас тебя!",
-
-    'guardianSub': "Вернулись {n} выживших",
-
-    'next': "Далее: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Выбери оружие",
-    'nextStage': "следующий уровень",
-    'stagesAway': "через {n} уровня"
-  },
-  'weaponPick': {
-    'title': "Выбери своё оружие",
-    'subtitle': "Твоё на уровень {n}. На дороге ждёт ещё.",
-    'take': "Взять",
-    'rocket': {
-      'a': "Самонаводящийся залп",
-      'b': "Урон от взрыва"
+    'move': {
+      'touch': 'Нажми, чтобы двигаться',
+      'desktop': 'Кликни, чтобы двигаться'
     },
-    'gatling': {
-      'a': "Вдвое выше скорострельность",
-      'b': "Быстрее качает ворота"
+    'slam': {
+      'touch': 'Удерживай и отпусти — мощный удар',
+      'desktop': 'Удерживай кнопку — мощный удар'
+    },
+    'beetle': {
+      'touch': 'У жуков панцирь — удерживай и бей',
+      'desktop': 'У жуков панцирь — удерживай и бей'
+    },
+    'flea': {
+      'touch': 'Блохи прыгают — бей туда, где приземлятся',
+      'desktop': 'Блохи прыгают — бей туда, где приземлятся'
+    },
+    'spike': {
+      'touch': 'Не топчи колючих!',
+      'desktop': 'Не топчи колючих!'
+    },
+    'stink': {
+      'touch': 'Клопы-вонючки размывают экран',
+      'desktop': 'Клопы-вонючки размывают экран'
+    },
+    'fever': {
+      'touch': 'Колба полна — нажми на пламя!',
+      'desktop': 'Колба полна — кликни на пламя!'
+    },
+    'honey': {
+      'touch': 'Мёд держит прыгунов на месте',
+      'desktop': 'Мёд держит прыгунов на месте'
+    },
+    'web': {
+      'touch': 'Паутина замедляет ногу',
+      'desktop': 'Паутина замедляет ногу'
+    },
+    'belt': {
+      'touch': 'Лента уносит насекомых',
+      'desktop': 'Лента уносит насекомых'
+    },
+    'sweeper': {
+      'touch': 'Щётка давит насекомых бесплатно',
+      'desktop': 'Щётка давит насекомых бесплатно'
+    },
+    'boss': {
+      'touch': 'Удерживай и бей, когда босс замахнётся',
+      'desktop': 'Удерживай и бей, когда босс замахнётся'
+    },
+    'pods': {
+      'touch': 'Раздави яйца, пока они не вылупились!',
+      'desktop': 'Раздави яйца, пока они не вылупились!'
     }
-  },
-  'bossReward': {
-    'title': "Босс повержен!",
-    'subtitle': "Подарок на уровень {n}. Беги дальше!"
   },
   'result': {
-    'stageClear': 'Этап пройден!',
-    'wipedOut': 'Отряд уничтожен',
-    'reachedStage': 'Этап {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n} %',
-    'bestReach': 'Рекорд {n} %',
-    'newReach': 'Твой рекорд!',
+    'cleared': 'Уровень пройден!',
+    'timeUp': 'Время вышло!',
+    'upNext': 'Далее: {n}',
+    'retryLevel': 'Ещё раз?',
+    'campaignDone': 'Все уровни пройдены!',
     'newRecord': 'Новый рекорд!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Босс повержен!',
-    'wasted': 'Конец',
-    'cause': {
-      'foe': 'Смяли монстры',
-      'elite': 'Минибосс сломал вас',
-      'barricade': 'Влетели в баррикады',
-      'crate': 'Влетели в ящики',
-      'divider': 'Задели разделители',
-      'trap': 'Попались в ловушки',
-      'slam': 'Босс вас раздавил'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Рубеж!',
-    'rallied': 'Второе дыхание',
-    'peakSquad': 'Макс. отряд',
-    'kills': 'Убийства',
-    'tripleCoins': '×3',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Монеты утроены!',
-    'nextStage': 'Следующий этап',
+    'nextLevel': 'Следующий уровень',
     'tryAgain': 'Ещё раз',
-    'upgrade': 'Улучшить',
-    'upgradeHint': 'Улучши отряд!',
+    'squishes': 'Раздавлено насекомых',
+    'starsEarned': '{n} из 3 звёзд',
     'rankOf': 'из {n}',
-    'upNext': 'Далее: уровень {n}'
+    'worldUnlocked': '{n} открыт!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Поделиться забегом',
-    'text': 'Я дошёл до уровня {n} в {game}. Сможешь дальше?'
-  },
-
   'leaderboard': {
     'title': 'Таблица лидеров',
-    'rank': '#',
+    'rank': 'Место',
     'player': 'Игрок',
-    'stage': 'Этап',
-    'squad': 'Отряд',
-    'empty': 'Пока никого. Будьте первым!',
-    'failed': 'Таблица лидеров недоступна.',
-    'loading': 'Загрузка…',
-    'you': 'Вы',
-    'yourRank': 'Вы на #{n}',
-    'of': 'из {n} игроков'
+    'score': 'Очки',
+    'level': 'Уровень',
+    'you': 'Ты',
+    'yourRank': 'Ты #{n} из {total}',
+    'of': 'из {n}',
+    'unranked': 'Пройди уровень, чтобы попасть в таблицу',
+    'loading': 'Загружаем таблицу…',
+    'empty': 'Пока никто не набрал очков',
+    'failed': 'Не удалось получить таблицу'
   },
-
-  'chest': {
-    'label': 'Сундук с сокровищами',
-    'ready': 'Открыть сундук за {n} монет',
-    'filling': 'Сундук наполняется',
-    'spent': 'Сундук пуст до завтра'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Ежедневная вылазка',
-    'hud': 'Вылазка',
-    'multiplier': '×{n}',
-    'available': 'Ежедневная вылазка — сегодняшняя дорога, тройные монеты',
-    'confirm': 'Начать вылазку',
-    'spent': 'Ежедневная вылазка — новая дорога через {time}',
-    'done': 'Возвращайтесь завтра',
-    'back': 'Вернуться к кампании'
-  },
-
-  'skills': {
-
-    'grenade': 'Граната',
-
-    'shield': 'Щит',
-
-    'locked': 'Закрыто',
-
-    'unlocksAt': 'Откроется на уровне {n}',
-
-    'frost': 'Ледяная нова',
-
-    'decoy': 'Сигнал-приманка',
-
-    'trialLabel': '{name} · бесплатно',
-
-    'trialTag': 'Попробуй бесплатно!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Улучшения',
-    'spotlight': 'Потратить!',
-    'level': 'Ур. {n}',
-    'maxed': 'Макс',
-    'names': {
-      'squad': 'Отряд',
-      'power': 'Урон',
-      'rate': 'Скорострельность',
-      'range': 'Дальность',
-      'scavenge': 'Мародёрство',
-      'grenade': 'Граната',
-      'shield': 'Щит',
-      'rocket': 'Сила ракет',
-      'gatling': 'Сила пулемёта'
-    },
-    'descriptions': {
-      'squad': 'Начинайте этап с большим отрядом.',
-      'power': 'Каждый боец наносит больше урона за выстрел.',
-      'rate': 'Каждый боец стреляет быстрее.',
-      'range': 'Отряд открывает огонь дальше по дороге.',
-      'scavenge': 'Больше монет за каждый забег.',
-      'grenade': 'Бросьте гранату для мощного взрыва урона.',
-      'shield': 'Вдвое снижает урон по отряду на несколько секунд.',
-      'rocket': 'Ракетомёты, открытые на этапе, наносят больше урона.',
-      'gatling': 'Пулемёты, открытые на этапе, наносят больше урона.'
-    }
-  },
-
   'options': {
-    'title': 'Настройки', 'general': 'Общие', 'audio': 'Звук', 'language': 'Язык',
-    'difficulty': 'Сложность', 'soundEffects': 'Звуковые эффекты', 'music': 'Музыка', 'musicTrack': 'Музыкальный трек',
-    'musicTracks': { 'cozy': 'Уютная гармония', 'trance': 'Транс-туннель' },
-    'haptics': 'Вибрация', 'on': 'Вкл.', 'off': 'Выкл.',
+    'title': 'Настройки',
+    'general': 'Основное',
+    'play': 'Игра',
+    'audio': 'Звук',
     'close': 'Сохранить и закрыть',
-    'difficulties': { 'easy': 'Лёгкая', 'medium': 'Средняя', 'hard': 'Сложная' },
+    'language': 'Язык',
+    'difficulty': 'Сложность',
+    'soundEffects': 'Звуковые эффекты',
+    'music': 'Музыка',
+    'musicTrack': 'Трек',
+    'haptics': 'Вибрация',
+    'on': 'Вкл.',
+    'off': 'Выкл.',
+    'difficulties': {
+      'easy': 'Лёгкая',
+      'medium': 'Обычная',
+      'hard': 'Сложная'
+    },
     'difficultyHints': {
-      'easy': 'Слабее враги и тоньше баррикады.',
-      'medium': 'Обычный забег.',
-      'hard': 'Крепче враги и прочнее баррикады.'
-    }
+      'easy': 'Насекомые медленнее, времени больше.',
+      'medium': 'Игра такая, какой задумана.',
+      'hard': 'Насекомые быстрее, поле плотнее.'
+    },
+    'musicTracks': {
+      'trance': 'Жучиный грув',
+      'cozy': 'Уютный пикник'
+    },
+    'juiceStyle': 'Стиль брызг',
+    'juiceStyles': {
+      'ooze': 'Мультяшная слизь',
+      'confetti': 'Конфетти-пиньята',
+      'bubble': 'Мыльные пузыри'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Яркая слизь. Игра не меняется.',
+      'confetti': 'Насекомые взрываются конфетти. Игра не меняется.',
+      'bubble': 'Насекомые лопаются пузырями. Игра не меняется.'
+    },
+    'highVis': 'Большой круг удара',
+    'highVisHint': 'Толще и ярче кольцо там, куда опустится нога.',
+    'singleTap': 'Лёгкий прицел',
+    'singleTapHint': 'Нажми где угодно — нога полетит к ближайшему насекомому.'
   },
-
-  'adsBlocked': {
-    'title': 'Не удалось показать рекламу',
-    'body': 'Мы пытались показать видео, чтобы вы получили награду, но что-то в браузере блокирует рекламу.',
-    'allowPrefix': 'Разрешите рекламу на',
-    'allowSuffix': '(или приостановите блокировщик для этой игры) и попробуйте снова.',
-    'gotIt': 'Понятно'
+  'loading': {
+    'boo': 'Бу!',
+    'laugh': 'Хи-хи!',
+    'tooLong': 'Всё ещё грузится… проверь соединение?'
   },
   'saveStatus': {
-    'restoredTitle': 'Облачное сохранение восстановлено', 'restoredBody': '+{n} бонусных монет за восстановление',
-    'tap': 'нажать', 'pausedTitle': 'Синхронизация приостановлена',
-    'pausedBody': 'Игра офлайн. Ваш прогресс сохраняется здесь.',
-    'retry': 'Повторить', 'dismiss': 'скрыть'
+    'restoredTitle': 'Прогресс восстановлен',
+    'restoredBody': 'Мы вернули твоё сохранение и добавили {n} монет.',
+    'pausedTitle': 'Сохранение приостановлено',
+    'pausedBody': 'Не удаётся связаться с сервисом сохранений. Твой прогресс в безопасности на этом устройстве.',
+    'retry': 'Повторить',
+    'dismiss': 'Закрыть',
+    'tap': 'Нажми, чтобы закрыть'
   },
-  'loading': { 'tooLong': 'Загрузка слишком долгая? Отключите блокировщик рекламы и обновите страницу.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Поверни телефон',
-    'body': 'splatix играется вертикально.'
+  'adsBlocked': {
+    'title': 'Обнаружен блокировщик рекламы',
+    'body': 'Splatix бесплатен благодаря рекламе. Отключи блокировщик и перезагрузи страницу.',
+    'allowPrefix': 'Разреши рекламу на',
+    'allowSuffix': 'и перезагрузи страницу.',
+    'gotIt': 'Понятно'
   },
-  'license': { 'denied': 'Доступ запрещён: приобретите лицензию.' }
+  'license': {
+    'denied': 'Не удалось проверить эту копию'
+  }
 }

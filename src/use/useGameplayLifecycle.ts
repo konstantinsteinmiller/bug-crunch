@@ -37,7 +37,6 @@
 
 import { syncGameplayLifecycle as syncCrazyGameplay } from '@/use/useCrazyGames'
 import { pokiGameplayStart, pokiGameplayStop } from '@/utils/pokiPlugin'
-import { setMonsterBakeAllowed } from '@/game/monsterSprites'
 
 // ─── What counts as live gameplay ───────────────────────────────────────────
 //
@@ -45,15 +44,15 @@ import { setMonsterBakeAllowed } from '@/game/monsterSprites'
 // owns only the reactive wiring that feeds it. Pure and total, so the contract
 // can be asserted without mounting a canvas.
 //
-// The phase union is restated rather than imported from `useSurvivalGame` on
+// The phase union is restated rather than imported from `useSplatixGame` on
 // purpose: that module is the whole simulation, and a platform-contract module
 // must not drag it into anything that imports it.
 export interface GameplayLiveInputs {
-  /** The run's own state machine. Only `run` / `boss` are being PLAYED. */
-  phase: 'run' | 'boss' | 'clear' | 'wipe'
-  /** The result screen is up — the run is over and a decision is pending. */
+  /** The level's own state machine. Only `play` is being PLAYED. */
+  phase: 'intro' | 'play' | 'won' | 'lost'
+  /** The result screen is up — the level is over and a decision is pending. */
   showResult: boolean
-  /** Any blocking modal (shop, options, leaderboard). */
+  /** Any blocking modal (Locker, options, leaderboard). */
   anyModalOpen: boolean
   /** A rewarded / interstitial ad is on screen. */
   adShowing: boolean
@@ -61,7 +60,7 @@ export interface GameplayLiveInputs {
   visibilityHidden: boolean
   /** The portal's SDK asked us to pause (its own overlay, chrome, ad frame). */
   platformPaused: boolean
-  /** The onboarding lightbox holds the road frozen before the first input. */
+  /** The onboarding lesson holds the board before the player's first input. */
   tutorialActive: boolean
 }
 
@@ -81,7 +80,7 @@ export interface GameplayLiveInputs {
  *     is the kind of thing portal moderation rejects.
  */
 export const isGameplayLive = (i: GameplayLiveInputs): boolean =>
-  (i.phase === 'run' || i.phase === 'boss')
+  i.phase === 'play'
   && !i.showResult
   && !i.anyModalOpen
   && !i.adShowing
@@ -106,12 +105,6 @@ let reported = false
 
 export const syncGameplayLifecycle = (live: boolean): void => {
   reported = live
-  // Sprite baking rides the same edge. A monster frame costs up to ~12 ms and
-  // cannot be sliced smaller, so it must never run while the player is playing;
-  // every break this signal reports — the result screen, a modal, an ad, the
-  // loading screen — is a moment nothing is animating and the baker is free.
-  setMonsterBakeAllowed(!live)
-
   syncCrazyGameplay(live)
 
   if (import.meta.env.VITE_APP_POKI === 'true') {

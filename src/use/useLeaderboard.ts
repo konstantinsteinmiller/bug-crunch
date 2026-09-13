@@ -1,13 +1,13 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { getState, setState } from '@/use/useTowerState'
-import { POSTED_NAME_KEY, SUBMITTED_STAGE_KEY } from '@/keys'
+import { getState, setState } from '@/use/useSplatixState'
+import { POSTED_NAME_KEY, SUBMITTED_SCORE_KEY } from '@/keys'
 import { resolveIdentity, type PlayerIdentity } from '@/use/usePlayerIdentity'
 import { boardSnapshot, rankFromDist } from '@/use/leaderboardSnapshot'
 
 /**
  * ─── The global board, client side ──────────────────────────────────────────
  *
- * THE SCORE IS THE HIGHEST STAGE EVER REACHED. Not a run total and not a point
+ * THE SCORE IS THE BEST SINGLE-LEVEL SCORE. Not a career total and not a point
  * count — the game's whole progression is "how deep did you get", so the board
  * is a depth chart and `score` is a small integer that grows by one at a time.
  * `squad` rides along as a second column because two players on stage 40 are
@@ -221,7 +221,7 @@ let boardSource: BoardSource = null
 let fetched = false
 
 /**
- * Deliberately NOT a `ts_`-prefixed key and not a field inside `tower_state`.
+ * Deliberately NOT a `ts_`-prefixed key and not a field inside `splatix_state`.
  *
  * Both of those round-trip to the platform's cloud save (see `isPayloadKey`),
  * and this is a ~6 kB cache of PUBLIC data that is identical for every player.
@@ -343,17 +343,20 @@ export const ensureBoard = async (): Promise<void> => {
  * score as posted after a `true`, so a failed write is retried on the next run
  * instead of being silently forgotten.
  */
-export const submitScore = async (score: number, squad: number): Promise<boolean> => {
+export const submitScore = async (score: number, level: number): Promise<boolean> => {
   if (!LIVE) return false
   pending.value = true
   try {
     const { id, name } = await identity()
-    const body: Record<string, unknown> = { id, name, score, squad }
+    // `squad` is the wire field the worker has always used for the SECOND
+    // column. Splatix puts the deepest level in it; the schema is unchanged so a
+    // board deployed for either game keeps working.
+    const body: Record<string, unknown> = { id, name, score, squad: level }
     // Only when this build was given a secret. An unsigned request against a
     // worker with `SCORE_SECRET` set is a 401; a signed one against a worker
     // without it is simply ignored — so the two sides can be rolled out in
     // either order.
-    if (SECRET.length > 0) body.sig = await sign(`${id}:${score}:${squad}`)
+    if (SECRET.length > 0) body.sig = await sign(`${id}:${score}:${level}`)
 
     const res = await withTimeout(`${ENDPOINT}/score`, {
       method: 'POST',
@@ -392,8 +395,8 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
 /**
  * A run posts at most this often, however many records it sets.
  *
- * `reportRun` fires on every cleared stage, and a good run beats its own best
- * on nearly all of them — a climb to stage 42 was up to forty-two POSTs, each
+ * `reportRun` fires on every finished level, and a good session beats its own
+ * best on nearly all of them — a climb to level 42 was up to forty-two POSTs, each
  * one a write and a rate-limit check on a free tier. Since every post carries
  * the CURRENT best rather than a delta, skipping one loses nothing: the next
  * one carries the higher number, so the throttle coalesces rather than drops.
@@ -403,7 +406,7 @@ export const submitScore = async (score: number, squad: number): Promise<boolean
  */
 const WRITE_MIN_GAP_MS = 180_000
 /** When the last write was ATTEMPTED — success or not. A backend that is
- *  refusing must not be asked again on the next stage clear. */
+ *  refusing must not be asked again on the next level clear. */
 let lastWriteAt = 0
 
 /**
@@ -421,11 +424,11 @@ let lastWriteAt = 0
  *   • NEITHER → no write at all, and at most one read for the whole session
  *     (`ensureBoard` no-ops once the board is in hand).
  *
- * A player grinding stage 30 for an hour therefore costs the backend one GET,
+ * A player grinding level 30 for an hour therefore costs the backend one GET,
  * served from the edge cache.
  */
 export const reportRun = async (
-  bestStage: number, bestSquad: number, o: { force?: boolean } = {}
+  bestScore: number, bestLevel: number, o: { force?: boolean } = {}
 ): Promise<void> => {
   // A baked build has nothing to report TO. The rank it shows comes from the
   // snapshot, which no run can change, so this is the one entry point that stays
@@ -434,9 +437,9 @@ export const reportRun = async (
   try {
     // Both numbers come off the save blob, which a cloud restore can hand back
     // anything for, and the worker rejects a non-integer outright.
-    const stage = Math.max(0, Math.trunc(Number(bestStage) || 0))
-    const squad = Math.max(0, Math.trunc(Number(bestSquad) || 0))
-    const posted = Math.max(0, Math.trunc(Number(getState(SUBMITTED_STAGE_KEY, 0)) || 0))
+    const points = Math.max(0, Math.trunc(Number(bestScore) || 0))
+    const level = Math.max(0, Math.trunc(Number(bestLevel) || 0))
+    const posted = Math.max(0, Math.trunc(Number(getState(SUBMITTED_SCORE_KEY, 0)) || 0))
     const { name } = await identity()
 
     // The first record of a session goes straight out; the rest wait their turn
@@ -444,15 +447,15 @@ export const reportRun = async (
     const due = o.force === true || lastWriteAt === 0 ||
       Date.now() - lastWriteAt >= WRITE_MIN_GAP_MS
 
-    if (stage > posted && due) {
+    if (points > posted && due) {
       lastWriteAt = Date.now()
-      if (await submitScore(stage, squad)) {
-        setState(SUBMITTED_STAGE_KEY, stage)
+      if (await submitScore(points, level)) {
+        setState(SUBMITTED_SCORE_KEY, points)
         setState(POSTED_NAME_KEY, name)
       }
     } else if (posted > 0 && due && getState<string>(POSTED_NAME_KEY, '') !== name) {
       lastWriteAt = Date.now()
-      if (await submitScore(posted, squad)) setState(POSTED_NAME_KEY, name)
+      if (await submitScore(posted, level)) setState(POSTED_NAME_KEY, name)
     }
 
     // HOWEVER the run was reported, end with a board to rank against.

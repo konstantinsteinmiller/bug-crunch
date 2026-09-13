@@ -3,19 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // ─── flushSaveNow — immediate checkpoint flush (the CG "stage lost on reload"
 // regression) ──────────────────────────────────────────────────────────────
 //
-// On the CrazyGames cloud-only build, a cleared stage writes the new best stage into
-// `tower_state`, but the push to `sdk.data` only fires after the persist (~200ms)
+// On the CrazyGames cloud-only build, a cleared level writes the new best level into
+// `splatix_state`, but the push to `sdk.data` only fires after the persist (~200ms)
 // + strategy-flush (~250ms) debounces, and the async cloud write then takes
-// time to land. A player who clears a stage and reloads a moment later beat that
-// pipeline → the reload restored the OLD stage.
+// time to land. A player who clears a level and reloads a moment later beat that
+// pipeline, and the reload restored the OLD level.
 //
 // `flushSaveNow()` (called at every hard checkpoint) forces the whole pipeline to
-// drain synchronously-as-possible: write `tower_state` now → SaveManager proxy →
+// drain synchronously-as-possible: write `splatix_state` now → SaveManager proxy →
 // strategy dirty → `manager.flush()` → backend. This test proves a checkpoint write
 // reaches the (fake) backend right after `flushSaveNow()` WITHOUT advancing any
 // timers — i.e. it does not wait for either debounce.
 
-const STATE_KEY = 'tower_state'
+const STATE_KEY = 'splatix_state'
 
 const makeFakeData = (seed: Record<string, string> = {}) => {
   const store = new Map<string, string>(Object.entries(seed))
@@ -47,39 +47,39 @@ beforeEach(() => {
 })
 
 describe('flushSaveNow — immediate flush on a hard checkpoint', () => {
-  it('pushes a pending stage write to the backend without waiting for the debounce', async () => {
+  it('pushes a pending level write to the backend without waiting for the debounce', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
 
-    const { setState } = await import('@/use/useTowerState')
+    const { setState } = await import('@/use/useSplatixState')
     const { flushSaveNow } = await import('@/use/useSaveStatus')
 
-    // A cleared stage writes the new best into tower_state (still sitting on the
+    // A cleared level writes the new best into splatix_state (still sitting on the
     // debounce timers — nothing has reached the cloud yet).
-    setState('ts_best_stage', 2)
+    setState('sx_best_level', 2)
     expect(data.store.get(STATE_KEY)).toBeUndefined()
 
     // The checkpoint flush drains everything immediately — no fake timers.
     await flushSaveNow()
 
     const cloudBlob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(cloudBlob.ts_best_stage).toBe(2)
+    expect(cloudBlob.sx_best_level).toBe(2)
   })
 
   it('also carries coexisting progress (coins) written in the same checkpoint', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
 
-    const { setState } = await import('@/use/useTowerState')
+    const { setState } = await import('@/use/useSplatixState')
     const { flushSaveNow } = await import('@/use/useSaveStatus')
 
-    setState('ts_coins', 250)
-    setState('ts_best_stage', 3)
+    setState('sx_coins', 250)
+    setState('sx_best_level', 3)
     await flushSaveNow()
 
     const cloudBlob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(cloudBlob.ts_best_stage).toBe(3)
-    expect(cloudBlob.ts_coins).toBe(250)
+    expect(cloudBlob.sx_best_level).toBe(3)
+    expect(cloudBlob.sx_coins).toBe(250)
   })
 })
 
@@ -90,39 +90,42 @@ describe('flushSaveNow — immediate flush on a hard checkpoint', () => {
 const settle = () => new Promise((r) => setTimeout(r, 0))
 
 describe('discrete progression events flush to the backend immediately', () => {
-  it('buying an upgrade flushes without waiting for the debounce', async () => {
+  it('buying a shoe flushes without waiting for the debounce', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
-    const { applyUpgrade } = await import('@/use/useUpgrades')
-    const { default: useTowerEconomy } = await import('@/use/useTowerEconomy')
-    useTowerEconomy().addCoins(10_000)
+    const progress = await import('@/use/useSplatProgress')
+    const locker = await import('@/use/useLocker')
 
-    expect(applyUpgrade('power')).toBe(true)
+    // Enough coins AND enough stars: the Locker's two gates are independent, and
+    // a purchase test that only funds one of them proves nothing.
+    progress.addCoins(10_000)
+    progress.bankLevel(1, 3, { ...(await import('@/game/stars')).emptyTally(), cleared: true })
+    progress.bankLevel(2, 3, { ...(await import('@/game/stars')).emptyTally(), cleared: true })
+    progress.bankLevel(3, 3, { ...(await import('@/game/stars')).emptyTally(), cleared: true })
+
+    expect(locker.buy('steelBoot')).toBe(true)
     await settle()
 
     const blob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(blob.ts_upgrades?.power).toBe(1)
+    expect(blob.sx_shoes_owned).toContain('steelBoot')
+    expect(blob.sx_shoe).toBe('steelBoot')
   })
 
-  it('finishing a stage flushes the new best stage immediately', async () => {
+  it('finishing a level flushes the new best level immediately', async () => {
     const data = makeFakeData()
     await bootCloudOnly(data)
-    const game = await import('@/use/useSurvivalGame')
+    const progress = await import('@/use/useSplatProgress')
+    const { emptyTally } = await import('@/game/stars')
 
-    // Walk stage 3 to its end: start it, then run the clock until the boss is
-    // dead. Driving the real simulation (rather than poking the state blob)
-    // is the point — it proves the checkpoint fires from the code path a
-    // player actually takes.
-    game.startStage(3)
-    game.debugAddUnits(400)
-    game.debugAddDamage(400)
-    for (let i = 0; i < 4000 && game.phase.value !== 'clear'; i++) game.step(16)
-    expect(game.phase.value).toBe('clear')
+    // Through the real banking path (rather than poking the state blob), so the
+    // test proves the checkpoint fires from the code a player actually takes.
+    progress.setLevel(3)
+    progress.bankLevel(3, 2, { ...emptyTally(), cleared: true, squishes: 20, score: 4000 })
     await settle()
 
     const blob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(blob.ts_best_stage).toBe(3)
-    // And the NEXT stage is banked, so a reload resumes at 4 rather than 3.
-    expect(blob.ts_stage).toBe(4)
+    expect(blob.sx_best_level).toBe(3)
+    // And the NEXT level is banked, so a reload resumes at 4 rather than 3.
+    expect(blob.sx_level).toBe(4)
   })
 })

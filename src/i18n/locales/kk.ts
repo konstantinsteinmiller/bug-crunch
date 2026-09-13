@@ -1,6 +1,9 @@
+// KK bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
-  'cancel': 'Болдырмау',
+  'gameName': 'Splatix',
+  'cancel': 'Бас тарту',
   'close': 'Жабу',
   'ok': 'Жарайды',
   'continue': 'Жалғастыру',
@@ -9,273 +12,266 @@ export default {
   'rewards': 'СЫЙЛЫҚТАР',
   'tip': 'Кеңес',
   'crazyGamesOnly': 'Бұл ойын тек мына жерде қолжетімді:',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Келесі',
     'replay': 'Қайта',
     'back': 'Артқа',
     'play': 'Ойнау',
-    'pause': 'Кідіріс',
+    'pause': 'Кідірту',
     'menu': 'Мәзір',
     'home': 'Басты бет',
     'info': 'Ақпарат'
   },
-
   'hud': {
-    'stage': '{n}-кезең',
-    'best': 'Рекорд {n}',
-    'boss': 'Бос',
-    'miniboss': 'Мини-бос',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Келесі бонусқа дейінгі кезеңдер',
-    'fireRate': 'Қарқын',
-    'incoming': 'Шабуыл келеді!',
-    'dodge': 'Жалтар',
-    'getIn': 'Ішіне',
-    'holdStill': 'Қимылдама',
-    'milestone': '{n} жауынгер!',
-    'weaponActive': '{name} дайын',
-    'weaponsActive': '{a} + {b} дайын',
-    'weaponLocked': '{name} құлыпталған — {total} тұтқаның {n} атылды',
-    'weaponGift': '{name} алда — тегін, иінтіректерсіз',
-    'weaponFree': 'ТЕГІН'
+    'score': 'Ұпай',
+    'time': 'Уақыт',
+    'chain': 'Splat тізбегі: {n}',
+    'level': 'Деңгей {n}'
   },
-
-  'weapons': {
-    'rocket': 'Зымыран атқыш',
-    'gatling': 'Гатлинг пулемёті'
+  'worlds': {
+    'picnic': 'Пикник көрпесі',
+    'backyard': 'Қалың өскен аула',
+    'attic': 'Шаңды шатыр асты',
+    'arcade': 'Неон аркада'
   },
-
-  'tutorial': {
-    'touch': 'Жасағыңды жылжыту үшін сипаңыз',
-    'desktop': 'Жасағыңды бағыттау үшін тінтуірді жылжытыңыз'
+  'bugs': {
+    'ant': 'Құмырсқалар',
+    'beetle': 'Қоңыздар',
+    'flea': 'Бүргелер',
+    'caterpillar': 'Жұлдызқұрттар',
+    'stinkbug': 'Сасық қандалалар',
+    'centipede': 'Көпаяқтар',
+    'pinatafly': 'Пиньята шыбындары',
+    'moth': 'Көбелектер',
+    'robobug': 'Робо-жәндіктер'
+  },
+  'bosses': {
+    'queenAnt': 'Голиаф Құмырсқа Ханшайымы',
+    'beetleKing': 'Тікенді Қоңыз Патшасы',
+    'matriarch': 'Көпаяқ Аналығы',
+    'roachPrime': 'Меха-Таракан Прайм'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Бастықты таптап таста!',
+      'summon': 'Үйірді тазала!',
+      'pods': 'Жұмыртқаларды жаныш!',
+      'charge': 'Басып тұрып соқ!',
+      'spin': 'Шеңберден шық!',
+      'shield': 'Қалқанды соғып сындыр!',
+      'beam': 'Сәуледен қашық!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Жылдамдық',
+      'radius': 'Басу аумағы',
+      'pierce': 'Сауыт тесу'
+    },
+    'sneaker': {
+      'name': 'Классикалық кроссовка',
+      'perk': 'Теңгерімді әрі тез дайын болады.',
+      'trade': 'Ештеңеде ерекше емес.'
+    },
+    'steelBoot': {
+      'name': 'Болат тұмсықты бәтеңке',
+      'perk': 'Тікендер зиян тигізбейді. Соққы маңайдағыны есеңгіретеді.',
+      'trade': 'Ауыр әрі баяу көтеріледі.'
+    },
+    'bunnySlipper': {
+      'name': 'Қоян тәпішке',
+      'perk': 'Үнсіз қадам — секіргіш жәндіктер байқамайды.',
+      'trade': 'Ешқандай қабықты сындыра алмайды.'
+    },
+    'rollerSkate': {
+      'name': 'Ролик',
+      'perk': 'Басып, сүйретіп бүкіл бір сызықты тазарт.',
+      'trade': 'Басу аумағы өте тар.'
+    },
+    'cleatBoot': {
+      'name': 'Шегелі бәтеңке',
+      'perk': 'Шегелер қабықты да, иіс безін де тесіп өтеді.',
+      'trade': 'Шкафтағы ең кіші аумақ.'
+    },
+    'electricSock': {
+      'name': 'Электр шұлық',
+      'perk': 'Әр басу тағы үш жәндікке найзағай жібереді.',
+      'trade': 'Найзағай тек әлсіздерін бітіреді.'
+    }
+  },
+  'locker': {
+    'title': 'Шкаф',
+    'buy': '{n} сатып алу',
+    'wear': 'Кию',
+    'worn': 'Киілген',
+    'needStars': 'Тағы {n} жұлдыз',
+    'needCoins': 'Тағы {n} монета'
+  },
+  'fever': {
+    'filling': 'Splat қызуы: {n}%',
+    'ready': 'Splat қызуы дайын — түртіңіз',
+    'running': 'Splat қызуы жүруде'
+  },
+  'objectives': {
+    'clear': 'Деңгейді бітір',
+    'combo': '×{n} тізбегіне жет',
+    'noSpike': 'Тікеннен зақым алма',
+    'time': '{n} с қалғанда бітір',
+    'accuracy': 'Басудың {n}% дәл тисін',
+    'fever': 'Splat қызуын {n} рет қос',
+    'kind': '{n} {bug} жаныш',
+    'feverKills': 'Бір қызуда {n} жаныш',
+    'noMiss': 'Ең көбі {n} рет жаңыл',
+    'score': '{n} ұпай жина'
   },
   'hints': {
-    'move': { 'touch': 'Жылжу үшін түртіңіз', 'desktop': 'Жылжу үшін басыңыз' },
-    'gate': { 'touch': 'Қақпаға ата беріңіз: әр жарты секунд сайын +1', 'desktop': 'Қақпаға ата беріңіз: әр жарты секунд сайын +1' },
-    'trap': { 'touch': 'Қызыл қақпа жасақты АЗАЙТАДЫ — екіншісін таңдаңыз!', 'desktop': 'Қызыл қақпа жасақты АЗАЙТАДЫ — екіншісін таңдаңыз!' },
-    'divider': { 'touch': 'Қақпалар арасындағы бағанаға тиюге болмайды', 'desktop': 'Қақпалар арасындағы бағанаға тиюге болмайды' },
-    'crate': { 'touch': 'Жасыл жәшік: бәрі күштірек соғады', 'desktop': 'Жасыл жәшік: бәрі күштірек соғады' },
-    'rate': { 'touch': 'Көк жәшік: бәрі жылдамырақ атады', 'desktop': 'Көк жәшік: бәрі жылдамырақ атады' },
-    'boss': { 'touch': 'Қызыл шеңберден аулақ болыңыз!', 'desktop': 'Қызыл шеңберден аулақ болыңыз!' },
-    'lever': { 'touch': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады', 'desktop': 'Жол шетіндегі ЕКІ тұтқаны да ат — олар қару жәшігін ашады' },
-    'guard': { 'touch': 'Қалқан қосулы — оғың әзірге өтпейді', 'desktop': 'Қалқан қосулы — оғың әзірге өтпейді' },
-    'cage': { 'touch': 'Торларды ат — тұтқындар отрядыңа қосылады', 'desktop': 'Торларды ат — тұтқындар отрядыңа қосылады' },
-    'shieldBox': { 'touch': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады', 'desktop': 'Қалқан жәшігі — күтіп тұрып, бір ауыр соққыны тоқтатады' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} аман қалған айырбасталды',
-    'unlocked': 'Ашылды!',
-
-    'guardian': "Күзетші періште сені құтқарды!",
-
-    'guardianSub': "{n} тірі қалған оралды",
-
-    'next': "Келесі: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Қару таңдаңыз",
-    'nextStage': "келесі деңгей",
-    'stagesAway': "{n} деңгейден кейін"
-  },
-  'weaponPick': {
-    'title': "Қаруыңызды таңдаңыз",
-    'subtitle': "{n}-деңгейге сіздікі. Жолда тағы бар.",
-    'take': "Алу",
-    'rocket': {
-      'a': "Бағыттаушы залп",
-      'b': "Жарылыс зақымы"
+    'move': {
+      'touch': 'Жылжу үшін түртіңіз',
+      'desktop': 'Жылжу үшін басыңыз'
     },
-    'gatling': {
-      'a': "Екі есе жылдам ату",
-      'b': "Қақпаларды тезірек толтырады"
+    'slam': {
+      'touch': 'Басып тұрып жіберсеңіз күшті соққы',
+      'desktop': 'Түймені басып тұрсаңыз күшті соққы'
+    },
+    'beetle': {
+      'touch': 'Қоңыздың қабығы бар — басып тұрып соғыңыз',
+      'desktop': 'Қоңыздың қабығы бар — басып тұрып соғыңыз'
+    },
+    'flea': {
+      'touch': 'Бүргелер секіреді — қонған жерін басыңыз',
+      'desktop': 'Бүргелер секіреді — қонған жерін басыңыз'
+    },
+    'spike': {
+      'touch': 'Тікенділерді баспаңыз!',
+      'desktop': 'Тікенділерді баспаңыз!'
+    },
+    'stink': {
+      'touch': 'Сасық қандала жанышталғанда экранды бұлдыратады',
+      'desktop': 'Сасық қандала жанышталғанда экранды бұлдыратады'
+    },
+    'fever': {
+      'touch': 'Құты толды — жалынды түртіңіз!',
+      'desktop': 'Құты толды — жалынды басыңыз!'
+    },
+    'honey': {
+      'touch': 'Бал секіргіштерді ұстап қалады',
+      'desktop': 'Бал секіргіштерді ұстап қалады'
+    },
+    'web': {
+      'touch': 'Өрмек аяғыңызды баяулатады',
+      'desktop': 'Өрмек аяғыңызды баяулатады'
+    },
+    'belt': {
+      'touch': 'Таспа жәндіктерді алып кетеді',
+      'desktop': 'Таспа жәндіктерді алып кетеді'
+    },
+    'sweeper': {
+      'touch': 'Сыпырғыш жәндіктерді тегін жаныштайды',
+      'desktop': 'Сыпырғыш жәндіктерді тегін жаныштайды'
+    },
+    'boss': {
+      'touch': 'Бастық дайындалғанда басып тұрып соғыңыз',
+      'desktop': 'Бастық дайындалғанда басып тұрып соғыңыз'
+    },
+    'pods': {
+      'touch': 'Жұмыртқалар жарылмай тұрып жаныш!',
+      'desktop': 'Жұмыртқалар жарылмай тұрып жаныш!'
     }
-  },
-  'bossReward': {
-    'title': "Бос жеңілді!",
-    'subtitle': "{n}-деңгейге сыйлық. Жүгіре бер!"
   },
   'result': {
-    'stageClear': 'Кезең өтті!',
-    'wipedOut': 'Жасақ жойылды',
-    'reachedStage': '{n}-кезең',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n} %',
-    'bestReach': 'Рекорд {n} %',
-    'newReach': 'Ең алысы!',
+    'cleared': 'Деңгей өтті!',
+    'timeUp': 'Уақыт бітті!',
+    'upNext': 'Келесі: {n}',
+    'retryLevel': 'Тағы бір рет пе?',
+    'campaignDone': 'Барлық деңгей өтілді!',
     'newRecord': 'Жаңа рекорд!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Босс құлады!',
-    'wasted': 'Құрыды',
-    'cause': {
-      'foe': 'Құбыжықтар басып қалды',
-      'elite': 'Шағын босс күйретті',
-      'barricade': 'Бөгеттерге соғылдың',
-      'crate': 'Жәшіктерге соғылдың',
-      'divider': 'Бөлгіштерге ілікті',
-      'trap': 'Қақпанға түсті',
-      'slam': 'Босс жаныштап тастады'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Белес!',
-    'rallied': 'Екінші тыныс',
-    'peakSquad': 'Ең үлкен жасақ',
-    'kills': 'Жойылған',
-    'tripleCoins': '×3',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Монеталар үш еселенді!',
-    'nextStage': 'Келесі кезең',
+    'nextLevel': 'Келесі деңгей',
     'tryAgain': 'Қайта көру',
-    'upgrade': 'Жақсарту',
-    'upgradeHint': 'Жасағыңды жақсарт!',
-    'rankOf': '{n} ішінде',
-    'upNext': 'Келесі: {n}-деңгей'
+    'squishes': 'Жанышталған жәндіктер',
+    'starsEarned': '3-тен {n} жұлдыз',
+    'rankOf': '{n} ішінен',
+    'worldUnlocked': '{n} ашылды!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Ойынды бөлісу',
-    'text': '{game} ойынында {n}-деңгейге жеттім. Одан әрі бара аласың ба?'
-  },
-
   'leaderboard': {
-    'title': 'Көшбасшылар',
-    'rank': '#',
+    'title': 'Көшбасшылар тақтасы',
+    'rank': 'Орын',
     'player': 'Ойыншы',
-    'stage': 'Кезең',
-    'squad': 'Жасақ',
-    'empty': 'Әзірге бос. Бірінші болыңыз!',
-    'failed': 'Көшбасшылар тізімі қолжетімсіз.',
-    'loading': 'Жүктелуде…',
+    'score': 'Ұпай',
+    'level': 'Деңгей',
     'you': 'Сіз',
-    'yourRank': 'Сіз #{n} орындасыз',
-    'of': '{n} ойыншыдан'
+    'yourRank': 'Сіз {total} ішінен #{n} орындасыз',
+    'of': '{n} ішінен',
+    'unranked': 'Тақтаға түсу үшін бір деңгей бітіріңіз',
+    'loading': 'Тақта жүктелуде…',
+    'empty': 'Әлі ешкім ұпай жинаған жоқ',
+    'failed': 'Көшбасшылар тақтасына қосыла алмадық'
   },
-
-  'chest': {
-    'label': 'Қазына сандығы',
-    'ready': 'Сандықты {n} монетаға ашу',
-    'filling': 'Қазына сандығы толып жатыр',
-    'spent': 'Қазына сандығы ертеңге дейін бос'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Күнделікті экспедиция',
-    'hud': 'Экспедиция',
-    'multiplier': '×{n}',
-    'available': 'Күнделікті экспедиция — бүгінгі жол, үш есе тиын',
-    'confirm': 'Экспедицияны бастау',
-    'spent': 'Күнделікті экспедиция — жаңа жол {time} ішінде',
-    'done': 'Ертең келіңіз',
-    'back': 'Науқанға оралу'
-  },
-
-  'skills': {
-
-    'grenade': 'Граната',
-
-    'shield': 'Қалқан',
-
-    'locked': 'Жабық',
-
-    'unlocksAt': '{n}-деңгейде ашылады',
-
-    'frost': 'Мұзды нова',
-
-    'decoy': 'Алдамшы алау',
-
-    'trialLabel': '{name} · тегін',
-
-    'trialTag': 'Тегін сынап көр!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Жақсартулар',
-    'spotlight': 'Жұмсаңыз!',
-    'level': 'Дең. {n}',
-    'maxed': 'Макс',
-    'names': {
-      'squad': 'Жасақ',
-      'power': 'Оқ күші',
-      'rate': 'Ату жылдамдығы',
-      'range': 'Қашықтық',
-      'scavenge': 'Жинау',
-      'grenade': 'Граната',
-      'shield': 'Қалқан',
-      'rocket': 'Зымыран күші',
-      'gatling': 'Гатлинг күші'
-    },
-    'descriptions': {
-      'squad': 'Әр кезеңді көбірек аман қалғанмен бастаңыз.',
-      'power': 'Әр аман қалған атқан сайын көбірек зақым келтіреді.',
-      'rate': 'Әр аман қалған жылдамырақ атады.',
-      'range': 'Жасағың жолда алысырақтан оқ ашады.',
-      'scavenge': 'Әр ойыннан көбірек монета алыңыз.',
-      'grenade': 'Ауыр зақым үшін граната лақтыр.',
-      'shield': 'Бірнеше секунд жасаққа келетін зақымды екі есе азайтады.',
-      'rocket': 'Кезеңде ашылған зымыран атқыштар көбірек зақым келтіреді.',
-      'gatling': 'Кезеңде ашылған гатлингтер көбірек зақым келтіреді.'
-    }
-  },
-
   'options': {
-    'title': 'Параметрлер', 'general': 'Жалпы', 'audio': 'Дыбыс', 'language': 'Тіл',
-    'difficulty': 'Қиындық', 'soundEffects': 'Дыбыс әсерлері', 'music': 'Музыка', 'musicTrack': 'Музыка тректі',
-    'musicTracks': { 'cozy': 'Жайлы үндестік', 'trance': 'Транс туннелі' },
-    'haptics': 'Діріл', 'on': 'Қосулы', 'off': 'Өшірулі',
+    'title': 'Параметрлер',
+    'general': 'Жалпы',
+    'play': 'Ойын',
+    'audio': 'Дыбыс',
     'close': 'Сақтап жабу',
-    'difficulties': { 'easy': 'Оңай', 'medium': 'Орташа', 'hard': 'Қиын' },
+    'language': 'Тіл',
+    'difficulty': 'Қиындық',
+    'soundEffects': 'Дыбыс әсерлері',
+    'music': 'Музыка',
+    'musicTrack': 'Музыка трегі',
+    'haptics': 'Дірілдеу',
+    'on': 'Қосулы',
+    'off': 'Өшірулі',
+    'difficulties': {
+      'easy': 'Оңай',
+      'medium': 'Қалыпты',
+      'hard': 'Қиын'
+    },
     'difficultyHints': {
-      'easy': 'Әлсіз жаулар және жұқа бөгеттер.',
-      'medium': 'Қалыпты ойын.',
-      'hard': 'Мықты жаулар және ауыр бөгеттер.'
-    }
+      'easy': 'Жәндіктер баяу, уақыт ұзағырақ.',
+      'medium': 'Ойын жобаланғандай.',
+      'hard': 'Жәндіктер жылдам, алаң тығызырақ.'
+    },
+    'musicTracks': {
+      'trance': 'Жәндік ырғағы',
+      'cozy': 'Жайлы пикник'
+    },
+    'juiceStyle': 'Шашырау стилі',
+    'juiceStyles': {
+      'ooze': 'Мультфильм шырыны',
+      'confetti': 'Конфетти пиньята',
+      'bubble': 'Сабын көбігі'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Түрлі-түсті шырын. Ойын өзгермейді.',
+      'confetti': 'Жәндіктер конфеттиге айналады. Ойын өзгермейді.',
+      'bubble': 'Жәндіктер көбікке айналады. Ойын өзгермейді.'
+    },
+    'highVis': 'Үлкен басу шеңбері',
+    'highVisHint': 'Аяқ түсетін жерде қалыңырақ әрі жарқын шеңбер.',
+    'singleTap': 'Жеңіл көздеу',
+    'singleTapHint': 'Кез келген жерді түртіңіз — аяқ ең жақын жәндікке ұшады.'
   },
-
-  'adsBlocked': {
-    'title': 'Жарнаманы көрсету мүмкін болмады',
-    'body': 'Сыйлық алуыңыз үшін бейне көрсетпек едік, бірақ браузеріңіздегі бірдеңе жарнаманы бөгеп тұр.',
-    'allowPrefix': 'Мына жерде жарнамаға рұқсат беріңіз:',
-    'allowSuffix': '(немесе осы ойын үшін жарнама бөгегішін тоқтатыңыз) және қайталап көріңіз.',
-    'gotIt': 'Түсінікті'
+  'loading': {
+    'boo': 'Бу!',
+    'laugh': 'Хи-хи!',
+    'tooLong': 'Әлі жүктелуде… байланысты тексересіз бе?'
   },
   'saveStatus': {
-    'restoredTitle': 'Бұлттық сақтау қалпына келтірілді', 'restoredBody': 'Қалпына келтіру үшін +{n} бонус тиын',
-    'tap': 'түрту', 'pausedTitle': 'Бұлттық синхрондау тоқтатылды',
-    'pausedBody': 'Желіден тыс ойнап жатырсыз. Прогресіңіз осында сақталады.',
-    'retry': 'Қайталау', 'dismiss': 'жасыру'
+    'restoredTitle': 'Прогресс қалпына келтірілді',
+    'restoredBody': 'Сақтауыңызды қайтардық және {n} монета қостық.',
+    'pausedTitle': 'Сақтау кідіртілді',
+    'pausedBody': 'Сақтау қызметіне қосыла алмай тұрмыз. Прогрессіңіз осы құрылғыда сақтаулы.',
+    'retry': 'Қайталау',
+    'dismiss': 'Жабу',
+    'tap': 'Жабу үшін түртіңіз'
   },
-  'loading': { 'tooLong': 'Жүктеу тым ұзаққа созылды ма? Жарнама бөгегішін өшіріп, бетті жаңартыңыз.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Телефонды бұр',
-    'body': 'splatix тік режимде ойналады.'
+  'adsBlocked': {
+    'title': 'Жарнама бөгегіші табылды',
+    'body': 'Splatix жарнаманың арқасында тегін. Бөгегішті өшіріп, бетті қайта жүктеңіз.',
+    'allowPrefix': 'Мына жерде жарнамаға рұқсат беріңіз:',
+    'allowSuffix': 'содан соң бетті қайта жүктеңіз.',
+    'gotIt': 'Түсінікті'
   },
-  'license': { 'denied': 'Кіруге тыйым салынды: лицензия сатып алыңыз.' }
+  'license': {
+    'denied': 'Бұл көшірмені тексеру мүмкін болмады'
+  }
 }

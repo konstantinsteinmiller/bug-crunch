@@ -1,5 +1,8 @@
+// DE bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Abbrechen',
   'close': 'Schließen',
   'ok': 'Ok',
@@ -9,12 +12,9 @@ export default {
   'rewards': 'BELOHNUNGEN',
   'tip': 'Tipp',
   'crazyGamesOnly': 'Dieses Spiel ist nur verfügbar auf',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Weiter',
-    'replay': 'Wiederholen',
+    'replay': 'Nochmal',
     'back': 'Zurück',
     'play': 'Spielen',
     'pause': 'Pause',
@@ -22,260 +22,256 @@ export default {
     'home': 'Start',
     'info': 'Info'
   },
-
   'hud': {
-    'stage': 'Level {n}',
-    'best': 'Rekord {n}',
-    'boss': 'Boss',
-    'miniboss': 'Miniboss',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Level bis zum nächsten Bonus',
-    'fireRate': 'Rate',
-    'incoming': 'Angriff!',
-    'dodge': 'Ausweichen',
-    'getIn': 'Rein da',
-    'holdStill': 'Stillhalten',
-    'milestone': '{n} Mann stark!',
-    'weaponActive': '{name} bereit',
-    'weaponsActive': '{a} + {b} bereit',
-    'weaponLocked': '{name} gesperrt — {n} von {total} Hebeln getroffen',
-    'weaponGift': '{name} voraus — gratis, keine Hebel',
-    'weaponFree': 'GRATIS'
+    'score': 'Punkte',
+    'time': 'Zeit',
+    'chain': 'Platsch-Kette: {n}',
+    'level': 'Level {n}'
   },
-
-  'weapons': {
-    'rocket': 'Raketenwerfer',
-    'gatling': 'Gatling'
+  'worlds': {
+    'picnic': 'Picknickdecke',
+    'backyard': 'Wilder Garten',
+    'attic': 'Staubiger Dachboden',
+    'arcade': 'Neon-Arcade'
   },
-
-  'tutorial': {
-    'touch': 'Wische, um deinen Trupp zu bewegen',
-    'desktop': 'Bewege die Maus, um deinen Trupp zu lenken'
+  'bugs': {
+    'ant': 'Ameisen',
+    'beetle': 'Käfer',
+    'flea': 'Flöhe',
+    'caterpillar': 'Raupen',
+    'stinkbug': 'Stinkwanzen',
+    'centipede': 'Tausendfüßler',
+    'pinatafly': 'Piñata-Fliegen',
+    'moth': 'Motten',
+    'robobug': 'Robo-Käfer'
+  },
+  'bosses': {
+    'queenAnt': 'Goliath-Ameisenkönigin',
+    'beetleKing': 'Dornrücken-Käferkönig',
+    'matriarch': 'Tausendfüßler-Matriarchin',
+    'roachPrime': 'Mecha-Schabe Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Stampf den Boss!',
+      'summon': 'Räum den Schwarm weg!',
+      'pods': 'Zermatsch die Eier!',
+      'charge': 'Halten und zuschlagen!',
+      'spin': 'Raus aus dem Ring!',
+      'shield': 'Schlag den Schild ein!',
+      'beam': 'Weich dem Strahl aus!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Tempo',
+      'radius': 'Trittfläche',
+      'pierce': 'Panzerbruch'
+    },
+    'sneaker': {
+      'name': 'Klassischer Sneaker',
+      'perk': 'Ausgewogen und schnell wieder bereit.',
+      'trade': 'In nichts besonders gut.'
+    },
+    'steelBoot': {
+      'name': 'Stahlkappenstiefel',
+      'perk': 'Stacheln tun dir nichts. Schläge betäuben alles ringsum.',
+      'trade': 'Schwer und langsam zu heben.'
+    },
+    'bunnySlipper': {
+      'name': 'Hasenpantoffel',
+      'perk': 'Lautlos — springende Käfer merken dich nicht.',
+      'trade': 'Knackt überhaupt keinen Panzer.'
+    },
+    'rollerSkate': {
+      'name': 'Rollschuh',
+      'perk': 'Auftreten und weiterziehen pflügt eine ganze Linie.',
+      'trade': 'Sehr schmale Trittfläche.'
+    },
+    'cleatBoot': {
+      'name': 'Stollenschuh',
+      'perk': 'Stollen stechen durch Panzer und Stinkdrüsen.',
+      'trade': 'Die kleinste Trittfläche im Spind.'
+    },
+    'electricSock': {
+      'name': 'Elektrosocke',
+      'perk': 'Jeder Tritt schickt Blitze zu drei weiteren Käfern.',
+      'trade': 'Die Blitze erwischen nur schwache Käfer.'
+    }
+  },
+  'locker': {
+    'title': 'Spind',
+    'buy': 'Kaufen {n}',
+    'wear': 'Anziehen',
+    'worn': 'Getragen',
+    'needStars': 'Noch {n} Sterne',
+    'needCoins': 'Noch {n} Münzen'
+  },
+  'fever': {
+    'filling': 'Platsch-Fieber: {n}% voll',
+    'ready': 'Platsch-Fieber bereit — tippen',
+    'running': 'Platsch-Fieber läuft'
+  },
+  'objectives': {
+    'clear': 'Level schaffen',
+    'combo': '×{n}-Kette erreichen',
+    'noSpike': 'Keinen Stachel-Schaden',
+    'time': 'Mit {n}s Rest fertig werden',
+    'accuracy': '{n}% der Tritte treffen',
+    'fever': 'Platsch-Fieber {n}× auslösen',
+    'kind': '{n} {bug} zermatschen',
+    'feverKills': '{n} in einem Fieber schaffen',
+    'noMiss': 'Höchstens {n} Tritte daneben',
+    'score': '{n} Punkte holen'
   },
   'hints': {
-    'move': { 'touch': 'Zum Bewegen tippen', 'desktop': 'Zum Bewegen klicken' },
-    'gate': { 'touch': 'Weiter aufs Tor schießen – alle 0,5 s +1', 'desktop': 'Weiter aufs Tor schießen – alle 0,5 s +1' },
-    'trap': { 'touch': 'Rote Tore VERKLEINERN den Trupp – nimm das andere!', 'desktop': 'Rote Tore VERKLEINERN den Trupp – nimm das andere!' },
-    'divider': { 'touch': 'Nie die Säule zwischen den Toren berühren', 'desktop': 'Nie die Säule zwischen den Toren berühren' },
-    'crate': { 'touch': 'Grüne Kisten: alle treffen härter', 'desktop': 'Grüne Kisten: alle treffen härter' },
-    'rate': { 'touch': 'Blaue Kisten: alle schießen schneller', 'desktop': 'Blaue Kisten: alle schießen schneller' },
-    'boss': { 'touch': 'Bleib aus dem roten Ring!', 'desktop': 'Bleib aus dem roten Ring!' },
-    'lever': { 'touch': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste', 'desktop': 'Triff BEIDE Hebel am Straßenrand – sie öffnen die Waffenkiste' },
-    'guard': { 'touch': 'Schild oben — deine Schüsse wirken noch nicht', 'desktop': 'Schild oben — deine Schüsse wirken noch nicht' },
-    'cage': { 'touch': 'Schieß auf Käfige — die Gefangenen schließen sich an', 'desktop': 'Schieß auf Käfige — die Gefangenen schließen sich an' },
-    'shieldBox': { 'touch': 'Schildkiste — sie wartet und blockt einen großen Treffer', 'desktop': 'Schildkiste — sie wartet und blockt einen großen Treffer' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} Überlebende eingelöst',
-    'unlocked': 'Freigeschaltet!',
-
-    'guardian': "Ein Schutzengel hat dich gerettet!",
-
-    'guardianSub': "{n} Überlebende sind zurück",
-
-    'next': "Als Nächstes: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Waffe wählen",
-    'nextStage': "nächstes Level",
-    'stagesAway': "in {n} Leveln"
-  },
-  'weaponPick': {
-    'title': "Wähle deine Waffe",
-    'subtitle': "Deine für Level {n}. Weitere warten auf der Straße.",
-    'take': "Nehmen",
-    'rocket': {
-      'a': "Zielsuchende Salve",
-      'b': "Explosionsschaden"
+    'move': {
+      'touch': 'Tippen zum Bewegen',
+      'desktop': 'Klicken zum Bewegen'
     },
-    'gatling': {
-      'a': "Doppelte Feuerrate",
-      'b': "Pumpt Tore schneller"
+    'slam': {
+      'touch': 'Halten, dann loslassen für einen Wuchtschlag',
+      'desktop': 'Taste halten für einen Wuchtschlag'
+    },
+    'beetle': {
+      'touch': 'Käfer haben Panzer — halten und zuschlagen',
+      'desktop': 'Käfer haben Panzer — halten und zuschlagen'
+    },
+    'flea': {
+      'touch': 'Flöhe springen weg — triff die Landung',
+      'desktop': 'Flöhe springen weg — triff die Landung'
+    },
+    'spike': {
+      'touch': 'Nicht auf die Stacheligen treten!',
+      'desktop': 'Nicht auf die Stacheligen treten!'
+    },
+    'stink': {
+      'touch': 'Stinkwanzen vernebeln den Bildschirm',
+      'desktop': 'Stinkwanzen vernebeln den Bildschirm'
+    },
+    'fever': {
+      'touch': 'Das Glas ist voll — tipp die Flamme!',
+      'desktop': 'Das Glas ist voll — klick die Flamme!'
+    },
+    'honey': {
+      'touch': 'Honig hält Springer fest',
+      'desktop': 'Honig hält Springer fest'
+    },
+    'web': {
+      'touch': 'Spinnweben bremsen deinen Fuß',
+      'desktop': 'Spinnweben bremsen deinen Fuß'
+    },
+    'belt': {
+      'touch': 'Das Band trägt Käfer mit sich',
+      'desktop': 'Das Band trägt Käfer mit sich'
+    },
+    'sweeper': {
+      'touch': 'Der Kehrer zermatscht Käfer gratis',
+      'desktop': 'Der Kehrer zermatscht Käfer gratis'
+    },
+    'boss': {
+      'touch': 'Halten und schlagen, wenn der Boss ausholt',
+      'desktop': 'Halten und schlagen, wenn der Boss ausholt'
+    },
+    'pods': {
+      'touch': 'Zermatsch die Eier, bevor sie schlüpfen!',
+      'desktop': 'Zermatsch die Eier, bevor sie schlüpfen!'
     }
-  },
-  'bossReward': {
-    'title': "Boss besiegt!",
-    'subtitle': "Ein Geschenk für Level {n}. Lauf weiter!"
   },
   'result': {
-    'stageClear': 'Level geschafft!',
-    'wipedOut': 'Trupp ausgelöscht',
-    'reachedStage': 'Level {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n} %',
-    'bestReach': 'Beste {n} %',
-    'newReach': 'So weit wie nie!',
+    'cleared': 'Level geschafft!',
+    'timeUp': 'Zeit abgelaufen!',
+    'upNext': 'Als Nächstes: {n}',
+    'retryLevel': 'Nochmal?',
+    'campaignDone': 'Alle Level geschafft!',
     'newRecord': 'Neuer Rekord!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Boss gefallen!',
-    'wasted': 'Erledigt',
-    'cause': {
-      'foe': 'Von Monstern überrannt',
-      'elite': 'Ein Miniboss erwischte dich',
-      'barricade': 'In Barrikaden gerast',
-      'crate': 'In Kisten gerast',
-      'divider': 'Die Trenner gestreift',
-      'trap': 'In Fallen geraten',
-      'slam': 'Vom Boss zerschmettert'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Meilenstein!',
-    'rallied': 'Zweiter Atem',
-    'peakSquad': 'Größter Trupp',
-    'kills': 'Kills',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Münzen verdreifacht!',
-    'nextStage': 'Nächstes Level',
+    'nextLevel': 'Nächstes Level',
     'tryAgain': 'Nochmal',
-    'upgrade': 'Upgrade',
-    'upgradeHint': 'Rüste deine Truppe auf!',
+    'squishes': 'Zermatschte Käfer',
+    'starsEarned': '{n} von 3 Sternen',
     'rankOf': 'von {n}',
-    'upNext': 'Als Nächstes: Level {n}'
+    'worldUnlocked': '{n} freigeschaltet!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Lauf teilen',
-    'text': 'Ich habe Level {n} in {game} erreicht. Kommst du weiter?'
-  },
-
   'leaderboard': {
     'title': 'Bestenliste',
-    'rank': '#',
+    'rank': 'Platz',
     'player': 'Spieler',
-    'stage': 'Level',
-    'squad': 'Trupp',
-    'empty': 'Noch keine Einträge. Sei der Erste!',
-    'failed': 'Bestenliste nicht erreichbar.',
-    'loading': 'Wird geladen…',
+    'score': 'Punkte',
+    'level': 'Level',
     'you': 'Du',
-    'yourRank': 'Du bist #{n}',
-    'of': 'von {n} Spielern'
+    'yourRank': 'Du bist #{n} von {total}',
+    'of': 'von {n}',
+    'unranked': 'Schaff ein Level für die Liste',
+    'loading': 'Liste wird geladen…',
+    'empty': 'Noch hat niemand gepunktet',
+    'failed': 'Bestenliste nicht erreichbar'
   },
-
-  'chest': {
-    'label': 'Schatztruhe',
-    'ready': 'Schatztruhe für {n} Münzen öffnen',
-    'filling': 'Schatztruhe — füllt sich',
-    'spent': 'Schatztruhe — leer bis morgen'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Tages-Expedition',
-    'hud': 'Expedition',
-    'multiplier': '{n}×',
-    'available': 'Tages-Expedition — die heutige Strecke, dreifache Münzen',
-    'confirm': 'Expedition starten',
-    'spent': 'Tages-Expedition — neue Strecke in {time}',
-    'done': 'Morgen wieder',
-    'back': 'Zurück zur Kampagne'
-  },
-
-  'skills': {
-
-    'grenade': 'Granate',
-
-    'shield': 'Schild',
-
-    'locked': 'Gesperrt',
-
-    'unlocksAt': 'Ab Level {n}',
-
-    'frost': 'Frostnova',
-
-    'decoy': 'Lockfackel',
-
-    'trialLabel': '{name} · gratis testen',
-
-    'trialTag': 'Gratis testen!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Upgrades',
-    'spotlight': 'Ausgeben!',
-    'level': 'St. {n}',
-    'maxed': 'Max',
-    'names': {
-      'squad': 'Trupp',
-      'power': 'Feuerkraft',
-      'rate': 'Feuerrate',
-      'range': 'Reichweite',
-      'scavenge': 'Plündern',
-      'grenade': 'Granate',
-      'shield': 'Schild',
-      'rocket': 'Raketenkraft',
-      'gatling': 'Gatling-Kraft'
-    },
-    'descriptions': {
-      'squad': 'Starte jedes Level mit mehr Überlebenden.',
-      'power': 'Jeder Überlebende macht mehr Schaden pro Schuss.',
-      'rate': 'Jeder Überlebende schießt schneller.',
-      'range': 'Dein Trupp eröffnet das Feuer weiter vorn.',
-      'scavenge': 'Verdiene mehr Münzen pro Lauf.',
-      'grenade': 'Wirf eine Granate für einen schweren Schadensstoß.',
-      'shield': 'Halbiere für einige Sekunden den Schaden an deiner Truppe.',
-      'rocket': 'Raketenwerfer, die du im Level freischaltest, machen mehr Schaden.',
-      'gatling': 'Gatlings, die du im Level freischaltest, machen mehr Schaden.'
-    }
-  },
-
   'options': {
-    'title': 'Optionen', 'general': 'Allgemein', 'audio': 'Audio', 'language': 'Sprache',
-    'difficulty': 'Schwierigkeit', 'soundEffects': 'Soundeffekte', 'music': 'Musik', 'musicTrack': 'Musiktitel',
-    'musicTracks': { 'cozy': 'Gemütliche Harmonie', 'trance': 'Trance-Tunnel' },
-    'haptics': 'Vibration', 'on': 'An', 'off': 'Aus',
-    'close': 'Speichern & Schließen',
-    'difficulties': { 'easy': 'Leicht', 'medium': 'Mittel', 'hard': 'Schwer' },
+    'title': 'Einstellungen',
+    'general': 'Allgemein',
+    'play': 'Spiel',
+    'audio': 'Audio',
+    'close': 'Speichern & schließen',
+    'language': 'Sprache',
+    'difficulty': 'Schwierigkeit',
+    'soundEffects': 'Soundeffekte',
+    'music': 'Musik',
+    'musicTrack': 'Musikstück',
+    'haptics': 'Vibration',
+    'on': 'An',
+    'off': 'Aus',
+    'difficulties': {
+      'easy': 'Leicht',
+      'medium': 'Normal',
+      'hard': 'Schwer'
+    },
     'difficultyHints': {
-      'easy': 'Schwächere Gegner und dünnere Barrikaden.',
-      'medium': 'Der normale Lauf.',
-      'hard': 'Zähere Gegner und stärkere Barrikaden.'
-    }
+      'easy': 'Langsamere Käfer und mehr Zeit.',
+      'medium': 'Das Spiel, wie es gedacht ist.',
+      'hard': 'Schnellere Käfer und vollere Felder.'
+    },
+    'musicTracks': {
+      'trance': 'Käfer-Groove',
+      'cozy': 'Gemütliches Picknick'
+    },
+    'juiceStyle': 'Platsch-Stil',
+    'juiceStyles': {
+      'ooze': 'Comic-Schleim',
+      'confetti': 'Konfetti-Piñata',
+      'bubble': 'Seifenblasen'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Bunter Comic-Schleim. Das Spiel bleibt gleich.',
+      'confetti': 'Käfer platzen zu Konfetti. Das Spiel bleibt gleich.',
+      'bubble': 'Käfer werden zu Seifenblasen. Das Spiel bleibt gleich.'
+    },
+    'highVis': 'Großer Trittkreis',
+    'highVisHint': 'Ein dickerer, hellerer Ring dort, wo dein Fuß landet.',
+    'singleTap': 'Zielhilfe',
+    'singleTapHint': 'Tipp irgendwohin — dein Fuß fliegt zum nächsten Käfer.'
   },
-
-  'adsBlocked': {
-    'title': 'Werbung konnte nicht geladen werden',
-    'body': 'Wir wollten dir ein Video zeigen, damit du deine Belohnung erhältst, aber etwas in deinem Browser blockiert Werbung.',
-    'allowPrefix': 'Bitte erlaube Werbung auf',
-    'allowSuffix': '(oder pausiere deinen Adblocker für dieses Spiel) und versuche es erneut.',
-    'gotIt': 'Verstanden'
+  'loading': {
+    'boo': 'Buh!',
+    'laugh': 'Hihi!',
+    'tooLong': 'Lädt noch… Verbindung prüfen?'
   },
   'saveStatus': {
-    'restoredTitle': 'Cloud-Speicher wiederhergestellt', 'restoredBody': '+{n} Bonusmünzen für die Wiederherstellung',
-    'tap': 'tippen', 'pausedTitle': 'Cloud-Sync pausiert',
-    'pausedBody': 'Offline-Modus. Dein Fortschritt wird hier gespeichert.',
-    'retry': 'Erneut versuchen', 'dismiss': 'ausblenden'
+    'restoredTitle': 'Fortschritt wiederhergestellt',
+    'restoredBody': 'Wir haben deinen Spielstand zurückgeholt und {n} Münzen dazugelegt.',
+    'pausedTitle': 'Speichern pausiert',
+    'pausedBody': 'Der Speicherdienst ist nicht erreichbar. Dein Fortschritt ist auf diesem Gerät sicher.',
+    'retry': 'Erneut',
+    'dismiss': 'Schließen',
+    'tap': 'Zum Schließen tippen'
   },
-  'loading': { 'tooLong': 'Laden dauert zu lange? Deaktiviere deinen Adblocker und lade neu.', 'boo': 'Buh!', 'laugh': 'Hahaha!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Dreh dein Handy',
-    'body': 'splatix spielt im Hochformat.'
+  'adsBlocked': {
+    'title': 'Werbeblocker erkannt',
+    'body': 'Splatix ist dank Werbung kostenlos. Bitte schalte deinen Werbeblocker aus und lade neu.',
+    'allowPrefix': 'Werbung erlauben auf',
+    'allowSuffix': 'und die Seite neu laden.',
+    'gotIt': 'Alles klar'
   },
-  'license': { 'denied': 'Zugriff verweigert: Bitte erwerbe eine Lizenz.' }
+  'license': {
+    'denied': 'Diese Kopie konnte nicht überprüft werden'
+  }
 }

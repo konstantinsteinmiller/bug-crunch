@@ -352,7 +352,11 @@ const styleVars = computed(() => {
   font-size: var(--fbtn-font)
   line-height: 1.15
   white-space: nowrap
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  // The drop shadow is in `em`, not px. At a fixed 3px it was a depth cue on a
+  // 2rem headline and a SECOND COPY OF THE WORD on a 0.7rem caption — the
+  // Locker's "WORN" plate read as doubled at dpr 3. Every caption in this game
+  // is fluid (`--fbtn-font` is a `clamp()`), so its ornament has to be too.
+  text-shadow: 0.13em 0.13em 0 #000, -0.045em -0.045em 0 #000, 0.045em -0.045em 0 #000, -0.045em 0.045em 0 #000, 0.045em 0.045em 0 #000
 
 .attention-bounce
   animation: fbtn-bounce 0.6s infinite alternate

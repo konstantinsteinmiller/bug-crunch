@@ -1,20 +1,20 @@
+// ZH bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': '取消',
   'close': '关闭',
-  'ok': '确定',
+  'ok': '好',
   'continue': '继续',
   'tapToContinue': '点击继续',
-  'clickToContinue': '单击继续',
+  'clickToContinue': '点击继续',
   'rewards': '奖励',
   'tip': '提示',
   'crazyGamesOnly': '本游戏仅在以下平台提供：',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
-    'next': '下一个',
-    'replay': '重玩',
+    'next': '下一步',
+    'replay': '再玩一次',
     'back': '返回',
     'play': '开始',
     'pause': '暂停',
@@ -22,260 +22,256 @@ export default {
     'home': '主页',
     'info': '信息'
   },
-
   'hud': {
-    'stage': '第 {n} 关',
-    'best': '最佳 {n}',
-    'boss': '首领',
-    'miniboss': '小首领',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': '距离下一个奖励的关卡数',
-    'fireRate': '射速',
-    'incoming': '攻击来袭！',
-    'dodge': '闪避',
-    'getIn': '进圈',
-    'holdStill': '别动',
-    'milestone': '{n} 人集结！',
-    'weaponActive': '{name} 就绪',
-    'weaponsActive': '{a} + {b} 就绪',
-    'weaponLocked': '{name} 未解锁 — 已击中 {n}/{total} 个拉杆',
-    'weaponGift': '{name} 就在前方 — 免费，无需拉杆',
-    'weaponFree': '免费'
+    'score': '分数',
+    'time': '时间',
+    'chain': '连踩：{n}',
+    'level': '关卡 {n}'
   },
-
-  'weapons': {
-    'rocket': '火箭筒',
-    'gatling': '加特林机枪'
+  'worlds': {
+    'picnic': '野餐垫',
+    'backyard': '荒草后院',
+    'attic': '灰尘阁楼',
+    'arcade': '霓虹游戏厅'
   },
-
-  'tutorial': {
-    'touch': '滑动来移动你的小队',
-    'desktop': '移动鼠标来操控你的小队'
+  'bugs': {
+    'ant': '蚂蚁',
+    'beetle': '甲虫',
+    'flea': '跳蚤',
+    'caterpillar': '毛毛虫',
+    'stinkbug': '臭虫',
+    'centipede': '蜈蚣',
+    'pinatafly': '彩球苍蝇',
+    'moth': '飞蛾',
+    'robobug': '机器虫'
+  },
+  'bosses': {
+    'queenAnt': '歌利亚蚁后',
+    'beetleKing': '棘背甲虫王',
+    'matriarch': '蜈蚣女王',
+    'roachPrime': '机甲蟑螂普莱姆'
+  },
+  'boss': {
+    'tell': {
+      'stomp': '踩住BOSS！',
+      'summon': '清掉虫群！',
+      'pods': '踩碎虫卵！',
+      'charge': '长按后砸下去！',
+      'spin': '离开圆圈！',
+      'shield': '砸碎护盾！',
+      'beam': '躲开光束！'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': '速度',
+      'radius': '踩踏范围',
+      'pierce': '破甲'
+    },
+    'sneaker': {
+      'name': '经典运动鞋',
+      'perk': '平衡好，抬脚快。',
+      'trade': '没有特别突出的地方。'
+    },
+    'steelBoot': {
+      'name': '钢头靴',
+      'perk': '尖刺伤不到你。重踩会震晕周围的虫子。',
+      'trade': '很重，抬脚慢。'
+    },
+    'bunnySlipper': {
+      'name': '兔子拖鞋',
+      'perk': '无声无息 — 会跳的虫子发现不了你。',
+      'trade': '完全踩不破硬壳。'
+    },
+    'rollerSkate': {
+      'name': '轮滑鞋',
+      'perk': '踩下后继续拖行，横扫一整条线。',
+      'trade': '踩踏范围非常窄。'
+    },
+    'cleatBoot': {
+      'name': '钉鞋',
+      'perk': '鞋钉能刺穿硬壳和臭腺。',
+      'trade': '储物柜里范围最小的一双。'
+    },
+    'electricSock': {
+      'name': '电力袜',
+      'perk': '每次踩踏都会弹出闪电，再打三只虫。',
+      'trade': '闪电只能收掉弱小的虫子。'
+    }
+  },
+  'locker': {
+    'title': '储物柜',
+    'buy': '购买 {n}',
+    'wear': '穿上',
+    'worn': '已穿',
+    'needStars': '还差 {n} 颗星',
+    'needCoins': '还差 {n} 金币'
+  },
+  'fever': {
+    'filling': '狂踩模式：{n}%',
+    'ready': '狂踩模式就绪 — 点击开始',
+    'running': '狂踩模式进行中'
+  },
+  'objectives': {
+    'clear': '通关本关',
+    'combo': '达成 ×{n} 连踩',
+    'noSpike': '不被尖刺扎到',
+    'time': '剩余 {n} 秒时通关',
+    'accuracy': '{n}% 的踩踏命中',
+    'fever': '触发狂踩模式 {n} 次',
+    'kind': '踩扁 {n} 只{bug}',
+    'feverKills': '一次狂踩踩扁 {n} 只',
+    'noMiss': '最多踩空 {n} 次',
+    'score': '拿到 {n} 分'
   },
   'hints': {
-    'move': { 'touch': '点击移动', 'desktop': '点击移动' },
-    'gate': { 'touch': '持续射击闸门：每半秒 +1', 'desktop': '持续射击闸门：每半秒 +1' },
-    'trap': { 'touch': '红色闸门会减少人数——走另一边！', 'desktop': '红色闸门会减少人数——走另一边！' },
-    'divider': { 'touch': '千万别碰闸门之间的柱子', 'desktop': '千万别碰闸门之间的柱子' },
-    'crate': { 'touch': '绿色箱子：全队伤害提升', 'desktop': '绿色箱子：全队伤害提升' },
-    'rate': { 'touch': '蓝色箱子：全队射速提升', 'desktop': '蓝色箱子：全队射速提升' },
-    'boss': { 'touch': '远离红圈！', 'desktop': '远离红圈！' },
-    'lever': { 'touch': '击中路两侧的两个拉杆 —— 它们会打开武器箱', 'desktop': '击中路两侧的两个拉杆 —— 它们会打开武器箱' },
-    'guard': { 'touch': '护盾开启——射击暂时无效', 'desktop': '护盾开启——射击暂时无效' },
-    'cage': { 'touch': '射击囚笼——被救的人会加入队伍', 'desktop': '射击囚笼——被救的人会加入队伍' },
-    'shieldBox': { 'touch': '护盾箱——待命并挡下一次重击', 'desktop': '护盾箱——待命并挡下一次重击' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} 名幸存者已兑换',
-    'unlocked': '已解锁！',
-
-    'guardian': "守护天使救了你！",
-
-    'guardianSub': "{n} 名幸存者归队",
-
-    'next': "下一个：{label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "选择武器",
-    'nextStage': "下一关",
-    'stagesAway': "{n} 关后"
-  },
-  'weaponPick': {
-    'title': "选择你的武器",
-    'subtitle': "第 {n} 关归你使用。路上还有更多在等着。",
-    'take': "拿走",
-    'rocket': {
-      'a': "追踪齐射",
-      'b': "爆炸伤害"
+    'move': {
+      'touch': '点击移动',
+      'desktop': '点击移动'
     },
-    'gatling': {
-      'a': "两倍射速",
-      'b': "更快充能闸门"
+    'slam': {
+      'touch': '长按再松开可以重踩',
+      'desktop': '长按按钮可以重踩'
+    },
+    'beetle': {
+      'touch': '甲虫有壳 — 长按重踩',
+      'desktop': '甲虫有壳 — 长按重踩'
+    },
+    'flea': {
+      'touch': '跳蚤会跳走 — 踩它落地的地方',
+      'desktop': '跳蚤会跳走 — 踩它落地的地方'
+    },
+    'spike': {
+      'touch': '别踩有尖刺的！',
+      'desktop': '别踩有尖刺的！'
+    },
+    'stink': {
+      'touch': '踩扁臭虫会让画面变模糊',
+      'desktop': '踩扁臭虫会让画面变模糊'
+    },
+    'fever': {
+      'touch': '瓶子满了 — 点火焰！',
+      'desktop': '瓶子满了 — 点击火焰！'
+    },
+    'honey': {
+      'touch': '蜂蜜能黏住会跳的虫子',
+      'desktop': '蜂蜜能黏住会跳的虫子'
+    },
+    'web': {
+      'touch': '蜘蛛网会拖慢你的脚',
+      'desktop': '蜘蛛网会拖慢你的脚'
+    },
+    'belt': {
+      'touch': '传送带会把虫子带走',
+      'desktop': '传送带会把虫子带走'
+    },
+    'sweeper': {
+      'touch': '清扫机免费帮你踩虫子',
+      'desktop': '清扫机免费帮你踩虫子'
+    },
+    'boss': {
+      'touch': 'BOSS蓄力时长按重踩',
+      'desktop': 'BOSS蓄力时长按重踩'
+    },
+    'pods': {
+      'touch': '在虫卵孵化前踩碎它们！',
+      'desktop': '在虫卵孵化前踩碎它们！'
     }
-  },
-  'bossReward': {
-    'title': "首领已击败！",
-    'subtitle': "第 {n} 关的礼物。继续前进！"
   },
   'result': {
-    'stageClear': '通关！',
-    'wipedOut': '小队全灭',
-    'reachedStage': '第 {n} 关',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': '最佳 {n}%',
-    'newReach': '新纪录！',
+    'cleared': '通关！',
+    'timeUp': '时间到！',
+    'upNext': '下一关：{n}',
+    'retryLevel': '再来一次？',
+    'campaignDone': '全部关卡通关！',
     'newRecord': '新纪录！',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': '首领已倒下！',
-    'wasted': '全灭',
-    'cause': {
-      'foe': '被怪物淹没',
-      'elite': '被小头目击溃',
-      'barricade': '撞上路障',
-      'crate': '撞上木箱',
-      'divider': '刮到隔离墩',
-      'trap': '踩中陷阱',
-      'slam': '被首领砸扁'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': '里程碑！',
-    'rallied': '重整旗鼓',
-    'peakSquad': '最大人数',
-    'kills': '击杀',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': '金币三倍！',
-    'nextStage': '下一关',
+    'nextLevel': '下一关',
     'tryAgain': '再试一次',
-    'upgrade': '升级',
-    'upgradeHint': '升级你的队伍！',
-    'rankOf': '共 {n} 人',
-    'upNext': '下一关：第 {n} 关'
+    'squishes': '踩扁的虫子',
+    'starsEarned': '3 颗星中的 {n} 颗',
+    'rankOf': '/ {n}',
+    'worldUnlocked': '{n} 已解锁！'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': '分享战绩',
-    'text': '我在 {game} 中打到了第 {n} 关。你能走得更远吗？'
-  },
-
   'leaderboard': {
     'title': '排行榜',
-    'rank': '#',
+    'rank': '排名',
     'player': '玩家',
-    'stage': '关卡',
-    'squad': '队伍',
-    'empty': '还没有记录，来抢头名吧！',
-    'failed': '无法连接排行榜。',
-    'loading': '加载中…',
+    'score': '分数',
+    'level': '关卡',
     'you': '你',
-    'yourRank': '你排第 {n}',
-    'of': '共 {n} 人'
+    'yourRank': '你在 {total} 人中排第 #{n}',
+    'of': '/ {n}',
+    'unranked': '通关一关就能上榜',
+    'loading': '正在加载排行榜…',
+    'empty': '还没有人上榜',
+    'failed': '无法连接排行榜'
   },
-
-  'chest': {
-    'label': '宝箱',
-    'ready': '打开宝箱获得 {n} 金币',
-    'filling': '宝箱填充中',
-    'spent': '宝箱已空，明天再来'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': '每日远征',
-    'hud': '远征',
-    'multiplier': '{n}×',
-    'available': '每日远征 — 今天的路线，三倍金币',
-    'confirm': '开始远征',
-    'spent': '每日远征 — 新路线还有 {time}',
-    'done': '明天再来',
-    'back': '返回战役'
-  },
-
-  'skills': {
-
-    'grenade': '手雷',
-
-    'shield': '护盾',
-
-    'locked': '未解锁',
-
-    'unlocksAt': '第{n}关解锁',
-
-    'frost': '冰霜新星',
-
-    'decoy': '诱饵信号弹',
-
-    'trialLabel': '{name} · 免费试用',
-
-    'trialTag': '免费试用！',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': '升级',
-    'spotlight': '去花费！',
-    'level': '等级 {n}',
-    'maxed': '已满',
-    'names': {
-      'squad': '队伍',
-      'power': '火力',
-      'rate': '射速',
-      'range': '射程',
-      'scavenge': '拾荒',
-      'grenade': '手雷',
-      'shield': '护盾',
-      'rocket': '火箭威力',
-      'gatling': '加特林威力'
-    },
-    'descriptions': {
-      'squad': '每关开局的幸存者更多。',
-      'power': '每名幸存者每发伤害更高。',
-      'rate': '每名幸存者射击更快。',
-      'range': '你的小队能在更远处开火。',
-      'scavenge': '每局获得更多金币。',
-      'grenade': '投掷手雷造成大量伤害。',
-      'shield': '数秒内使队伍受到的伤害减半。',
-      'rocket': '关卡中解锁的火箭筒伤害更高。',
-      'gatling': '关卡中解锁的加特林伤害更高。'
-    }
-  },
-
   'options': {
-    'title': '选项', 'general': '通用', 'audio': '音频', 'language': '语言',
-    'difficulty': '难度', 'soundEffects': '音效', 'music': '音乐', 'musicTrack': '音乐曲目',
-    'musicTracks': { 'cozy': '惬意和声', 'trance': '迷幻隧道' },
-    'haptics': '震动', 'on': '开', 'off': '关',
+    'title': '设置',
+    'general': '通用',
+    'play': '玩法',
+    'audio': '音频',
     'close': '保存并关闭',
-    'difficulties': { 'easy': '简单', 'medium': '普通', 'hard': '困难' },
+    'language': '语言',
+    'difficulty': '难度',
+    'soundEffects': '音效',
+    'music': '音乐',
+    'musicTrack': '音乐曲目',
+    'haptics': '震动',
+    'on': '开',
+    'off': '关',
+    'difficulties': {
+      'easy': '简单',
+      'medium': '普通',
+      'hard': '困难'
+    },
     'difficultyHints': {
-      'easy': '敌人更弱，路障更薄。',
-      'medium': '标准难度。',
-      'hard': '敌人更强，路障更厚。'
-    }
+      'easy': '虫子更慢，时间更长。',
+      'medium': '游戏原本设计的样子。',
+      'hard': '虫子更快，场面更热闹。'
+    },
+    'musicTracks': {
+      'trance': '虫虫律动',
+      'cozy': '悠闲野餐'
+    },
+    'juiceStyle': '溅射风格',
+    'juiceStyles': {
+      'ooze': '卡通黏液',
+      'confetti': '彩纸彩球',
+      'bubble': '肥皂泡'
+    },
+    'juiceStyleHints': {
+      'ooze': '彩色卡通黏液。玩法完全不变。',
+      'confetti': '虫子会炸成彩纸。玩法完全不变。',
+      'bubble': '虫子会变成肥皂泡。玩法完全不变。'
+    },
+    'highVis': '大踩踏圈',
+    'highVisHint': '在脚将落下的位置画一个更粗更亮的圈。',
+    'singleTap': '简易瞄准',
+    'singleTapHint': '点击任意位置，脚会飞向最近的虫子。'
   },
-
-  'adsBlocked': {
-    'title': '无法显示广告',
-    'body': '我们本想为你播放视频以便领取奖励，但你的浏览器中有内容拦截了广告。',
-    'allowPrefix': '请在以下网站允许广告：',
-    'allowSuffix': '（或为本游戏暂停广告拦截器）然后重试。',
-    'gotIt': '知道了'
+  'loading': {
+    'boo': '哇！',
+    'laugh': '嘻嘻！',
+    'tooLong': '还在加载… 检查一下网络？'
   },
   'saveStatus': {
-    'restoredTitle': '云存档已恢复', 'restoredBody': '恢复奖励 +{n} 金币',
-    'tap': '点击', 'pausedTitle': '云同步已暂停',
-    'pausedBody': '正在离线游戏。你的进度会保存在本地。',
-    'retry': '重试', 'dismiss': '忽略'
+    'restoredTitle': '进度已恢复',
+    'restoredBody': '我们找回了你的存档，并补了 {n} 金币。',
+    'pausedTitle': '存档已暂停',
+    'pausedBody': '连不上存档服务。你的进度安全地保存在本设备上。',
+    'retry': '重试',
+    'dismiss': '关闭',
+    'tap': '点击关闭'
   },
-  'loading': { 'tooLong': '加载太久？请关闭广告拦截器并刷新页面。', 'boo': '哇！', 'laugh': '哈哈哈！' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': '请旋转手机',
-    'body': '《splatix》为竖屏游戏。'
+  'adsBlocked': {
+    'title': '检测到广告拦截器',
+    'body': 'Splatix 靠广告才能免费。请关闭拦截器并刷新页面。',
+    'allowPrefix': '允许以下网站的广告：',
+    'allowSuffix': '然后刷新页面。',
+    'gotIt': '知道了'
   },
-  'license': { 'denied': '访问被拒绝：请购买许可证。' }
+  'license': {
+    'denied': '无法验证此副本'
+  }
 }

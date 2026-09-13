@@ -31,26 +31,26 @@ export const GAME_ICON_NAMES = [
   'plus', 'minus', 'left', 'right', 'up', 'down',
   // Game nouns
   'coin', 'gem', 'heart', 'flask', 'wheel', 'gift', 'fullscreen', 'share',
-  // ── splatix's own run nouns ────────────────────────────────────────────
-  // The five stats this game is actually about, added to the shared set because
-  // they were previously re-traced per component: `squad`, `bolt` and `rate`
-  // existed as byte-identical `d` strings in BOTH `RunHud.vue` and
-  // `UpgradeModal.vue`, which is the exact duplication this module exists to
-  // end. Geometry moved verbatim from those call sites — they are tuned against
-  // each other's weight in the HUD strip, so redraw them together or not at all.
-  'squad', 'bolt', 'rate', 'range', 'flame', 'skull',
-  // Active skills — see `SkillBar.vue`. The last two are the late skills
-  // (`game/skills.ts`): a six-armed ice crystal and a burning flare stick.
-  'bomb', 'shield', 'snowflake', 'flare',
-  // The two per-stage weapons. They front a shop row AND the run's weapon
-  // badge, which is the same rule the five stat glyphs above follow: the thing
-  // bought and the thing carried must be one drawing, or the player has to
-  // learn the same object twice. See `game/weapons.ts`.
-  'rocket', 'gatling',
-  // The incoming-attack alarm. It lives in the shared set rather than inline in
-  // `IncomingWarning.vue` because that badge now asks `ArtIcon` for its mark,
-  // and `ArtIcon`'s floor is a glyph from this list — see `game/uiArt.ts`,
-  // which draws the same sign on a canvas for the reference sheet.
+  // ── Splatix's own nouns ─────────────────────────────────────────────────
+  // The five things this game is about, in the shared set because every one of
+  // them appears on at least two surfaces: a HUD chip AND a result chip, or a
+  // Locker row AND the button that opens it. A glyph re-traced per component is
+  // the exact duplication this module exists to end.
+  //
+  //   bug     the squish counter, and the objective strip's "squish N of these"
+  //   boot    the Locker, on its HUD button and on every row inside it
+  //   splat   the Splat Chain — a burst, not a number
+  //   target  accuracy, on the objective strip
+  //   clock   the level timer, and the "finish with N seconds left" objective
+  //   bolt    the Electric Sock's perk, in the Locker
+  //   flame   Splat Fever, on the vial's button and on the objective strip
+  //   skull   lifetime squishes, on the result screen
+  //   shield  the "take no spike damage" objective, and the Steel Boot's perk
+  'bug', 'boot', 'splat', 'target', 'clock', 'bolt', 'flame', 'skull', 'shield',
+  // The incoming-hazard alarm. It lives in the shared set rather than inline
+  // because the sweeper badge asks `ArtIcon` for its mark, and `ArtIcon`'s floor
+  // is a glyph from this list — see `game/uiArt.ts`, which draws the same sign
+  // on a canvas for the reference sheet.
   'warning'
 ] as const
 

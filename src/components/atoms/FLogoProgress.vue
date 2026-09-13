@@ -19,18 +19,18 @@
   //- waiting, and the splash is the ONE moment every player sees before they
   //- decide whether to stay.
   //-
-  //- So it is a joke instead. The wispling — the game's lantern ghost, painted
-  //- through the art pipeline, its walk cycle already on disk — floats out,
-  //- shouts BOO, and then immediately cracks up at its own prank. Cute, not
-  //- spooky: the point is to buy sympathy for the cast in the two seconds
-  //- before the game starts, and a monster that scares you and then giggles is
-  //- a monster you do not mind meeting again.
+  //- So it is a joke instead. An ant — the first thing the player is going to
+  //- stomp — floats out, shouts BOO, and then immediately cracks up at its own
+  //- prank. The point is to buy sympathy for the cast in the two seconds before
+  //- the game starts: a bug that scares you and then giggles is a bug you do
+  //- not mind meeting again, which is exactly the tone a game about squishing
+  //- them needs to open on.
   //-
-  //- The composition is a greeting card — ghost and bubble on top, the title
-  //- under both — and it is duplicated (ghost + logo, no bubble) as the inline
-  //- static splash in `index.html`, so the handover from static HTML to this
-  //- component is one continuous picture with the bubble popping in on top of
-  //- it rather than a swap between two different screens.
+  //- The composition is a greeting card — ant and bubble on top, the mark under
+  //- both — and it is duplicated (ant + mark, no bubble) as the inline static
+  //- splash in `index.html`, so the handover from static HTML to this component
+  //- is one continuous picture with the bubble popping in on top of it rather
+  //- than a swap between two different screens.
   Transition(name="loader-fade")
     div.no-os-ui(
       v-if="!done"
@@ -42,7 +42,7 @@
         //- longer laugh (much longer in some locales) cannot nudge the ghost.
         div.greet-stage(:class="`is-${phase}`")
           div.wisp(ref="wispEl" aria-hidden="true")
-            img.wisp-strip(ref="stripEl" :src="WISP_SRC" alt="" decoding="async" fetchpriority="high")
+            img.wisp-strip(:src="MASCOT_SRC" alt="" decoding="async" fetchpriority="high")
 
           //- One bubble, re-keyed per beat: the key is what replays the pop, and
           //- `out-in` is deliberately NOT used — the two beats overlap for a
@@ -82,7 +82,7 @@ const { t } = useI18n()
 // The cost is ~60 KB on the boot path, spent while the sprite bake (which is
 // what the loading bar is actually waiting for) does its several seconds of
 // work. It is the only thing the player looks at in that window.
-const WISP_SRC = prependBaseUrl('images/monsters/wispling.webp')
+const MASCOT_SRC = prependBaseUrl('images/logo/mascot.webp')
 const LOGO_SRC = prependBaseUrl('images/logo/logo_512x512.png')
 
 // ─── The gag's clock ────────────────────────────────────────────────────────
@@ -107,7 +107,6 @@ const BOO_MS = 1500
 const LAUGH_MS = 3200
 
 const wispEl = ref<HTMLElement | null>(null)
-const stripEl = ref<HTMLElement | null>(null)
 const tilesEl = ref<HTMLElement | null>(null)
 
 /**
@@ -222,7 +221,6 @@ onMounted(() => {
     // Before it starts fading: both halves of the ghost, in order — the
     // window's float and the strip's frame cycle.
     adoptAnimationClock(staticSplash.querySelector('.splash-wisp'), wispEl.value)
-    adoptAnimationClock(staticSplash.querySelector('.splash-wisp img'), stripEl.value)
     // The tile, too: a layer starting its drift from zero would show the
     // pattern doubled and sliding against itself through the crossfade.
     adoptAnimationClock(staticSplash.querySelector('.splash-tiles'), tilesEl.value)
@@ -407,64 +405,25 @@ $greet-w: clamp(200px, 58vmin, 340px)
   width: 100%
   aspect-ratio: 340 / 200
 
-// --- The ghost -------------------------------------------------------------
-//
-// `wispling.webp` is the painted walk cycle the field already plays: one
-// horizontal strip of 8 panels, each 228 x 256. The window shows one panel and
-// the strip inside it is 8x as wide, so a `steps(8)` slide of exactly -100% of
-// the STRIP's own width lands on each panel in turn — no pixel arithmetic, and
-// it stays correct if the strip is ever repainted at a different resolution.
-//
-// The panel count IS hard-coded here, unlike `spriteStrip.ts` which reads it
-// off the file. CSS cannot measure an image; a repaint with a different panel
-// count has to change the 8 in three places (here, the strip width, and the
-// static splash). That is the trade for animating this without a frame of JS.
-//
-// A panel is the FIELD's frame box, and that box reserves headroom for the
-// tall monsters — the wispling only fills the middle of it. Measured off the
-// file, its ink runs 0.206..0.789 across a panel and 0.363..0.941 down it, so
-// a window sized to the panel shows a ghost barely half as big as the space it
-// occupies, floating oddly high. The three numbers below are therefore solved
-// for the INK rather than the box:
-//
-//   ink is 0.583 x 0.578 of a panel, its centre 0.4975 across
-//   want:  ink 76% of the stage tall, centred at 29% across, bottom at 98% down
-//   so:    window height = 0.76 / 0.578            = 131.5% of the stage
-//          window width  = that x (228/256) x (200/340) = 68.9% of the stage
-//          left   = 0.29 - 0.4975 x 0.689          = -5.3%
-//          bottom = (1 - 0.98) - (1 - 0.941) x 1.315 = -5.8%
-//
-// The window therefore hangs slightly outside the stage on two sides. That is
-// only transparent padding — the stage does not clip — and it is what puts the
-// ghost's own outline where the composition wants it.
+// The ant stands in the LEFT half of the stage and the bubble fills the right,
+// so a 320 px portrait phone never clips the speech.
 .wisp
   position: absolute
-  left: -5.3%
-  bottom: -5.8%
-  height: 131.5%
-  aspect-ratio: 228 / 256
-  overflow: hidden
-  // The float, and — on the shout — the lunge. Both live on the WINDOW so the
-  // strip inside is free to do nothing but cycle.
+  left: 1%
+  bottom: -2%
+  height: 112%
+  aspect-ratio: 1 / 1
+  // The float, and — on the shout — the lunge.
   animation: wisp-float 2.6s ease-in-out infinite
 
 .wisp-strip
   display: block
-  // Both overrides are load-bearing. Tailwind's preflight caps every image at
-  // `max-width: 100%`, which would squash all eight panels into one panel's
-  // width; and the `width`/`height` attributes on the tag are presentational
-  // hints that win until an author rule says otherwise, so the height is stated
-  // rather than left to `auto`.
+  // Tailwind preflight caps every image at `max-width: 100%`; the still is
+  // square and fills its own window, so both axes are stated.
   max-width: none
-  width: 800%
+  width: 100%
   height: 100%
-  animation: wisp-walk 2.6s steps(8, end) infinite
 
-@keyframes wisp-walk
-  from
-    transform: translateX(0)
-  to
-    transform: translateX(-100%)
 
 @keyframes wisp-float
   0%, 100%

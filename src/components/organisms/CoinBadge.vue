@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import IconCoin from '@/components/icons/IconCoin.vue'
-import useTowerEconomy from '@/use/useTowerEconomy'
+import { coins } from '@/use/useSplatProgress'
 import { registerQaAdTap } from '@/use/useQaAdTrigger'
 
-const { coins } = useTowerEconomy()
 
-// Exposed so siblings (e.g. TreasureChest) can target the badge for fly-to VFX.
+// Exposed so siblings can target the badge for fly-to coin VFX.
 const rootEl = ref<HTMLElement | null>(null)
 defineExpose({ rootEl })
 

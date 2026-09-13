@@ -1,21 +1,19 @@
 import { ref } from 'vue'
 import { prependBaseUrl } from '@/utils/function'
-import {
-  primeSurvivors, survivorsReady, survivorBakeProgress01, bakeSurvivorSlice
-} from '@/game/heroSprites'
-import {
-  primeMonsterSprites, monstersReady, monsterBakeProgress01, bakeMonsterSlice
-} from '@/game/monsterSprites'
-import { stageDesigns } from '@/game/foes'
-import { getState } from '@/use/useTowerState'
-import { STAGE_KEY } from '@/keys'
+import { primeBugs, bugsReady, bakeProgress01, bakeSlice } from '@/game/bugArt'
+import { levelCast, clampLevel } from '@/game/stages'
+import { getState } from '@/use/useSplatixState'
+import { LEVEL_KEY } from '@/keys'
 import { artOverridesEnabled, preloadArtOverrides } from '@/game/art'
 import { criticalArtWants, preloadRemainingArt } from '@/game/artPreload'
 
-// splatix draws all gameplay art programmatically (Canvas 2D) and uses
-// inline SVG for HUD icons, so the preloader only has to decode two pieces of
-// UI chrome. SFX decode on first play (see `useSound.ts`) and are warmed on an
-// idle slot after first paint; the splash exits as soon as the bundle parses.
+// Splatix draws all gameplay art programmatically (Canvas 2D) and uses inline
+// SVG for HUD icons, so the preloader has NO bitmaps of its own to decode. What
+// it does wait for is the BUG BAKE - the cast's frame strips, drawn into
+// offscreen canvases at runtime - because a bug whose strip is not ready draws
+// through the slow path and a whole level of that is a stutter nobody can
+// explain. SFX decode on first play (see `useSound.ts`) and are warmed on an
+// idle slot after first paint.
 
 const loadingProgress = ref(100)
 const areAllAssetsLoaded = ref(true)
@@ -228,13 +226,13 @@ export const loadAudioBuffer = async (src: string): Promise<AudioBuffer | null> 
 }
 
 /**
- * How long the splash may wait on the survivor strips before giving up and
- * letting the player in anyway.
+ * How long the splash may wait on the bug bake before giving up and letting the
+ * player in anyway.
  *
- * A ceiling, not a target: with the bake-slice fix in `heroSprites.ts` the whole
- * set lands in well under a second even on a thread with no idle time. But a
- * loading screen that can hang forever is a worse bug than a crowd of capsules,
- * so the wait is bounded — and the fallback path is exactly the old behaviour.
+ * A ceiling, not a target: a level's cast is at most nine designs times eight
+ * frames and lands in well under a second even on a thread with no idle time.
+ * But a loading screen that can hang forever is a worse bug than a few frames of
+ * the slow drawing path, so the wait is bounded.
  */
 const SPRITE_BAKE_TIMEOUT_MS = 6000
 
@@ -250,14 +248,10 @@ const SPRITE_BAKE_TIMEOUT_MS = 6000
  */
 const CRITICAL_ART_TIMEOUT_MS = 10000
 
-/** Share of the loading bar given to image decodes; the rest is the sprite
- *  bake. The images are one file and the bake is hundreds of canvases, so the
- *  bar spends most of its life where the time actually goes. */
+/** Share of the loading bar given to image decodes; the rest is the bug bake.
+ *  There are no critical images left, so this is the head start the bar gets so
+ *  it is never sitting at 0 while the first slice runs. */
 const IMAGE_SHARE = 0.1
-/** Of the bake, the share given to the survivor strips. The foe cast is far
- *  bigger (13 designs x 16 frames against 3 x 14) and its frames are dearer, so
- *  it owns most of the bar. */
-const SURVIVOR_SHARE = 0.25
 /** Where the bake's share of the bar ends when painted art is on: the last
  *  stretch belongs to the first stage's bitmaps, so the number keeps moving
  *  instead of parking at 100% while they land. */
@@ -291,10 +285,10 @@ const decodeImage = (src: string): Promise<void> => {
 // ─── Off-hot-path background warm-up ───────────────────────────────────────
 // Runs ONCE, after the splash has hidden (hot path done + first paint).
 //
-// splatix draws every block, enemy and background layer procedurally, so
-// there is no gameplay art to decode here — the only deferred work is the SFX
-// buffer decode. Doing it on an idle slot means the first explosion of a
-// session doesn't pay a decode cost mid-frame, without delaying first paint.
+// Splatix draws every bug, prop and floor procedurally, so there is no gameplay
+// art to decode here: the deferred work is the painted-art tiers and the SFX
+// buffer decode. Doing it on an idle slot means the first squish of a session
+// does not pay a decode cost mid-frame, without delaying first paint.
 let backgroundWarmStarted = false
 
 const runBackgroundWarmup = (): void => {
@@ -327,9 +321,9 @@ const runBackgroundWarmup = (): void => {
 export default () => {
   const preloadAssets = async (): Promise<void> => {
     // ── HOT PATH ──
-    // splatix has NO gameplay bitmaps: blocks, enemies, projectiles and the
-    // whole background are drawn from code, and so is the result screen's
-    // banner now. Nothing is on the critical image path but the renderer chunk.
+    // Splatix has NO gameplay bitmaps: bugs, props, floors and the result
+    // screen's banner are all drawn from code. Nothing is on the critical image
+    // path but the renderer chunk and the cast's own bake.
     //
     // So the "loading" phase is effectively just the JS parse, which is exactly
     // the fast-start behaviour portals grade on. Everything else (SFX decode,
@@ -351,7 +345,7 @@ export default () => {
     await Promise.allSettled(tasks)
     loadingProgress.value = Math.round(IMAGE_SHARE * 100)
 
-    // ── Step 2: the survivor sprite strips ──
+    // ── Step 2: the bug bake ──
     //
     // These are ESSENTIAL, and they are the reason this step exists. They are
     // procedural — baked into offscreen canvases at runtime, not downloaded —
@@ -367,9 +361,8 @@ export default () => {
     // deadlock the loading screen.
     // `fetch: false`: the painted strips are staged by `artPreload` below, not
     // fired all at once from the priming call.
-    primeSurvivors({ fetch: false })
-    primeMonsterSprites(foeDesigns(), { fetch: false })
-    await waitForSpriteStrips()
+    primeBugs(bootCast(), Math.max(3, Math.min(window.innerWidth, window.innerHeight) / 100))
+    await waitForBugBake()
 
     // ── Step 3: the painted art the first screen needs ──
     //
@@ -425,65 +418,58 @@ export default () => {
  * the loader runs before the game module graph is imported, and reaching for it
  * here would invert that order.
  */
-let foeDesignCache: string[] | null = null
-const foeDesigns = (): string[] => {
-  if (foeDesignCache) return foeDesignCache
-  const raw = Number(getState(STAGE_KEY, 1))
-  const stage = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1
-  foeDesignCache = stageDesigns(stage)
-  return foeDesignCache
+let castCache: ReturnType<typeof levelCast> | null = null
+const bootCast = (): ReturnType<typeof levelCast> => {
+  if (!castCache) castCache = levelCast(clampLevel(Number(getState(LEVEL_KEY, 1))))
+  return castCache
 }
 
 /**
- * Wait for the sprite strips to bake, feeding the loading bar as they go.
+ * Wait for the level bug bake, feeding the loading bar as it goes.
  *
- * BOTH casts are waited on, and both for the same reason. A survivor whose strip
- * is missing draws as a coloured capsule and a foe draws as a dark red ellipse —
- * the two fallbacks players reported. They are procedural, baked into offscreen
- * canvases at runtime, so no network waterfall covers them and nothing else in
- * this function would ever have waited for them.
+ * A design whose strip is missing is drawn from paths every frame instead of
+ * blitted, which on a dense board is the difference between 60 fps and a
+ * stutter. The bake is procedural (offscreen canvases built at runtime), so no
+ * network waterfall covers it and nothing else here would ever have waited.
  *
- * Resolves early when everything is already cached (a second run), and always
- * resolves within `SPRITE_BAKE_TIMEOUT_MS` — a loading screen that can hang
- * forever is a worse bug than a fallback shape.
+ * Resolves early when everything is already cached (a second level in the same
+ * session), and always within `SPRITE_BAKE_TIMEOUT_MS`: a loading screen that
+ * can hang forever is a worse bug than a few frames of the slow path.
  *
- * Polls rather than subscribing: the bake is driven by `requestIdleCallback`
- * slices with no completion event to hang a listener on, and a 60 ms poll over
- * roughly a second is cheaper than the machinery to avoid it.
+ * Polls rather than subscribing: there is no completion event to hang a listener
+ * on, and a 30 ms poll over a fraction of a second is cheaper than the machinery
+ * to avoid it.
  */
-const waitForSpriteStrips = async (): Promise<void> => {
-  const ids = foeDesigns()
-  const ready = (): boolean => survivorsReady() && monstersReady(ids)
-  if (ready()) return
+const waitForBugBake = async (): Promise<void> => {
+  const ids = bootCast()
+  if (bugsReady(ids)) return
 
   const deadline = Date.now() + SPRITE_BAKE_TIMEOUT_MS
-  while (!ready() && Date.now() < deadline) {
+  while (!bugsReady(ids) && Date.now() < deadline) {
     // Drive the bake directly rather than waiting on idle slots. The splash is
     // up, so nothing else is animating and these slices cost nothing visible —
     // and it is what stops a device that never goes idle from sitting here until
     // the cap expires. The idle-driven pump keeps ownership after this returns.
-    bakeSurvivorSlice(6)
-    bakeMonsterSlice(10)
-    const baked = SURVIVOR_SHARE * survivorBakeProgress01()
-      + (1 - SURVIVOR_SHARE) * monsterBakeProgress01(ids)
+    bakeSlice(8)
     const bakeEnd = artOverridesEnabled() ? BAKE_END_WITH_ART : 1
-    loadingProgress.value = Math.round((IMAGE_SHARE + (bakeEnd - IMAGE_SHARE) * baked) * 100)
-    await new Promise((resolve) => setTimeout(resolve, 60))
+    loadingProgress.value = Math.round(
+      (IMAGE_SHARE + (bakeEnd - IMAGE_SHARE) * bakeProgress01()) * 100
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30))
   }
 }
 
 // Dev-only probe, same pattern as `__audioDebug` / `__testInterstitial` in
-// `useAds`. Lets a cross-browser harness assert that the survivor strips really
+// `useAds`. Lets a cross-browser harness assert that the bug strips really
 // baked in THAT engine, rather than inferring it from a screenshot. Gated on
 // `import.meta.env.DEV`, so it is dead-code-eliminated from every platform build.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   ;(window as unknown as Record<string, unknown>).__assetDebug = () => ({
     loadingProgress: loadingProgress.value,
     areAllAssetsLoaded: areAllAssetsLoaded.value,
-    survivorsReady: survivorsReady(),
-    survivorBake01: survivorBakeProgress01(),
-    monstersReady: monstersReady(foeDesigns()),
-    monsterBake01: monsterBakeProgress01(foeDesigns())
+    cast: bootCast(),
+    bugsReady: bugsReady(bootCast()),
+    bugBake01: bakeProgress01()
   })
 }
 

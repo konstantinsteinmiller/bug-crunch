@@ -4,8 +4,8 @@ import { prependBaseUrl } from '@/utils/function'
  * ─── Art contract ───────────────────────────────────────────────────────────
  *
  * splatix ships with ZERO gameplay bitmaps of its own making: the cast is
- * hand-inked vector art baked to frame strips at runtime, and the road, the
- * gates, the crates and every effect are Canvas 2D. That keeps the download
+ * hand-inked vector art baked to frame strips at runtime, and the floors, the
+ * props, the foot and every effect are Canvas 2D. That keeps the download
  * tiny, makes the art crisp at any DPR, and means the game is playable the
  * instant the JS parses.
  *
@@ -27,7 +27,7 @@ import { prependBaseUrl } from '@/utils/function'
  *
  * The build default has to stay the floor because a miss is only free for the
  * GAME. CrazyGames' QA console reports every 404 as `Missing resource detected:
- * …/images/monsters/grumpling.webp`, one line per drawable, which reads as a
+ * …/images/bugs/beetle.webp`, one line per drawable, which reads as a
  * broken build to a reviewer. So art is shipped off until it is ready, while a
  * URL param still lets it be switched on and — the point of the flag — straight
  * back OFF, live, with no rebuild, when the new art turns out worse than the
@@ -41,39 +41,32 @@ import { prependBaseUrl } from '@/utils/function'
 /** Folder layout the art pipeline targets, one per drawable kind. */
 export const ART_FOLDERS = {
   /**
-   * Painted WALK CYCLES, one horizontal strip per monster design.
+   * Painted WALK CYCLES, one horizontal strip per bug design.
    *
    * Keyed on the DESIGN (the thing that has a gait), sliced back into frames at
    * runtime by `spriteStrip`, and played from the same clock that drives the
    * procedural bake — so a design can swap from the drawing to the painting
-   * mid-stride without a pop.
+   * mid-step without a pop.
    */
-  monster: 'images/monsters',
-  /** The squad's RUN CYCLES, one strip per outfit, on the same terms. */
-  hero: 'images/heroes',
+  bug: 'images/bugs',
+  /** The six shoes, seen from above, one still each. */
+  shoe: 'images/shoes',
   /**
-   * Painted DEATHS, one strip per BOSS design: eight panels from the killing
-   * blow to the body lying still, played once and held on the last panel as
-   * the corpse the next stage opens beside. Wider panels than a walk's (see
-   * `DEATH_FRAME_ASPECT`). Fetched late on purpose — when the stage is 80 %
-   * run, never on the splash (`deathArtWant`) — and a miss is the drawn topple.
+   * Painted BOSS bodies, one still per boss. Not a strip: a boss is drawn at a
+   * size where a walk cycle would be the heaviest file in the game, and its
+   * animation is the script (charge, spin, beam) rather than a gait.
    */
-  death: 'images/deaths',
-  /** Road props: the two crates, the barricade tile, boulders, the powder keg,
-   *  the divider pillar, the coin. One still each. */
+  boss: 'images/bosses',
+  /** Hazards and floor props: honey, magnet, salt, sweeper, cobweb, conveyor,
+   *  crumbs, the boss egg pod, the coin. One still each. */
   prop: 'images/props',
-  /** Gate frames, one per op, nine-sliced across the leaf's own width. */
-  gate: 'images/gates',
-  /** Projectiles in flight, authored at rest and turned by the renderer. */
-  round: 'images/rounds',
-  /** Effects: the muzzle flash, the smoke puff, scorch, rings, the shield dome,
-   *  the boss guard and both crests. */
+  /** Effects: the splat burst, the shockwave rings, the haze, the scorch, the
+   *  spark, the fever star. */
   fx: 'images/fx',
-  /** Backdrop: the two ridge silhouettes. (The road tile stays drawn — a
-   *  painted one was tried, and cobbles read as objects under the crowd.) */
+  /** Floors: one seamless tile per world. */
   bg: 'images/bg',
-  /** The HUD's own art — the elite crown (shared with the field), the result
-   *  banner, the shop chest, the two skill icons — and the logo. */
+  /** The HUD's own art — the vial, the star, the fever boot, the result
+   *  banner — and the logo. */
   ui: 'images/ui'
 } as const
 
@@ -156,7 +149,7 @@ const artChanged = (change: ArtChange = null): void => {
  *
  * A 404 is remembered FOREVER — that is what stops the renderer re-requesting a
  * file that is not coming. Which is also exactly wrong the moment new art lands
- * on disk: without this, dropping in `grumpling.webp` and flipping the flag
+ * on disk: without this, dropping in `beetle.webp` and flipping the flag
  * would change nothing, because the miss from boot is still cached.
  */
 export const refreshArtOverrides = (): void => {

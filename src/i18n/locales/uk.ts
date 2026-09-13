@@ -1,20 +1,20 @@
+// UK bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Скасувати',
   'close': 'Закрити',
   'ok': 'Ок',
-  'continue': 'Продовжити',
-  'tapToContinue': 'Торкніться, щоб продовжити',
-  'clickToContinue': 'Клацніть, щоб продовжити',
+  'continue': 'Далі',
+  'tapToContinue': 'Торкнись, щоб продовжити',
+  'clickToContinue': 'Клікни, щоб продовжити',
   'rewards': 'НАГОРОДИ',
-  'tip': 'Порада',
+  'tip': 'Підказка',
   'crazyGamesOnly': 'Ця гра доступна лише на',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Далі',
-    'replay': 'Заново',
+    'replay': 'Ще раз',
     'back': 'Назад',
     'play': 'Грати',
     'pause': 'Пауза',
@@ -22,260 +22,256 @@ export default {
     'home': 'Головна',
     'info': 'Інфо'
   },
-
   'hud': {
-    'stage': 'Етап {n}',
-    'best': 'Рекорд {n}',
-    'boss': 'Бос',
-    'miniboss': 'Міні-бос',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Етапів до наступного бонусу',
-    'fireRate': 'Темп',
-    'incoming': 'Атака!',
-    'dodge': 'Ухилися',
-    'getIn': 'Всередину',
-    'holdStill': 'Завмри',
-    'milestone': '{n} у строю!',
-    'weaponActive': '{name} готовий',
-    'weaponsActive': '{a} + {b} готові',
-    'weaponLocked': '{name} заблоковано — збито важелів: {n} з {total}',
-    'weaponGift': '{name} попереду — безкоштовно, без важелів',
-    'weaponFree': 'ДАРМА'
+    'score': 'Очки',
+    'time': 'Час',
+    'chain': 'Серія Splat: {n}',
+    'level': 'Рівень {n}'
   },
-
-  'weapons': {
-    'rocket': 'Ракетниця',
-    'gatling': 'Кулемет Ґатлінга'
+  'worlds': {
+    'picnic': 'Килимок для пікніка',
+    'backyard': 'Зарослий двір',
+    'attic': 'Запилене горище',
+    'arcade': 'Неоновий зал'
   },
-
-  'tutorial': {
-    'touch': 'Проведіть пальцем, щоб рухати загін',
-    'desktop': 'Рухайте мишею, щоб вести загін'
+  'bugs': {
+    'ant': 'Мурахи',
+    'beetle': 'Жуки',
+    'flea': 'Блохи',
+    'caterpillar': 'Гусениці',
+    'stinkbug': 'Клопи-смердюхи',
+    'centipede': 'Багатоніжки',
+    'pinatafly': 'Мухи-піньяти',
+    'moth': 'Метелики',
+    'robobug': 'Робожуки'
+  },
+  'bosses': {
+    'queenAnt': 'Королева мурах Голіаф',
+    'beetleKing': 'Колючий Король Жуків',
+    'matriarch': 'Матріарх Багатоніжок',
+    'roachPrime': 'Меха-Тарган Прайм'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Топчи боса!',
+      'summon': 'Прибери рій!',
+      'pods': 'Розчави яйця!',
+      'charge': 'Утримуй і бий!',
+      'spin': 'Геть із кола!',
+      'shield': 'Розбий щит ударом!',
+      'beam': 'Ухились від променя!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Швидкість',
+      'radius': 'Площа удару',
+      'pierce': 'Пробиття броні'
+    },
+    'sneaker': {
+      'name': 'Класичний кед',
+      'perk': 'Збалансований і швидко готовий знову.',
+      'trade': 'Ні в чому не видатний.'
+    },
+    'steelBoot': {
+      'name': 'Черевик зі сталевим носком',
+      'perk': 'Шипи тобі не страшні. Удари оглушують усе довкола.',
+      'trade': 'Важкий і повільно піднімається.'
+    },
+    'bunnySlipper': {
+      'name': 'Капець-зайчик',
+      'perk': 'Безшумний крок — стрибуни тебе не помітять.',
+      'trade': 'Панцир не пробиває зовсім.'
+    },
+    'rollerSkate': {
+      'name': 'Ролик',
+      'perk': 'Наступи й тягни — зоре цілу лінію.',
+      'trade': 'Дуже вузька площа удару.'
+    },
+    'cleatBoot': {
+      'name': 'Бутса з шипами',
+      'perk': 'Шипи протикають панцири й залози.',
+      'trade': 'Найменша площа в шафці.'
+    },
+    'electricSock': {
+      'name': 'Електрошкарпетка',
+      'perk': 'Кожен удар б\'є блискавкою ще по трьох комахах.',
+      'trade': 'Блискавки добивають лише слабких.'
+    }
+  },
+  'locker': {
+    'title': 'Шафка',
+    'buy': 'Купити {n}',
+    'wear': 'Взути',
+    'worn': 'Взуто',
+    'needStars': 'Ще {n} зірок',
+    'needCoins': 'Ще {n} монет'
+  },
+  'fever': {
+    'filling': 'Splat-гарячка: {n}%',
+    'ready': 'Splat-гарячка готова — торкнись',
+    'running': 'Splat-гарячка триває'
+  },
+  'objectives': {
+    'clear': 'Пройди рівень',
+    'combo': 'Набери серію ×{n}',
+    'noSpike': 'Не отримай шкоди від шипів',
+    'time': 'Заверши, коли лишилось {n}с',
+    'accuracy': 'Влучай {n}% ударів',
+    'fever': 'Запусти Splat-гарячку {n}×',
+    'kind': 'Розчави {n} {bug}',
+    'feverKills': 'Розчави {n} за одну гарячку',
+    'noMiss': 'Промахнись не більше {n} разів',
+    'score': 'Набери {n} очок'
   },
   'hints': {
-    'move': { 'touch': 'Торкніться, щоб рухатись', 'desktop': 'Клацніть, щоб рухатись' },
-    'gate': { 'touch': 'Стріляйте у ворота: +1 кожні пів секунди', 'desktop': 'Стріляйте у ворота: +1 кожні пів секунди' },
-    'trap': { 'touch': 'Червоні ворота ЗМЕНШУЮТЬ загін — біжіть в інші!', 'desktop': 'Червоні ворота ЗМЕНШУЮТЬ загін — біжіть в інші!' },
-    'divider': { 'touch': 'Ніколи не зачіпайте стовп між воротами', 'desktop': 'Ніколи не зачіпайте стовп між воротами' },
-    'crate': { 'touch': 'Зелені ящики: усі б’ють сильніше', 'desktop': 'Зелені ящики: усі б’ють сильніше' },
-    'rate': { 'touch': 'Сині ящики: усі стріляють швидше', 'desktop': 'Сині ящики: усі стріляють швидше' },
-    'boss': { 'touch': 'Не стійте в червоному колі!', 'desktop': 'Не стійте в червоному колі!' },
-    'lever': { 'touch': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю', 'desktop': 'Збий ОБИДВА важелі по краях дороги — вони відкриють ящик зі зброєю' },
-    'guard': { 'touch': 'Щит піднято — постріли поки не пробивають', 'desktop': 'Щит піднято — постріли поки не пробивають' },
-    'cage': { 'touch': 'Стріляй по клітках — полонені приєднаються до загону', 'desktop': 'Стріляй по клітках — полонені приєднаються до загону' },
-    'shieldBox': { 'touch': 'Ящик щита — чекає й блокує один сильний удар', 'desktop': 'Ящик щита — чекає й блокує один сильний удар' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} вцілілих обміняно',
-    'unlocked': 'Відкрито!',
-
-    'guardian': "Ангел-охоронець врятував тебе!",
-
-    'guardianSub': "Повернулися {n} вцілілих",
-
-    'next': "Далі: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Обери зброю",
-    'nextStage': "наступний рівень",
-    'stagesAway': "через {n} рівні"
-  },
-  'weaponPick': {
-    'title': "Обери свою зброю",
-    'subtitle': "Твоя на рівень {n}. На дорозі чекає ще.",
-    'take': "Взяти",
-    'rocket': {
-      'a': "Самонавідний залп",
-      'b': "Шкода від вибуху"
+    'move': {
+      'touch': 'Торкнись, щоб рухатись',
+      'desktop': 'Клікни, щоб рухатись'
     },
-    'gatling': {
-      'a': "Удвічі вища скорострільність",
-      'b': "Швидше качає ворота"
+    'slam': {
+      'touch': 'Утримуй і відпусти — потужний удар',
+      'desktop': 'Утримуй кнопку — потужний удар'
+    },
+    'beetle': {
+      'touch': 'У жуків панцир — утримуй і бий',
+      'desktop': 'У жуків панцир — утримуй і бий'
+    },
+    'flea': {
+      'touch': 'Блохи стрибають — бий туди, де приземляться',
+      'desktop': 'Блохи стрибають — бий туди, де приземляться'
+    },
+    'spike': {
+      'touch': 'Не топчи колючих!',
+      'desktop': 'Не топчи колючих!'
+    },
+    'stink': {
+      'touch': 'Клопи-смердюхи розмивають екран',
+      'desktop': 'Клопи-смердюхи розмивають екран'
+    },
+    'fever': {
+      'touch': 'Колба повна — торкнись полум\'я!',
+      'desktop': 'Колба повна — клікни на полум\'я!'
+    },
+    'honey': {
+      'touch': 'Мед тримає стрибунів на місці',
+      'desktop': 'Мед тримає стрибунів на місці'
+    },
+    'web': {
+      'touch': 'Павутина сповільнює ногу',
+      'desktop': 'Павутина сповільнює ногу'
+    },
+    'belt': {
+      'touch': 'Стрічка несе комах',
+      'desktop': 'Стрічка несе комах'
+    },
+    'sweeper': {
+      'touch': 'Щітка давить комах безкоштовно',
+      'desktop': 'Щітка давить комах безкоштовно'
+    },
+    'boss': {
+      'touch': 'Утримуй і бий, коли бос замахнеться',
+      'desktop': 'Утримуй і бий, коли бос замахнеться'
+    },
+    'pods': {
+      'touch': 'Розчави яйця, поки вони не вилупились!',
+      'desktop': 'Розчави яйця, поки вони не вилупились!'
     }
-  },
-  'bossReward': {
-    'title': "Боса переможено!",
-    'subtitle': "Подарунок на рівень {n}. Біжи далі!"
   },
   'result': {
-    'stageClear': 'Етап пройдено!',
-    'wipedOut': 'Загін знищено',
-    'reachedStage': 'Етап {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n} %',
-    'bestReach': 'Рекорд {n} %',
-    'newReach': 'Твій рекорд!',
+    'cleared': 'Рівень пройдено!',
+    'timeUp': 'Час вийшов!',
+    'upNext': 'Далі: {n}',
+    'retryLevel': 'Ще раз?',
+    'campaignDone': 'Усі рівні пройдено!',
     'newRecord': 'Новий рекорд!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Бос повалений!',
-    'wasted': 'Кінець',
-    'cause': {
-      'foe': 'Зім’яли монстри',
-      'elite': 'Мінібос зламав вас',
-      'barricade': 'Влетіли в барикади',
-      'crate': 'Влетіли в ящики',
-      'divider': 'Зачепили розділювачі',
-      'trap': 'Потрапили в пастки',
-      'slam': 'Бос вас розчавив'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Рубіж!',
-    'rallied': 'Друге дихання',
-    'peakSquad': 'Найбільший загін',
-    'kills': 'Убивства',
-    'tripleCoins': '×3',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Монети потроєно!',
-    'nextStage': 'Наступний етап',
+    'nextLevel': 'Наступний рівень',
     'tryAgain': 'Ще раз',
-    'upgrade': 'Покращити',
-    'upgradeHint': 'Покращ загін!',
-    'rankOf': 'із {n}',
-    'upNext': 'Далі: рівень {n}'
+    'squishes': 'Розчавлено комах',
+    'starsEarned': '{n} із 3 зірок',
+    'rankOf': 'з {n}',
+    'worldUnlocked': '{n} відкрито!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Поділитися забігом',
-    'text': 'Я дійшов до рівня {n} у {game}. Зайдеш далі?'
-  },
-
   'leaderboard': {
     'title': 'Таблиця лідерів',
-    'rank': '#',
+    'rank': 'Місце',
     'player': 'Гравець',
-    'stage': 'Етап',
-    'squad': 'Загін',
-    'empty': 'Поки що порожньо. Будьте першим!',
-    'failed': 'Таблиця лідерів недоступна.',
-    'loading': 'Завантаження…',
-    'you': 'Ви',
-    'yourRank': 'Ви на #{n}',
-    'of': 'із {n} гравців'
+    'score': 'Очки',
+    'level': 'Рівень',
+    'you': 'Ти',
+    'yourRank': 'Ти #{n} з {total}',
+    'of': 'з {n}',
+    'unranked': 'Пройди рівень, щоб потрапити в таблицю',
+    'loading': 'Завантаження таблиці…',
+    'empty': 'Ще ніхто не набрав очок',
+    'failed': 'Не вдалося отримати таблицю'
   },
-
-  'chest': {
-    'label': 'Скриня зі скарбами',
-    'ready': 'Відкрити скриню за {n} монет',
-    'filling': 'Скриня наповнюється',
-    'spent': 'Скриня порожня до завтра'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Щоденна вилазка',
-    'hud': 'Вилазка',
-    'multiplier': '×{n}',
-    'available': 'Щоденна вилазка — сьогоднішня дорога, потрійні монети',
-    'confirm': 'Почати вилазку',
-    'spent': 'Щоденна вилазка — нова дорога через {time}',
-    'done': 'Повертайтеся завтра',
-    'back': 'Повернутися до кампанії'
-  },
-
-  'skills': {
-
-    'grenade': 'Граната',
-
-    'shield': 'Щит',
-
-    'locked': 'Закрито',
-
-    'unlocksAt': 'Відкриється на рівні {n}',
-
-    'frost': 'Крижана нова',
-
-    'decoy': 'Сигнал-приманка',
-
-    'trialLabel': '{name} · безкоштовно',
-
-    'trialTag': 'Спробуй безкоштовно!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Покращення',
-    'spotlight': 'Витратити!',
-    'level': 'Рів. {n}',
-    'maxed': 'Макс',
-    'names': {
-      'squad': 'Загін',
-      'power': 'Вогнева міць',
-      'rate': 'Швидкострільність',
-      'range': 'Дальність',
-      'scavenge': 'Мародерство',
-      'grenade': 'Граната',
-      'shield': 'Щит',
-      'rocket': 'Сила ракет',
-      'gatling': 'Сила кулемета'
-    },
-    'descriptions': {
-      'squad': 'Починайте кожен етап із більшим загоном.',
-      'power': 'Кожен боєць завдає більше шкоди за постріл.',
-      'rate': 'Кожен боєць стріляє швидше.',
-      'range': 'Загін відкриває вогонь далі по дорозі.',
-      'scavenge': 'Більше монет за кожен забіг.',
-      'grenade': 'Кинь гранату для потужного сплеску шкоди.',
-      'shield': 'Удвічі зменшує шкоду загону на кілька секунд.',
-      'rocket': 'Ракетниці, відкриті на етапі, завдають більше шкоди.',
-      'gatling': 'Кулемети, відкриті на етапі, завдають більше шкоди.'
-    }
-  },
-
   'options': {
-    'title': 'Налаштування', 'general': 'Загальні', 'audio': 'Звук', 'language': 'Мова',
-    'difficulty': 'Складність', 'soundEffects': 'Звукові ефекти', 'music': 'Музика', 'musicTrack': 'Музичний трек',
-    'musicTracks': { 'cozy': 'Затишна гармонія', 'trance': 'Транс-тунель' },
-    'haptics': 'Вібрація', 'on': 'Увімк.', 'off': 'Вимк.',
+    'title': 'Налаштування',
+    'general': 'Загальне',
+    'play': 'Гра',
+    'audio': 'Звук',
     'close': 'Зберегти й закрити',
-    'difficulties': { 'easy': 'Легка', 'medium': 'Середня', 'hard': 'Складна' },
+    'language': 'Мова',
+    'difficulty': 'Складність',
+    'soundEffects': 'Звукові ефекти',
+    'music': 'Музика',
+    'musicTrack': 'Трек',
+    'haptics': 'Вібрація',
+    'on': 'Увімк.',
+    'off': 'Вимк.',
+    'difficulties': {
+      'easy': 'Легка',
+      'medium': 'Звичайна',
+      'hard': 'Складна'
+    },
     'difficultyHints': {
-      'easy': 'Слабші вороги й тонші барикади.',
-      'medium': 'Звичайний забіг.',
-      'hard': 'Міцніші вороги й важчі барикади.'
-    }
+      'easy': 'Комахи повільніші, часу більше.',
+      'medium': 'Гра така, якою її задумали.',
+      'hard': 'Комахи швидші, поле щільніше.'
+    },
+    'musicTracks': {
+      'trance': 'Жучиний грув',
+      'cozy': 'Затишний пікнік'
+    },
+    'juiceStyle': 'Стиль бризок',
+    'juiceStyles': {
+      'ooze': 'Мультяшна слиз',
+      'confetti': 'Конфеті-піньята',
+      'bubble': 'Мильні бульбашки'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Яскрава слиз. Гра не змінюється.',
+      'confetti': 'Комахи вибухають конфеті. Гра не змінюється.',
+      'bubble': 'Комахи лопаються бульбашками. Гра не змінюється.'
+    },
+    'highVis': 'Велике коло удару',
+    'highVisHint': 'Товстіше і яскравіше кільце там, куди опуститься нога.',
+    'singleTap': 'Легке прицілювання',
+    'singleTapHint': 'Торкнись будь-де — нога полетить до найближчої комахи.'
   },
-
-  'adsBlocked': {
-    'title': 'Не вдалося показати рекламу',
-    'body': 'Ми намагалися показати відео, щоб ви отримали нагороду, але щось у браузері блокує рекламу.',
-    'allowPrefix': 'Дозвольте рекламу на',
-    'allowSuffix': '(або призупиніть блокувальник для цієї гри) і спробуйте ще раз.',
-    'gotIt': 'Зрозуміло'
+  'loading': {
+    'boo': 'Бу!',
+    'laugh': 'Хі-хі!',
+    'tooLong': 'Досі вантажиться… перевір з\'єднання?'
   },
   'saveStatus': {
-    'restoredTitle': 'Хмарне збереження відновлено', 'restoredBody': '+{n} бонусних монет за відновлення',
-    'tap': 'торкнутися', 'pausedTitle': 'Синхронізацію призупинено',
-    'pausedBody': 'Гра офлайн. Ваш прогрес зберігається тут.',
-    'retry': 'Повторити', 'dismiss': 'сховати'
+    'restoredTitle': 'Прогрес відновлено',
+    'restoredBody': 'Ми повернули твоє збереження й додали {n} монет.',
+    'pausedTitle': 'Збереження призупинено',
+    'pausedBody': 'Не вдається зв\'язатися зі службою збережень. Твій прогрес у безпеці на цьому пристрої.',
+    'retry': 'Повторити',
+    'dismiss': 'Закрити',
+    'tap': 'Торкнись, щоб закрити'
   },
-  'loading': { 'tooLong': 'Завантаження триває надто довго? Вимкніть блокувальник реклами та оновіть сторінку.', 'boo': 'Бу!', 'laugh': 'Ха-ха-ха!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Поверни телефон',
-    'body': 'splatix грається вертикально.'
+  'adsBlocked': {
+    'title': 'Виявлено блокувальник реклами',
+    'body': 'Splatix безкоштовний завдяки рекламі. Вимкни блокувальник і перезавантаж сторінку.',
+    'allowPrefix': 'Дозволь рекламу на',
+    'allowSuffix': 'і перезавантаж сторінку.',
+    'gotIt': 'Зрозуміло'
   },
-  'license': { 'denied': 'Доступ заборонено: придбайте ліцензію.' }
+  'license': {
+    'denied': 'Не вдалося перевірити цю копію'
+  }
 }

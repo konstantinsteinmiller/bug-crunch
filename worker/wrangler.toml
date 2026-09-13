@@ -6,7 +6,7 @@ compatibility_date = "2024-11-01"
 binding = "DB"
 database_name = "splatix-leaderboard"
 # Replace with the id `wrangler d1 create splatix-leaderboard` prints.
-database_id = "a7845c12-395d-4d6a-9cac-b44a056cf4eb"
+database_id = ""
 
 [vars]
 # Empty = allow any origin. Every portal build serves the game from a different

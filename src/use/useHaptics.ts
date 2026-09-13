@@ -49,7 +49,7 @@ import { isAudioSuspended } from '@/use/useAssets'
 import { isMobileAudioMuted } from '@/use/useMobileAudioMute'
 import { isGamePaused } from '@/use/useGamePause'
 import { isPlatformAudioMuted } from '@/use/useGamePauseAudio'
-import { getState, setState } from '@/use/useTowerState'
+import { getState, setState } from '@/use/useSplatixState'
 import { saveDataVersion } from '@/use/useSaveStatus'
 import { HAPTICS_KEY } from '@/keys'
 

@@ -25,15 +25,15 @@ import type { HydrateState, LocalStorageAccessor, SaveStrategy } from './types'
 //
 //   1. **< 1 MB after gzip.** Poki switches cloud gamesave OFF for a player
 //      whose payload exceeds it, with no warning and nothing the game can
-//      detect. splatix's `tower_state` blob is well inside that today
+//      detect. splatix's `splatix_state` blob is well inside that today
 //      (single-digit KB), but anything that starts caching per-wave history or
 //      replay data would need a `poki_ignore`-prefixed key so the wrapper skips
 //      it.
 //
 //   2. **Never use the `poki_` key prefix.** Reserved and in active use by the
-//      SDK: poki_events_user_id, poki_pbf, poki_uid*, poki_session, poki_source,
-//      poki_pubcid, poki_no_ads, poki_url. This project's keys are `tower_state`
-//      / `ts_*` / `__save_*`, so there is no collision — keep it that way.
+//      SDK: poki_evensx_user_id, poki_pbf, poki_uid*, poki_session, poki_source,
+//      poki_pubcid, poki_no_ads, poki_url. This project's keys are `splatix_state`
+//      / `sx_*` / `__save_*`, so there is no collision — keep it that way.
 //
 //   3. **Incognito restricts localStorage — every access needs try/catch.** An
 //      explicit Poki hard requirement and a real crash: incognito sessions can

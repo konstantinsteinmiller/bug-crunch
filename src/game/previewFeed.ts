@@ -11,23 +11,22 @@
  *   ?feed=preview   the marketing cut. The recorder hides the DOM (the HUD, the
  *                   buttons, the banners, the result screen) on its own; this
  *                   switches off what the RENDERER paints that is a readout
- *                   rather than the game — floating damage numbers, the health
- *                   bars over crates and barricades, the off-screen elite
- *                   marker. The numbers on the gate leaves STAY: "×3" over a
- *                   doorway is the thing this genre is sold on, and a portal's
- *                   ban on "promotional text" is not a ban on the game's own
- *                   playfield.
+ *                   rather than the world — the boss tell and the objective
+ *                   call-out. The COMIC WORDS stay: SQUISH! over a flattened
+ *                   beetle is the thing this game is sold on, it is painted on
+ *                   the playfield rather than in a corner, and a portal's ban on
+ *                   "promotional text" is not a ban on a game's own art.
  *
  *   ?feed=pure      everything above, and the RECORDER additionally no-ops
  *                   `fillText` / `strokeText` for the whole page, which takes
- *                   the gate values and the crate health with it — for a spec
- *                   that demands "no hardcoded text, score counters,
- *                   watermarks, UI or logos". The crowd's own size is then the
- *                   only score on screen, which — for a crowd runner — is
- *                   enough. Nothing in this file has to do that job: every
- *                   number the world paints is drawn with canvas text, so the
- *                   recorder's own lever reaches all of them at once
- *                   (`preview.config.mjs`, `clean.suppressCanvasText`).
+ *                   the comic words with it — for a spec that demands "no
+ *                   hardcoded text, score counters, watermarks, UI or logos".
+ *                   What is left is a shoe, a floor and a great many bugs
+ *                   bursting, which for this game is enough. Nothing in this
+ *                   file has to do that job: every word the world paints is
+ *                   drawn with canvas text, so the recorder's own lever reaches
+ *                   all of them at once (`preview.config.mjs`,
+ *                   `clean.suppressCanvasText`).
  *
  * ── Why it is resolved once, at module load ──
  *
@@ -73,7 +72,7 @@ export const FEED_ON = FEED !== 'off'
  * Publish the scripting handle.
  *
  * DELIBERATELY a different flag from the feed. `--no-clean` records the game
- * exactly as a player sees it — HUD, damage numbers, health bars — and that
+ * exactly as a player sees it — HUD, chain badge, objective rail — and that
  * take still has to be DRIVEN, so `?preview=1` rides on every recording URL
  * while `?feed=` rides only on the clean ones. Tying the two together cost a
  * take: `--no-clean` dropped the feed parameter, the seam was never published,
@@ -82,38 +81,49 @@ export const FEED_ON = FEED !== 'off'
 export const SEAM_ON: boolean = FEED_ON || params()?.get('preview') === '1'
 
 /**
- * Hide the renderer's own readouts: floating damage numbers, the health bars
- * over breakables and foes, the elite's screen-edge marker. True for both
- * levels — they are interface in either cut. The numbers painted ON the world
- * (a gate's value, a crate's HP) are not: they are what the genre is sold on,
- * and `pure` takes them out through the recorder instead.
+ * Hide the renderer's own readouts: the boss tell, the objective call-out, the
+ * off-screen alert markers. True for both levels — they are interface in either
+ * cut. The comic words painted ON the world are not: they are what this game is
+ * sold on, and `pure` takes them out through the recorder instead.
  */
 export const HIDE_READOUTS = FEED_ON
 
 /** The shape published on `window.__preview`. */
 export interface PreviewSeam {
   feed: FeedLevel
-  game: typeof import('@/use/useSurvivalGame')
+  game: typeof import('@/use/useSplatixGame')
   vfx: typeof import('@/use/useVfx')
   /** The painted-art layer and its want lists — a recording holds until every
-   *  painting the stage can ask for has decoded, or the clip would swap from
+   *  painting the level can ask for has decoded, or the clip would swap from
    *  the drawing to the painting mid-shot. */
   art: typeof import('@/game/art')
   artPreload: typeof import('@/game/artPreload')
-  /** The save blob. A recorder that plays a stage twice — once unrendered, to
-   *  find out when the boss dies, and once for the camera — has to put the
-   *  bookkeeping of the first run back: a clear winds the autobalancer up and
-   *  moves the resume stage, and the take would then be a different fight. */
-  state: typeof import('@/use/useTowerState')
+  /** The save blob. A recorder that plays a level twice — once unrendered, to
+   *  find out when the vial fills, and once for the camera — has to put the
+   *  bookkeeping of the first run back: a clear moves the resume level, banks
+   *  stars and coins, and clears the failure record that hands out relief, so
+   *  the take would be a measurably different level from the one measured. */
+  state: typeof import('@/use/useSplatixState')
   /** Freeze the scene's simulation while a run is staged, and let it go again.
    *  Refcount-safe: it holds at most one app pause at a time. */
   hold: (on: boolean) => void
   /** True while `hold(true)` is in force. */
   held: () => boolean
   /** The result screen's own two buttons, so a clip can end in motion rather
-   *  than on a frozen road behind a hidden overlay. */
+   *  than on a frozen board behind a hidden overlay. */
   next: () => void
   retry: () => void
+  /**
+   * Open a level outright — the scene's own `startLevel`.
+   *
+   * The two buttons above are what a PLAYER presses, and both of them read a
+   * result summary to decide which level they mean. A recorder that wants to
+   * open on 3-7 has no summary, so it gets the scene's own entry point: the
+   * board is re-synced, the effects and the art are reset, the shoe and the
+   * difficulty are re-read, and the level banner runs — exactly as it does
+   * between two levels of a real session.
+   */
+  play: (level: number) => void
 }
 
 /**
@@ -126,16 +136,16 @@ export interface PreviewSeam {
  * queue into whatever chunk this file lands in.
  */
 export const installPreviewSeam = (
-  scene: { next: () => void; retry: () => void }
+  scene: { next: () => void; retry: () => void; play: (level: number) => void }
 ): void => {
   if (!SEAM_ON) return
   void Promise.all([
-    import('@/use/useSurvivalGame'),
+    import('@/use/useSplatixGame'),
     import('@/use/useVfx'),
     import('@/use/useGamePause'),
     import('@/game/art'),
     import('@/game/artPreload'),
-    import('@/use/useTowerState')
+    import('@/use/useSplatixState')
   ]).then(([game, vfx, pause, art, artPreload, state]) => {
     let release: (() => void) | null = null
     const seam: PreviewSeam = {
@@ -154,7 +164,8 @@ export const installPreviewSeam = (
       },
       held: (): boolean => release !== null,
       next: scene.next,
-      retry: scene.retry
+      retry: scene.retry,
+      play: scene.play
     }
     ;(window as unknown as Record<string, unknown>).__preview = seam
     console.warn(`[preview] window.__preview is live (feed=${FEED}).`)

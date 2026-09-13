@@ -9,7 +9,7 @@ import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 import type { SaveManager } from '@/utils/save/SaveManager'
 import type { HydrateNotice, HydrateState } from '@/utils/save/types'
-import { reloadTowerState, flushPersist } from '@/use/useTowerState'
+import { reloadSplatixState, flushPersist } from '@/use/useSplatixState'
 
 const hydrateState: Ref<HydrateState> = ref('pending')
 const lastNotice: Ref<HydrateNotice | null> = ref(null)
@@ -29,10 +29,10 @@ const saveDataVersion: Ref<number> = ref(0)
 let manager: SaveManager | null = null
 
 /**
- * Refresh the in-memory `tower_state` blob from (now-patched) localStorage,
+ * Refresh the in-memory `splatix_state` blob from (now-patched) localStorage,
  * THEN bump `saveDataVersion`. Order is load-bearing: composables re-read
  * their refs via `getState(...)` inside a `watch(saveDataVersion)` callback,
- * and `getState` reads from the `towerState` ref — so the blob MUST already
+ * and `getState` reads from the `splatixState` ref — so the blob MUST already
  * hold the cloud-hydrated values when the watcher fires. Without the reload,
  * everything that re-reads on `saveDataVersion` (tech levels, achievements,
  * the resumable run, battle pass, user settings, …) would see the pre-hydrate
@@ -40,13 +40,13 @@ let manager: SaveManager | null = null
  * treated as a fresh user" bug this ordering exists to prevent.
  */
 const bumpSaveDataVersion = (): void => {
-  reloadTowerState()
+  reloadSplatixState()
   saveDataVersion.value++
 }
 
 /**
  * Force the whole save pipeline to flush NOW, bypassing both debounces:
- *   1. `flushPersist()` writes the in-memory `tower_state` blob to localStorage
+ *   1. `flushPersist()` writes the in-memory `splatix_state` blob to localStorage
  *      immediately (cancels the 200ms persist debounce) — which routes through
  *      the SaveManager proxy into the active strategy's dirty queue.
  *   2. `manager.flush()` drains that queue to the backend immediately

@@ -5,65 +5,44 @@ import { isMobilePortrait } from '@/use/useUser'
 import { mobileCheck } from '@/utils/function'
 
 /**
- * The on-screen control primer.
+ * ─── The on-screen control primer ───────────────────────────────────────────
  *
- * A crowd runner has exactly one control and three ideas, and a player who
- * doesn't discover them in the first fifteen seconds bounces. So each hint is
- * explicit, phrased for the input device the player actually has, and it
- * retires itself the moment the action is performed — nagging a competent
- * player is its own kind of failure.
+ * One pill, one lesson at a time, phrased for the input device the player
+ * actually has — a wrong verb ("Click" on a phone) reads as a bug — and it
+ * retires itself the moment the action is performed. Nagging a competent player
+ * is its own kind of failure.
  *
- *   move    — the only control there is
- *   gate    — why you would ever stand still
- *   crate   — why you would ever go out of your way
- *   rate    — the second crate type, and the one nobody works out alone
- *   trap    — the red gates take survivors away
- *   divider — the pillar between two gates is lethal, and that is the whole
- *             reason a gate bank is a decision
- *   boss    — the one thing that can kill a big crowd instantly
- *   guard   — the boss's phase shield, which is the one moment in the game
- *             where the player's fire deliberately stops working. Without a
- *             word for it, "my bullets do nothing" reads as a bug.
- *   lever   — the weapon puzzle. The only hint here for a thing that is purely
- *             a BONUS: every other lesson in this list is something that will
- *             otherwise cost the player survivors, and this one costs them
- *             nothing at all. It is here because a beat with no consequence for
- *             missing it is a beat the road can never teach on its own.
- *   cage    — the rescue cage, on exactly the lever's terms and for exactly the
- *             lever's reason. It also carries a second job the lever's does
- *             not: a cage looks enough like a supply crate from a distance that
- *             "another box" is the default reading, so the hint has to say what
- *             is DIFFERENT about it rather than what it is.
- *   shieldBox
- *           — the auto-shield pickup, same again. Its specific misreading is
- *             the opposite one: the player already owns a shield with a three
- *             second timer, so the word "shield" alone would promise them the
- *             wrong object. The hint's load-bearing word is *waits*.
+ *   move       the only control there is, and the only hint every player sees
+ *   slam       hold to charge, which is the answer to everything armoured
+ *   beetle     a shell that taps bounce off
+ *   flea       a target that moves when you aim at it
+ *   spike      the caterpillar, the one thing stomping is wrong for
+ *   stink      the haze, and why a direct stomp is sometimes the worst option
+ *   fever      the vial is full and the button is live
+ *   honey      a puddle that holds a jumper still
+ *   web        a floor that slows the foot
+ *   belt       a floor that moves what is standing on it
+ *   sweeper    a machine that kills for free, if you can herd into it
+ *   boss       the charge tell, and the slam that answers it
+ *   pods       the phase where the boss is not the target
  *
  * ─── Being held quiet ───────────────────────────────────────────────────────
  *
  * `suppressed` is the one way anything outside this component can silence it,
- * and it exists because of a single measured disaster: at the first boss, the
- * gaze attack raises "Hold still" in the warning badge while the guard hint pill
- * says the boss's shield is up and its own answer is to move. Two instructions,
- * pointing opposite ways, in the first minute of the game, on the frame that
- * decides the fight. One tester lost 38 of 41 survivors standing in it.
+ * and it exists because of a single rule: A SCREEN MAY CARRY EXACTLY ONE
+ * INSTRUCTION AT A TIME, and the one with a countdown on it wins. A boss tell is
+ * about this second; a primer is about the game. So the scene holds this pill
+ * quiet for as long as it is telling the player to do something else, and lets
+ * it back when it is not.
  *
- * The rule the two now share is that a screen may carry exactly ONE instruction
- * at a time, and the one with a countdown on it wins — a warning is about this
- * second, a primer is about the game. So the scene holds this pill quiet for as
- * long as it is telling the player to do something else, and lets it back when
- * it is not.
- *
- * Held QUIET, not retired: `hint` is untouched, the hint has not been taught,
- * nothing is marked as seen, and the same pill with the same text comes back the
- * moment the flag drops. Suppression is a property of the FRAME, and the lesson
- * belongs to the run.
+ * Held QUIET, not retired: `hint` is untouched, nothing is marked as seen, and
+ * the same pill with the same text comes back the moment the flag drops.
+ * Suppression is a property of the FRAME; the lesson belongs to the level.
  */
 
 export type HintId =
-  | 'move' | 'gate' | 'crate' | 'rate' | 'trap' | 'divider' | 'boss' | 'guard' | 'lever'
-  | 'cage' | 'shieldBox'
+  | 'move' | 'slam' | 'beetle' | 'flea' | 'spike' | 'stink' | 'fever'
+  | 'honey' | 'web' | 'belt' | 'sweeper' | 'boss' | 'pods'
 
 interface Props {
   hint: HintId | null
@@ -102,8 +81,8 @@ const isTouch = computed(() => mobileCheck() || isMobilePortrait.value
 
 const text = computed(() => {
   if (!props.hint) return ''
-  // Each hint has a touch and a pointer phrasing — "Tap" vs "Click", "Pinch"
-  // vs "Scroll" — because a wrong verb reads as a bug.
+  // Each hint has a touch and a pointer phrasing — "Tap" against "Click",
+  // "Drag" against "Move the mouse" — because a wrong verb reads as a bug.
   return t(`hints.${props.hint}.${isTouch.value ? 'touch' : 'desktop'}`)
 })
 </script>
@@ -116,11 +95,11 @@ const text = computed(() => {
   //- animation never fires. The pill was removed from the render tree and left
   //- in the DOM FOREVER, breathing at full opacity.
   //-
-  //- Measured in a browser during the grenade lesson: the component reported
-  //- `suppressed: true, shown: false` while the element was still on screen over
-  //- the lightbox. Nothing here caught it because `@vue/test-utils` stubs
-  //- `Transition` by default and renders the children straight through — see
-  //- `tests/game/controlHintSuppressed.test.ts`, which now pins the attribute.
+  //- Measured in a browser: the component reported `suppressed: true, shown:
+  //- false` while the element was still on screen. Nothing caught it because
+  //- `@vue/test-utils` stubs `Transition` by default and renders the children
+  //- straight through — see `tests/ui/controlHint.test.ts`, which pins the
+  //- attribute.
   Transition(name="hint" type="transition")
     div.control-hint(v-if="shown")
       svg.control-hint__icon(viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true")

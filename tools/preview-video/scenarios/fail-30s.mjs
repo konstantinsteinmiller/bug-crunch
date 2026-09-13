@@ -1,88 +1,86 @@
 /**
- * FAIL-30 — "a hundred and fifty of them, and then a `÷5`."
+ * FAIL-30 — "a boss, in the wrong shoe."
  *
- * The 30 s fail is not the 10 s fail held longer: it is the RUN that explains
- * the loss, and it is told entirely in the numbers painted on the doors.
+ * The thirty-second fail is a different story from the ten-second one. Ten
+ * seconds can only show a mistake and its price; thirty can show somebody being
+ * OUT-EQUIPPED, which is the more useful story — it is the one that sells the
+ * Locker.
  *
- *   0–4    a bank pays out; the crowd is building
- *   4–7    a THREE-door bank with a `×2.4` in it — a hundred and fifty
- *          survivors, the biggest crowd of the run. This looks won
- *   7–13   the road's ordinary traffic, and the crowd carries it comfortably
- *   13     THE MISTAKE: a `÷5` next to a `+31`, and it takes the wrong one.
- *          A hundred and fifty become seventy in a single step
- *   13–22  the bleed: `−16` against `÷3`, then `−16` again. Every bank from
- *          here is a dilemma with no good answer, and each one costs
- *   22–26   nine survivors left, and the road does not stop
- *   26      SQUAD WIPED OUT
- *   26–30  …and the retry is already running
+ *   0–3    the board, already busy: adds pouring out of the boss
+ *   3–10   the run goes well. The chain builds, the vial fills, the score moves
+ *   10–15  FEVER, spent on the swarm — and it barely dents the boss, because
+ *          Fever is a swarm answer and a boss is not a swarm
+ *   15–22  the boss's own phase: armour this shoe cannot open in one blow, and
+ *          the CLANG of a tap that was not a slam, twice
+ *   22–26  the clock in the red with the bar two thirds full
+ *   26     TIME'S UP
+ *   26–30  the board is already back — the retry, not the result screen
  *
- * Nothing in it is scripted. It is the balance suite's `average` player — a
- * quarter of a second late, takes the door it is nearest, aims at a doorway's
- * painted centre rather than at the line that clears the pillar — on stage 25
- * with a shop two upgrade levels short of the success clips' (`THIN_SHOP`).
+ * ── Why the same boss as `success-30s`, in the starter shoe ──
  *
- * ── Why this road and not a boss fight ──
- *
- * The first cut of this clip lost at the boss, and it did not land: the fight
- * is a DPS race, the scout is an estimate rather than a replay (no renderer,
- * so a different `Math.random` stream), and the take drifted far enough that
- * the crowd was still alive when the clip ran out — a fail clip with no fail in
- * it. A run that dies to a cascade of hostile doors is in freefall from the
- * moment it goes wrong, so the verdict lands where the scout says it will, and
- * the camera is still travelling while it happens.
+ * Because it is the same fight, and that is the entire point: a viewer who
+ * watches both sees one player open the Matriarch with a slam and another bounce
+ * off her, on the same floor, against the same boss. The difference is a shoe,
+ * and the shoe is three hundred coins.
  */
 
 import {
-  boot, budget, installDrive, playOn, rideToVerdict, rollCamera, saveFixture, snapshot, stageRun, THIN_SHOP
+  boot, budget, feverWhenReady, installDrive, levelRun, playOn, release, rideToVerdict,
+  rollCamera, saveFixture, snapshot, STARTER_LOADOUT
 } from './_drive.mjs'
 
-const STAGE = 25
+const LEVEL = 30
+const SEED = 11
 
-/** Where in the clip the crowd runs out. The rest is the retry. */
-const WIPE_AT = 0.82
+/** Where in the clip the clock runs out. The rest is the retry. */
+const TIMEUP_AT = 0.86
 
 export default {
   id: 'fail-30s',
-  label: 'A hundred and fifty, and then a ÷5',
+  label: 'The Matriarch, in the wrong shoe',
 
   async setup(ctx) {
-    await boot(ctx, { stage: STAGE, save: saveFixture({ ts_upgrades: THIN_SHOP, ts_stage: STAGE }) })
-    await installDrive(ctx, { stage: STAGE, seed: 7, policy: 'average' })
+    await boot(ctx, { level: LEVEL, save: saveFixture({ sx_level: LEVEL, ...STARTER_LOADOUT }) })
+    await installDrive(ctx, { level: LEVEL, seed: SEED, policy: 'average' })
 
-    const at = await stageRun(ctx, {
-      stage: STAGE,
-      stop: { kind: 'preroll', anchor: 'wipe', lead: ctx.durationMs * WIPE_AT },
-      maxSeconds: 120
+    const at = await levelRun(ctx, {
+      level: LEVEL,
+      stop: { kind: 'preroll', anchor: 'lost', lead: ctx.durationMs * TIMEUP_AT },
+      seed: SEED,
+      maxSeconds: 200
     })
-    ctx.log.info(`opening frame: squad ${at.squad}, phase ${at.phase}, ${at.progress.toFixed(2)} along`)
+    ctx.log.info(
+      `opening frame: boss at ${((at.boss?.hp01 ?? 1) * 100).toFixed(0)} %, ` +
+      `${at.timeLeft}s left, chain ×${at.mult}`
+    )
   },
 
   async record(ctx) {
     const t = budget(ctx)
     const clip = ctx.durationMs
 
-    await rollCamera(ctx, { seed: 7 })
-    ctx.beat('building')
+    await rollCamera(ctx, { seed: SEED })
 
-    // The peak: the three-door bank with the multiplier in it. This is the
-    // poster as well as the beat — the biggest crowd of the run, under the
-    // numbers that built it, and the last moment the run is winning.
-    await t.until(clip * 0.13)
-    ctx.beat('poster')
-    const peak = await snapshot(ctx)
-    ctx.log.info(`peak: squad ${peak.squad} (run peak ${peak.peak}), ${peak.progress.toFixed(2)} along`)
+    // ── 0–10: it is going well ──
+    ctx.beat('chain')
+    await t.until(clip * 0.33)
+    const good = await snapshot(ctx)
+    ctx.log.info(`going well: chain ×${good.mult}, score ${good.score}, boss ${((good.boss?.hp01 ?? 1) * 100).toFixed(0)} %`)
 
-    // THE MISTAKE, and the bleed after it.
+    // ── 10–15: Fever, spent on the wrong problem ──
+    const lit = await feverWhenReady(ctx, t, 1500)
+    if (lit) ctx.beat('fever')
     await t.until(clip * 0.5)
-    const cut = await snapshot(ctx)
-    ctx.log.info(`after the ÷5: squad ${cut.squad}, ${cut.progress.toFixed(2)} along`)
+    const after = await snapshot(ctx)
+    ctx.log.info(`fever moved the boss ${((good.boss?.hp01 ?? 1) * 100).toFixed(0)} % → ${((after.boss?.hp01 ?? 1) * 100).toFixed(0)} %`)
 
-    await t.until(clip * 0.7)
-    ctx.log.info(`  bleeding: ${JSON.stringify(await snapshot(ctx))}`)
+    // ── 15–26: the boss, and the clock ──
+    ctx.beat('boss')
+    const verdict = await rideToVerdict(ctx, t, { timeoutMs: Math.max(3000, t.left()) })
 
-    const verdict = await rideToVerdict(ctx, t, { timeoutMs: Math.max(1500, t.left() - clip * 0.1) })
+    // ── 26–30: straight back in ──
     if (verdict !== 'running') await playOn(ctx, t, verdict)
-
+    await release(ctx)
     await t.until(clip)
   }
 }

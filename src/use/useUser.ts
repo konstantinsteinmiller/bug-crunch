@@ -4,10 +4,12 @@ import { mobileCheck } from '@/utils/function'
 import { DIFFICULTY, type Difficulties } from '@/utils/enums'
 import { isDbInitialized, isSplashScreenVisible } from '@/use/useMatch'
 import { saveDataVersion } from '@/use/useSaveStatus'
-import { getState, setState, hasState } from '@/use/useTowerState'
+import { getState, setState, hasState } from '@/use/useSplatixState'
 import {
-  SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY
+  SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY,
+  JUICE_STYLE_KEY, HIGH_VIS_KEY, SINGLE_TAP_KEY
 } from '@/keys'
+import { DEFAULT_JUICE_STYLE, isJuiceStyle, type JuiceStyleId } from '@/game/juiceStyle'
 
 export const windowWidth = ref(window.innerWidth)
 export const windowHeight = ref(window.innerHeight)
@@ -47,8 +49,9 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// splatix persists FIVE user settings — difficulty, sound volume, music
-// volume, locale, music track — as fields inside the single `tower_state`
+// Splatix persists EIGHT user settings — difficulty, sound volume, music
+// volume, locale, music track, juice style, high-vis ring, single-tap mode —
+// as fields inside the single `splatix_state`
 // blob (keys catalogued in `src/keys.ts`), never as their own localStorage
 // entries. On a platform build the blob goes through the patched
 // `SaveManager.setItem` and is mirrored to the SDK cloud store automatically.
@@ -57,7 +60,10 @@ export const version: string = APP_VERSION
 //
 // Key constants are re-exported here so long-standing importers
 // (`useCrazyMuteSync`, tests) keep working without an extra import hop.
-export { SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY }
+export {
+  SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY,
+  JUICE_STYLE_KEY, HIGH_VIS_KEY, SINGLE_TAP_KEY
+}
 
 // Background-music track id → audio filename (under public/audio/music/).
 export type MusicTrack = 'trance' | 'cozy'
@@ -90,8 +96,33 @@ const userLanguage: Ref<string> = ref(readString(LANGUAGE_KEY, 'en'))
 // Difficulty defaults to MEDIUM. It scales enemy HP + wave budget (Easy −20%,
 // Hard +25%) via `difficultyFactor()` below, read by the wave director.
 const userDifficulty: Ref<Difficulties> = ref(readString<Difficulties>(DIFFICULTY_KEY, DIFFICULTY.MEDIUM))
-// Background-music track — defaults to 'trance' (Trance Tunnel).
-const userMusicTrack: Ref<MusicTrack> = ref(readString<MusicTrack>(MUSIC_TRACK_KEY, 'trance'))
+// Background-music track — defaults to 'cozy', which is the one that matches
+// this game. `trance` stays available for anybody who prefers it.
+const userMusicTrack: Ref<MusicTrack> = ref(readString<MusicTrack>(MUSIC_TRACK_KEY, 'cozy'))
+
+// ─── Tone and accessibility (GDD §2.2, §10.2) ───────────────────────────────
+//
+// Three settings that change the PICTURE and never a number. See
+// `game/juiceStyle.ts` for why that rule is absolute: a toggle that quietly
+// made the game easier would turn an accessibility option into a difficulty
+// selector, and then nobody could use it honestly.
+const readBool = (key: string, fallback: boolean): boolean => {
+  const v = getState<unknown>(key)
+  if (v === undefined || v === null) return fallback
+  return v === true || v === 'true' || v === 1
+}
+
+/** Cartoon Ooze / Confetti Piñata / Bubble Pop. */
+const userJuiceStyle: Ref<JuiceStyleId> = ref(
+  (() => {
+    const v = getState<unknown>(JUICE_STYLE_KEY)
+    return isJuiceStyle(v) ? v : DEFAULT_JUICE_STYLE
+  })()
+)
+/** A thicker, brighter stomp ring for players with low vision. */
+const userHighVis: Ref<boolean> = ref(readBool(HIGH_VIS_KEY, false))
+/** A tap anywhere flies the foot to the nearest bug — for ages 6-7. */
+const userSingleTap: Ref<boolean> = ref(readBool(SINGLE_TAP_KEY, false))
 
 // Re-read on hydrate-success bump. Module init reads these synchronously
 // from localStorage, but on cloud-only builds (CrazyGames) the blob is
@@ -119,16 +150,23 @@ watch(saveDataVersion, () => {
   userLanguage.value = readString(LANGUAGE_KEY, userLanguage.value)
   userDifficulty.value = readString<Difficulties>(DIFFICULTY_KEY, userDifficulty.value)
   userMusicTrack.value = readString<MusicTrack>(MUSIC_TRACK_KEY, userMusicTrack.value)
+  {
+    const v = getState<unknown>(JUICE_STYLE_KEY)
+    if (isJuiceStyle(v)) userJuiceStyle.value = v
+  }
+  userHighVis.value = readBool(HIGH_VIS_KEY, userHighVis.value)
+  userSingleTap.value = readBool(SINGLE_TAP_KEY, userSingleTap.value)
 
   if (!hasState(SOUND_KEY)) setState(SOUND_KEY, userSoundVolume.value)
   if (!hasState(MUSIC_KEY)) setState(MUSIC_KEY, userMusicVolume.value)
   if (!hasState(DIFFICULTY_KEY)) setState(DIFFICULTY_KEY, userDifficulty.value)
   if (!hasState(MUSIC_TRACK_KEY)) setState(MUSIC_TRACK_KEY, userMusicTrack.value)
+  if (!hasState(JUICE_STYLE_KEY)) setState(JUICE_STYLE_KEY, userJuiceStyle.value)
 })
 
-/** Wave-pressure multiplier for the active difficulty: Easy −20% (smaller wave
- *  budgets and softer enemies), Medium ×1, Hard +25% (denser waves, tankier
- *  enemies). Read by the wave director when composing a wave. */
+/** Pressure multiplier for the active difficulty: Easy −20% (a slower board and
+ *  a longer clock), Medium ×1, Hard +25% (faster bugs, denser spawns). Read by
+ *  the spawn director and by every bug's base speed. */
 export const difficultyFactor = (): number => {
   if (userDifficulty.value === DIFFICULTY.EASY) return 0.8
   if (userDifficulty.value === DIFFICULTY.HARD) return 1.25
@@ -207,6 +245,20 @@ const useUser = () => {
         userMusicTrack.value = value as MusicTrack
         setState(MUSIC_TRACK_KEY, userMusicTrack.value)
         break
+      case 'juiceStyle':
+        if (isJuiceStyle(value)) {
+          userJuiceStyle.value = value
+          setState(JUICE_STYLE_KEY, value)
+        }
+        break
+      case 'highVis':
+        userHighVis.value = !!value
+        setState(HIGH_VIS_KEY, userHighVis.value)
+        break
+      case 'singleTap':
+        userSingleTap.value = !!value
+        setState(SINGLE_TAP_KEY, userSingleTap.value)
+        break
     }
   }
 
@@ -216,6 +268,9 @@ const useUser = () => {
     userLanguage,
     userDifficulty,
     userMusicTrack,
+    userJuiceStyle,
+    userHighVis,
+    userSingleTap,
     setSettingValue
   }
 }

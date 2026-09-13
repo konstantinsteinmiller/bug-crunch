@@ -1,7 +1,7 @@
 /**
  * ─── Hand-drawn ink & cel-shading toolkit ───────────────────────────────────
  *
- * Everything in `useTowerArt.ts` is drawn with clean primitives — perfect arcs,
+ * Everything in the renderer is drawn with clean primitives — perfect arcs,
  * even strokes, smooth gradients. That is fast and readable at 20 px, and it is
  * also exactly why it reads as PROGRAMMATIC. A machine draws a circle; a person
  * draws a nearly-circle, with a line that swells where the hand pressed and
@@ -27,6 +27,24 @@
  */
 
 export type Pt = [number, number]
+
+/**
+ * The one ink colour the whole game is outlined in.
+ *
+ * Warm near-black rather than `#000`: pure black reads as vector clip-art, and
+ * everything in Splatix is meant to look drawn. One constant, because a cast
+ * outlined in three slightly different blacks reads as three casts.
+ */
+export const INK = '#2b1b2e'
+
+/**
+ * The key light's direction, radians, for the whole game.
+ *
+ * Cel shading only holds together if every object was lit by the same lamp.
+ * Down-and-right (1.05 rad) is the convention a child's picture book uses, and
+ * it puts the shadow where a top-down floor shadow already falls.
+ */
+export const SHADOW_DIR = 1.05
 
 // ─── Noise ──────────────────────────────────────────────────────────────────
 

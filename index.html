@@ -7,14 +7,14 @@
   <!-- CSP meta tag injected by vite.config.ts at build time -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0a1224">
+  <meta name="theme-color" content="#120c1e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="splatix">
-  <meta name="description" content="Shoot the gates to grow them, run your crowd through, and turn three survivors into an army before the boss turns them into dust.">
+  <meta name="apple-mobile-web-app-title" content="Splatix">
+  <meta name="description" content="Stomp, slam and slide your way through swarms of googly-eyed bugs. Build a Splat Chain, fill the Juice vial and let the Gilded Boot loose.">
   <link rel="manifest" href="/manifest.json">
-  <title>splatix</title>
+  <title>Splatix</title>
   <style>
       /* The splash paints before any JS runs, so its colours are inlined here
          rather than pulled from the app's stylesheet. They match the scene's
@@ -22,7 +22,7 @@
          flash of a differently-coloured page. */
       body {
           margin: 0;
-          background-color: #0a1224;
+          background-color: #120c1e;
           outline: none;
       }
 
@@ -36,7 +36,7 @@
           /* The tile layer below is one tile wider and taller than the screen;
              without this it would hand the page a scrollbar. */
           overflow: hidden;
-          background: radial-gradient(circle at 50% 38%, #1b2b52 0%, #0a1224 70%);
+          background: radial-gradient(circle at 50% 38%, #2b1d45 0%, #120c1e 70%);
           transition: opacity 0.4s ease-out;
       }
 
@@ -47,10 +47,9 @@
 
       /* The panning backdrop.
          ------------------------------------------------------------------
-         Eight of the game's own things — the survivor, the boss, the chest,
-         the coin, a barrel, an anvil, a grenade, a rocket — as faint line
-         drawings on one seamless tile (public/images/bg/bg-tile_800x800.webp,
-         flattened out of the paintings themselves by `pnpm art:bg-tile`),
+         Six of the game's own marks — an ant, a splat, a sole, a star and a
+         coin — as faint white silhouettes on one seamless tile
+         (public/images/bg/bg-tile_800x800.webp, written by `pnpm brand`),
          drifting down and to the right the way a Brawl Stars loading screen
          does.
 
@@ -93,13 +92,11 @@
 
       /* The greeting card, minus its punchline.
          ------------------------------------------------------------------
-         What stood here was Tower Siege's: three stacked blocks pulsing in
-         sequence, carried over with the splash flow. It is now the same
-         picture `FLogoProgress.vue` draws — the wispling floating over the
-         title — at the SAME size in the SAME place, so when Vue mounts and
-         this element fades out, nothing moves. The speech bubble is the only
-         thing that is not here, and it pops in on top of this once the fade
-         has finished (see `LURK_MS` in that component).
+         The same picture `FLogoProgress.vue` draws — the ant floating over the
+         mark — at the SAME size in the SAME place, so when Vue mounts and this
+         element fades out, nothing moves. The speech bubble is the only thing
+         that is not here, and it pops in on top of this once the fade has
+         finished (see `LURK_MS` in that component).
 
          Duplicated rather than shared because this has to paint before any
          stylesheet or module has been fetched. Change one, change both.
@@ -122,18 +119,15 @@
           aspect-ratio: 340 / 200;
       }
 
-      /* One panel of the painted 8-panel walk strip. The strip inside is 8x as
-         wide, so a steps(8) slide of -100% of its own width lands on each panel
-         in turn. */
-      /* Solved for the ghost's INK, not the panel box it is padded inside —
-         see the long note on `.wisp` in FLogoProgress.vue. */
+      /* The mascot: one ant, floating. It stands in the LEFT half of the stage
+         so the speech bubble the Vue splash pops in on top of this has the
+         right half to itself on a 320 px phone. */
       .splash-wisp {
           position: absolute;
-          left: -5.3%;
-          bottom: -5.8%;
-          height: 131.5%;
-          aspect-ratio: 228 / 256;
-          overflow: hidden;
+          left: 1%;
+          bottom: -2%;
+          height: 112%;
+          aspect-ratio: 1 / 1;
           animation: splash-float 2.6s ease-in-out infinite;
       }
 
@@ -144,24 +138,21 @@
       .splash-wisp img {
           display: block;
           max-width: none;
-          width: 800%;
+          width: 100%;
           height: 100%;
-          animation: splash-walk 2.6s steps(8, end) infinite;
       }
 
-      /* The wordmark's ink runs from y=216 to y=295 of the 512 icon; the rest
-         of the file is transparent padding. Crop to a band around it. */
+      /* The mark, at its own square. `pnpm brand` writes it edge to edge with a
+         small margin, so nothing is cropped here. */
       .splash-logo {
-          width: 100%;
-          aspect-ratio: 512 / 103;
-          overflow: hidden;
+          width: 46%;
+          aspect-ratio: 1 / 1;
       }
 
       .splash-logo img {
           display: block;
           width: 100%;
-          height: auto;
-          margin-top: -39.84%;
+          height: 100%;
       }
 
       /* The loading read-out's placeholder. It is here for the SPACE as much as
@@ -181,11 +172,6 @@
           text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
       }
 
-      @keyframes splash-walk {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-100%); }
-      }
-
       @keyframes splash-float {
           0%, 100% { transform: translateY(0) rotate(-1.5deg); }
           50%      { transform: translateY(-6%) rotate(1.5deg); }
@@ -202,11 +188,11 @@
   <div class="splash-greet">
     <div class="splash-stage">
       <div class="splash-wisp">
-        <img src="/images/monsters/wispling.webp" alt="" width="1824" height="256" fetchpriority="high">
+        <img src="/images/logo/mascot.webp" alt="" width="512" height="512" fetchpriority="high">
       </div>
     </div>
     <div class="splash-logo">
-      <img src="/images/logo/logo_512x512.png" alt="splatix" width="512" height="512" fetchpriority="high">
+      <img src="/images/logo/logo_512x512.png" alt="Splatix" width="512" height="512" fetchpriority="high">
     </div>
     <span class="splash-progress">0%</span>
   </div>

@@ -2,23 +2,31 @@
  * SCOUT — not a clip. The measuring tape the other beat sheets are cut with.
  *
  *   pnpm preview:video --scenarios scout --only-setup --formats 10s \
- *                      --orientations portrait --url-param scoutStage=12
+ *                      --orientations portrait --url-param scoutLevel=14
  *
- * It plays a whole stage in the FROZEN sim as fast as the machine can step it —
- * no rendering, no recording — and prints the timeline a beat sheet needs:
- * when each gate bank was passed, when the miniboss planted, when the boss
- * spawned and died, and what the crowd was doing at each. Twenty seconds of
- * wall time for a stage, against four minutes to record one and watch it.
+ * It plays a whole level in the FROZEN sim as fast as the machine can step it —
+ * no rendering, no recording — and prints the timeline a beat sheet needs: when
+ * the first body went under the foot, when the chain crossed ×8 and ×20, when
+ * the vial filled, when Fever ran, when the boss changed phase and died, and
+ * when the level was won or lost.
+ *
+ * Twenty seconds of wall time for a level, against four minutes to record one
+ * and watch it.
  *
  * Every number the scenarios schedule against comes from here, which is also
- * why they schedule against DISTANCE rather than time: the crowd's forward pace
- * is constant except where the game slows it down on purpose (a gate pass runs
- * at 0.45× for a beat, a boss guard-gate holds), so a clip timed off
- * `stageSpeed` alone runs ~10 % late by the end of a stage. `PACE` in
- * `_drive.mjs` is that correction, and this is what measured it.
+ * why they schedule against EVENTS rather than against times: this game has no
+ * fixed pace. A level's interesting moments arrive when the player has put in
+ * the squishes, so "six seconds before the vial fills" survives a rebalance of
+ * the bug juice values and "at 41 seconds" does not.
+ *
+ * ── The parameters ──
+ *
+ *   --url-param scoutLevel=20     which level (default: the fixture's)
+ *   --url-param scoutPolicy=ace   'ace' | 'good' | 'average'
+ *   --url-param scoutShoe=starter the fail clips' under-equipped save
  */
 
-import { boot, installDrive, saveFixture, THIN_SHOP } from './_drive.mjs'
+import { boot, installDrive, saveFixture, STARTER_LOADOUT } from './_drive.mjs'
 
 /** Read a `--url-param` off the URL the runner actually opened — the one place
  *  every parameter source has already been merged. */
@@ -32,17 +40,15 @@ const param = (ctx, key) => {
 
 export default {
   id: 'scout',
-  label: 'Stage timeline (no clip)',
+  label: 'Level timeline (no clip)',
 
   async setup(ctx) {
-    // `--url-param scoutStage=14` overrides; the default is the fixture's.
-    const stage = Number(param(ctx, 'scoutStage')) || saveFixture().ts_stage
-    const policy = param(ctx, 'scoutPolicy') ?? 'optimal'
-    // `--url-param scoutShop=thin` scouts the fail clips' under-invested save.
-    const shop = param(ctx, 'scoutShop') === 'thin' ? { ts_upgrades: THIN_SHOP } : {}
+    const level = Number(param(ctx, 'scoutLevel')) || saveFixture().sx_level
+    const policy = param(ctx, 'scoutPolicy') ?? 'ace'
+    const loadout = param(ctx, 'scoutShoe') === 'starter' ? STARTER_LOADOUT : {}
 
-    await boot(ctx, { stage, save: saveFixture(shop) })
-    const { speed } = await installDrive(ctx, { stage, seed: 7, policy })
+    await boot(ctx, { level, save: saveFixture({ sx_level: level, ...loadout }) })
+    await installDrive(ctx, { level, seed: 7, policy })
 
     const line = await ctx.evaluate((arg) => {
       const w = /** @type {any} */ (window)
@@ -50,64 +56,104 @@ export default {
       const G = P.game
       const D = w.__drive
       P.hold(true)
-      G.startStage(arg.stage)
+      D.reset(arg.seed)
+      P.play(arg.level)
+      G.resetVial()
       P.vfx.resetVfx()
-      P.vfx.drainFx()
       w.__vseed?.reseed(arg.seed)
 
-      const track = G.getTrack()
-      const banks = track.events.filter((e) => e.kind === 'gates')
-        .map((e) => ({ y: e.y, offer: e.leaves.map((l) => `${l.op}${l.value}`).join('/'), at: null, squad: 0 }))
+      const spec = G.getLevel()
       const marks = []
-      let bossAt = null
-      let bossDeadAt = null
-      let eliteAt = null
-      let eliteGoneAt = null
-      let sawElite = false
-      let i = 0
-      const dt = arg.dtMs
+      const out = {
+        level: spec.id,
+        label: `${spec.world}-${spec.index}`,
+        quota: G.quota.value,
+        time: G.timeLeft.value,
+        roster: spec.roster.map((r) => `${r.id}:${r.weight}`),
+        hazards: [...spec.hazards],
+        boss: spec.boss,
+        marks,
+        rungs: {},
+        firstSquish: null,
+        halfQuota: null,
+        vialFull: null,
+        feverAt: null,
+        feverEnd: null,
+        bossPhase2: null,
+        bossPhase3: null,
+        bossDead: null,
+        won: null,
+        lost: null,
+        bestChain: 0,
+        misses: 0,
+        end: null
+      }
 
+      const dt = arg.dtMs
       for (let step = 0; step < arg.maxSteps; step++) {
         const t = (step * dt) / 1000
-        const y = G.anchor().y
-        while (i < banks.length && y >= banks[i].y) {
-          banks[i].at = t
-          banks[i].squad = G.squadCount.value
-          i++
+        if (out.firstSquish === null && G.squished.value > 0) {
+          out.firstSquish = t
+          marks.push(`first squish @${t.toFixed(1)}s`)
         }
-        if (!sawElite && G.eliteAlive.value) { sawElite = true; eliteAt = t }
-        if (sawElite && eliteGoneAt === null && !G.eliteAlive.value) eliteGoneAt = t
-        if (bossAt === null && G.phase.value === 'boss') {
-          bossAt = t
-          marks.push(`boss spawns @${t.toFixed(1)}s squad ${G.squadCount.value} dps ${(G.squadCount.value * G.damage.value * G.runFireRate.value).toFixed(0)}`)
+        if (out.halfQuota === null && G.quota.value > 0 && G.squished.value >= G.quota.value / 2) out.halfQuota = t
+        for (const rung of [3, 5, 8, 12, 20, 30, 50]) {
+          if (out.rungs[rung] === undefined && G.chainMult.value >= rung) out.rungs[rung] = t
         }
-        if (bossAt !== null && bossDeadAt === null && G.getBoss()?.dead) bossDeadAt = t
-        if (G.phase.value === 'clear' || G.phase.value === 'wipe') {
-          marks.push(`${G.phase.value} @${t.toFixed(1)}s`)
-          break
+        if (out.vialFull === null && G.juice.value >= 1) {
+          out.vialFull = t
+          marks.push(`vial full @${t.toFixed(1)}s after ${G.squished.value} squishes`)
         }
+        if (out.feverAt === null && G.feverMs.value > 0) {
+          out.feverAt = t
+          marks.push(`FEVER @${t.toFixed(1)}s`)
+        }
+        if (out.feverAt !== null && out.feverEnd === null && G.feverMs.value <= 0) out.feverEnd = t
+        if (out.bossPhase2 === null && G.bossPhaseIndex.value >= 1) out.bossPhase2 = t
+        if (out.bossPhase3 === null && G.bossPhaseIndex.value >= 2) out.bossPhase3 = t
+        if (spec.boss && out.bossDead === null && G.bossHp.value <= 0) {
+          out.bossDead = t
+          marks.push(`boss down @${t.toFixed(1)}s`)
+        }
+        out.bestChain = Math.max(out.bestChain, G.chainCount.value)
+        if (G.phase.value === 'won') { out.won = t; marks.push(`WON @${t.toFixed(1)}s`); break }
+        if (G.phase.value === 'lost') { out.lost = t; marks.push(`LOST @${t.toFixed(1)}s`); break }
         D.step(dt)
       }
 
-      return {
-        stage: arg.stage,
-        arenaY: track.arenaY,
-        banks,
-        eliteAt, eliteGoneAt, bossAt, bossDeadAt,
-        marks,
-        end: { phase: G.phase.value, squad: G.squadCount.value, peak: G.peakSquad.value, damage: G.damage.value, rate: G.runFireRate.value }
+      const tally = G.tally.value
+      out.why = D.state().why
+      out.misses = tally.misses
+      out.end = {
+        score: G.score.value,
+        squished: G.squished.value,
+        quota: G.quota.value,
+        timeLeft: Math.round(G.timeLeft.value),
+        hits: tally.hits,
+        misses: tally.misses,
+        spikes: tally.spikes,
+        fevers: tally.fevers,
+        bestCombo: tally.bestCombo
       }
-    }, { stage, seed: 7, dtMs: 1000 / ctx.fps, maxSteps: Math.round((150 * ctx.fps)) })
+      return out
+    }, { level, seed: 7, dtMs: 1000 / ctx.fps, maxSteps: Math.round(200 * ctx.fps) })
 
-    ctx.log.info(`── stage ${line.stage}, arena at ${line.arenaY?.toFixed(0)} u, ${speed.toFixed(2)} u/s nominal`)
-    for (const b of line.banks) {
-      ctx.log.info(`   bank y=${String(b.y).padStart(4)} ${b.offer.padEnd(22)} passed @${b.at === null ? ' never' : `${b.at.toFixed(1)}s`}  squad ${b.squad}`)
+    const s = (v) => (v === null || v === undefined ? '—' : `${v.toFixed(1)}s`)
+
+    ctx.log.info(`── level ${line.level} (${line.label}), ${policy}${loadout.sx_shoe ? ` in the ${loadout.sx_shoe}` : ''}`)
+    ctx.log.info(`   quota ${line.quota} in ${line.time}s · roster ${line.roster.join(', ')}`)
+    ctx.log.info(`   hazards ${line.hazards.length ? line.hazards.join(', ') : 'none'}${line.boss ? ` · boss ${line.boss}` : ''}`)
+    ctx.log.info(`   first squish ${s(line.firstSquish)} · half quota ${s(line.halfQuota)}`)
+    ctx.log.info(`   chain rungs ${[3, 5, 8, 12, 20, 30, 50].map((r) => `×${r} ${s(line.rungs[r])}`).join(' · ')}`)
+    ctx.log.info(`   vial full ${s(line.vialFull)} · fever ${s(line.feverAt)} → ${s(line.feverEnd)}`)
+    if (line.boss) {
+      ctx.log.info(`   boss phases ${s(line.bossPhase2)} / ${s(line.bossPhase3)} · down ${s(line.bossDead)}`)
     }
-    ctx.log.info(`   miniboss ${line.eliteAt?.toFixed(1) ?? '—'}s → ${line.eliteGoneAt?.toFixed(1) ?? '—'}s`)
-    ctx.log.info(`   boss ${line.bossAt?.toFixed(1) ?? '—'}s → dead ${line.bossDeadAt?.toFixed(1) ?? '—'}s` +
-      (line.bossAt !== null && line.bossDeadAt !== null ? ` (${(line.bossDeadAt - line.bossAt).toFixed(1)}s fight)` : ''))
     for (const m of line.marks) ctx.log.info(`   ${m}`)
     ctx.log.info(`   end: ${JSON.stringify(line.end)}`)
+    // Frames the autopilot spent behind each gate. A clip that comes back flat
+    // is usually this, not the level.
+    ctx.log.info(`   autopilot: ${JSON.stringify(line.why)}`)
   },
 
   async record(ctx) {

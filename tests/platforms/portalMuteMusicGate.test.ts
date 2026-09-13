@@ -60,8 +60,14 @@ beforeEach(() => {
   // `canplaythrough` event jsdom never fires, so `play()` would go uncalled
   // whether the mute worked or not — and a game that simply never plays music
   // would pass. The control case below is the proof that it does not.
-  const src = prependBaseUrl('audio/music/' + MUSIC_TRACK_FILES.trance)
-  resourceCache.audio.set(src, { src } as unknown as HTMLAudioElement)
+  //
+  // EVERY track, not just the default one: which track is default is a design
+  // decision that has already changed once, and a test that seeds only the
+  // current default silently becomes vacuous the next time it moves.
+  for (const file of Object.values(MUSIC_TRACK_FILES)) {
+    const src = prependBaseUrl('audio/music/' + file)
+    resourceCache.audio.set(src, { src } as unknown as HTMLAudioElement)
+  }
 })
 
 afterEach(async () => {

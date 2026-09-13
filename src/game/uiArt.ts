@@ -1,30 +1,318 @@
 import {
-  blob, cel, ink, rough, densify, fillShape, tones, terminator, trace, type Pt
+  blob, cel, ink, rough, densify, tones, terminator, INK, SHADOW_DIR, type Pt
 } from '@/game/inkArt'
-import { INK, SHADOW_DIR } from '@/game/monsterKit'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
 import type { GameIconName } from '@/components/icons/iconNames'
 import { spriteFor } from '@/game/art'
+import { JUICE_STYLE, type JuiceStyleId } from '@/game/juiceStyle'
+import type { SplatWord } from '@/game/combo'
 
 /**
- * ─── HUD art ────────────────────────────────────────────────────────────────
+ * ─── The comic layer ────────────────────────────────────────────────────────
  *
- * The things the DOM side of the game shows that the art pipeline can repaint:
- * the result screen's banner, the idle chest, the shop's forge and the two
- * skill icons. They live here rather than in the renderer because nothing on
- * the field blits them — Vue does — but the bench and the playground still
- * need ONE painter per drawable that the runtime provably shows, which is the
- * pipeline's first rule: a reference drawn from a lookalike proves nothing.
+ * Splatix is a game about hitting things, and the single loudest piece of
+ * feedback it has is the WORD that pops out of an impact: SQUISH!, CRUNCH!,
+ * SPLAT!, ULTRA SPLAT! The reference sheets are built around them. They are
+ * drawn here, on the canvas, in the game's own display face, because a DOM
+ * element cannot be spawned forty times a second and cannot be rotated,
+ * skewed and spring-scaled for free.
  *
- * Two of them are drawn ON A CANVAS and handed to the DOM as a data URL — the
- * banner, for a `border-image`, and the forge, for an `<img>` — so the drawing
- * the player sees and the reference on the sheet are one function. The rest
- * are the shared SVG glyphs filled through `Path2D`, so their reference is
- * exactly the silhouette the button shows.
+ * Also here: the splat decal the floor keeps, the shockwave rings, the star,
+ * and the result banner the DOM shows through a `border-image`.
  */
 
 /** Draw the procedural version even when a painting is available. */
 export interface UiPaintOpts { procedural?: boolean }
+
+// ─── Comic word pops ────────────────────────────────────────────────────────
+
+/**
+ * The palette each chain tier's word is shouted in.
+ *
+ * Deliberately a LADDER of temperature, not four arbitrary colours: white-pink
+ * for the first rung, gold in the middle, hot orange-red at the top. A player
+ * who is not reading the word can still read the heat.
+ */
+export const WORD_TONE: Record<SplatWord, { fill: string; fill2: string; edge: string; burst: string }> = {
+  squish: { fill: '#ffffff', fill2: '#ffd7e6', edge: '#d9297a', burst: 'rgba(255,110,170,0.55)' },
+  crunch: { fill: '#fff6c8', fill2: '#ffd93c', edge: '#b26a00', burst: 'rgba(255,190,60,0.55)' },
+  splat: { fill: '#ffe27a', fill2: '#ff9f2e', edge: '#9c3200', burst: 'rgba(255,140,40,0.6)' },
+  ultra: { fill: '#ffffff', fill2: '#ff5d5d', edge: '#7a0014', burst: 'rgba(255,70,90,0.68)' }
+}
+
+/**
+ * A jagged comic burst — the spiky star behind a shouted word.
+ *
+ * `n` points, alternating between `r` and `r * inner`, each perturbed by a
+ * fixed per-vertex amount so no two bursts are the same shape and none of them
+ * is a perfect star.
+ */
+const burstPath = (
+  ctx: CanvasRenderingContext2D, r: number, n: number, inner: number, seed: number
+): void => {
+  ctx.beginPath()
+  for (let i = 0; i < n * 2; i++) {
+    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2
+    const h = (Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453) % 1
+    const jitter = 1 + (Math.abs(h) - 0.5) * 0.26
+    const rr = (i % 2 === 0 ? r : r * inner) * jitter
+    const x = Math.cos(a) * rr
+    const y = Math.sin(a) * rr * 0.88
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+}
+
+/**
+ * One comic word, centred on the origin.
+ *
+ * `size` is the cap height in px. `pop` is the spring scale the sim drives
+ * (overshoots past 1 and settles), `rot` a small fixed tilt so a burst of them
+ * does not read as a list, and `alpha` the fade-out.
+ *
+ * The text is drawn FOUR times — a thick dark edge, a shadow offset, the fill
+ * gradient and a white top-light — which is what gives it the sticker-cut look
+ * the reference sheets have. All four are one `fillText` each; it is far
+ * cheaper than it sounds and it is the game's loudest single piece of art.
+ */
+export const paintComicWord = (
+  ctx: CanvasRenderingContext2D,
+  text: string, tone: SplatWord, size: number,
+  pop: number, rot: number, alpha: number, withBurst = true
+): void => {
+  const c = WORD_TONE[tone]
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.rotate(rot)
+  ctx.scale(pop, pop)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `900 ${size}px Angry, system-ui, sans-serif`
+  const w = ctx.measureText(text).width
+
+  if (withBurst) {
+    burstPath(ctx, Math.max(w * 0.62, size * 1.15), 11, 0.68, text.length + size)
+    ctx.fillStyle = c.burst
+    ctx.fill()
+  }
+
+  // The cut edge: a wide stroke under everything, so the letters read as one
+  // object rather than as outlined glyphs.
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = size * 0.34
+  ctx.strokeStyle = INK
+  ctx.strokeText(text, 0, 0)
+  ctx.lineWidth = size * 0.2
+  ctx.strokeStyle = c.edge
+  ctx.strokeText(text, 0, 0)
+
+  const g = ctx.createLinearGradient(0, -size * 0.6, 0, size * 0.6)
+  g.addColorStop(0, c.fill)
+  g.addColorStop(1, c.fill2)
+  ctx.fillStyle = g
+  ctx.fillText(text, 0, 0)
+
+  // A clipped white band across the top third — the glossy sticker highlight.
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(-w, -size * 0.72, w * 2, size * 0.42)
+  ctx.clip()
+  ctx.fillStyle = 'rgba(255,255,255,0.62)'
+  ctx.fillText(text, 0, 0)
+  ctx.restore()
+
+  ctx.restore()
+}
+
+// ─── The splat decal ────────────────────────────────────────────────────────
+
+const hash = (a: number, b: number): number => {
+  let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+/**
+ * A splat: the mark a squish leaves on the floor, forever.
+ *
+ * The GDD asks for a decal "procedurally scaled by foot speed and insect mass",
+ * stamped into a persistent floor canvas. This is the stamp.
+ *
+ * Three parts, and all three are needed for it to read as a splat rather than
+ * as a blot:
+ *   1. a central blob with an irregular rim,
+ *   2. radiating fingers — the thing that says something BURST,
+ *   3. satellite droplets, scattered further out than the fingers reach.
+ *
+ * `stretch` and `angle` are the foot's motion at the moment of impact: a splat
+ * made by a sliding foot is smeared along its travel, which is the cheapest
+ * possible way to make a slide feel different from a stomp.
+ */
+export const paintSplat = (
+  ctx: CanvasRenderingContext2D,
+  r: number, colour: string, seed: number,
+  style: JuiceStyleId = 'ooze', stretch = 1, angle = 0
+): void => {
+  const spec = JUICE_STYLE[style]
+  ctx.save()
+  ctx.rotate(angle)
+  ctx.scale(stretch, 1 / Math.max(0.6, Math.sqrt(stretch)))
+  ctx.fillStyle = colour
+  ctx.globalAlpha = spec.decalAlpha
+
+  if (style === 'confetti') {
+    // Chips, not a puddle. Confetti leaves litter.
+    for (let i = 0; i < 16; i++) {
+      const a = hash(seed, i) * Math.PI * 2
+      const d = Math.sqrt(hash(seed + 1, i)) * r
+      const s = r * (0.08 + hash(seed + 2, i) * 0.1)
+      ctx.save()
+      ctx.translate(Math.cos(a) * d, Math.sin(a) * d)
+      ctx.rotate(hash(seed + 3, i) * Math.PI)
+      ctx.fillRect(-s, -s * 0.55, s * 2, s * 1.1)
+      ctx.restore()
+    }
+    ctx.restore()
+    return
+  }
+
+  // 1. The body — a 15-vertex wobbling loop.
+  const n = 15
+  const xs: number[] = []
+  const ys: number[] = []
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2
+    const k = 0.62 + hash(seed, i) * 0.5
+    xs.push(Math.cos(a) * r * k)
+    ys.push(Math.sin(a) * r * k)
+  }
+  ctx.beginPath()
+  ctx.moveTo((xs[n - 1]! + xs[0]!) / 2, (ys[n - 1]! + ys[0]!) / 2)
+  for (let i = 0; i < n; i++) {
+    ctx.quadraticCurveTo(
+      xs[i]!, ys[i]!,
+      (xs[i]! + xs[(i + 1) % n]!) / 2, (ys[i]! + ys[(i + 1) % n]!) / 2
+    )
+  }
+  ctx.closePath()
+  ctx.fill()
+
+  // 2. Fingers — tapering teardrops radiating out of the body.
+  const fingers = 5 + Math.floor(hash(seed + 7, 0) * 4)
+  for (let i = 0; i < fingers; i++) {
+    const a = hash(seed + 11, i) * Math.PI * 2
+    const len = r * (0.9 + hash(seed + 13, i) * 1.0)
+    const wid = r * (0.1 + hash(seed + 17, i) * 0.16)
+    ctx.save()
+    ctx.rotate(a)
+    ctx.beginPath()
+    ctx.moveTo(0, -wid)
+    ctx.quadraticCurveTo(len * 0.7, -wid * 0.55, len, 0)
+    ctx.quadraticCurveTo(len * 0.7, wid * 0.55, 0, wid)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+  }
+
+  // 3. Droplets.
+  for (let i = 0; i < 9; i++) {
+    const a = hash(seed + 19, i) * Math.PI * 2
+    const d = r * (1.1 + hash(seed + 23, i) * 1.3)
+    const s = r * (0.05 + hash(seed + 29, i) * 0.13)
+    ctx.beginPath()
+    ctx.ellipse(Math.cos(a) * d, Math.sin(a) * d, s, s * 0.82, a, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // A darker core, so the puddle has depth rather than being one flat colour.
+  ctx.globalAlpha = spec.decalAlpha * 0.45
+  ctx.fillStyle = 'rgba(0,0,0,1)'
+  ctx.beginPath()
+  ctx.ellipse(0, 0, r * 0.42, r * 0.36, hash(seed, 3) * 3, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.restore()
+}
+
+// ─── Rings ──────────────────────────────────────────────────────────────────
+
+/**
+ * A shockwave: a ring that expands, thins and fades.
+ *
+ * `p01` is 0 at the impact and 1 when it is gone. The ring is drawn with an
+ * inner glow pass and an outer hard pass — two strokes, and it is what makes a
+ * slam read as a physical event rather than a growing circle.
+ */
+export const paintShockRing = (
+  ctx: CanvasRenderingContext2D, r: number, p01: number, colour: string, thick = 1
+): void => {
+  const e = 1 - Math.pow(1 - p01, 2.2)
+  const rr = r * (0.18 + e * 0.94)
+  const a = Math.max(0, 1 - p01) ** 1.4
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.strokeStyle = colour
+  ctx.globalAlpha = a * 0.35
+  ctx.lineWidth = Math.max(2, r * 0.16 * thick * (1 - e * 0.6))
+  ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.stroke()
+  ctx.globalAlpha = a * 0.9
+  ctx.lineWidth = Math.max(1.2, r * 0.055 * thick * (1 - e * 0.6))
+  ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.stroke()
+  ctx.restore()
+}
+
+/** The alert badge a dodger wears the instant it has noticed the shadow. */
+export const paintAlert = (
+  ctx: CanvasRenderingContext2D, size: number, pop: number
+): void => {
+  ctx.save()
+  ctx.scale(pop, pop)
+  burstPath(ctx, size, 9, 0.7, 4)
+  ctx.fillStyle = '#ff3b5c'
+  ctx.fill()
+  ctx.lineWidth = size * 0.14
+  ctx.strokeStyle = INK
+  ctx.stroke()
+  ctx.fillStyle = '#fff'
+  ctx.beginPath()
+  ctx.roundRect(-size * 0.11, -size * 0.52, size * 0.22, size * 0.6, size * 0.1)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(0, size * 0.38, size * 0.13, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+/** A five-point star, filled or hollow. The objective pip and the fever mark. */
+export const paintStar = (
+  ctx: CanvasRenderingContext2D, r: number, filled: boolean
+): void => {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i / 10) * Math.PI * 2
+    const rr = i % 2 === 0 ? r : r * 0.44
+    const x = Math.cos(a) * rr
+    const y = Math.sin(a) * rr
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+  if (filled) {
+    const g = ctx.createLinearGradient(0, -r, 0, r)
+    g.addColorStop(0, '#fff3b0')
+    g.addColorStop(1, '#ffb703')
+    ctx.fillStyle = g
+    ctx.fill()
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'
+    ctx.fill()
+  }
+  ctx.lineWidth = r * 0.16
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = INK
+  ctx.stroke()
+}
 
 // ─── The result banner ──────────────────────────────────────────────────────
 
@@ -34,17 +322,17 @@ export interface UiPaintOpts { procedural?: boolean }
  *
  * 21:9 — a ratio the image tools offer — because the file's shape is only the
  * END PIECES' shape: the banner is nine-sliced (three, really — two ends kept
- * at true size and a middle stretched to the caption), so its height on
- * screen is the caption's line and its width is the caption's width. `cap` is
- * how much of the width each end piece takes, and it is where ALL the detail
- * goes; the middle is a plain band precisely because it gets stretched.
+ * at true size and a middle stretched to the caption), so its height on screen
+ * is the caption's line and its width is the caption's width. `cap` is how much
+ * of the width each end piece takes, and it is where ALL the detail goes; the
+ * middle is a plain band precisely because it gets stretched.
  */
 export const BANNER = { w: 1344, h: 576, cap: 0.171 } as const
 
 /**
- * The banner, drawn into the box (0, 0, w, h): a plate of blackened iron with
- * swallow-tailed ends, bound top and bottom in tarnished gold, a boss at each
- * end. The middle stays plain — the title goes there.
+ * The banner: a fat sticker-cut ribbon in picnic red and cream, swallow-tailed
+ * at both ends, with a gold bind top and bottom and a button at each notch.
+ * The middle stays plain — the title goes there.
  */
 export const paintBanner = (
   ctx: CanvasRenderingContext2D, w: number, h: number, o?: UiPaintOpts
@@ -55,29 +343,23 @@ export const paintBanner = (
     return
   }
   const cap = BANNER.cap * w
-  /** How deep the swallow-tail bites into each end. */
   const notch = cap * 0.55
   const top = h * 0.07
   const bot = h * 0.93
   const mid = h / 2
-  const iron = tones('#2b2e38', 1.15)
-  const gold = tones('#a5823a', 1)
+  const cloth = tones('#e8534f', 1.2)
+  const gold = tones('#ffcd00', 1)
 
   ctx.save()
 
-  // ── The plate ──
-  // Densified so the traced contour keeps its corners — the notch has to be a
-  // point, not a dimple — and roughened only slightly: the middle band is
-  // stretched sideways in play, and a wobble there stretches with it.
-  const plate = rough(densify([
+  const plate: Pt[] = rough(densify([
     [0, top], [w, top], [w - notch, mid], [w, bot], [0, bot], [notch, mid]
-  ], 8), h * 0.005, 7, 0.7)
-  cel(ctx, plate, iron, {
+  ] as Pt[], 8), h * 0.005, 7, 0.7)
+  cel(ctx, plate, cloth, {
     shade: terminator(plate, Math.PI / 2, 0.35, 0.05, 3),
     lit: terminator(plate, -Math.PI / 2, 0.62, 0.04, 5)
   })
 
-  // ── The gold binding, straight: it crosses the band that gets stretched ──
   ctx.lineCap = 'round'
   for (const y of [top + h * 0.085, bot - h * 0.085]) {
     ctx.strokeStyle = gold.shade
@@ -94,33 +376,30 @@ export const paintBanner = (
     ctx.stroke()
   }
 
-  // ── The end pieces: a boss at the notch and a rivet at each corner ──
   for (const side of [0, 1] as const) {
     const sx = (x: number): number => (side === 0 ? x : w - x)
-    const boss = blob(sx(notch + h * 0.15), mid, h * 0.075, h * 0.075, 21 + side, 0.05)
-    cel(ctx, boss, gold, {
-      shade: terminator(boss, SHADOW_DIR, 0.1, 0.1, 23 + side),
-      lit: terminator(boss, SHADOW_DIR + Math.PI, 0.6, 0.08, 25 + side)
+    const button = blob(sx(notch + h * 0.15), mid, h * 0.075, h * 0.075, 21 + side, 0.05)
+    cel(ctx, button, gold, {
+      shade: terminator(button, SHADOW_DIR, 0.1, 0.1, 23 + side),
+      lit: terminator(button, SHADOW_DIR + Math.PI, 0.6, 0.08, 25 + side)
     })
-    ink(ctx, boss, { width: h * 0.014, color: INK, seed: 27 + side, breakUp: 0.2 })
+    ink(ctx, button, { width: h * 0.014, color: INK, seed: 27 + side, breakUp: 0.2 })
     for (const y of [top + h * 0.19, bot - h * 0.19]) {
-      const rivet = blob(sx(cap * 0.86), y, h * 0.032, h * 0.032, 31 + side, 0.08)
-      cel(ctx, rivet, iron, { lit: terminator(rivet, SHADOW_DIR + Math.PI, 0.5, 0.1, 33 + side) })
-      ink(ctx, rivet, { width: h * 0.01, color: INK, seed: 35 + side, breakUp: 0.2 })
+      const stitch = blob(sx(cap * 0.86), y, h * 0.032, h * 0.032, 31 + side, 0.08)
+      cel(ctx, stitch, tones('#fdf4ea', 1), {
+        lit: terminator(stitch, SHADOW_DIR + Math.PI, 0.5, 0.1, 33 + side)
+      })
+      ink(ctx, stitch, { width: h * 0.01, color: INK, seed: 35 + side, breakUp: 0.2 })
     }
   }
 
-  // ── The contour, inked last, with few breaks: a gap in the middle band
-  //    would be stretched into a missing edge ──
   ink(ctx, plate, { width: h * 0.026, color: INK, seed: 41, breakUp: 0.06 })
-
   ctx.restore()
 }
 
 let drawnBanner: HTMLCanvasElement | null = null
 let drawnBannerUrl: string | null = null
 
-/** The drawing at the reference size, baked once. */
 const bannerCanvas = (): HTMLCanvasElement => {
   if (drawnBanner) return drawnBanner
   const c = document.createElement('canvas')
@@ -132,22 +411,14 @@ const bannerCanvas = (): HTMLCanvasElement => {
   return c
 }
 
-/**
- * The drawn banner as a data URL, for a `border-image`.
- *
- * Baked on first use and kept for the page: the result screen shows it once
- * a stage, and the bake is a few hundred path operations.
- */
+/** The drawn banner as a data URL, for a `border-image`. Baked once per page. */
 export const bannerDataUrl = (): string => {
   if (drawnBannerUrl === null) drawnBannerUrl = bannerCanvas().toDataURL('image/png')
   return drawnBannerUrl
 }
 
-/**
- * The banner blitted the way CSS shows it: the two end pieces at true size
- * for the height, the middle stretched to whatever is left. The playground's
- * way of proving a painting's caps land where the drawing's do.
- */
+/** The banner blitted the way CSS shows it — the playground's way of proving a
+ *  painting's caps land where the drawing's do. */
 export const blitBanner = (
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, o?: UiPaintOpts
 ): void => {
@@ -162,322 +433,22 @@ export const blitBanner = (
   ctx.drawImage(src, sw - capS, 0, capS, sh, x + w - capD, y, capD, h)
 }
 
-// ─── The upgrade shop's mark ────────────────────────────────────────────────
+// ─── UI marks the art pipeline can repaint ──────────────────────────────────
 
 /**
- * The shop button's forge: a blackened anvil with a chevron of hot gold rising
- * off its face.
+ * The HUD drawables that are SVG glyphs filled through `Path2D`, so their
+ * reference sheet shows exactly the silhouette the button shows.
  *
- * It is DRAWN rather than filled from a glyph, which makes it the odd one out
- * among the icons below, and the reason is the button it sits on. The shop
- * chip is the one control on the HUD the game actively wants pressed — it
- * carries an unspent-coins badge and a one-shot spotlight — and it used to
- * wear the painted chest. That chest now belongs to the idle reward in the
- * wallet column, because two buttons that do different things may not be the
- * same drawing. What the shop needed back was not the glyph underneath it: a
- * flat white silhouette beside a painted chest is not a mark, it is the
- * absence of one.
- *
- * Centred on the origin, `size` px square — the same contract every icon here
- * keeps, so `paintUiIcon` can dispatch to it and the reference sheet, the
- * playground and the button all show one drawing. A painting at
- * `images/ui/forge.webp` replaces it wholesale; `artSheet.ts` carries the
- * prompt that would produce one.
+ * Each entry maps a pipeline id (`images/ui/<id>.webp`) to the glyph it is
+ * drawn from. A painting replaces the glyph; the glyph is the floor under it.
  */
-export const paintForge = (ctx: CanvasRenderingContext2D, size: number): void => {
-  const S = size
-  /** Authored in fractions of the box, centred on the origin. */
-  const P = (pts: readonly (readonly [number, number])[]): Pt[] =>
-    pts.map(([x, y]) => [x * S, y * S] as Pt)
-
-  const iron = tones('#525a6b', 1.3)
-
-  // ── The anvil ──
-  //
-  // Every point is DOUBLED, which is not decoration: `trace` makes each
-  // authored point the control point of a quadratic, so a lone vertex rounds
-  // off — and the first draft of this mark, authored with single points at the
-  // waist, smoothed its own pinch away and read as a mushroom on a plinth. An
-  // anvil is a hard object; doubling makes `trace` pass through each vertex
-  // with a corner and leaves the hand-drawn wobble to `rough`.
-  //
-  // The three masses, in the proportions that make the silhouette legible at
-  // 24 px: a face nearly the full width and a fifth of the height, a waist a
-  // QUARTER of that width, and a foot almost as wide as the face. The horn is
-  // a wedge off the left at face height, not a spur underneath it.
-  const anvil = rough(densify(P([
-    [-0.49, 0.055], [-0.49, 0.055],
-    [-0.33, -0.02], [-0.33, -0.02],
-    [-0.30, -0.055], [-0.30, -0.055],
-    [0.35, -0.055], [0.35, -0.055],
-    [0.42, -0.005], [0.42, -0.005],
-    [0.42, 0.115], [0.42, 0.115],
-    [0.35, 0.165], [0.35, 0.165],
-    [0.145, 0.165], [0.145, 0.165],
-    [0.10, 0.225], [0.10, 0.225],
-    [0.10, 0.30], [0.10, 0.30],
-    [0.30, 0.345], [0.30, 0.345],
-    [0.335, 0.385], [0.335, 0.385],
-    [0.335, 0.46], [0.335, 0.46],
-    [-0.335, 0.46], [-0.335, 0.46],
-    [-0.335, 0.385], [-0.335, 0.385],
-    [-0.30, 0.345], [-0.30, 0.345],
-    [-0.10, 0.30], [-0.10, 0.30],
-    [-0.10, 0.225], [-0.10, 0.225],
-    [-0.145, 0.165], [-0.145, 0.165],
-    [-0.30, 0.165], [-0.30, 0.165],
-    [-0.335, 0.13], [-0.335, 0.13]
-  ]), 3), S * 0.004, 71, 0.9)
-
-  cel(ctx, anvil, iron, {
-    shade: terminator(anvil, SHADOW_DIR, 0.18, 0.09, 311),
-    deep: terminator(anvil, SHADOW_DIR, 0.55, 0.07, 312),
-    lit: terminator(anvil, SHADOW_DIR + Math.PI, 0.70, 0.06, 313)
-  })
-
-  // The face, still hot from whatever was last struck on it — a hand's width
-  // of heat on the TOP SURFACE only. The first draft ran this gradient down
-  // the whole face and turned the iron brown; what says "forge" is the
-  // contrast between a hot edge and cold metal, not a warm wash over both.
-  ctx.save()
-  ctx.beginPath()
-  trace(ctx, anvil)
-  ctx.clip()
-  const ember = ctx.createLinearGradient(0, -0.06 * S, 0, 0.035 * S)
-  ember.addColorStop(0, 'rgba(255, 186, 86, 0.55)')
-  ember.addColorStop(1, 'rgba(255, 120, 24, 0)')
-  ctx.fillStyle = ember
-  ctx.fillRect(-0.5 * S, -0.06 * S, S, 0.095 * S)
-  ctx.restore()
-
-  ink(ctx, anvil, { width: S * 0.05, color: INK, seed: 314, breakUp: 0.2 })
-
-  // ── The chevron ──
-  //
-  // The half of the mark that says "upgrade", so its point has to be a point:
-  // tripled at the apex, at the inner notch and at each tip.
-  const chevron = rough(densify(P([
-    [0, -0.47], [0, -0.47], [0, -0.47],
-    [0.33, -0.21], [0.33, -0.21],
-    [0.33, -0.095], [0.33, -0.095],
-    [0, -0.335], [0, -0.335], [0, -0.335],
-    [-0.33, -0.095], [-0.33, -0.095],
-    [-0.33, -0.21], [-0.33, -0.21]
-  ]), 3), S * 0.003, 91, 1.1)
-
-  // Molten, so it is lit from ABOVE along its own length rather than cel-shaded
-  // from the scene's light: a terminator across a shape this thin cuts a hard
-  // diagonal through one arm and reads as a crease, not as a form.
-  ctx.save()
-  ctx.shadowColor = 'rgba(255, 168, 40, 0.95)'
-  ctx.shadowBlur = S * 0.12
-  fillShape(ctx, chevron, '#ffc340')
-  ctx.restore()
-  ctx.save()
-  ctx.beginPath()
-  trace(ctx, chevron)
-  ctx.clip()
-  const molten = ctx.createLinearGradient(0, -0.47 * S, 0, -0.09 * S)
-  molten.addColorStop(0, '#fff0b8')
-  molten.addColorStop(0.45, '#ffc63e')
-  molten.addColorStop(1, '#e8830f')
-  ctx.fillStyle = molten
-  ctx.fillRect(-0.5 * S, -0.5 * S, S, S)
-  ctx.restore()
-  ink(ctx, chevron, { width: S * 0.032, color: INK, seed: 323, breakUp: 0.3 })
-
-  // ── Sparks ──
-  // Struck off the chevron's tips and thrown outward, clear of both shapes, so
-  // they read as sparks rather than as dirt on the glyph.
-  for (const [sx, sy, sr, seed] of [
-    [-0.42, -0.26, 0.030, 41], [-0.33, -0.40, 0.019, 42], [0.41, -0.31, 0.024, 43]
-  ] as const) {
-    const spark = blob(sx * S, sy * S, sr * S, sr * S, seed, 0.22)
-    ctx.save()
-    ctx.shadowColor = 'rgba(255, 200, 90, 0.9)'
-    ctx.shadowBlur = S * 0.06
-    fillShape(ctx, spark, '#ffe6a8')
-    ctx.restore()
-  }
-}
-
-let drawnForge: HTMLCanvasElement | null = null
-let drawnForgeUrl: string | null = null
-
-/**
- * The drawn forge as a data URL, for an `<img>` — see `ArtIcon`.
- *
- * Baked once at 256 so it stays crisp on a 3× phone (the chip tops out around
- * 55 px), and kept for the page: the bake is a few hundred path operations and
- * the mark is on screen for the whole run. Returns `null` where a canvas
- * cannot be encoded at all (jsdom, a locked-down context), which is exactly
- * when the glyph underneath has to take over.
- */
-export const forgeDataUrl = (): string | null => {
-  if (drawnForgeUrl !== null) return drawnForgeUrl
-  try {
-    if (!drawnForge) {
-      const c = document.createElement('canvas')
-      c.width = 256
-      c.height = 256
-      const ctx = c.getContext('2d')
-      if (!ctx) return null
-      ctx.translate(128, 128)
-      paintForge(ctx, 256)
-      drawnForge = c
-    }
-    const url = drawnForge.toDataURL('image/png')
-    // jsdom returns a 1×1 stub rather than throwing; anything this short is
-    // not an image and must fall through to the glyph.
-    if (url.length < 128) return null
-    drawnForgeUrl = url
-    return url
-  } catch {
-    return null
-  }
-}
-
-// ─── The incoming-attack sign ───────────────────────────────────────────────
-
-/**
- * The alarm the badge in the top-right corner wears.
- *
- * THREE marks, not one, because the badge's colour is load-bearing: amber is
- * "get out of the way", the cold blue is the same blue as the shock's eye and
- * the ward it tells the player to stand in, and the violet is the boss's own
- * gaze. A painting cannot be re-tinted by `currentColor` the way the flat SVG
- * this replaces could, so each state is its own drawable and its own painting.
- *
- * Drawn rather than filled from the glyph for the reason `paintForge` is: this
- * is the one mark on the screen that has to be caught in peripheral vision at
- * a tenth of the screen's width, and a flat vector triangle beside a painted
- * cast is exactly the thing that reads as "not finished".
- *
- * Centred on the origin, `size` px square — the contract every mark here
- * keeps, so the badge, the reference sheet and the playground show one drawing.
- */
-export const WARN_TONES = {
-  'warn-away': '#ffb32e',
-  'warn-into': '#6ecbff',
-  'warn-still': '#c77dff'
-} as const
-
-export type WarnId = keyof typeof WARN_TONES
-
-export const paintWarnSign = (
-  ctx: CanvasRenderingContext2D, size: number, id: WarnId
-): void => {
-  const S = size
-  const P = (pts: readonly (readonly [number, number])[]): Pt[] =>
-    pts.map(([x, y]) => [x * S, y * S] as Pt)
-
-  const plate = tones(WARN_TONES[id], 1.35)
-
-  // ── The plate ──
-  //
-  // The same triangle the badge has always shown — apex at the top, a wide
-  // flat base — with every vertex DOUBLED so `trace`'s quadratics pass through
-  // the corners instead of rounding them off. A hazard sign whose points have
-  // gone soft is a shield, and the silhouette is the whole signal here.
-  const tri = rough(densify(P([
-    [0, -0.45], [0, -0.45],
-    [0.5, 0.41], [0.5, 0.41],
-    [-0.5, 0.41], [-0.5, 0.41]
-  ]), 5), S * 0.006, 21)
-
-  // The shadow side, authored rather than derived: the key light is up and to
-  // the left for the whole cast (`SHADOW_DIR`), so the right flank and the
-  // underside of the base carry the dark.
-  const shade = P([
-    [0.03, -0.42], [0.03, -0.42],
-    [0.5, 0.41], [0.5, 0.41],
-    [-0.5, 0.41], [-0.5, 0.41],
-    [-0.34, 0.28], [-0.34, 0.28],
-    [0.26, 0.28], [0.26, 0.28]
-  ])
-
-  cel(ctx, tri, plate, { shade })
-
-  // ── The bang ──
-  //
-  // A wedge, not a bar: it tapers toward the point exactly as the plate does,
-  // which is what keeps the two reading as one object at 24 px. Ink-dark
-  // rather than black — the same near-black the cast is outlined in.
-  const bar = rough(densify(P([
-    [-0.075, -0.24], [-0.075, -0.24],
-    [0.075, -0.24], [0.075, -0.24],
-    [0.052, 0.08], [0.052, 0.08],
-    [-0.052, 0.08], [-0.052, 0.08]
-  ]), 4), S * 0.004, 37)
-  const dot = blob(0, S * 0.235, S * 0.072, S * 0.072, 43, 0.1)
-  fillShape(ctx, bar, INK)
-  fillShape(ctx, dot, INK)
-
-  // ── The outline ──
-  //
-  // Last, so it sits over both the plate's shade and the bang's edge.
-  ink(ctx, tri, { width: S * 0.05, color: INK, breakUp: 0.22, seed: 12 })
-}
-
-const drawnWarn = new Map<WarnId, string>()
-
-/** A drawn warning sign as a data URL, for the badge's `<img>`. One bake per
- *  state, kept for the page: the badge is up and down all fight. */
-export const warnSignDataUrl = (id: WarnId): string | null => {
-  const had = drawnWarn.get(id)
-  if (had !== undefined) return had
-  try {
-    const c = document.createElement('canvas')
-    c.width = 256
-    c.height = 256
-    const ctx = c.getContext('2d')
-    if (!ctx) return null
-    ctx.translate(128, 128)
-    paintWarnSign(ctx, 256, id)
-    const url = c.toDataURL('image/png')
-    // jsdom hands back a 1×1 stub rather than throwing; anything this short is
-    // not an image and must fall through to the glyph.
-    if (url.length < 128) return null
-    drawnWarn.set(id, url)
-    return url
-  } catch {
-    return null
-  }
-}
-
-/**
- * The DOM-side marks this module can DRAW when the pipeline has not painted
- * them — keyed the way `spriteFor` keys the paintings, so `ArtIcon` can ask
- * one question and get the best answer available.
- */
-const UI_DRAWN_MARKS: Record<string, () => string | null> = {
-  forge: forgeDataUrl,
-  'warn-away': () => warnSignDataUrl('warn-away'),
-  'warn-into': () => warnSignDataUrl('warn-into'),
-  'warn-still': () => warnSignDataUrl('warn-still')
-}
-
-/** A drawn stand-in for `images/ui/<id>.webp`, or `null` if there is none. */
-export const drawnUiMark = (id: string): string | null =>
-  UI_DRAWN_MARKS[id]?.() ?? null
-
-// ─── The icons ──────────────────────────────────────────────────────────────
-
-/** The HUD marks the pipeline paints, and the glyph each one stands in for. */
 export const UI_ICON_GLYPH = {
-  // The idle reward on the wallet column — NOT the shop, which is `forge`.
-  chest: 'chest',
-  forge: 'anvil',
-  'skill-grenade': 'bomb',
-  'skill-shield': 'shield',
-  // The two cards of the stage-3 weapon choice — the weapon itself, big, on a
-  // lit plate. Their glyphs are the HUD's own weapon marks.
-  'weapon-card-rocket': 'rocket',
-  'weapon-card-gatling': 'gatling',
-  // The three states of the incoming-attack alarm — see `paintWarnSign`.
-  'warn-away': 'warning',
-  'warn-into': 'warning',
-  'warn-still': 'warning'
+  'locker': 'boot',
+  'fever': 'flame',
+  'star': 'star',
+  'timer': 'clock',
+  'target': 'target',
+  'trophy': 'trophy'
 } as const satisfies Record<string, GameIconName>
 
 export type UiIconId = keyof typeof UI_ICON_GLYPH
@@ -485,39 +456,61 @@ export type UiIconId = keyof typeof UI_ICON_GLYPH
 export const UI_ICON_IDS = Object.keys(UI_ICON_GLYPH) as UiIconId[]
 
 /**
- * One HUD icon at the origin, `size` px square: the painting, or the glyph it
- * stands in for filled in `colour` — the exact silhouette the button shows,
- * through the same paths `GameIcon` renders.
+ * One UI mark, centred on the origin, `size` px square.
+ *
+ * The glyph set is authored in a 24×24 box, so the path is scaled by
+ * `size / 24` and offset to the centre. A painting at `images/ui/<id>.webp`
+ * replaces it wholesale.
  */
 export const paintUiIcon = (
-  ctx: CanvasRenderingContext2D, id: UiIconId, size: number, o?: UiPaintOpts, colour = '#ffffff'
+  ctx: CanvasRenderingContext2D, id: UiIconId, size: number, o?: UiPaintOpts
 ): void => {
   const painted = o?.procedural ? null : spriteFor('ui', id)
   if (painted) {
     ctx.drawImage(painted, -size / 2, -size / 2, size, size)
     return
   }
-  // The forge and the three alarms have drawings of their own — every other
-  // mark here IS its glyph.
-  if (id === 'forge') {
-    paintForge(ctx, size)
-    return
-  }
-  if (id in WARN_TONES) {
-    paintWarnSign(ctx, size, id as WarnId)
-    return
-  }
-  const path = new Path2D(ICON_PATHS[UI_ICON_GLYPH[id]].join(''))
+  const subPaths = ICON_PATHS[UI_ICON_GLYPH[id]]
+  if (!subPaths || subPaths.length === 0) return
   ctx.save()
   ctx.translate(-size / 2, -size / 2)
   ctx.scale(size / 24, size / 24)
-  ctx.fillStyle = colour
-  ctx.fill(path)
+  // The glyphs are authored as a LIST of sub-paths filled with the nonzero
+  // winding rule, so a counter-wound sub-path punches a hole through the ones
+  // before it (the shield's band, the skull's eyes). Appending them all into one
+  // `Path2D` and filling once is what preserves that; filling them one at a time
+  // would paint the holes solid.
+  const path = new Path2D()
+  for (const d of subPaths) path.addPath(new Path2D(d))
+  ctx.fillStyle = '#ffffff'
+  ctx.fill(path, 'nonzero')
   ctx.restore()
 }
 
-/** Points, for the tests: the plate's outline is what the fit measures. */
-export const bannerOutline = (w: number, h: number): Pt[] => {
-  const notch = BANNER.cap * w * 0.55
-  return [[0, h * 0.07], [w, h * 0.07], [w - notch, h / 2], [w, h * 0.93], [0, h * 0.93], [notch, h / 2]]
+/** A UI mark as a data URL, for an `<img>` in the DOM. Cached per id. */
+const iconUrls = new Map<UiIconId, string>()
+
+export const uiIconDataUrl = (id: UiIconId, size = 128): string | null => {
+  const hit = iconUrls.get(id)
+  if (hit) return hit
+  try {
+    const c = document.createElement('canvas')
+    c.width = size
+    c.height = size
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    ctx.translate(size / 2, size / 2)
+    paintUiIcon(ctx, id, size * 0.86, { procedural: true })
+    const url = c.toDataURL('image/png')
+    iconUrls.set(id, url)
+    return url
+  } catch {
+    return null
+  }
 }
+
+/** The drawn stand-in for a UI mark an `ArtIcon` asked for, or null when this
+ *  module has no drawing of it. */
+export const drawnUiMark = (id: string): string | null =>
+  id === 'ribbon' ? bannerDataUrl()
+    : (UI_ICON_IDS as string[]).includes(id) ? uiIconDataUrl(id as UiIconId) : null

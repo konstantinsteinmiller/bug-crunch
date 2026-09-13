@@ -29,7 +29,10 @@ const {
   userDifficulty,
   userSoundVolume,
   userMusicVolume,
-  userMusicTrack
+  userMusicTrack,
+  userJuiceStyle,
+  userHighVis,
+  userSingleTap
 } = useUser()
 
 const currentTab = ref('general')
@@ -48,7 +51,12 @@ const isMobile = computed(() => {
 
 const tabs = computed(() => {
   const list = [
-    { value: 'general', label: t('options.general') }
+    { value: 'general', label: t('options.general') },
+    // Always present, on every device. It carries the Juice Style selector,
+    // which is the one setting in this game a PARENT might open the menu to
+    // find — burying it behind a desktop-only tab would be the same as not
+    // having it.
+    { value: 'play', label: t('options.play') }
   ]
   return !isMobile.value ? list.concat({ label: t('options.audio'), value: 'audio' }) : list
 })
@@ -69,7 +77,7 @@ const difficultyList = computed(() => [
 
 const difficultyHint = computed(() => t('options.difficultyHints.' + userDifficulty.value))
 
-// Background-music track picker — Trance Tunnel (default) vs Cozy Harmony.
+// Background-music track picker — Cozy Harmony (default) against Trance Tunnel.
 const musicTrackList = computed(() => [
   { value: 'trance', label: t('options.musicTracks.trance') },
   { value: 'cozy', label: t('options.musicTracks.cozy') }
@@ -87,6 +95,25 @@ const musicTrackList = computed(() => [
 // this tab is one and the modal has no toggle atom — a one-off switch here
 // would be the only control in the game that looks like that.
 const hapticsList = computed(() => [
+  { value: 'on', label: t('options.on') },
+  { value: 'off', label: t('options.off') }
+])
+
+// ─── Tone and accessibility (GDD 2.2, 10.2) ─────────────────────────────────
+//
+// Three settings that change the PICTURE and never a number. Stated in the hint
+// under the picker, because a parent scanning this screen for "can I turn the
+// squishing down" needs to find the answer without playing the game — and a
+// child who picks Confetti needs to know they have not made it easier.
+const juiceStyleList = computed(() => [
+  { value: 'ooze', label: t('options.juiceStyles.ooze') },
+  { value: 'confetti', label: t('options.juiceStyles.confetti') },
+  { value: 'bubble', label: t('options.juiceStyles.bubble') }
+])
+
+const juiceStyleHint = computed(() => t('options.juiceStyleHints.' + userJuiceStyle.value))
+
+const onOffList = computed(() => [
   { value: 'on', label: t('options.on') },
   { value: 'off', label: t('options.off') }
 ])
@@ -144,6 +171,36 @@ const hapticsList = computed(() => [
             :model-value="hapticsEnabled ? 'on' : 'off'"
             @update:model-value="setHapticsEnabled($event === 'on')"
           )
+
+    //- ── The play tab ────────────────────────────────────────────────────
+    //- Everything that changes how the game LOOKS or how it is AIMED, and
+    //- nothing that changes what it is worth.
+    div(v-else-if="currentTab === 'play'")
+      div(:class="isMobileLandscape ? 'grid grid-cols-2 gap-x-4 gap-y-1 p-1 items-start' : 'flex flex-col gap-2 p-2'")
+        div(class="z-[20] flex flex-col gap-1")
+          FSelect(
+            :label="t('options.juiceStyle')"
+            :options="juiceStyleList"
+            :model-value="userJuiceStyle"
+            @update:model-value="setSettingValue('juiceStyle', $event)"
+          )
+          p.text-white.game-text.opacity-70.leading-tight.px-1(class="text-[10px] md:text-xs") {{ juiceStyleHint }}
+        div(class="z-[10] flex flex-col gap-1")
+          FSelect(
+            :label="t('options.highVis')"
+            :options="onOffList"
+            :model-value="userHighVis ? 'on' : 'off'"
+            @update:model-value="setSettingValue('highVis', $event === 'on')"
+          )
+          p.text-white.game-text.opacity-70.leading-tight.px-1(class="text-[10px] md:text-xs") {{ t('options.highVisHint') }}
+        div(class="z-[5] flex flex-col gap-1")
+          FSelect(
+            :label="t('options.singleTap')"
+            :options="onOffList"
+            :model-value="userSingleTap ? 'on' : 'off'"
+            @update:model-value="setSettingValue('singleTap', $event === 'on')"
+          )
+          p.text-white.game-text.opacity-70.leading-tight.px-1(class="text-[10px] md:text-xs") {{ t('options.singleTapHint') }}
 
     div(v-else-if="currentTab === 'audio'").flex.flex-col.justify-between.items-center
       FSlider.px-4(class="!py-1 !pb-3 w-full max-w-[min(20rem,90%)]" :model-value="userSoundVolume" @update:modelValue="setSettingValue('sound', $event)" :label="t('options.soundEffects')" :min="0" :max="1" :step="0.01")

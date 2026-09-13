@@ -7,9 +7,8 @@ import { resolveIconLabel } from '@/components/icons/iconLabels'
 import type { GameIconName } from '@/components/icons/iconNames'
 
 /**
- * The standard HUD chip used by every meta button in the bottom rows
- * (Daily Rewards, Missions, Achievements, Battle Pass, Ad Reward, Settings,
- * Tech Tree, Themes).
+ * The standard HUD chip used by every meta button in the bottom rows — in this
+ * game the Leaderboard, Settings and the Locker.
  *
  * Exists to kill the copy-pasted `scale-80 sm:scale-100` wrappers that used to
  * live in each of those components. Those transforms shrank the painted chip

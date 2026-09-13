@@ -1,29 +1,29 @@
 /**
  * ─── Painted-art boxes the manifest shares with the renderer ────────────────
  *
- * The geometry a painting is blitted into, for the stills whose box is not
- * simply their panel. They live HERE, in a module with no imports, rather than
- * beside the painters in `useSurvivalArt`, because the art manifest
- * (`artSheet.ts`) needs them too — and the manifest has to load under plain Node
- * for `pnpm art:prompts`, where the renderer (Vue, the save, the audio) cannot.
- * `useSurvivalArt` imports and re-exports both, so nothing that read them from
- * there had to change.
+ * The geometry a painting is blitted into, for the drawables whose box is not
+ * simply a square. They live HERE, in a module with no imports, rather than
+ * beside the painters, because the art manifest (`artSheet.ts`) needs them too
+ * — and the manifest has to load under plain Node for `pnpm art:prompts`, where
+ * the renderer (Vue, the save, the audio) cannot.
  */
 
 /**
- * The gate frame painting's own geometry, shared with the art bench.
+ * The box a painted shoe is authored in, in units of the shoe's half-length.
  *
- * The reference is drawn at `ppu` px per world unit with a two-leaf door
- * (`refHalfW`) centred in a `w` x `h` panel, the leaf's origin at the panel's
- * centre. `cap` is how much of each side is blitted at true size; the span
- * between the caps is stretched to whatever leaf it is drawn on.
+ * PORTRAIT, and that is the whole reason this constant exists: the shoe body is
+ * roughly square, but the ankle and lower leg recede out of the frame BEHIND the
+ * heel and need room the body does not. `toeFromTop` is where the toe sits
+ * inside that box as a fraction of its height — the renderer anchors the
+ * painting on it, so a painting with a longer leg still lands with its toe on
+ * the stomp point.
  */
-export const GATE_FRAME = { ppu: 220, w: 1344, h: 576, cap: 260, refHalfW: 2.05 } as const
+export const SHOE_BOX = { w: 2.2, h: 4.4, toeFromTop: 0.26 } as const
 
 /**
- * The box a painted rocket is blitted into, in units of the shell's radius
- * `rr`: `w` wide and `h` tall, its top edge `top` above the shell's centre.
- * 9:16 — a ratio the image tools offer — with the plume given the room it
- * has in the drawing.
+ * The result banner's nine-slice, as a fraction of its own width.
+ *
+ * Mirrors `uiArt.BANNER.cap`. Stated separately here so a Node-side tool can
+ * reason about the cut without importing the painter.
  */
-export const ROCKET_BOX = { w: 3.6, h: 6.4, top: 2 } as const
+export const BANNER_CAP = 0.171

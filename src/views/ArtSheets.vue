@@ -1,51 +1,43 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import {
-  WALKS, STILLS, GATE_POST, GATE_REF_POST_W,
-  framesOf, colsOf, rowsOf,
-  BOSS_DEATHS, promptDocs,
-  type WalkSpec, type StillSpec, type DeathSpec
+  WALKS, STILLS, framesOf, colsOf, rowsOf, promptDocs,
+  type WalkSpec, type StillSpec
 } from '@/game/artSheet'
-import { paintMonsterDeathFrame, paintMonsterFrame } from '@/game/monsterSprites'
-import { paintSurvivorFrame, OUTFITS } from '@/game/heroSprites'
+import { paintBug, paintBoss, BUG_R_FRAC } from '@/game/bugArt'
+import { paintShoe } from '@/game/footArt'
+import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
+import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
+import { paintBanner, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, type UiIconId } from '@/game/uiArt'
 import { paintSmokeRef } from '@/use/useVfx'
-import {
-  paintCoin, paintCrateBody, paintBarrelBody, paintBoulder, paintBarricadeBody,
-  paintWeaponBoxBody, paintGuardPlate, paintLeverPost, paintLeverArm, LEVER_ART,
-  paintGateFrame, GATE_FRAME, paintPillarBody, hazardPatternFor,
-  paintRollerBall, ROLLER_ART_PAD, ROLLER_SPIN_PER_LOOP,
-  paintGunnerBolt, paintBossBolt, paintMeteorRock, METEOR_BOX,
-  ROUND_BOX, paintBombCharge, paintGrenadeBody, paintTracerRef, FX_PAD,
-  ROCKET_BOX, paintRocketBody,
-  muzzleRamp, paintMuzzleFlash, paintScorch, paintRing, paintShieldDome,
-  paintGuardHex, paintCrest, paintCrown, paintRidge, RIDGE_BAND
-} from '@/use/useSurvivalArt'
-import { paintBanner, paintUiIcon, type UiIconId } from '@/game/uiArt'
-import { BARREL_R, DIVIDER_HALF_W, DIVIDER_H } from '@/game/survival'
-import { BOLT_R, ROLLER_R } from '@/game/threats'
-import { WEAPON_BOX_R } from '@/game/weapons'
+import { shoeSpec, type ShoeId } from '@/game/shoes'
+import { bugSpec, type BugId } from '@/game/bugs'
+import type { BossId } from '@/game/bosses'
+import { hazardSpec, type HazardId } from '@/game/hazards'
+import type { WorldId } from '@/game/stages'
+import { SHOE_BOX } from '@/game/artBoxes'
 
 /**
  * `/art-sheets` — the reference bench.
  *
- * splatix has no art folder. Every monster, prop and effect is a few
- * hundred canvas operations, which is exactly what you want in a bundle and
- * exactly what you cannot hand to somebody who paints. This screen bakes the
- * whole cast onto the sheets described in `artSheet.ts` and writes them into
- * `art-sheets/` through a dev-only endpoint, so the art can go out to be
- * repainted and come back as drop-in bitmaps.
+ * Splatix has no art folder. Every bug, shoe, prop and effect is a few hundred
+ * canvas operations, which is exactly what you want in a bundle and exactly what
+ * you cannot hand to somebody who paints. This screen bakes the whole cast onto
+ * the sheets described in `artSheet.ts` and writes them into `art-sheets/`
+ * through a dev-only endpoint, so the art can go out to be repainted and come
+ * back as drop-in bitmaps.
  *
  * THREE RULES, and they are all about the return trip.
  *
- *   1. Every reference is drawn by the GAME'S OWN PAINTER into the exact box
- *      the game blits the painting back into. A reference drawn from a private
- *      copy of the geometry agrees with itself and proves nothing.
- *   2. Nothing is written inside a panel. Captions live on the key sheets —
- *      text inside a frame is text an image model will dutifully repaint.
- *   3. Every reference is rendered on a TRANSPARENT canvas first and measured
+ *   1. Every reference is drawn by the GAME'S OWN PAINTER into the exact box the
+ *      game blits the painting back into. A reference drawn from a private copy
+ *      of the geometry agrees with itself and proves nothing.
+ *   2. Nothing is written inside a panel. Captions live on the key sheets — text
+ *      inside a frame is text an image model will dutifully repaint.
+ *   3. Every reference is rendered on a TRANSPARENT canvas first and MEASURED
  *      there, then laid on the magenta sheet. The sheet itself has no alpha to
- *      measure, and the effects paint additively — additive light over magenta
- *      is a pink smear, over nothing it is the effect.
+ *      measure, and the effects paint additively — additive light over magenta is
+ *      a pink smear, over nothing it is the effect.
  *
  * Everything animated is frozen at a fixed phase rather than at the wall clock,
  * so re-exporting produces a byte-identical sheet and a diff means the art
@@ -56,10 +48,6 @@ const status = ref('idle')
 const busy = ref(false)
 const previews = ref<{ id: string; title: string; url: string; dims: string }[]>([])
 
-/** Procedural only, always: the bench must never bake a painting into the
- *  reference it is about to be replaced by. */
-const REF = { procedural: true } as const
-
 // ─── Fit measurement ────────────────────────────────────────────────────────
 //
 // Where the reference actually SITS inside its panel, as fractions of one.
@@ -68,10 +56,9 @@ const REF = { procedural: true } as const
 // gets to match.
 
 /**
- * Alpha floor for the fit measurement. Deliberately high: the procedural
- * effects have soft glows and the creatures cast a soft ground shadow, and a
- * soft edge is light, not extent. At 140 a 32%-opacity shadow is not part of
- * the object on either side.
+ * Alpha floor for the fit measurement. Deliberately high: the effects have soft
+ * glows and the creatures cast a soft ground shadow, and a soft edge is light,
+ * not extent. At 140 a 32 %-opacity shadow is not part of the object.
  */
 const FIT_ALPHA = 140
 
@@ -80,12 +67,12 @@ interface Fit { h: number; w: number; bottom: number; cx: number }
 /**
  * Alpha bbox of one rectangle of a canvas, in that rectangle's own pixels.
  *
- * Solid pixels are grouped into connected pieces and a sliver (three pixels
- * or thinner) or a speck is left out — the SAME rule the slicer applies to a
+ * Solid pixels are grouped into connected pieces and a sliver (three pixels or
+ * thinner) or a speck is left out — the SAME rule the slicer applies to a
  * return, so the two measure the same thing. The slicer needs it because a
- * neighbour's shadow bleeds across the cut line as a thin solid line; the
- * bench applies it so a design's own sparkle dots do not put the reference's
- * box somewhere the return's can never land.
+ * neighbour's shadow bleeds across the cut line as a thin solid line; the bench
+ * applies it so a design's own antenna beads do not put the reference's box
+ * somewhere the return's can never land.
  */
 const boxOf = (
   cv: HTMLCanvasElement, ox: number, oy: number, W: number, H: number
@@ -152,356 +139,161 @@ const fits = new Map<string, Fit>()
 
 // ─── Walks ──────────────────────────────────────────────────────────────────
 
-/** Every panel of a walk on a transparent canvas, through the bake's own painter. */
+/** Every panel of a walk on a transparent canvas, through the bake's own
+ *  painter — so the reference is provably the frame box the game draws. */
 const renderWalkAlpha = (walk: WalkSpec): HTMLCanvasElement => {
   const cv = document.createElement('canvas')
   cv.width = walk.w
   cv.height = walk.h
   const ctx = cv.getContext('2d')!
-  const outfit = walk.kind === 'hero' ? OUTFITS.findIndex((o) => o.id === walk.id) : -1
   for (let i = 0; i < walk.frames; i++) {
     ctx.save()
     ctx.translate((i % walk.cols) * walk.panelW, Math.floor(i / walk.cols) * walk.panelH)
-    // Clipped to its own panel, exactly as the bake's frame clips it: a sword
-    // tip or a canopy that overruns the frame is cut off in play, and left
-    // unclipped here it lands in the NEXT panel — where it is measured as
-    // that panel's creature and drags the whole strip's fit off by a quarter.
+    // Clipped to its own panel, exactly as the bake's frame clips it: an antenna
+    // that overruns the frame is cut off in play, and left unclipped here it
+    // lands in the NEXT panel, where it is measured as that panel's creature and
+    // drags the whole strip's fit off by a quarter.
     ctx.beginPath()
     ctx.rect(0, 0, walk.panelW, walk.panelH)
     ctx.clip()
-    // Straight through the renderer's own frame painter, so the reference is
-    // provably the frame box the game draws rather than a lookalike.
-    if (walk.kind === 'hero') paintSurvivorFrame(ctx, outfit, i, walk.frames, walk.panelW, walk.panelH)
-    else paintMonsterFrame(ctx, walk.id, i, walk.frames, walk.panelW, walk.panelH)
+    ctx.translate(walk.panelW / 2, walk.panelH / 2)
+    paintBug(ctx, walk.id as BugId, (walk.panelH / 2) * BUG_R_FRAC, i / walk.frames)
     ctx.restore()
   }
   return cv
-}
-
-// ─── Deaths ─────────────────────────────────────────────────────────────────
-
-/**
- * A boss's death LAYOUT on a transparent canvas.
- *
- * The game cannot draw a creature falling — only standing — so this is the
- * standing drawing, through the bake's own painter, placed panel by panel as
- * `DEATH_POSES` says: squashed, rolled about its feet toward the side it falls
- * to, re-centred in the panel and rested ON the ground line. It carries size,
- * place and direction, which is all the prompt takes from it; the pose itself
- * is the painter's (see `promptForDeath`).
- *
- * Resting on the line is computed, not guessed: the standing box's corners are
- * put through the same squash and roll, and the panel is shifted until the
- * lowest one sits on the feet line — so a wide boar and a tall treant both lie
- * on the ground rather than half under it.
- */
-const renderDeathAlpha = (d: DeathSpec): HTMLCanvasElement => {
-  const cv = document.createElement('canvas')
-  cv.width = d.w
-  cv.height = d.h
-  const ctx = cv.getContext('2d')!
-  for (let i = 0; i < d.frames; i++) {
-    ctx.save()
-    ctx.translate((i % d.cols) * d.panelW, Math.floor(i / d.cols) * d.panelH)
-    ctx.beginPath()
-    ctx.rect(0, 0, d.panelW, d.panelH)
-    ctx.clip()
-    // The drawn fall itself, through the bake's own death painter — the same
-    // frames the game plays until a painting arrives.
-    paintMonsterDeathFrame(ctx, d.design, i, d.frames, d.panelW, d.panelH)
-    ctx.restore()
-  }
-  return cv
-}
-
-const renderDeath = (d: DeathSpec): HTMLCanvasElement => {
-  const alpha = renderDeathAlpha(d)
-  // The union of all eight, like a walk's: the slicer registers the return's
-  // union onto it, standing height and lying length together.
-  const fit = fitOf(alpha, d.cols, d.rows, d.panelW, d.panelH)
-  if (fit) fits.set(`death/${d.id}`, fit)
-  return onGround(alpha, 'magenta')
 }
 
 // ─── Stills ─────────────────────────────────────────────────────────────────
 
 /**
- * One still on a transparent canvas, through the game's own painter, into
- * the exact box the runtime blits the painting back into.
+ * One still on a transparent canvas, through the game's own painter, into the
+ * exact box the runtime blits the painting back into.
  *
- * Every size here is DERIVED from the panel and the painter's own blit
- * contract — a crate is blitted into (-r, -r, 2r, 2r), so the reference draws
- * it with r at half the panel; a round is blitted into `ROUND_BOX`, so the
- * reference puts its head where `ROUND_BOX.head` says. Nothing is eyeballed.
+ * Every size here is DERIVED from the panel and the painter's own blit contract
+ * — a hazard is blitted into (−r, −r, 2r, 2r), so the reference draws it with r
+ * at half the panel. Nothing is eyeballed.
  */
 const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
   const cv = document.createElement('canvas')
   cv.width = s.w
   cv.height = s.h
   const ctx = cv.getContext('2d')!
-  const S = s.w
   const cx = s.w / 2
   const cy = s.h / 2
-  // The bench's own paint options, plus WHERE IN ITS LOOP this panel is. Only
-  // the animated subjects read it; for everything else `cycle` is 0 and the
-  // reference is exactly the one still it always was.
-  const ref = { ...REF, cycle }
+  const half = Math.min(s.w, s.h) / 2
   ctx.save()
 
-  switch (`${s.kind}/${s.id}`) {
-    case 'prop/crate-damage':
-    case 'prop/crate-rate':
+  switch (s.kind) {
+    case 'shoe': {
+      // The shoe's own box: portrait, toe at `toeFromTop`, drawn through the
+      // renderer's painter at the half-length the box implies.
+      const spec = shoeSpec(s.id as ShoeId)
+      ctx.translate(cx, s.h * SHOE_BOX.toeFromTop)
+      paintShoe(ctx, s.id as ShoeId, spec, s.w / SHOE_BOX.w)
+      break
+    }
+    case 'boss':
       ctx.translate(cx, cy)
-      paintCrateBody(ctx, s.id === 'crate-rate' ? 'rate' : 'damage', S / 2, REF)
+      paintBoss(ctx, s.id as BossId, half * 0.62, cycle, 0)
       break
-    case 'prop/barricade':
-      // A slice of a WIDER block, so the block's rounded corners fall outside
-      // the tile: a tile is square-cornered or it seams when repeated.
+    case 'bg': {
+      // A floor tile is drawn at its own tile resolution and scaled up, so the
+      // reference is exactly what `floorArt` will later be replaced by.
+      const tile = document.createElement('canvas')
+      tile.width = FLOOR_TILE_PX
+      tile.height = FLOOR_TILE_PX
+      const w = Number(s.id.slice('floor-'.length)) as WorldId
+      paintFloorTile(tile.getContext('2d')!, w)
+      ctx.drawImage(tile, 0, 0, s.w, s.h)
+      break
+    }
+    case 'prop':
       ctx.translate(cx, cy)
-      paintBarricadeBody(ctx, S * 1.6, S, REF)
+      if (s.id === 'coin') paintCoin(ctx, half * 0.82, 0)
+      else if (s.id === 'pod') paintPod(ctx, half * 0.82, 0, '#ffd07a')
+      else if (s.id === 'conveyor' || s.id === 'sweeper') {
+        // The bar-shaped props fill their panel edge to edge along x.
+        paintHazard(ctx, s.id as HazardId, half, { t: 0, angle: 0 }, 3)
+      } else {
+        paintHazard(ctx, s.id as HazardId, half * 0.86, { t: 0, angle: 0 }, 3)
+      }
       break
-    case 'prop/boulder-1':
-    case 'prop/boulder-2':
-    case 'prop/boulder-3': {
-      // `paintBoulder` picks the painting by `seed % 3`; the seed here is the
-      // one that lands on this variant, and it is also what shapes the lump.
-      const seed = Number(s.id.slice(-1)) - 1
+    case 'fx':
       ctx.translate(cx, cy)
-      paintBoulder(ctx, S / 1.08, S / 1.08, seed, REF)
+      switch (s.id) {
+        case 'ring-stomp': paintShockRing(ctx, half * 0.92, 0.55, 'rgba(255,255,255,0.95)', 0.7); break
+        case 'ring-slam': paintShockRing(ctx, half * 0.92, 0.55, 'rgba(255,255,255,0.95)', 1.8); break
+        case 'ring-fever': paintShockRing(ctx, half * 0.92, 0.5, 'rgba(255,205,0,0.95)', 2.6); break
+        case 'burst': {
+          // The comic burst, with nothing written in it — the game writes the
+          // word over the middle, and a word painted into the reference is a
+          // word the image model will faithfully repaint.
+          ctx.save()
+          ctx.beginPath()
+          for (let i = 0; i < 22; i++) {
+            const a = (i / 22) * Math.PI * 2 - Math.PI / 2
+            const rr = (i % 2 === 0 ? half * 0.94 : half * 0.64)
+            const x = Math.cos(a) * rr
+            const y = Math.sin(a) * rr * 0.88
+            if (i === 0) ctx.moveTo(x, y)
+            else ctx.lineTo(x, y)
+          }
+          ctx.closePath()
+          ctx.fillStyle = '#ffffff'
+          ctx.fill()
+          ctx.lineWidth = half * 0.06
+          ctx.strokeStyle = '#2b1b2e'
+          ctx.stroke()
+          ctx.restore()
+          break
+        }
+        case 'haze': paintHaze(ctx, half * 0.9, 0, 1); break
+        case 'salt-cloud': paintSaltBurst(ctx, half * 0.92, 0.6); break
+        case 'spark':
+          // The ricochet spark, drawn as the game's own particle bucket shapes
+          // it: a bright core with two crossing streaks.
+          ctx.fillStyle = '#fff6c8'
+          for (const a of [0, Math.PI / 2, 0.8, 2.4]) {
+            ctx.save()
+            ctx.rotate(a)
+            ctx.beginPath()
+            ctx.ellipse(0, 0, half * 0.9, half * 0.08, 0, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+          }
+          break
+        case 'scorch':
+          paintSplat(ctx, half * 0.62, '#3a2a1e', 7, 'ooze', 1, 0)
+          break
+        case 'smoke':
+          paintSmokeRef(ctx, half * 0.94)
+          break
+      }
       break
-    }
-    case 'prop/barrel':
-      ctx.translate(cx, cy)
-      paintBarrelBody(ctx, S / 2, (S / 2) / BARREL_R, false, 0, 0, REF)
+    case 'ui':
+      if (s.id === 'ribbon') {
+        paintBanner(ctx, s.w, s.h, { procedural: true })
+      } else if (s.id === 'logo') {
+        // The wordmark, in the game's own display face — the reference exists to
+        // pin the SIZE and the composition, not the lettering, which is what the
+        // prompt describes.
+        ctx.translate(cx, cy)
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.font = `900 ${s.h * 0.26}px Angry, system-ui, sans-serif`
+        ctx.lineJoin = 'round'
+        ctx.lineWidth = s.h * 0.06
+        ctx.strokeStyle = '#2b1b2e'
+        ctx.strokeText('SPLATIX', 0, 0)
+        ctx.fillStyle = '#ffd93c'
+        ctx.fillText('SPLATIX', 0, 0)
+      } else {
+        ctx.translate(cx, cy)
+        paintUiIcon(ctx, s.id as UiIconId, half * 1.5, { procedural: true })
+      }
       break
-    case 'prop/pillar': {
-      // The painting's box is 2.5 half-widths by 1.26 heights, the pillar's
-      // origin 0.6 heights below the box's top.
-      const halfPx = s.w / 2.5
-      const h = s.h / 1.26
-      const scale = halfPx / DIVIDER_HALF_W
-      void DIVIDER_H
-      ctx.translate(cx, s.h * (0.6 / 1.26))
-      paintPillarBody(ctx, halfPx, h, scale, hazardPatternFor(ctx, scale), REF)
+    default:
       break
-    }
-    case 'prop/coin':
-      ctx.translate(cx, cy)
-      paintCoin(ctx, S / 2, 1, 0, REF)
-      break
-    case 'prop/guard-plate':
-      // The plate fills its box exactly, as it does in play.
-      ctx.translate(cx, cy)
-      paintGuardPlate(ctx, s.w, s.h, REF)
-      break
-    case 'prop/lever-post': {
-      // The housing's box is `LEVER_ART.post` wide, its TOP edge on the post's
-      // origin — so the origin is the panel's top, not its middle.
-      const r = s.w / LEVER_ART.post.w
-      ctx.translate(cx, 0)
-      paintLeverPost(ctx, r, r, REF)
-      break
-    }
-    case 'prop/lever-arm': {
-      // The arm's box is `LEVER_ART.arm`, drawn from its PIVOT — which sits
-      // `pivot` radii above the panel's bottom edge.
-      const r = s.w / LEVER_ART.arm.w
-      ctx.translate(cx, s.h - LEVER_ART.arm.pivot * r)
-      paintLeverArm(ctx, r, REF)
-      break
-    }
-    case 'prop/weapon-box':
-    case 'prop/weapon-box-open':
-      // The case AND its face plate: the glyph, the brace and the halo are
-      // the only things left live over a painting. `pulse` at 0 so the
-      // reference is the open box's steady colour, not a frame of its throb.
-      ctx.translate(cx, cy)
-      paintWeaponBoxBody(ctx, S / 2, S / 2 / WEAPON_BOX_R, s.id.endsWith('-open'), 0, REF)
-      break
-
-    case 'gate/frame-add':
-    case 'gate/frame-sub':
-    case 'gate/frame-mul':
-    case 'gate/frame-div': {
-      const op = s.id.slice('frame-'.length) as 'add' | 'sub' | 'mul' | 'div'
-      const ppu = GATE_FRAME.ppu
-      ctx.translate(cx, cy)
-      // Posts at the band's full width, so the painter copies a heavy post
-      // rather than inventing one. See `GATE_REF_POST_W`.
-      paintGateFrame(ctx, op, GATE_FRAME.refHalfW * ppu, 1.5 * ppu, ppu,
-        { ...REF, postW: GATE_REF_POST_W })
-      break
-    }
-
-    case 'round/tracer':
-      // The streak fills the `len`-square box from its top edge.
-      ctx.translate(cx, 0)
-      paintTracerRef(ctx, 0, S / 0.55)
-      break
-    case 'round/bolt-gunner': {
-      const r = S / ROUND_BOX.side
-      ctx.translate(ROUND_BOX.head * r, cy)
-      paintGunnerBolt(ctx, r, 1, 0, r / BOLT_R, false, ref)
-      break
-    }
-    case 'round/bolt-boss': {
-      const r = S / ROUND_BOX.side
-      ctx.translate(ROUND_BOX.head * r, cy)
-      paintBossBolt(ctx, r, 1, 0, 1, false, ref)
-      break
-    }
-    case 'round/roller': {
-      // The sphere at 1/1.3 of the panel: the margin is where the spikes go.
-      //
-      // The reference has to SHOW the roll, or the painter has nothing to
-      // follow — the first return came back as one ball copied eight times
-      // with sparks added, because that is exactly what the sheet in front of
-      // it looked like. `spin` therefore walks one ring spacing (a quarter
-      // turn) across the loop, which is what the game plays it back at.
-      const r = S / 2 / ROLLER_ART_PAD
-      ctx.translate(cx, cy)
-      paintRollerBall(ctx, r, cycle * ROLLER_SPIN_PER_LOOP, r / ROLLER_R, false, ref)
-      break
-    }
-    case 'round/meteor': {
-      const R = S / METEOR_BOX.side
-      ctx.translate(cx, METEOR_BOX.centre * R)
-      paintMeteorRock(ctx, R, false, R / 0.55, false, ref)
-      break
-    }
-    case 'round/bomb': {
-      const bodyR = S / 4.4
-      ctx.translate(cx, cy)
-      paintBombCharge(ctx, bodyR, bodyR * 2.1, ref)
-      break
-    }
-    case 'round/grenade': {
-      const r = S / 2.6
-      ctx.translate(cx, cy)
-      paintGrenadeBody(ctx, r, r / 0.26, REF)
-      break
-    }
-    case 'round/rocket': {
-      // The panel IS `ROCKET_BOX`: the shell's centre `top` radii below the
-      // top edge, nose up, the plume running down.
-      const rr = S / ROCKET_BOX.w
-      ctx.translate(cx, ROCKET_BOX.top * rr)
-      paintRocketBody(ctx, rr, REF)
-      break
-    }
-
-    case 'fx/muzzle': {
-      const flashR = S / 2
-      ctx.translate(cx, cy)
-      paintMuzzleFlash(ctx, 0, flashR, muzzleRamp(ctx, 0, flashR), REF)
-      break
-    }
-    case 'fx/smoke':
-      ctx.translate(cx, cy)
-      paintSmokeRef(ctx, S / 2)
-      break
-    case 'fx/scorch':
-      // The panel is the scorch's own 2 : 1.1 box, so the file maps 1:1.
-      ctx.translate(cx, cy)
-      paintScorch(ctx, S / 2, REF)
-      break
-    case 'fx/ring-shock':
-    case 'fx/ring-heat':
-    case 'fx/ring-heal': {
-      const kind = s.id.slice('ring-'.length) as 'shock' | 'heat' | 'heal'
-      const lw = S * 0.06
-      const colour = kind === 'shock' ? 'rgba(215,240,255,0.9)' : kind === 'heat' ? '#ff7a2a' : '#5cf08a'
-      // The ring's edge at 1/1.12 of the panel: the margin is for its glow.
-      ctx.translate(cx, cy)
-      paintRing(ctx, kind, S / 2 / FX_PAD - lw / 2, S / 2 / FX_PAD - lw / 2, lw, colour, REF)
-      break
-    }
-    case 'fx/shield': {
-      const rr = S / 2 / FX_PAD
-      paintShieldDome(ctx, cx, cy, rr, rr, 1, 0, false, S / 4, REF)
-      break
-    }
-    case 'fx/guard': {
-      const rr = S / 2 / FX_PAD
-      ctx.translate(cx, cy)
-      paintGuardHex(ctx, 0, rr, rr, 0.5, S / 4, REF)
-      break
-    }
-    case 'fx/crest-shield': {
-      const m = S * 0.06
-      paintCrest(ctx, 'shield', cx, cy, S / 2 - m, S / 2 - m, {
-        fill: '#6fd6ff', rim: '#06263a', rimW: S * 0.05,
-        rib: 'rgba(6,38,58,0.9)', ribW: S * 0.025
-      }, REF)
-      break
-    }
-    case 'fx/crest-guard': {
-      const m = S * 0.06
-      paintCrest(ctx, 'guard', cx, cy, S / 2 - m, S / 2 - m, {
-        fill: '#ffc46a', rim: '#2a0f05', rimW: S * 0.06,
-        rib: 'rgba(42,15,5,0.9)', ribW: S * 0.03
-      }, REF)
-      break
-    }
-
-    case 'bg/ridge-far':
-    case 'bg/ridge-near':
-      // Black silhouette, ridge line at `RIDGE_BAND.line`: the game tints it.
-      paintRidge(ctx, s.id as 'ridge-far' | 'ridge-near', s.w, s.h,
-        s.h * RIDGE_BAND.line, s.h * 0.16, '#000000', s.id === 'ridge-far' ? 1.7 : 4.2, REF)
-      break
-
-    case 'ui/crown': {
-      const cw = S * 0.92
-      paintCrown(ctx, cx, S * 0.96, cw, cw / 1.15, S * 0.04, REF)
-      break
-    }
-    case 'ui/ribbon':
-      // The whole box: CSS slices it at `BANNER.cap` from each end.
-      paintBanner(ctx, s.w, s.h, REF)
-      break
-    case 'ui/chest':
-    case 'ui/forge':
-    case 'ui/skill-grenade':
-    case 'ui/skill-shield':
-      // The button's own mark — the glyph through the same paths `GameIcon`
-      // renders, or, for the forge, the drawing `paintForge` makes.
-      ctx.translate(cx, cy)
-      paintUiIcon(ctx, s.id as UiIconId, S, REF)
-      break
-    case 'ui/warn-away':
-    case 'ui/warn-into':
-    case 'ui/warn-still':
-      // The alarm, at the size the badge shows it: the plate fills the frame,
-      // which is what the prompt promises the painter.
-      ctx.translate(cx, cy)
-      paintUiIcon(ctx, s.id as UiIconId, S * 0.98, REF)
-      break
-    case 'ui/weapon-card-rocket':
-    case 'ui/weapon-card-gatling':
-      // The weapon choice's cards: the weapon's own glyph, turned to point to
-      // the upper right and filling about nine tenths of the frame — the
-      // diagonal layout the prompt asks for, so the painter copies a pose and
-      // not an upright icon. The card's plate, halo and text are the DOM's.
-      ctx.translate(cx, cy)
-      ctx.rotate(-Math.PI * 0.2)
-      paintUiIcon(ctx, s.id as UiIconId, S * 0.82, REF)
-      break
-    case 'ui/logo': {
-      // There is no procedural logo — the one on disk is the previous
-      // project's — so the reference is a layout: the word, its size and its
-      // place. The prompt describes the treatment.
-      ctx.fillStyle = '#ffffff'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      let px = S * 0.2
-      ctx.font = `900 ${px}px Angry, sans-serif`
-      const want = S * 0.9
-      const got = ctx.measureText('splatix').width
-      if (got > want) { px *= want / got; ctx.font = `900 ${px}px Angry, sans-serif` }
-      ctx.fillText('splatix', cx, cy)
-      break
-    }
   }
 
   ctx.restore()
@@ -510,7 +302,6 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
 
 // ─── Composition ────────────────────────────────────────────────────────────
 
-/** The reference laid on its ground: magenta, or nothing for an opaque tile. */
 const onGround = (alpha: HTMLCanvasElement, bg: StillSpec['bg']): HTMLCanvasElement => {
   const cv = document.createElement('canvas')
   cv.width = alpha.width
@@ -535,15 +326,11 @@ const renderWalk = (walk: WalkSpec): HTMLCanvasElement => {
  * One still, or one LOOP of an animated one, on the lattice.
  *
  * The grid is laid out exactly as a walk's is — panels are an integer multiple
- * of the panel box from the origin, no gutters, no centring fudge — because
- * that is what lets the slicer cut the return with integer arithmetic. Panel k
- * is the painter called at `cycle = k / frames`, so the eight panels are eight
- * real moments of the same fire rather than one picture stamped eight times.
+ * of the panel box from the origin, no gutters, no centring fudge — because that
+ * is what lets the slicer cut the return with integer arithmetic.
  *
  * The FIT is measured on panel 0 only. It describes where the subject sits in
- * ONE panel, which is the same box for all of them; measuring the union of
- * eight frames of a whipping flame would hand the slicer a box the size of the
- * biggest lick and shrink every panel to fit it.
+ * ONE panel, which is the same box for all of them.
  */
 const renderStill = (s: StillSpec): HTMLCanvasElement => {
   const frames = framesOf(s)
@@ -576,7 +363,7 @@ const renderKey = (
   const rows = Math.ceil(items.length / cols)
   const cv = document.createElement('canvas')
   cv.width = cols * cell
-  cv.height = rows * (cell + 44)
+  cv.height = Math.max(1, rows) * (cell + 44)
   const ctx = cv.getContext('2d')!
   ctx.fillStyle = '#11151c'
   ctx.fillRect(0, 0, cv.width, cv.height)
@@ -606,9 +393,9 @@ const renderKey = (
 /**
  * Every sheet as the slicer reads it: a grid of panels, a target, and the
  * measured fit. A still is a one-panel walk with a TIGHT box — the space the
- * game lends it — while a creature's box is not, because it stands on open
- * ground and shrinking it because a painted arm swings wider would lift its
- * feet off the line.
+ * game lends it — while a creature's box is not, because a bug rotates about its
+ * own centre and shrinking its box because a painted antenna swings wider would
+ * put the body off centre.
  */
 const buildIndex = () => ({
   generated: new Date().toISOString(),
@@ -630,7 +417,9 @@ const buildIndex = () => ({
       panel: { w: w.panelW, h: w.panelH },
       ...(fits.has(`${w.kind}/${w.id}`) ? { fit: fits.get(`${w.kind}/${w.id}`) } : {}),
       faces: w.faces,
-      anchor: 'feet',
+      // A bug is turned about its own centre by the renderer, so it registers on
+      // its CENTRE. Nothing in this game stands on a ground line.
+      anchor: 'centre',
       tight: false,
       maxEdge: w.maxEdge,
       target: w.target
@@ -647,16 +436,13 @@ const buildIndex = () => ({
       frames: framesOf(s),
       kind: s.kind,
       panel: { w: s.w, h: s.h },
-      // A glow-only effect carries no fit: measured on solid pixels its box
-      // is a fraction of what the eye sees, and a painting fitted onto it
-      // would shrink to match. See `StillSpec.fit`.
+      // A glow-only effect carries no fit: measured on solid pixels its box is a
+      // fraction of what the eye sees, and a painting fitted onto it would
+      // shrink to match. See `StillSpec.fit`.
       ...(s.fit !== false && fits.has(`${s.kind}/${s.id}`) ? { fit: fits.get(`${s.kind}/${s.id}`) } : {}),
       anchor: s.anchor,
       tight: true,
       bg: s.bg,
-      // A gate frame's post band, so the slicer can re-compose a return's
-      // posts onto it — whatever width they came back at.
-      ...(s.kind === 'gate' ? { post: GATE_POST } : {}),
       ...(s.tile ? { tile: s.tile } : {}),
       ...(s.fill ? { fill: true } : {}),
       // A size the world reads the file at (the PWA logo), which the slicer's
@@ -665,26 +451,6 @@ const buildIndex = () => ({
       maxEdge: s.maxEdge,
       target: s.target,
       ...(s.extra ? { extra: s.extra } : {})
-    })),
-    // A death is a walk to the slicer — a feet-anchored grid of one creature,
-    // registered by the union of its panels — with wider panels and its own
-    // `death-` id, so it can never be mistaken for the walk of the same design.
-    ...BOSS_DEATHS.map((d) => ({
-      id: d.id,
-      file: `${d.file}.png`,
-      width: d.w,
-      height: d.h,
-      cols: d.cols,
-      rows: d.rows,
-      frames: d.frames,
-      kind: d.kind,
-      panel: { w: d.panelW, h: d.panelH },
-      ...(fits.has(`death/${d.id}`) ? { fit: fits.get(`death/${d.id}`) } : {}),
-      faces: d.faces,
-      anchor: 'feet',
-      tight: false,
-      maxEdge: d.maxEdge,
-      target: d.target
     }))
   ]
 })
@@ -707,33 +473,22 @@ const preview = async (): Promise<void> => {
   const out: typeof previews.value = []
   for (const w of WALKS.slice(0, 3)) {
     const cv = renderWalk(w)
-    out.push({ id: w.id, title: `${w.name} — walk`, url: cv.toDataURL('image/png'),
-      dims: `${cv.width}x${cv.height} · ${w.cols}x${w.rows} panels` })
+    out.push({
+      id: w.id, title: `${w.name} — walk`, url: cv.toDataURL('image/png'),
+      dims: `${cv.width}x${cv.height} · ${w.cols}x${w.rows} panels`
+    })
   }
   const stills = STILLS.map((s) => ({ title: s.name, sub: s.target, cv: renderStill(s) }))
   const key = renderKey(stills, 160, 8)
-  out.push({ id: 'stills', title: 'Every still', url: key.toDataURL('image/png'),
-    dims: `${STILLS.length} stills` })
-  for (const d of BOSS_DEATHS.slice(0, 2)) {
-    const cv = renderDeath(d)
-    out.push({ id: d.id, title: `${d.name} — death (layout)`, url: cv.toDataURL('image/png'),
-      dims: `${cv.width}x${cv.height} · ${d.cols}x${d.rows} panels` })
-  }
+  out.push({
+    id: 'stills', title: 'Every still', url: key.toDataURL('image/png'),
+    dims: `${STILLS.length} stills`
+  })
   previews.value = out
 }
 
-/**
- * Write the sheets.
- *
- * `deaths` writes the boss deaths and nothing else of the cast — the references,
- * their key and their prompts — so adding a sheet kind does not re-stamp fifty
- * reference files that did not change. The INDEX is still written whole, which
- * is why every other sheet is still rendered (in memory only): the slicer reads
- * one index, and an index with holes in it would forget how to cut the walks.
- */
-const exportSheets = async (scope: 'all' | 'deaths'): Promise<void> => {
+const exportSheets = async (): Promise<void> => {
   busy.value = true
-  const every = scope === 'all'
   let written = 0
   const put = async (name: string, payload: { dataUrl?: string; text?: string }): Promise<void> => {
     await save(name, payload)
@@ -742,12 +497,12 @@ const exportSheets = async (scope: 'all' | 'deaths'): Promise<void> => {
   try {
     await document.fonts?.ready
     fits.clear()
+
     const walkKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
     for (const walk of WALKS) {
-      status.value = `${every ? 'rendering' : 'measuring'} ${walk.file}`
+      status.value = `rendering ${walk.file}`
       await tick()
       const cv = renderWalk(walk)
-      if (!every) continue
       await put(`${walk.file}.png`, { dataUrl: cv.toDataURL('image/png') })
       const first = document.createElement('canvas')
       first.width = walk.panelW
@@ -755,41 +510,22 @@ const exportSheets = async (scope: 'all' | 'deaths'): Promise<void> => {
       first.getContext('2d')!.drawImage(cv, 0, 0, walk.panelW, walk.panelH, 0, 0, walk.panelW, walk.panelH)
       walkKeys.push({ title: walk.name, sub: walk.target, cv: first })
     }
-    if (every) await put('key-walks.png', { dataUrl: renderKey(walkKeys, 192, 8).toDataURL('image/png') })
+    await put('key-walks.png', { dataUrl: renderKey(walkKeys, 192, 8).toDataURL('image/png') })
 
     const stillKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
     for (const s of STILLS) {
-      status.value = `${every ? 'rendering' : 'measuring'} ${s.file}`
+      status.value = `rendering ${s.file}`
       await tick()
       const cv = renderStill(s)
-      if (!every) continue
       await put(`${s.file}.png`, { dataUrl: cv.toDataURL('image/png') })
       stillKeys.push({ title: s.name, sub: s.target, cv })
     }
-    if (every) await put('key-stills.png', { dataUrl: renderKey(stillKeys, 192, 8).toDataURL('image/png') })
-
-    const deathKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
-    for (const d of BOSS_DEATHS) {
-      status.value = `rendering ${d.file}`
-      await tick()
-      const cv = renderDeath(d)
-      await put(`${d.file}.png`, { dataUrl: cv.toDataURL('image/png') })
-      // The key shows the LAST panel — the body the game keeps on screen.
-      const last = document.createElement('canvas')
-      last.width = d.panelW
-      last.height = d.panelH
-      last.getContext('2d')!.drawImage(cv, (d.cols - 1) * d.panelW, (d.rows - 1) * d.panelH,
-        d.panelW, d.panelH, 0, 0, d.panelW, d.panelH)
-      deathKeys.push({ title: d.name, sub: d.target, cv: last })
-    }
-    await put('key-deaths.png', { dataUrl: renderKey(deathKeys, 192, 8).toDataURL('image/png') })
+    await put('key-stills.png', { dataUrl: renderKey(stillKeys, 192, 8).toDataURL('image/png') })
 
     // The text is the manifest's (`promptDocs`), so this route and
     // `pnpm art:prompts` write byte-identical documents.
     const docs = promptDocs()
-    await put('PROMPTS-DEATHS.md', { text: docs['PROMPTS-DEATHS.md']! })
-    if (every) await put('PROMPTS-WALKS.md', { text: docs['PROMPTS-WALKS.md']! })
-    if (every) await put('PROMPTS-STILLS.md', { text: docs['PROMPTS-STILLS.md']! })
+    for (const [name, text] of Object.entries(docs)) await put(name, { text })
 
     await put('sheet-index.json', { text: JSON.stringify(buildIndex(), null, 2) + '\n' })
     status.value = `wrote ${written} files to art-sheets/`
@@ -800,10 +536,10 @@ const exportSheets = async (scope: 'all' | 'deaths'): Promise<void> => {
   }
 }
 
-const exportAll = (): Promise<void> => exportSheets('all')
-const exportDeaths = (): Promise<void> => exportSheets('deaths')
-
 onMounted(preview)
+
+/** Every UI mark the bench can draw, for the "what is in the set" line. */
+const uiIds: UiIconId[] = UI_ICON_IDS
 </script>
 
 <template lang="pug">
@@ -811,11 +547,13 @@ onMounted(preview)
     header
       h1 Art sheets
       p.lede
-        | Every drawable in the game, through its own painter, onto a reference
-        |  the painting is registered against. Export writes into #[code art-sheets/].
+        | Every drawable in the game, through its own painter, onto a reference the
+        |  painting is registered against. Export writes into #[code art-sheets/].
+      p.lede
+        | #[strong {{ WALKS.length }}] walk sheets · #[strong {{ STILLS.length }}] stills ·
+        |  #[strong {{ uiIds.length }}] HUD marks
       .bar
-        button(:disabled="busy" @click="exportAll") {{ busy ? 'Exporting…' : 'Export all sheets' }}
-        button.ghost(:disabled="busy" @click="exportDeaths") Export boss deaths
+        button(:disabled="busy" @click="exportSheets") {{ busy ? 'Exporting…' : 'Export all sheets' }}
         button.ghost(:disabled="busy" @click="preview") Re-render preview
         span.status {{ status }}
 
@@ -842,7 +580,7 @@ h1
 
 .lede
   max-width: 70ch
-  margin: 0 0 14px
+  margin: 0 0 6px
   color: #9aa7b4
 
 code
@@ -855,7 +593,7 @@ code
   display: flex
   align-items: center
   gap: 10px
-  margin-bottom: 28px
+  margin: 14px 0 28px
 
 button
   padding: 9px 16px

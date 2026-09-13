@@ -35,8 +35,8 @@ import { isGamepix } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch'
 import { isPlatformPaused, isVisibilityHidden, pauseGame, resumeGame } from '@/use/useGamePause'
 import { setPlatformAudioMuted } from '@/use/useGamePauseAudio'
-import { getState } from '@/use/useTowerState'
-import { BEST_STAGE_KEY, RUNS_KEY } from '@/keys'
+import { getState } from '@/use/useSplatixState'
+import { BEST_LEVEL_KEY, RUNS_KEY } from '@/keys'
 
 // Score / level are read straight out of the persisted state blob rather than
 // from the simulation composable. GamePix's plugin is dynamically imported on
@@ -44,7 +44,7 @@ import { BEST_STAGE_KEY, RUNS_KEY } from '@/keys'
 // into that chunk to read two integers would be a real download cost for every
 // GamePix player. `getState` reads the reactive blob, so these stay live.
 const gamesPlayedTotal = computed(() => Number(getState(RUNS_KEY, 0)) || 0)
-const maxStageReached = computed(() => Number(getState(BEST_STAGE_KEY, 0)) || 0)
+const maxStageReached = computed(() => Number(getState(BEST_LEVEL_KEY, 0)) || 0)
 
 declare global {
   interface Window {

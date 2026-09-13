@@ -1,7 +1,7 @@
 {
-  "name": "splatix",
-  "short_name": "splatix",
-  "description": "Shoot the gates to grow them, run your crowd through, and turn three survivors into an army before the boss turns them into dust.",
+  "name": "Splatix",
+  "short_name": "Splatix",
+  "description": "Stomp, slam and slide your way through swarms of googly-eyed bugs. Build a Splat Chain, fill the Juice vial and let the Gilded Boot loose.",
   "display": "standalone",
   "display_override": [
     "fullscreen",
@@ -10,8 +10,8 @@
   "orientation": "any",
   "start_url": "./",
   "scope": "./",
-  "theme_color": "#0a1224",
-  "background_color": "#0a1224",
+  "theme_color": "#120c1e",
+  "background_color": "#120c1e",
   "icons": [
     {
       "src": "images/logo/logo_192x192.png",

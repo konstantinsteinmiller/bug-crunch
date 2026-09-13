@@ -1,17 +1,17 @@
+// NL bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Annuleren',
   'close': 'Sluiten',
   'ok': 'Ok',
-  'continue': 'Doorgaan',
-  'tapToContinue': 'Tik om door te gaan',
-  'clickToContinue': 'Klik om door te gaan',
+  'continue': 'Verder',
+  'tapToContinue': 'Tik om verder te gaan',
+  'clickToContinue': 'Klik om verder te gaan',
   'rewards': 'BELONINGEN',
   'tip': 'Tip',
   'crazyGamesOnly': 'Dit spel is alleen beschikbaar op',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Volgende',
     'replay': 'Opnieuw',
@@ -22,260 +22,256 @@ export default {
     'home': 'Start',
     'info': 'Info'
   },
-
   'hud': {
-    'stage': 'Level {n}',
-    'best': 'Record {n}',
-    'boss': 'Baas',
-    'miniboss': 'Minibaas',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Levels tot de volgende bonus',
-    'fireRate': 'Tempo',
-    'incoming': 'Aanval!',
-    'dodge': 'Ontwijk',
-    'getIn': 'Ga erin',
-    'holdStill': 'Stilstaan',
-    'milestone': '{n} man sterk!',
-    'weaponActive': '{name} gereed',
-    'weaponsActive': '{a} + {b} gereed',
-    'weaponLocked': '{name} vergrendeld — {n} van {total} hendels geraakt',
-    'weaponGift': '{name} verderop — gratis, geen hendels',
-    'weaponFree': 'GRATIS'
+    'score': 'Punten',
+    'time': 'Tijd',
+    'chain': 'Splat-reeks: {n}',
+    'level': 'Level {n}'
   },
-
-  'weapons': {
-    'rocket': 'Raketwerper',
-    'gatling': 'Gatling'
+  'worlds': {
+    'picnic': 'Picknickkleed',
+    'backyard': 'Overwoekerde tuin',
+    'attic': 'Stoffige zolder',
+    'arcade': 'Neon-arcade'
   },
-
-  'tutorial': {
-    'touch': 'Veeg om je team te bewegen',
-    'desktop': 'Beweeg de muis om je team te sturen'
+  'bugs': {
+    'ant': 'Mieren',
+    'beetle': 'Kevers',
+    'flea': 'Vlooien',
+    'caterpillar': 'Rupsen',
+    'stinkbug': 'Stinkwantsen',
+    'centipede': 'Duizendpoten',
+    'pinatafly': 'Piñatavliegen',
+    'moth': 'Motten',
+    'robobug': 'Robotkevers'
+  },
+  'bosses': {
+    'queenAnt': 'Goliath-Mierenkoningin',
+    'beetleKing': 'Doornrug-Keverkoning',
+    'matriarch': 'Duizendpoot-Matriarch',
+    'roachPrime': 'Mecha-Kakkerlak Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Stamp op de baas!',
+      'summon': 'Ruim de zwerm op!',
+      'pods': 'Plet de eieren!',
+      'charge': 'Houd vast en sla toe!',
+      'spin': 'Uit de ring blijven!',
+      'shield': 'Sla het schild kapot!',
+      'beam': 'Ontwijk de straal!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Snelheid',
+      'radius': 'Stampvlak',
+      'pierce': 'Pantserbreuk'
+    },
+    'sneaker': {
+      'name': 'Klassieke sneaker',
+      'perk': 'Evenwichtig en snel weer klaar.',
+      'trade': 'Nergens echt goed in.'
+    },
+    'steelBoot': {
+      'name': 'Werkschoen met stalen neus',
+      'perk': 'Stekels doen je niets. Klappen verdoven alles eromheen.',
+      'trade': 'Zwaar en traag op te tillen.'
+    },
+    'bunnySlipper': {
+      'name': 'Konijnenpantoffel',
+      'perk': 'Geruisloos: springerige beestjes zien je niet aankomen.',
+      'trade': 'Kraakt geen enkel schild.'
+    },
+    'rollerSkate': {
+      'name': 'Rolschaats',
+      'perk': 'Stamp en blijf slepen om een hele lijn te ploegen.',
+      'trade': 'Heel smal stampvlak.'
+    },
+    'cleatBoot': {
+      'name': 'Noppenschoen',
+      'perk': 'De noppen prikken door schilden en stinkklieren.',
+      'trade': 'Het kleinste stampvlak in de kast.'
+    },
+    'electricSock': {
+      'name': 'Elektrische sok',
+      'perk': 'Elke stamp stuurt bliksem naar drie andere beestjes.',
+      'trade': 'De bliksem maakt alleen zwakke beestjes af.'
+    }
+  },
+  'locker': {
+    'title': 'Kluisje',
+    'buy': 'Koop {n}',
+    'wear': 'Aandoen',
+    'worn': 'Aan',
+    'needStars': 'Nog {n} sterren',
+    'needCoins': 'Nog {n} munten'
+  },
+  'fever': {
+    'filling': 'Splatkoorts: {n}% vol',
+    'ready': 'Splatkoorts klaar — tik om te starten',
+    'running': 'Splatkoorts bezig'
+  },
+  'objectives': {
+    'clear': 'Haal het level',
+    'combo': 'Bereik een ×{n}-reeks',
+    'noSpike': 'Loop geen stekelschade op',
+    'time': 'Eindig met {n}s over',
+    'accuracy': 'Raak {n}% van je stampen',
+    'fever': 'Start Splatkoorts {n}×',
+    'kind': 'Plet {n} {bug}',
+    'feverKills': 'Plet er {n} in één koorts',
+    'noMiss': 'Mis hoogstens {n} stampen',
+    'score': 'Scoor {n} punten'
   },
   'hints': {
-    'move': { 'touch': 'Tik om te bewegen', 'desktop': 'Klik om te bewegen' },
-    'gate': { 'touch': 'Blijf op de poort schieten: elke halve seconde +1', 'desktop': 'Blijf op de poort schieten: elke halve seconde +1' },
-    'trap': { 'touch': 'Rode poorten VERKLEINEN je team — neem de andere!', 'desktop': 'Rode poorten VERKLEINEN je team — neem de andere!' },
-    'divider': { 'touch': 'Raak nooit de pilaar tussen de poorten aan', 'desktop': 'Raak nooit de pilaar tussen de poorten aan' },
-    'crate': { 'touch': 'Groene kisten: iedereen slaat harder', 'desktop': 'Groene kisten: iedereen slaat harder' },
-    'rate': { 'touch': 'Blauwe kisten: iedereen schiet sneller', 'desktop': 'Blauwe kisten: iedereen schiet sneller' },
-    'boss': { 'touch': 'Blijf uit de rode ring!', 'desktop': 'Blijf uit de rode ring!' },
-    'lever': { 'touch': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist', 'desktop': 'Schiet op BEIDE hendels aan de rand — ze openen de wapenkist' },
-    'guard': { 'touch': 'Schild op — je schoten raken hem nog niet', 'desktop': 'Schild op — je schoten raken hem nog niet' },
-    'cage': { 'touch': 'Schiet op kooien — de gevangenen sluiten zich aan', 'desktop': 'Schiet op kooien — de gevangenen sluiten zich aan' },
-    'shieldBox': { 'touch': 'Schildkist — wacht en blokkeert één grote klap', 'desktop': 'Schildkist — wacht en blokkeert één grote klap' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} overlevenden verzilverd',
-    'unlocked': 'Vrijgespeeld!',
-
-    'guardian': "Een beschermengel heeft je gered!",
-
-    'guardianSub': "{n} overlevenden zijn terug",
-
-    'next': "Hierna: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Kies een wapen",
-    'nextStage': "volgend level",
-    'stagesAway': "over {n} levels"
-  },
-  'weaponPick': {
-    'title': "Kies je wapen",
-    'subtitle': "Van jou in level {n}. Er wachten er meer langs de weg.",
-    'take': "Pakken",
-    'rocket': {
-      'a': "Geleide salvo",
-      'b': "Explosieschade"
+    'move': {
+      'touch': 'Tik om te bewegen',
+      'desktop': 'Klik om te bewegen'
     },
-    'gatling': {
-      'a': "Dubbele vuursnelheid",
-      'b': "Pompt poorten sneller op"
+    'slam': {
+      'touch': 'Houd vast en laat los voor een harde klap',
+      'desktop': 'Houd de knop vast voor een harde klap'
+    },
+    'beetle': {
+      'touch': 'Kevers hebben een schild: vasthouden en toeslaan',
+      'desktop': 'Kevers hebben een schild: vasthouden en toeslaan'
+    },
+    'flea': {
+      'touch': 'Vlooien springen weg: raak ze waar ze landen',
+      'desktop': 'Vlooien springen weg: raak ze waar ze landen'
+    },
+    'spike': {
+      'touch': 'Stamp niet op de stekelige!',
+      'desktop': 'Stamp niet op de stekelige!'
+    },
+    'stink': {
+      'touch': 'Stinkwantsen vertroebelen het scherm',
+      'desktop': 'Stinkwantsen vertroebelen het scherm'
+    },
+    'fever': {
+      'touch': 'Het flesje is vol — tik op de vlam!',
+      'desktop': 'Het flesje is vol — klik op de vlam!'
+    },
+    'honey': {
+      'touch': 'Honing houdt springers vast',
+      'desktop': 'Honing houdt springers vast'
+    },
+    'web': {
+      'touch': 'Spinnenwebben remmen je voet af',
+      'desktop': 'Spinnenwebben remmen je voet af'
+    },
+    'belt': {
+      'touch': 'De band neemt beestjes mee',
+      'desktop': 'De band neemt beestjes mee'
+    },
+    'sweeper': {
+      'touch': 'De veger plet beestjes gratis',
+      'desktop': 'De veger plet beestjes gratis'
+    },
+    'boss': {
+      'touch': 'Vasthouden en slaan als de baas uithaalt',
+      'desktop': 'Vasthouden en slaan als de baas uithaalt'
+    },
+    'pods': {
+      'touch': 'Plet de eieren voor ze uitkomen!',
+      'desktop': 'Plet de eieren voor ze uitkomen!'
     }
-  },
-  'bossReward': {
-    'title': "Baas verslagen!",
-    'subtitle': "Een cadeau voor level {n}. Blijf rennen!"
   },
   'result': {
-    'stageClear': 'Level gehaald!',
-    'wipedOut': 'Team weggevaagd',
-    'reachedStage': 'Level {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': 'Record {n}%',
-    'newReach': 'Nog nooit zo ver!',
+    'cleared': 'Level gehaald!',
+    'timeUp': 'Tijd voorbij!',
+    'upNext': 'Hierna: {n}',
+    'retryLevel': 'Nog een keer?',
+    'campaignDone': 'Alle levels gehaald!',
     'newRecord': 'Nieuw record!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Baas geveld!',
-    'wasted': 'Afgemaakt',
-    'cause': {
-      'foe': 'Overlopen door monsters',
-      'elite': 'Een minibaas brak je',
-      'barricade': 'Op barricades gereden',
-      'crate': 'Op kratten gereden',
-      'divider': 'De scheidingen geraakt',
-      'trap': 'In vallen gelopen',
-      'slam': 'De baas verpletterde je'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Mijlpaal!',
-    'rallied': 'Tweede adem',
-    'peakSquad': 'Grootste team',
-    'kills': 'Kills',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Munten verdrievoudigd!',
-    'nextStage': 'Volgend level',
+    'nextLevel': 'Volgend level',
     'tryAgain': 'Opnieuw',
-    'upgrade': 'Upgraden',
-    'upgradeHint': 'Upgrade je team!',
+    'squishes': 'Geplette beestjes',
+    'starsEarned': '{n} van 3 sterren',
     'rankOf': 'van {n}',
-    'upNext': 'Hierna: Level {n}'
+    'worldUnlocked': '{n} vrijgespeeld!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Deel je run',
-    'text': 'Ik haalde level {n} in {game}. Kom jij verder?'
-  },
-
   'leaderboard': {
     'title': 'Ranglijst',
-    'rank': '#',
+    'rank': 'Plek',
     'player': 'Speler',
-    'stage': 'Level',
-    'squad': 'Team',
-    'empty': 'Nog geen scores. Wees de eerste!',
-    'failed': 'Ranglijst niet bereikbaar.',
-    'loading': 'Laden…',
+    'score': 'Punten',
+    'level': 'Level',
     'you': 'Jij',
-    'yourRank': 'Jij bent #{n}',
-    'of': 'van {n} spelers'
+    'yourRank': 'Je bent #{n} van {total}',
+    'of': 'van {n}',
+    'unranked': 'Haal een level om erop te komen',
+    'loading': 'Ranglijst laden…',
+    'empty': 'Nog niemand heeft gescoord',
+    'failed': 'Ranglijst niet bereikbaar'
   },
-
-  'chest': {
-    'label': 'Schatkist',
-    'ready': 'Open de schatkist voor {n} munten',
-    'filling': 'Schatkist — wordt gevuld',
-    'spent': 'Schatkist — leeg tot morgen'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Dagelijkse expeditie',
-    'hud': 'Expeditie',
-    'multiplier': '{n}×',
-    'available': 'Dagelijkse expeditie — de route van vandaag, drie keer zo veel munten',
-    'confirm': 'Expeditie starten',
-    'spent': 'Dagelijkse expeditie — nieuwe route over {time}',
-    'done': 'Kom morgen terug',
-    'back': 'Terug naar de campagne'
-  },
-
-  'skills': {
-
-    'grenade': 'Granaat',
-
-    'shield': 'Schild',
-
-    'locked': 'Vergrendeld',
-
-    'unlocksAt': 'Vanaf level {n}',
-
-    'frost': 'Vorstnova',
-
-    'decoy': 'Lokfakkel',
-
-    'trialLabel': '{name} · gratis proberen',
-
-    'trialTag': 'Gratis proberen!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Upgrades',
-    'spotlight': 'Uitgeven!',
-    'level': 'Lv {n}',
-    'maxed': 'Max',
-    'names': {
-      'squad': 'Team',
-      'power': 'Vuurkracht',
-      'rate': 'Vuursnelheid',
-      'range': 'Bereik',
-      'scavenge': 'Sprokkelen',
-      'grenade': 'Granaat',
-      'shield': 'Schild',
-      'rocket': 'Raketkracht',
-      'gatling': 'Gatling-kracht'
-    },
-    'descriptions': {
-      'squad': 'Begin elk level met meer overlevenden.',
-      'power': 'Elke overlevende doet meer schade per schot.',
-      'rate': 'Elke overlevende schiet sneller.',
-      'range': 'Je team opent verder op de weg het vuur.',
-      'scavenge': 'Verdien meer munten per run.',
-      'grenade': 'Gooi een granaat voor een uitbarsting van schade.',
-      'shield': 'Halveer de schade aan je team voor enkele seconden.',
-      'rocket': 'Raketwerpers die je in een level vrijspeelt doen meer schade.',
-      'gatling': 'Gatlings die je in een level vrijspeelt doen meer schade.'
-    }
-  },
-
   'options': {
-    'title': 'Opties', 'general': 'Algemeen', 'audio': 'Audio', 'language': 'Taal',
-    'difficulty': 'Moeilijkheid', 'soundEffects': 'Geluidseffecten', 'music': 'Muziek', 'musicTrack': 'Muzieknummer',
-    'musicTracks': { 'cozy': 'Behaaglijke harmonie', 'trance': 'Trance-tunnel' },
-    'haptics': 'Trillen', 'on': 'Aan', 'off': 'Uit',
+    'title': 'Instellingen',
+    'general': 'Algemeen',
+    'play': 'Spel',
+    'audio': 'Audio',
     'close': 'Opslaan en sluiten',
-    'difficulties': { 'easy': 'Makkelijk', 'medium': 'Gemiddeld', 'hard': 'Moeilijk' },
+    'language': 'Taal',
+    'difficulty': 'Moeilijkheid',
+    'soundEffects': 'Geluidseffecten',
+    'music': 'Muziek',
+    'musicTrack': 'Muzieknummer',
+    'haptics': 'Trillen',
+    'on': 'Aan',
+    'off': 'Uit',
+    'difficulties': {
+      'easy': 'Makkelijk',
+      'medium': 'Normaal',
+      'hard': 'Moeilijk'
+    },
     'difficultyHints': {
-      'easy': 'Zwakkere vijanden en dunnere barricades.',
-      'medium': 'De standaard run.',
-      'hard': 'Taaiere vijanden en zwaardere barricades.'
-    }
+      'easy': 'Tragere beestjes en meer tijd.',
+      'medium': 'Het spel zoals bedoeld.',
+      'hard': 'Snellere beestjes en vollere velden.'
+    },
+    'musicTracks': {
+      'trance': 'Beestjes-groove',
+      'cozy': 'Rustige picknick'
+    },
+    'juiceStyle': 'Splatstijl',
+    'juiceStyles': {
+      'ooze': 'Cartoonslijm',
+      'confetti': 'Confetti-piñata',
+      'bubble': 'Zeepbellen'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Kleurig slijm. Het spel blijft hetzelfde.',
+      'confetti': 'Beestjes spatten uiteen in confetti. Het spel blijft hetzelfde.',
+      'bubble': 'Beestjes worden zeepbellen. Het spel blijft hetzelfde.'
+    },
+    'highVis': 'Grote stampring',
+    'highVisHint': 'Een dikkere, fellere ring waar je voet gaat landen.',
+    'singleTap': 'Makkelijk mikken',
+    'singleTapHint': 'Tik ergens en je voet vliegt naar het dichtstbijzijnde beestje.'
   },
-
-  'adsBlocked': {
-    'title': 'Advertentie kon niet worden getoond',
-    'body': 'We wilden je een video tonen zodat je je beloning kon verdienen, maar iets in je browser blokkeert advertenties.',
-    'allowPrefix': 'Sta advertenties toe op',
-    'allowSuffix': '(of pauzeer je adblocker voor dit spel) en probeer het opnieuw.',
-    'gotIt': 'Begrepen'
+  'loading': {
+    'boo': 'Boe!',
+    'laugh': 'Hihi!',
+    'tooLong': 'Nog aan het laden… verbinding checken?'
   },
   'saveStatus': {
-    'restoredTitle': 'Cloudopslag hersteld', 'restoredBody': '+{n} bonusmunten voor het herstel',
-    'tap': 'tik', 'pausedTitle': 'Cloudsync gepauzeerd',
-    'pausedBody': 'Je speelt offline. Je voortgang wordt hier opgeslagen.',
-    'retry': 'Opnieuw', 'dismiss': 'sluiten'
+    'restoredTitle': 'Voortgang hersteld',
+    'restoredBody': 'We hebben je opslag teruggezet en {n} munten toegevoegd.',
+    'pausedTitle': 'Opslaan gepauzeerd',
+    'pausedBody': 'We kunnen de opslagdienst niet bereiken. Je voortgang staat veilig op dit apparaat.',
+    'retry': 'Opnieuw',
+    'dismiss': 'Sluiten',
+    'tap': 'Tik om te sluiten'
   },
-  'loading': { 'tooLong': 'Duurt het laden te lang? Schakel je adblocker uit en ververs.', 'boo': 'Boe!', 'laugh': 'Hahaha!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Draai je telefoon',
-    'body': 'splatix speel je staand.'
+  'adsBlocked': {
+    'title': 'Adblocker gevonden',
+    'body': 'Splatix is gratis dankzij advertenties. Zet je adblocker uit en herlaad.',
+    'allowPrefix': 'Sta advertenties toe op',
+    'allowSuffix': 'en herlaad de pagina.',
+    'gotIt': 'Begrepen'
   },
-  'license': { 'denied': 'Toegang geweigerd: koop een licentie.' }
+  'license': {
+    'denied': 'Deze kopie kon niet worden geverifieerd'
+  }
 }

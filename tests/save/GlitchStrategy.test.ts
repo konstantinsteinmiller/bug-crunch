@@ -71,7 +71,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
   })
 
   it('hydrates local state from the Glitch save list', async () => {
-    const payload = { ts_coins: '99', ts_best_stage: '[1,2]' }
+    const payload = { sx_coins: '99', sx_best_level: '[1,2]' }
     const fetchImpl = makeFetch({
       [`GET ${savesUrl}`]: () =>
         jsonResponse({
@@ -91,8 +91,8 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('99')
-    expect(window.localStorage.getItem('ts_best_stage')).toBe('[1,2]')
+    expect(window.localStorage.getItem('sx_coins')).toBe('99')
+    expect(window.localStorage.getItem('sx_best_level')).toBe('[1,2]')
     expect(strategy.getBaseVersion()).toBe(5)
     expect(strategy.getSaveId()).toBe('save-uuid-1')
   })
@@ -123,7 +123,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '10')
+    window.localStorage.setItem('sx_coins', '10')
 
     await vi.runAllTimersAsync()
     // Await the inflight upload triggered by the scheduled flush.
@@ -138,7 +138,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
 
     // Decode payload and verify content round-trips.
     const decoded = JSON.parse(atob(body.payload))
-    expect(decoded.ts_coins).toBe('10')
+    expect(decoded.sx_coins).toBe('10')
 
     // Checksum must match SHA-256 of the raw JSON bytes.
     const bytes = new TextEncoder().encode(JSON.stringify(decoded))
@@ -190,7 +190,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '77')
+    window.localStorage.setItem('sx_coins', '77')
     await manager.flush()
 
     expect(postCalls).toBe(1)
@@ -198,7 +198,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
   })
 
   it('respects a custom keep_server conflict resolver and refreshes from the server', async () => {
-    const remotePayload = { ts_coins: '200' }
+    const remotePayload = { sx_coins: '200' }
     const fetchImpl = makeFetch({
       [`GET ${savesUrl}`]: () =>
         jsonResponse({
@@ -207,7 +207,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
               id: 'save-uuid-3',
               slot_index: 0,
               version: 1,
-              payload: base64Encode(JSON.stringify({ ts_coins: '1' }))
+              payload: base64Encode(JSON.stringify({ sx_coins: '1' }))
             }
           ]
         }),
@@ -243,7 +243,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
                 id: 'save-uuid-3',
                 slot_index: 0,
                 version: 1,
-                payload: base64Encode(JSON.stringify({ ts_coins: '1' }))
+                payload: base64Encode(JSON.stringify({ sx_coins: '1' }))
               }
             ]
           })
@@ -283,12 +283,12 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('1')
+    expect(window.localStorage.getItem('sx_coins')).toBe('1')
 
-    window.localStorage.setItem('ts_coins', '999')
+    window.localStorage.setItem('sx_coins', '999')
     await manager.flush()
 
-    expect(window.localStorage.getItem('ts_coins')).toBe('200')
+    expect(window.localStorage.getItem('sx_coins')).toBe('200')
     expect(strategy.getBaseVersion()).toBe(8)
   })
 
@@ -297,7 +297,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // sanity guard doesn't engage (it only retries when local looks like
     // fresh defaults — see SaveManager.shouldRunSanityGuard). The point
     // of THIS test is the local-mirror fallback, not the retry behaviour.
-    window.localStorage.setItem('ts_best_stage', '5')
+    window.localStorage.setItem('sx_best_level', '5')
     const fetchImpl = vi.fn(async () => new Response('boom', { status: 500 }))
     const strategy = makeStrategy({ fetchImpl })
     const manager = new SaveManager(strategy)
@@ -305,8 +305,8 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     await expect(manager.init()).resolves.toBeUndefined()
 
     // Local writes still succeed even without a working backend.
-    window.localStorage.setItem('ts_coins', '3')
-    expect(window.localStorage.getItem('ts_coins')).toBe('3')
+    window.localStorage.setItem('sx_coins', '3')
+    expect(window.localStorage.getItem('sx_coins')).toBe('3')
 
     // Strategy schedules a background retry on failure — clean it up so
     // the test runner doesn't hang on the pending timer.
@@ -355,14 +355,14 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     }
 
     const a = await captureChecksum([
-      ['ts_coins', '10'],
-      ['ts_best_stage', '4'],
-      ['ts_user_language', 'en']
+      ['sx_coins', '10'],
+      ['sx_best_level', '4'],
+      ['sx_user_language', 'en']
     ])
     const b = await captureChecksum([
-      ['ts_user_language', 'en'],
-      ['ts_best_stage', '4'],
-      ['ts_coins', '10']
+      ['sx_user_language', 'en'],
+      ['sx_best_level', '4'],
+      ['sx_coins', '10']
     ])
 
     expect(a.checksum).toBe(b.checksum)
@@ -375,9 +375,9 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const decoded = JSON.parse(atob(a.payload))
     expect(Object.keys(decoded)).toEqual([
       '__save_meta__',
-      'ts_best_stage',
-      'ts_coins',
-      'ts_user_language'
+      'sx_best_level',
+      'sx_coins',
+      'sx_user_language'
     ])
   })
 
@@ -394,7 +394,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '1')
+    window.localStorage.setItem('sx_coins', '1')
     await manager.flush()
 
     // `__save_meta__` is written by every flush so the next hydrate can
@@ -402,7 +402,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // design now, alongside the player's own keys. The internal
     // bookkeeping keys (`__save_internal__*`) are still excluded.
     const decoded = JSON.parse(atob(captured.payload))
-    expect(Object.keys(decoded)).toEqual(['__save_meta__', 'ts_coins'])
+    expect(Object.keys(decoded)).toEqual(['__save_meta__', 'sx_coins'])
   })
 
   it('flips to guest-blocked mode on 403 and suppresses further uploads', async () => {
@@ -431,7 +431,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     )
 
     // Subsequent writes must not trigger any POST — only the one GET.
-    window.localStorage.setItem('ts_coins', '5')
+    window.localStorage.setItem('sx_coins', '5')
     await manager.flush()
 
     const postCalls = fetchImpl.mock.calls.filter(
@@ -440,7 +440,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     expect(postCalls).toHaveLength(0)
 
     // Local write still landed — backend is off but localStorage mirror works.
-    expect(window.localStorage.getItem('ts_coins')).toBe('5')
+    expect(window.localStorage.getItem('sx_coins')).toBe('5')
   })
 
   it('flips to guest-blocked on 403 during upload, cancelling pending flushes', async () => {
@@ -465,7 +465,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '5')
+    window.localStorage.setItem('sx_coins', '5')
     await manager.flush()
 
     expect(postCount).toBe(1)
@@ -475,7 +475,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     )
 
     // More writes → no more POSTs.
-    window.localStorage.setItem('ts_coins', '6')
+    window.localStorage.setItem('sx_coins', '6')
     await manager.flush()
     expect(postCount).toBe(1)
   })
@@ -498,7 +498,7 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     // 10MB+ payload — `a`.repeat(10M) Base64-encodes to ~13.3MB, safely
     // over the limit.
     const bigValue = 'a'.repeat(10 * 1024 * 1024)
-    window.localStorage.setItem('ts_huge_test', bigValue)
+    window.localStorage.setItem('sx_huge_test', bigValue)
     await manager.flush()
 
     expect(postCount).toBe(0)
@@ -531,12 +531,12 @@ describe('GlitchStrategy (isGlitch guard)', () => {
     const manager = new SaveManager(strategy)
     await manager.init()
 
-    window.localStorage.setItem('ts_coins', '1')
+    window.localStorage.setItem('sx_coins', '1')
     await manager.flush()
 
     const decoded = JSON.parse(atob(captured.payload))
     expect(decoded).not.toHaveProperty('__save_internal__glitch_version')
     expect(decoded).not.toHaveProperty('__save_internal__glitch_save_id')
-    expect(decoded.ts_coins).toBe('1')
+    expect(decoded.sx_coins).toBe('1')
   })
 })

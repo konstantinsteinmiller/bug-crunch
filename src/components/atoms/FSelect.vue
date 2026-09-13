@@ -135,7 +135,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   font-size: clamp(0.75rem, 3.2vw, 1.1rem)
 
 .text, .label-text
-  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+  text-shadow: 0.13em 0.13em 0 #000, -0.045em -0.045em 0 #000, 0.045em -0.045em 0 #000, -0.045em 0.045em 0 #000, 0.045em 0.045em 0 #000
 
 /* Custom Scrollbar for that game feel */
 .custom-scrollbar

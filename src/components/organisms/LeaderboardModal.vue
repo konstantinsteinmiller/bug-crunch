@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FModal from '@/components/molecules/FModal.vue'
-import { bestStage } from '@/use/useSurvivalGame'
+import { bestScore } from '@/use/useSplatProgress'
 import { playerDisplayName } from '@/use/usePlayerIdentity'
 import {
   OUTSIDE_BOARD, boardSize, ensureBoard, leaderboard, leaderboardFailed,
@@ -12,9 +12,9 @@ import {
 /**
  * ─── The global board ───────────────────────────────────────────────────────
  *
- * The top 100 by DEEPEST STAGE EVER REACHED, with the biggest squad as the
- * second column — two players on stage 40 are not the same player, and the
- * squad is the thing they compare.
+ * The top 100 by BEST SINGLE-LEVEL SCORE, with the deepest level as the second
+ * column — two players on 120 000 points are not the same player, and how far
+ * into the campaign they got is the thing they compare.
  *
  * Four states, and three of them are not the happy one: still loading, nothing
  * to show, and the endpoint is unreachable. All three have to say something
@@ -55,7 +55,7 @@ const isYou = (name: string): boolean => ownName.value.length > 0 && name === ow
 const onBoard = computed(() => entries.value.some((e) => isYou(e.name)))
 
 /** The player's own rank, for the footer. `0` means "nothing to say yet". */
-const ownRank = computed(() => rankFor(bestStage.value))
+const ownRank = computed(() => rankFor(bestScore.value))
 
 /** Below the cut the exact rank is unknowable — the server only publishes its
  *  top slice — so the honest label is "past the last row we can see". */
@@ -89,8 +89,8 @@ watch(model, (open) => {
       div.board__head
         span.board__col.is-rank {{ t('leaderboard.rank') }}
         span.board__col.is-name {{ t('leaderboard.player') }}
-        span.board__col.is-stage {{ t('leaderboard.stage') }}
-        span.board__col.is-squad {{ t('leaderboard.squad') }}
+        span.board__col.is-score {{ t('leaderboard.score') }}
+        span.board__col.is-level {{ t('leaderboard.level') }}
 
       div.board__state(v-if="showLoading") {{ t('leaderboard.loading') }}
       div.board__state.is-failed(v-else-if="showFailed") {{ t('leaderboard.failed') }}
@@ -106,8 +106,8 @@ watch(model, (open) => {
           span.board-row__name
             span.board-row__name-text {{ entry.name }}
             span.board-row__you(v-if="isYou(entry.name)") {{ t('leaderboard.you') }}
-          span.board-row__stage {{ entry.score }}
-          span.board-row__squad {{ entry.squad }}
+          span.board-row__score {{ entry.score }}
+          span.board-row__level {{ entry.squad }}
 
       //- Where the player stands when they are not up there. The reason a
       //- player outside the top 100 opens this screen at all.
@@ -202,14 +202,14 @@ $cols: clamp(1.6rem, 8vw, 2.4rem) minmax(0, 1fr) clamp(2rem, 9vw, 3rem) clamp(2.
   letter-spacing: 0.03em
   font-size: clamp(0.45rem, 2vw, 0.6rem)
 
-.board-row__stage
+.board-row__score
   color: #8fd6ff
   font-weight: 900
   font-size: clamp(0.62rem, 2.8vw, 0.85rem)
   text-align: right
   text-shadow: 1px 1px 0 #000
 
-.board-row__squad
+.board-row__level
   color: #b9cbe8
   font-weight: 700
   font-size: clamp(0.6rem, 2.6vw, 0.8rem)

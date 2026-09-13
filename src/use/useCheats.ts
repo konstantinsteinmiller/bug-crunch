@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, ref } from 'vue'
-import useTowerEconomy from '@/use/useTowerEconomy'
+import { addCoins } from '@/use/useSplatProgress'
 import { toggleDebug } from '@/use/useMatch'
 
 // `cheat` stays a top-level localStorage flag — it's an explicit dev toggle
@@ -57,29 +57,27 @@ installDebugUnlock()
 const useCheats = () => {
   if (!isCheat.value) return {}
 
-  const { addCoins } = useTowerEconomy()
 
-  // Dev shortcuts, retargeted to splatix's runner: coins for the shop, and
-  // the three things a reviewer needs to reach a late stage in ten seconds —
-  // survivors, damage, and a stage skip.
+  // Dev shortcuts — the four things a reviewer needs to see the whole game in a
+  // minute: money for the Locker, the Fever they would otherwise have to earn,
+  // and either end of a level.
   //
   //   Ctrl+Alt+Shift+K   +3000 coins
-  //   Ctrl+Alt+Shift+G   +40 survivors
-  //   Ctrl+Alt+Shift+D   +5 damage
-  //   Ctrl+Alt+Shift+F   +2 shots/s
-  //   Ctrl+Alt+Shift+N   next stage
-  //   Ctrl+Alt+Shift+R   restart this stage
-  //   Ctrl+Alt+Shift+<n> jump to stage n — type the digits, e.g. 1 then 5 for
-  //                      stage 15 (see the buffer below).
+  //   Ctrl+Alt+Shift+F   Splat Fever, now
+  //   Ctrl+Alt+Shift+N   clear this level
+  //   Ctrl+Alt+Shift+R   fail this level
+  //   Ctrl+Alt+Shift+<n> jump to level n — type the digits, e.g. 1 then 5 for
+  //                      level 15 (see the buffer below).
   //
   // The simulation is reached through a DYNAMIC import, never a static one.
   // `useCheats` is called from `App.vue`, which is on the eager boot path — a
-  // static import would drag the whole game model (track generator, foes,
-  // sprite bakers) into the entry chunk and delay first paint for every player,
-  // to serve a dev-only feature that 99.99% of them never trigger. Fetching it
-  // on the keypress costs a few ms exactly once, for the developer.
-  const withGame = (fn: (game: typeof import('@/use/useSurvivalGame')) => void): void => {
-    void import('@/use/useSurvivalGame').then(fn).catch((e) => {
+  // static import would drag the whole game model (the level generator, the
+  // bestiary, the sprite bakers) into the entry chunk and delay first paint for
+  // every player, to serve a dev-only feature that 99.99% of them never
+  // trigger. Fetching it on the keypress costs a few ms exactly once, for the
+  // developer.
+  const withGame = (fn: (game: typeof import('@/use/useSplatixGame')) => void): void => {
+    void import('@/use/useSplatixGame').then(fn).catch((e) => {
       console.warn('[CHEAT] could not load the game module', e)
     })
   }
@@ -87,7 +85,7 @@ const useCheats = () => {
   /**
    * Hand the live simulation to the console as `window.__run`.
    *
-   * Reaching the sim from devtools with a bare `import('@/use/useSurvivalGame')`
+   * Reaching the sim from devtools with a bare `import('@/use/useSplatixGame')`
    * does NOT work during development: Vite serves an HMR-updated module under a
    * versioned URL, so the import resolves to a second, inert copy of the
    * singleton and every mutation lands on an object nothing is rendering. The
@@ -97,7 +95,7 @@ const useCheats = () => {
    */
   const publishDebugHandle = (): void => {
     if (typeof window === 'undefined') return
-    void import('@/use/useSurvivalGame').then((game) => {
+    void import('@/use/useSplatixGame').then((game) => {
       ;(window as unknown as Record<string, unknown>).__run = game
       console.warn('[CHEAT] window.__run is live (inspect / drive the running sim).')
     })
@@ -109,25 +107,17 @@ const useCheats = () => {
       addCoins(3000)
       console.warn('[CHEAT] +3000 coins.')
     },
-    'ctrl+shift+alt+g': () => withGame((game) => {
-      game.debugAddUnits(40)
-      console.warn('[CHEAT] +40 survivors.')
-    }),
-    'ctrl+shift+alt+d': () => withGame((game) => {
-      game.debugAddDamage(5)
-      console.warn('[CHEAT] +5 damage per survivor.')
-    }),
     'ctrl+shift+alt+f': () => withGame((game) => {
-      game.debugAddFireRate(2)
-      console.warn('[CHEAT] +2 shots/s per survivor.')
+      game.tryFever()
+      console.warn('[CHEAT] Splat Fever.')
     }),
     'ctrl+shift+alt+n': () => withGame((game) => {
-      game.advanceStage()
-      console.warn('[CHEAT] Skipped to the next stage.')
+      game.endLevel(true)
+      console.warn('[CHEAT] Level cleared.')
     }),
     'ctrl+shift+alt+r': () => withGame((game) => {
-      game.retryStage()
-      console.warn('[CHEAT] Stage restarted.')
+      game.endLevel(false)
+      console.warn('[CHEAT] Level failed.')
     })
   }
 
@@ -151,18 +141,18 @@ const useCheats = () => {
     return parts.join('+')
   }
 
-  // ─── Stage jump: Ctrl+Alt+Shift and then the number ──────────────────────
+  // ─── Level jump: Ctrl+Alt+Shift and then the number ──────────────────────
   //
   // Type the digits while the three modifiers are held: `Ctrl+Alt+Shift` then
-  // `1`, `5` lands on stage 15. Released or left alone for a moment, it jumps.
+  // `1`, `5` lands on level 15. Released or left alone for a moment, it jumps.
   //
   // Deliberately a TYPED BUFFER rather than another entry in `cheatsMap`. The
   // shortcut builder sorts the keys it is holding, so a simultaneous
-  // `Ctrl+Alt+Shift+1+5` and `…+5+1` are the same string — stage 51 would be
+  // `Ctrl+Alt+Shift+1+5` and `…+5+1` are the same string — level 51 would be
   // unreachable, and holding two digits down at once to ask for a two-digit
   // number is a strange thing to make anyone do. A buffer reads digits in the
-  // order they were pressed, so any stage is reachable, including three-digit
-  // ones out in the endless run.
+  // order they were pressed, so any level is reachable, including three-digit
+  // ones, which are simply clamped onto the campaign.
   const STAGE_COMMIT_MS = 700
   let stageBuffer = ''
   let stageTimer: ReturnType<typeof setTimeout> | null = null
@@ -182,9 +172,9 @@ const useCheats = () => {
     const target = Number.parseInt(typed, 10)
     if (!Number.isFinite(target) || target < 1) return
 
-    withGame((game) => {
-      game.startStage(target)
-      console.warn(`[CHEAT] Jumped to stage ${target}.`)
+    void import('@/use/useSplatProgress').then((prog) => {
+      prog.setLevel(target)
+      console.warn(`[CHEAT] Jumped to level ${target}. Reload or finish the level.`)
     })
   }
 
@@ -195,7 +185,7 @@ const useCheats = () => {
   const handleKeyDown = (e: KeyboardEvent) => {
     const key = normalizeKey(e)
 
-    // Digits under the full modifier set feed the stage buffer and go no
+    // Digits under the full modifier set feed the level buffer and go no
     // further — they must not also be matched as a `cheatsMap` shortcut.
     if (key !== null && stageJumpArmed(e) && /^[0-9]$/.test(key)) {
       e.preventDefault()

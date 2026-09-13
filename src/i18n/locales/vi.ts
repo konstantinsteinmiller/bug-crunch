@@ -1,17 +1,17 @@
+// VI bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Hủy',
   'close': 'Đóng',
-  'ok': 'OK',
+  'ok': 'Ok',
   'continue': 'Tiếp tục',
   'tapToContinue': 'Chạm để tiếp tục',
   'clickToContinue': 'Nhấp để tiếp tục',
   'rewards': 'PHẦN THƯỞNG',
   'tip': 'Mẹo',
   'crazyGamesOnly': 'Trò chơi này chỉ có trên',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
   'ui': {
     'next': 'Tiếp',
     'replay': 'Chơi lại',
@@ -22,260 +22,256 @@ export default {
     'home': 'Trang chính',
     'info': 'Thông tin'
   },
-
   'hud': {
-    'stage': 'Màn {n}',
-    'best': 'Kỷ lục {n}',
-    'boss': 'Trùm',
-    'miniboss': 'Trùm nhỏ',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Số màn đến phần thưởng tiếp theo',
-    'fireRate': 'Tốc độ',
-    'incoming': 'Sắp bị tấn công!',
-    'dodge': 'Né',
-    'getIn': 'Vào trong',
-    'holdStill': 'Đứng yên',
-    'milestone': '{n} chiến binh!',
-    'weaponActive': '{name} sẵn sàng',
-    'weaponsActive': '{a} + {b} sẵn sàng',
-    'weaponLocked': '{name} đã khoá — đã bắn {n}/{total} cần gạt',
-    'weaponGift': '{name} phía trước — miễn phí, không cần cần gạt',
-    'weaponFree': 'MIỄN PHÍ'
+    'score': 'Điểm',
+    'time': 'Thời gian',
+    'chain': 'Chuỗi Splat: {n}',
+    'level': 'Màn {n}'
   },
-
-  'weapons': {
-    'rocket': 'Súng phóng rocket',
-    'gatling': 'Súng Gatling'
+  'worlds': {
+    'picnic': 'Tấm bạt dã ngoại',
+    'backyard': 'Sân sau um tùm',
+    'attic': 'Gác xép bụi bặm',
+    'arcade': 'Sảnh game neon'
   },
-
-  'tutorial': {
-    'touch': 'Vuốt để di chuyển đội của bạn',
-    'desktop': 'Di chuyển chuột để điều khiển đội'
+  'bugs': {
+    'ant': 'Kiến',
+    'beetle': 'Bọ cánh cứng',
+    'flea': 'Bọ chét',
+    'caterpillar': 'Sâu bướm',
+    'stinkbug': 'Bọ xít',
+    'centipede': 'Rết',
+    'pinatafly': 'Ruồi piñata',
+    'moth': 'Bướm đêm',
+    'robobug': 'Bọ máy'
+  },
+  'bosses': {
+    'queenAnt': 'Kiến Chúa Goliath',
+    'beetleKing': 'Vua Bọ Gai Lưng',
+    'matriarch': 'Rết Mẫu Hậu',
+    'roachPrime': 'Gián Máy Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Giẫm trùm đi!',
+      'summon': 'Dọn sạch bầy!',
+      'pods': 'Đạp nát trứng!',
+      'charge': 'Giữ rồi nện xuống!',
+      'spin': 'Ra khỏi vòng!',
+      'shield': 'Nện vỡ khiên!',
+      'beam': 'Né tia sáng!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Tốc độ',
+      'radius': 'Vùng giẫm',
+      'pierce': 'Xuyên giáp'
+    },
+    'sneaker': {
+      'name': 'Giày thể thao cổ điển',
+      'perk': 'Cân bằng, nhấc chân lại rất nhanh.',
+      'trade': 'Không nổi trội ở điểm nào.'
+    },
+    'steelBoot': {
+      'name': 'Bốt mũi thép',
+      'perk': 'Gai không làm bạn đau. Cú nện làm choáng mọi thứ quanh đó.',
+      'trade': 'Nặng và nhấc lên chậm.'
+    },
+    'bunnySlipper': {
+      'name': 'Dép thỏ',
+      'perk': 'Bước chân êm — lũ bọ nhảy không hay biết.',
+      'trade': 'Không phá nổi vỏ cứng nào.'
+    },
+    'rollerSkate': {
+      'name': 'Giày trượt',
+      'perk': 'Giẫm rồi kéo lê để càn cả một hàng.',
+      'trade': 'Vùng giẫm rất hẹp.'
+    },
+    'cleatBoot': {
+      'name': 'Giày đinh',
+      'perk': 'Đinh xuyên thẳng qua vỏ và túi hôi.',
+      'trade': 'Vùng giẫm nhỏ nhất trong tủ.'
+    },
+    'electricSock': {
+      'name': 'Tất điện',
+      'perk': 'Mỗi cú giẫm phóng tia điện sang ba con bọ khác.',
+      'trade': 'Tia điện chỉ hạ được con yếu.'
+    }
+  },
+  'locker': {
+    'title': 'Tủ đồ',
+    'buy': 'Mua {n}',
+    'wear': 'Mang',
+    'worn': 'Đang mang',
+    'needStars': 'Còn thiếu {n} sao',
+    'needCoins': 'Còn thiếu {n} xu'
+  },
+  'fever': {
+    'filling': 'Cuồng Splat: {n}%',
+    'ready': 'Cuồng Splat sẵn sàng — chạm để bắt đầu',
+    'running': 'Cuồng Splat đang chạy'
+  },
+  'objectives': {
+    'clear': 'Hoàn thành màn',
+    'combo': 'Đạt chuỗi ×{n}',
+    'noSpike': 'Không dính sát thương gai',
+    'time': 'Xong khi còn {n} giây',
+    'accuracy': 'Trúng {n}% cú giẫm',
+    'fever': 'Kích hoạt Cuồng Splat {n}×',
+    'kind': 'Đạp nát {n} {bug}',
+    'feverKills': 'Đạp nát {n} con trong một lần Cuồng',
+    'noMiss': 'Hụt tối đa {n} cú',
+    'score': 'Ghi {n} điểm'
   },
   'hints': {
-    'move': { 'touch': 'Chạm để di chuyển', 'desktop': 'Nhấp để di chuyển' },
-    'gate': { 'touch': 'Bắn liên tục vào cổng: +1 mỗi nửa giây', 'desktop': 'Bắn liên tục vào cổng: +1 mỗi nửa giây' },
-    'trap': { 'touch': 'Cổng đỏ LÀM GIẢM quân — chọn bên kia!', 'desktop': 'Cổng đỏ LÀM GIẢM quân — chọn bên kia!' },
-    'divider': { 'touch': 'Đừng bao giờ chạm cột giữa hai cổng', 'desktop': 'Đừng bao giờ chạm cột giữa hai cổng' },
-    'crate': { 'touch': 'Thùng xanh lá: cả đội đánh mạnh hơn', 'desktop': 'Thùng xanh lá: cả đội đánh mạnh hơn' },
-    'rate': { 'touch': 'Thùng xanh dương: cả đội bắn nhanh hơn', 'desktop': 'Thùng xanh dương: cả đội bắn nhanh hơn' },
-    'boss': { 'touch': 'Tránh xa vòng tròn đỏ!', 'desktop': 'Tránh xa vòng tròn đỏ!' },
-    'lever': { 'touch': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí', 'desktop': 'Bắn CẢ HAI cần gạt ở hai bên đường — chúng mở hòm vũ khí' },
-    'guard': { 'touch': 'Khiên bật — đạn chưa xuyên được', 'desktop': 'Khiên bật — đạn chưa xuyên được' },
-    'cage': { 'touch': 'Bắn vào lồng — tù nhân sẽ gia nhập đội', 'desktop': 'Bắn vào lồng — tù nhân sẽ gia nhập đội' },
-    'shieldBox': { 'touch': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn', 'desktop': 'Hộp khiên — chờ sẵn rồi chặn một đòn lớn' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': 'Quy đổi {n} người sống sót',
-    'unlocked': 'Đã mở khóa!',
-
-    'guardian': "Thiên thần hộ mệnh đã cứu bạn!",
-
-    'guardianSub': "{n} người sống sót đã trở lại",
-
-    'next': "Tiếp theo: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Chọn vũ khí",
-    'nextStage': "màn tiếp theo",
-    'stagesAway': "sau {n} màn"
-  },
-  'weaponPick': {
-    'title': "Chọn vũ khí của bạn",
-    'subtitle': "Của bạn ở Màn {n}. Còn nhiều hơn đang chờ trên đường.",
-    'take': "Lấy",
-    'rocket': {
-      'a': "Loạt đạn tự dẫn",
-      'b': "Sát thương nổ"
+    'move': {
+      'touch': 'Chạm để di chuyển',
+      'desktop': 'Nhấp để di chuyển'
     },
-    'gatling': {
-      'a': "Tốc độ bắn gấp đôi",
-      'b': "Bơm cổng nhanh hơn"
+    'slam': {
+      'touch': 'Giữ rồi thả để nện mạnh',
+      'desktop': 'Giữ nút để nện mạnh'
+    },
+    'beetle': {
+      'touch': 'Bọ cánh cứng có vỏ — giữ rồi nện',
+      'desktop': 'Bọ cánh cứng có vỏ — giữ rồi nện'
+    },
+    'flea': {
+      'touch': 'Bọ chét nhảy đi — giẫm nơi chúng đáp xuống',
+      'desktop': 'Bọ chét nhảy đi — giẫm nơi chúng đáp xuống'
+    },
+    'spike': {
+      'touch': 'Đừng giẫm mấy con có gai!',
+      'desktop': 'Đừng giẫm mấy con có gai!'
+    },
+    'stink': {
+      'touch': 'Bọ xít làm mờ màn hình khi bị đạp nát',
+      'desktop': 'Bọ xít làm mờ màn hình khi bị đạp nát'
+    },
+    'fever': {
+      'touch': 'Ống đã đầy — chạm ngọn lửa!',
+      'desktop': 'Ống đã đầy — nhấp ngọn lửa!'
+    },
+    'honey': {
+      'touch': 'Mật ong giữ chân lũ bọ nhảy',
+      'desktop': 'Mật ong giữ chân lũ bọ nhảy'
+    },
+    'web': {
+      'touch': 'Mạng nhện làm chân bạn chậm lại',
+      'desktop': 'Mạng nhện làm chân bạn chậm lại'
+    },
+    'belt': {
+      'touch': 'Băng chuyền cuốn bọ đi theo',
+      'desktop': 'Băng chuyền cuốn bọ đi theo'
+    },
+    'sweeper': {
+      'touch': 'Máy quét đạp bọ giúp bạn miễn phí',
+      'desktop': 'Máy quét đạp bọ giúp bạn miễn phí'
+    },
+    'boss': {
+      'touch': 'Giữ rồi nện khi trùm lấy đà',
+      'desktop': 'Giữ rồi nện khi trùm lấy đà'
+    },
+    'pods': {
+      'touch': 'Đạp nát trứng trước khi chúng nở!',
+      'desktop': 'Đạp nát trứng trước khi chúng nở!'
     }
-  },
-  'bossReward': {
-    'title': "Đã hạ Trùm!",
-    'subtitle': "Quà cho Màn {n}. Chạy tiếp nào!"
   },
   'result': {
-    'stageClear': 'Qua màn!',
-    'wipedOut': 'Đội bị xóa sổ',
-    'reachedStage': 'Màn {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': 'Kỷ lục {n}%',
-    'newReach': 'Xa nhất từ trước!',
+    'cleared': 'Qua màn!',
+    'timeUp': 'Hết giờ!',
+    'upNext': 'Tiếp theo: {n}',
+    'retryLevel': 'Thử lại nhé?',
+    'campaignDone': 'Đã qua hết các màn!',
     'newRecord': 'Kỷ lục mới!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Hạ gục trùm!',
-    'wasted': 'Toi đời',
-    'cause': {
-      'foe': 'Bị quái vật tràn ngập',
-      'elite': 'Trùm nhỏ hạ gục bạn',
-      'barricade': 'Đâm vào rào chắn',
-      'crate': 'Đâm vào thùng gỗ',
-      'divider': 'Vướng dải phân cách',
-      'trap': 'Sập bẫy',
-      'slam': 'Trùm nghiền nát bạn'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Cột mốc!',
-    'rallied': 'Hồi sức',
-    'peakSquad': 'Đội đông nhất',
-    'kills': 'Tiêu diệt',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Xu đã nhân ba!',
-    'nextStage': 'Màn tiếp theo',
+    'nextLevel': 'Màn kế tiếp',
     'tryAgain': 'Thử lại',
-    'upgrade': 'Nâng cấp',
-    'upgradeHint': 'Nâng cấp đội của bạn!',
+    'squishes': 'Bọ đã đạp nát',
+    'starsEarned': '{n} trên 3 sao',
     'rankOf': 'trên {n}',
-    'upNext': 'Tiếp theo: Màn {n}'
+    'worldUnlocked': 'Đã mở {n}!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Chia sẻ lượt chơi',
-    'text': 'Tôi đã đến màn {n} trong {game}. Bạn đi xa hơn được không?'
-  },
-
   'leaderboard': {
     'title': 'Bảng xếp hạng',
-    'rank': '#',
+    'rank': 'Hạng',
     'player': 'Người chơi',
-    'stage': 'Màn',
-    'squad': 'Đội',
-    'empty': 'Chưa có ai. Hãy là người đầu tiên!',
-    'failed': 'Không kết nối được bảng xếp hạng.',
-    'loading': 'Đang tải…',
+    'score': 'Điểm',
+    'level': 'Màn',
     'you': 'Bạn',
-    'yourRank': 'Bạn hạng #{n}',
-    'of': 'trên {n} người chơi'
+    'yourRank': 'Bạn hạng #{n} trên {total}',
+    'of': 'trên {n}',
+    'unranked': 'Qua một màn để lên bảng',
+    'loading': 'Đang tải bảng xếp hạng…',
+    'empty': 'Chưa ai ghi điểm cả',
+    'failed': 'Không kết nối được bảng xếp hạng'
   },
-
-  'chest': {
-    'label': 'Rương báu',
-    'ready': 'Mở rương báu nhận {n} xu',
-    'filling': 'Rương báu đang đầy dần',
-    'spent': 'Rương báu trống đến ngày mai'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Chuyến đi hằng ngày',
-    'hud': 'Chuyến đi',
-    'multiplier': '{n}×',
-    'available': 'Chuyến đi hằng ngày — cung đường hôm nay, xu gấp ba',
-    'confirm': 'Bắt đầu chuyến đi',
-    'spent': 'Chuyến đi hằng ngày — cung đường mới sau {time}',
-    'done': 'Mai quay lại',
-    'back': 'Về chiến dịch'
-  },
-
-  'skills': {
-
-    'grenade': 'Lựu đạn',
-
-    'shield': 'Khiên',
-
-    'locked': 'Đã khóa',
-
-    'unlocksAt': 'Mở khóa ở màn {n}',
-
-    'frost': 'Nova Băng Giá',
-
-    'decoy': 'Pháo Sáng Mồi',
-
-    'trialLabel': '{name} · dùng thử miễn phí',
-
-    'trialTag': 'Dùng thử miễn phí!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Nâng cấp',
-    'spotlight': 'Tiêu đi!',
-    'level': 'Cấp {n}',
-    'maxed': 'Tối đa',
-    'names': {
-      'squad': 'Đội',
-      'power': 'Sát thương',
-      'rate': 'Tốc độ bắn',
-      'range': 'Tầm bắn',
-      'scavenge': 'Nhặt nhạnh',
-      'grenade': 'Lựu đạn',
-      'shield': 'Khiên',
-      'rocket': 'Sức mạnh rocket',
-      'gatling': 'Sức mạnh Gatling'
-    },
-    'descriptions': {
-      'squad': 'Bắt đầu mỗi màn với nhiều người sống sót hơn.',
-      'power': 'Mỗi người gây nhiều sát thương hơn mỗi phát.',
-      'rate': 'Mỗi người bắn nhanh hơn.',
-      'range': 'Đội của bạn khai hỏa xa hơn trên đường.',
-      'scavenge': 'Kiếm nhiều xu hơn sau mỗi lượt.',
-      'grenade': 'Ném lựu đạn để gây sát thương lớn.',
-      'shield': 'Giảm một nửa sát thương lên đội trong vài giây.',
-      'rocket': 'Súng phóng rocket mở khoá trong màn gây nhiều sát thương hơn.',
-      'gatling': 'Súng Gatling mở khoá trong màn gây nhiều sát thương hơn.'
-    }
-  },
-
   'options': {
-    'title': 'Tùy chọn', 'general': 'Chung', 'audio': 'Âm thanh', 'language': 'Ngôn ngữ',
-    'difficulty': 'Độ khó', 'soundEffects': 'Hiệu ứng âm thanh', 'music': 'Nhạc', 'musicTrack': 'Bản nhạc',
-    'musicTracks': { 'cozy': 'Giai điệu ấm cúng', 'trance': 'Đường hầm Trance' },
-    'haptics': 'Rung', 'on': 'Bật', 'off': 'Tắt',
-    'close': 'Lưu & Đóng',
-    'difficulties': { 'easy': 'Dễ', 'medium': 'Trung bình', 'hard': 'Khó' },
+    'title': 'Cài đặt',
+    'general': 'Chung',
+    'play': 'Lối chơi',
+    'audio': 'Âm thanh',
+    'close': 'Lưu và đóng',
+    'language': 'Ngôn ngữ',
+    'difficulty': 'Độ khó',
+    'soundEffects': 'Hiệu ứng âm thanh',
+    'music': 'Nhạc',
+    'musicTrack': 'Bản nhạc',
+    'haptics': 'Rung',
+    'on': 'Bật',
+    'off': 'Tắt',
+    'difficulties': {
+      'easy': 'Dễ',
+      'medium': 'Thường',
+      'hard': 'Khó'
+    },
     'difficultyHints': {
-      'easy': 'Kẻ địch yếu hơn và rào chắn mỏng hơn.',
-      'medium': 'Lượt chơi tiêu chuẩn.',
-      'hard': 'Kẻ địch cứng hơn và rào chắn dày hơn.'
-    }
+      'easy': 'Bọ chậm hơn và nhiều thời gian hơn.',
+      'medium': 'Trò chơi đúng như thiết kế.',
+      'hard': 'Bọ nhanh hơn và sân đông hơn.'
+    },
+    'musicTracks': {
+      'trance': 'Nhịp bọ',
+      'cozy': 'Dã ngoại thảnh thơi'
+    },
+    'juiceStyle': 'Kiểu splat',
+    'juiceStyles': {
+      'ooze': 'Nhớt hoạt hình',
+      'confetti': 'Piñata giấy màu',
+      'bubble': 'Bong bóng xà phòng'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Nhớt nhiều màu. Lối chơi không đổi.',
+      'confetti': 'Bọ nổ thành giấy màu. Lối chơi không đổi.',
+      'bubble': 'Bọ hóa bong bóng. Lối chơi không đổi.'
+    },
+    'highVis': 'Vòng giẫm lớn',
+    'highVisHint': 'Vòng dày và sáng hơn ở chỗ chân bạn sắp đáp.',
+    'singleTap': 'Ngắm dễ',
+    'singleTapHint': 'Chạm bất cứ đâu, chân sẽ bay tới con bọ gần nhất.'
   },
-
-  'adsBlocked': {
-    'title': 'Không thể hiển thị quảng cáo',
-    'body': 'Chúng tôi đã thử phát video để bạn nhận thưởng, nhưng có gì đó trên trình duyệt đang chặn quảng cáo.',
-    'allowPrefix': 'Vui lòng cho phép quảng cáo trên',
-    'allowSuffix': '(hoặc tạm dừng trình chặn quảng cáo cho trò chơi này) rồi thử lại.',
-    'gotIt': 'Đã hiểu'
+  'loading': {
+    'boo': 'Hù!',
+    'laugh': 'Hi hi!',
+    'tooLong': 'Vẫn đang tải… kiểm tra kết nối nhé?'
   },
   'saveStatus': {
-    'restoredTitle': 'Đã khôi phục lưu trên đám mây', 'restoredBody': '+{n} xu thưởng cho việc khôi phục',
-    'tap': 'chạm', 'pausedTitle': 'Đã tạm dừng đồng bộ đám mây',
-    'pausedBody': 'Đang chơi ngoại tuyến. Tiến trình được lưu tại đây.',
-    'retry': 'Thử lại', 'dismiss': 'bỏ qua'
+    'restoredTitle': 'Đã khôi phục tiến trình',
+    'restoredBody': 'Chúng tôi đã lấy lại bản lưu và tặng thêm {n} xu.',
+    'pausedTitle': 'Đã tạm dừng lưu',
+    'pausedBody': 'Không liên lạc được dịch vụ lưu. Tiến trình của bạn vẫn an toàn trên thiết bị này.',
+    'retry': 'Thử lại',
+    'dismiss': 'Bỏ qua',
+    'tap': 'Chạm để đóng'
   },
-  'loading': { 'tooLong': 'Tải quá lâu? Hãy tắt trình chặn quảng cáo rồi làm mới trang.', 'boo': 'Hù!', 'laugh': 'Ha ha ha!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Xoay điện thoại',
-    'body': 'splatix chơi ở chế độ dọc.'
+  'adsBlocked': {
+    'title': 'Phát hiện trình chặn quảng cáo',
+    'body': 'Splatix miễn phí nhờ quảng cáo. Hãy tắt trình chặn rồi tải lại trang.',
+    'allowPrefix': 'Cho phép quảng cáo trên',
+    'allowSuffix': 'rồi tải lại trang.',
+    'gotIt': 'Đã hiểu'
   },
-  'license': { 'denied': 'Từ chối truy cập: vui lòng mua giấy phép.' }
+  'license': {
+    'denied': 'Không xác minh được bản sao này'
+  }
 }

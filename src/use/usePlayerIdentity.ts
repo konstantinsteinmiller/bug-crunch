@@ -1,4 +1,4 @@
-import { getState, setState } from '@/use/useTowerState'
+import { getState, setState } from '@/use/useSplatixState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
   ANON_NAME_KEY, PLAYER_ID_KEY, PLAYER_NAME_KEY, SDK_NAME_KEY

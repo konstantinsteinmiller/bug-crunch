@@ -9,7 +9,7 @@
 //
 // The tab-away and portal-pause arms are here because they were MISSING: both
 // already halted the simulation via `isGamePaused`, so the game looked correct
-// while the portal was never told, and a player who switched tabs mid-run left
+// while the portal was never told, and a player who switched tabs mid-level left
 // an open bracket behind them.
 
 import { describe, expect, it } from 'vitest'
@@ -17,7 +17,7 @@ import { isGameplayLive, type GameplayLiveInputs } from '@/use/useGameplayLifecy
 
 /** A player mid-run with nothing in the way. Each test negates one thing. */
 const playing: GameplayLiveInputs = {
-  phase: 'run',
+  phase: 'play',
   showResult: false,
   anyModalOpen: false,
   adShowing: false,
@@ -27,14 +27,14 @@ const playing: GameplayLiveInputs = {
 }
 
 describe('isGameplayLive', () => {
-  it('is live while a run or a boss fight is in progress', () => {
+  it('is live while a level is being played', () => {
     expect(isGameplayLive(playing)).toBe(true)
-    expect(isGameplayLive({ ...playing, phase: 'boss' })).toBe(true)
   })
 
-  it('is not live in the terminal phases — the run is over either way', () => {
-    expect(isGameplayLive({ ...playing, phase: 'clear' })).toBe(false)
-    expect(isGameplayLive({ ...playing, phase: 'wipe' })).toBe(false)
+  it('is not live before the level starts, or in either terminal phase', () => {
+    expect(isGameplayLive({ ...playing, phase: 'intro' })).toBe(false)
+    expect(isGameplayLive({ ...playing, phase: 'won' })).toBe(false)
+    expect(isGameplayLive({ ...playing, phase: 'lost' })).toBe(false)
   })
 
   // ─── The two that were missing ───────────────────────────────────────────

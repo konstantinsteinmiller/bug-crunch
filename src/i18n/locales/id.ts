@@ -1,5 +1,8 @@
+// ID bundle. Mirrors the key shape of `en.ts`, which is the source
+// of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
+// translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'splatix',
+  'gameName': 'Splatix',
   'cancel': 'Batal',
   'close': 'Tutup',
   'ok': 'Oke',
@@ -8,10 +11,7 @@ export default {
   'clickToContinue': 'Klik untuk lanjut',
   'rewards': 'HADIAH',
   'tip': 'Tips',
-  'crazyGamesOnly': 'Gim ini hanya tersedia di',
-
-  // Shared UI labels. NOT dead keys: they are the `aria-label` on the game's
-  // icon-only buttons, read aloud rather than shown. See `en.ts`.
+  'crazyGamesOnly': 'Game ini hanya tersedia di',
   'ui': {
     'next': 'Lanjut',
     'replay': 'Ulangi',
@@ -22,260 +22,256 @@ export default {
     'home': 'Beranda',
     'info': 'Info'
   },
-
   'hud': {
-    'stage': 'Tahap {n}',
-    'best': 'Rekor {n}',
-    'boss': 'Bos',
-    'miniboss': 'Mini Bos',
-    // Screen-reader label for the star chip that counts down to the
-    // next milestone payout. The chip itself is a glyph and a digit.
-    'toMilestone': 'Tahap menuju bonus berikutnya',
-    'fireRate': 'Laju',
-    'incoming': 'Serangan datang!',
-    'dodge': 'Hindari',
-    'getIn': 'Masuk',
-    'holdStill': 'Diam',
-    'milestone': '{n} pasukan!',
-    'weaponActive': '{name} siap',
-    'weaponsActive': '{a} + {b} siap',
-    'weaponLocked': '{name} terkunci — {n} dari {total} tuas ditembak',
-    'weaponGift': '{name} di depan — gratis, tanpa tuas',
-    'weaponFree': 'GRATIS'
+    'score': 'Skor',
+    'time': 'Waktu',
+    'chain': 'Rantai Splat: {n}',
+    'level': 'Level {n}'
   },
-
-  'weapons': {
-    'rocket': 'Peluncur Roket',
-    'gatling': 'Senapan Gatling'
+  'worlds': {
+    'picnic': 'Tikar piknik',
+    'backyard': 'Halaman rimbun',
+    'attic': 'Loteng berdebu',
+    'arcade': 'Arkade neon'
   },
-
-  'tutorial': {
-    'touch': 'Geser untuk menggerakkan pasukanmu',
-    'desktop': 'Gerakkan mouse untuk mengarahkan pasukan'
+  'bugs': {
+    'ant': 'Semut',
+    'beetle': 'Kumbang',
+    'flea': 'Kutu loncat',
+    'caterpillar': 'Ulat',
+    'stinkbug': 'Kepik bau',
+    'centipede': 'Kelabang',
+    'pinatafly': 'Lalat piñata',
+    'moth': 'Ngengat',
+    'robobug': 'Robo-serangga'
+  },
+  'bosses': {
+    'queenAnt': 'Ratu Semut Goliat',
+    'beetleKing': 'Raja Kumbang Berduri',
+    'matriarch': 'Ratu Kelabang',
+    'roachPrime': 'Meka-Kecoa Prime'
+  },
+  'boss': {
+    'tell': {
+      'stomp': 'Injak bosnya!',
+      'summon': 'Bersihkan kawanannya!',
+      'pods': 'Remukkan telurnya!',
+      'charge': 'Tahan lalu hantam!',
+      'spin': 'Keluar dari lingkaran!',
+      'shield': 'Hantam perisainya!',
+      'beam': 'Hindari sinarnya!'
+    }
+  },
+  'shoes': {
+    'stats': {
+      'speed': 'Kecepatan',
+      'radius': 'Luas injakan',
+      'pierce': 'Tembus baju zirah'
+    },
+    'sneaker': {
+      'name': 'Sepatu kets klasik',
+      'perk': 'Seimbang dan cepat siap lagi.',
+      'trade': 'Tidak unggul di mana pun.'
+    },
+    'steelBoot': {
+      'name': 'Sepatu ujung baja',
+      'perk': 'Duri tidak melukaimu. Hantaman membuat sekitarnya pingsan.',
+      'trade': 'Berat dan lambat diangkat.'
+    },
+    'bunnySlipper': {
+      'name': 'Sandal kelinci',
+      'perk': 'Langkah senyap — serangga peloncat tidak menyadarimu.',
+      'trade': 'Sama sekali tidak bisa memecah cangkang.'
+    },
+    'rollerSkate': {
+      'name': 'Sepatu roda',
+      'perk': 'Injak lalu terus seret untuk membabat satu garis penuh.',
+      'trade': 'Luas injakan sangat sempit.'
+    },
+    'cleatBoot': {
+      'name': 'Sepatu pul',
+      'perk': 'Pulnya menembus cangkang dan kelenjar bau.',
+      'trade': 'Injakan tersempit di loker.'
+    },
+    'electricSock': {
+      'name': 'Kaus kaki listrik',
+      'perk': 'Setiap injakan menyambar tiga serangga lain.',
+      'trade': 'Sambarannya hanya menghabisi yang lemah.'
+    }
+  },
+  'locker': {
+    'title': 'Loker',
+    'buy': 'Beli {n}',
+    'wear': 'Pakai',
+    'worn': 'Dipakai',
+    'needStars': 'Kurang {n} bintang',
+    'needCoins': 'Kurang {n} koin'
+  },
+  'fever': {
+    'filling': 'Demam Splat: {n}%',
+    'ready': 'Demam Splat siap — ketuk untuk mulai',
+    'running': 'Demam Splat berjalan'
+  },
+  'objectives': {
+    'clear': 'Selesaikan level',
+    'combo': 'Capai rantai ×{n}',
+    'noSpike': 'Jangan kena duri',
+    'time': 'Selesai dengan sisa {n} detik',
+    'accuracy': 'Kena {n}% dari injakanmu',
+    'fever': 'Picu Demam Splat {n}×',
+    'kind': 'Remukkan {n} {bug}',
+    'feverKills': 'Remukkan {n} dalam satu Demam',
+    'noMiss': 'Meleset maksimal {n} kali',
+    'score': 'Kumpulkan {n} poin'
   },
   'hints': {
-    'move': { 'touch': 'Ketuk untuk bergerak', 'desktop': 'Klik untuk bergerak' },
-    'gate': { 'touch': 'Terus tembak gerbang: +1 tiap setengah detik', 'desktop': 'Terus tembak gerbang: +1 tiap setengah detik' },
-    'trap': { 'touch': 'Gerbang merah MENGURANGI regu — ambil yang lain!', 'desktop': 'Gerbang merah MENGURANGI regu — ambil yang lain!' },
-    'divider': { 'touch': 'Jangan sentuh pilar di antara gerbang', 'desktop': 'Jangan sentuh pilar di antara gerbang' },
-    'crate': { 'touch': 'Peti hijau: semua memukul lebih keras', 'desktop': 'Peti hijau: semua memukul lebih keras' },
-    'rate': { 'touch': 'Peti biru: semua menembak lebih cepat', 'desktop': 'Peti biru: semua menembak lebih cepat' },
-    'boss': { 'touch': 'Jauhi lingkaran merah!', 'desktop': 'Jauhi lingkaran merah!' },
-    'lever': { 'touch': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata', 'desktop': 'Tembak KEDUA tuas di tepi jalan — keduanya membuka kotak senjata' },
-    'guard': { 'touch': 'Perisai aktif — tembakanmu belum melukainya', 'desktop': 'Perisai aktif — tembakanmu belum melukainya' },
-    'cage': { 'touch': 'Tembak kandang — tawanannya bergabung ke pasukanmu', 'desktop': 'Tembak kandang — tawanannya bergabung ke pasukanmu' },
-    'shieldBox': { 'touch': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar', 'desktop': 'Kotak perisai — menunggu, lalu menahan satu pukulan besar' }
-  },
-
-  'flow': {
-
-
-    // The handover, which used to read as LOSING the squad: five testers saw
-
-    // "Squad 101 -> 3" and one asked whether she had lost progress. The crowd
-
-    // is cashed into coins on screen now, and this names it. {n} = survivors.
-
-    'squadCashed': '{n} penyintas diuangkan',
-    'unlocked': 'Terbuka!',
-
-    'guardian': "Malaikat pelindung menyelamatkanmu!",
-
-    'guardianSub': "{n} penyintas kembali",
-
-    'next': "Berikutnya: {label} · {when}"
-
-  },
-
-  'ladder': {
-    'weaponPick': "Pilih senjata",
-    'nextStage': "level berikutnya",
-    'stagesAway': "{n} level lagi"
-  },
-  'weaponPick': {
-    'title': "Pilih senjatamu",
-    'subtitle': "Milikmu untuk Level {n}. Masih ada lagi di jalan.",
-    'take': "Ambil",
-    'rocket': {
-      'a': "Salvo pelacak",
-      'b': "Kerusakan ledakan"
+    'move': {
+      'touch': 'Ketuk untuk bergerak',
+      'desktop': 'Klik untuk bergerak'
     },
-    'gatling': {
-      'a': "Laju tembak dua kali lipat",
-      'b': "Memompa gerbang lebih cepat"
+    'slam': {
+      'touch': 'Tahan lalu lepas untuk hantaman keras',
+      'desktop': 'Tahan tombol untuk hantaman keras'
+    },
+    'beetle': {
+      'touch': 'Kumbang bercangkang — tahan lalu hantam',
+      'desktop': 'Kumbang bercangkang — tahan lalu hantam'
+    },
+    'flea': {
+      'touch': 'Kutu meloncat — injak tempat mendaratnya',
+      'desktop': 'Kutu meloncat — injak tempat mendaratnya'
+    },
+    'spike': {
+      'touch': 'Jangan injak yang berduri!',
+      'desktop': 'Jangan injak yang berduri!'
+    },
+    'stink': {
+      'touch': 'Kepik bau mengaburkan layar saat diremukkan',
+      'desktop': 'Kepik bau mengaburkan layar saat diremukkan'
+    },
+    'fever': {
+      'touch': 'Botolnya penuh — ketuk apinya!',
+      'desktop': 'Botolnya penuh — klik apinya!'
+    },
+    'honey': {
+      'touch': 'Madu menahan serangga peloncat',
+      'desktop': 'Madu menahan serangga peloncat'
+    },
+    'web': {
+      'touch': 'Sarang laba-laba memperlambat kakimu',
+      'desktop': 'Sarang laba-laba memperlambat kakimu'
+    },
+    'belt': {
+      'touch': 'Ban berjalan membawa serangga',
+      'desktop': 'Ban berjalan membawa serangga'
+    },
+    'sweeper': {
+      'touch': 'Penyapu meremukkan serangga secara gratis',
+      'desktop': 'Penyapu meremukkan serangga secara gratis'
+    },
+    'boss': {
+      'touch': 'Tahan lalu hantam saat bos bersiap',
+      'desktop': 'Tahan lalu hantam saat bos bersiap'
+    },
+    'pods': {
+      'touch': 'Remukkan telurnya sebelum menetas!',
+      'desktop': 'Remukkan telurnya sebelum menetas!'
     }
-  },
-  'bossReward': {
-    'title': "Bos dikalahkan!",
-    'subtitle': "Hadiah untuk Level {n}. Terus berlari!"
   },
   'result': {
-    'stageClear': 'Tahap selesai!',
-    'wipedOut': 'Regu habis',
-    'reachedStage': 'Tahap {n}',
-    // The near-miss readout under a wipe: how far this attempt got,
-    // and the best any previous attempt on this stage managed.
-    'reach': '{n}%',
-    'bestReach': 'Rekor {n}%',
-    'newReach': 'Terjauh sejauh ini!',
+    'cleared': 'Level selesai!',
+    'timeUp': 'Waktu habis!',
+    'upNext': 'Berikutnya: {n}',
+    'retryLevel': 'Coba lagi?',
+    'campaignDone': 'Semua level selesai!',
     'newRecord': 'Rekor baru!',
-    // The two seconds after a boss goes down, above its body. The kill is
-    // what the whole stage was for, so this is sold as a reward.
-    'bossFelled': 'Bos tumbang!',
-    'wasted': 'Tamat',
-    'cause': {
-      'foe': 'Dibanjiri monster',
-      'elite': 'Minibos menghabisimu',
-      'barricade': 'Menabrak barikade',
-      'crate': 'Menabrak peti',
-      'divider': 'Menyerempet pembatas',
-      'trap': 'Terjebak perangkap',
-      'slam': 'Bos meremukkanmu'
-    },
-    // The every-fifth-stage lump the HUD chip counts down to.
-    'milestone': 'Pencapaian!',
-    'rallied': 'Napas kedua',
-    'peakSquad': 'Regu terbesar',
-    'kills': 'Bunuh',
-    'tripleCoins': '3×',
-    'tripleBonus': '(+{n})',
-    'tripleClaimed': 'Koin dilipatgandakan!',
-    'nextStage': 'Tahap berikutnya',
+    'nextLevel': 'Level berikutnya',
     'tryAgain': 'Coba lagi',
-    'upgrade': 'Tingkatkan',
-    'upgradeHint': 'Tingkatkan pasukanmu!',
+    'squishes': 'Serangga diremukkan',
+    'starsEarned': '{n} dari 3 bintang',
     'rankOf': 'dari {n}',
-    'upNext': 'Berikutnya: Level {n}'
+    'worldUnlocked': '{n} terbuka!'
   },
-
-  // Two strings only; everything ON the card comes from keys this file
-  // already had (see en.ts). `action` is the accessible name of an
-  // icon-only button. `text` rides in the share sheet and is read by the
-  // person who receives the picture, so it is a boast, and it has to still
-  // make sense if the image never arrives.
-  'share': {
-    'action': 'Bagikan permainan',
-    'text': 'Aku mencapai level {n} di {game}. Bisa lebih jauh dari itu?'
-  },
-
   'leaderboard': {
-    'title': 'Papan Peringkat',
-    'rank': '#',
+    'title': 'Papan peringkat',
+    'rank': 'Peringkat',
     'player': 'Pemain',
-    'stage': 'Tahap',
-    'squad': 'Regu',
-    'empty': 'Belum ada skor. Jadilah yang pertama!',
-    'failed': 'Papan peringkat tidak terjangkau.',
-    'loading': 'Memuat…',
+    'score': 'Skor',
+    'level': 'Level',
     'you': 'Kamu',
-    'yourRank': 'Kamu peringkat #{n}',
-    'of': 'dari {n} pemain'
+    'yourRank': 'Kamu #{n} dari {total}',
+    'of': 'dari {n}',
+    'unranked': 'Selesaikan satu level untuk masuk papan',
+    'loading': 'Memuat papan peringkat…',
+    'empty': 'Belum ada yang mencetak skor',
+    'failed': 'Tidak bisa menghubungi papan peringkat'
   },
-
-  'chest': {
-    'label': 'Peti harta',
-    'ready': 'Buka peti harta untuk {n} koin',
-    'filling': 'Peti harta sedang terisi',
-    'spent': 'Peti harta kosong sampai besok'
-  },
-
-  // Daily expedition. See en.ts for what each state means, why the multiplier
-  // is split from any word, and why `hud` has to stay one short word.
-  'expedition': {
-    'title': 'Ekspedisi Harian',
-    'hud': 'Ekspedisi',
-    'multiplier': '{n}×',
-    'available': 'Ekspedisi harian — jalur hari ini, koin tiga kali lipat',
-    'confirm': 'Mulai ekspedisi',
-    'spent': 'Ekspedisi harian — jalur baru dalam {time}',
-    'done': 'Kembali besok',
-    'back': 'Kembali ke kampanye'
-  },
-
-  'skills': {
-
-    'grenade': 'Granat',
-
-    'shield': 'Perisai',
-
-    'locked': 'Terkunci',
-
-    'unlocksAt': 'Terbuka di level {n}',
-
-    'frost': 'Nova Beku',
-
-    'decoy': 'Suar Umpan',
-
-    'trialLabel': '{name} · coba gratis',
-
-    'trialTag': 'Coba gratis!',
-
-    'uses': '×{n}'
-  },
-
-  'upgrades': {
-    'title': 'Peningkatan',
-    'spotlight': 'Belanja!',
-    'level': 'Lv {n}',
-    'maxed': 'Maks',
-    'names': {
-      'squad': 'Regu',
-      'power': 'Daya tembak',
-      'rate': 'Laju tembak',
-      'range': 'Jangkauan',
-      'scavenge': 'Pemulungan',
-      'grenade': 'Granat',
-      'shield': 'Perisai',
-      'rocket': 'Kekuatan Roket',
-      'gatling': 'Kekuatan Gatling'
-    },
-    'descriptions': {
-      'squad': 'Mulai tiap tahap dengan lebih banyak penyintas.',
-      'power': 'Tiap penyintas memberi damage lebih besar per tembakan.',
-      'rate': 'Tiap penyintas menembak lebih cepat.',
-      'range': 'Pasukanmu melepas tembakan lebih jauh di jalan.',
-      'scavenge': 'Dapatkan lebih banyak koin tiap ronde.',
-      'grenade': 'Lempar granat untuk ledakan kerusakan besar.',
-      'shield': 'Kurangi setengah kerusakan pada pasukan beberapa detik.',
-      'rocket': 'Peluncur roket yang kamu buka di stage memberi lebih banyak damage.',
-      'gatling': 'Senapan Gatling yang kamu buka di stage memberi lebih banyak damage.'
-    }
-  },
-
   'options': {
-    'title': 'Opsi', 'general': 'Umum', 'audio': 'Audio', 'language': 'Bahasa',
-    'difficulty': 'Kesulitan', 'soundEffects': 'Efek Suara', 'music': 'Musik', 'musicTrack': 'Trek Musik',
-    'musicTracks': { 'cozy': 'Harmoni Nyaman', 'trance': 'Terowongan Trance' },
-    'haptics': 'Getaran', 'on': 'Aktif', 'off': 'Nonaktif',
-    'close': 'Simpan & Tutup',
-    'difficulties': { 'easy': 'Mudah', 'medium': 'Sedang', 'hard': 'Sulit' },
+    'title': 'Pengaturan',
+    'general': 'Umum',
+    'play': 'Permainan',
+    'audio': 'Audio',
+    'close': 'Simpan & tutup',
+    'language': 'Bahasa',
+    'difficulty': 'Kesulitan',
+    'soundEffects': 'Efek suara',
+    'music': 'Musik',
+    'musicTrack': 'Lagu',
+    'haptics': 'Getar',
+    'on': 'Nyala',
+    'off': 'Mati',
+    'difficulties': {
+      'easy': 'Mudah',
+      'medium': 'Normal',
+      'hard': 'Sulit'
+    },
     'difficultyHints': {
-      'easy': 'Musuh lebih lemah dan barikade lebih tipis.',
-      'medium': 'Ronde standar.',
-      'hard': 'Musuh lebih kuat dan barikade lebih tebal.'
-    }
+      'easy': 'Serangga lebih lambat dan waktu lebih lama.',
+      'medium': 'Game seperti yang dirancang.',
+      'hard': 'Serangga lebih cepat dan papan lebih ramai.'
+    },
+    'musicTracks': {
+      'trance': 'Groove serangga',
+      'cozy': 'Piknik santai'
+    },
+    'juiceStyle': 'Gaya splat',
+    'juiceStyles': {
+      'ooze': 'Lendir kartun',
+      'confetti': 'Piñata konfeti',
+      'bubble': 'Gelembung sabun'
+    },
+    'juiceStyleHints': {
+      'ooze': 'Lendir warna-warni. Gamenya tetap sama.',
+      'confetti': 'Serangga meledak jadi konfeti. Gamenya tetap sama.',
+      'bubble': 'Serangga jadi gelembung. Gamenya tetap sama.'
+    },
+    'highVis': 'Lingkaran injak besar',
+    'highVisHint': 'Cincin lebih tebal dan terang di tempat kakimu akan mendarat.',
+    'singleTap': 'Bidik mudah',
+    'singleTapHint': 'Ketuk di mana saja dan kakimu melayang ke serangga terdekat.'
   },
-
-  'adsBlocked': {
-    'title': 'Tidak dapat menampilkan iklan',
-    'body': 'Kami mencoba menampilkan video agar kamu bisa mendapat hadiah, tetapi ada yang memblokir iklan di peramban kamu.',
-    'allowPrefix': 'Izinkan iklan di',
-    'allowSuffix': '(atau jeda pemblokir iklan untuk gim ini) lalu coba lagi.',
-    'gotIt': 'Mengerti'
+  'loading': {
+    'boo': 'Dor!',
+    'laugh': 'Hihi!',
+    'tooLong': 'Masih memuat… cek koneksimu?'
   },
   'saveStatus': {
-    'restoredTitle': 'Simpanan cloud dipulihkan', 'restoredBody': '+{n} koin bonus untuk pemulihan',
-    'tap': 'ketuk', 'pausedTitle': 'Sinkronisasi cloud dijeda',
-    'pausedBody': 'Bermain offline. Progresmu disimpan di sini.',
-    'retry': 'Coba lagi', 'dismiss': 'tutup'
+    'restoredTitle': 'Progres dipulihkan',
+    'restoredBody': 'Kami kembalikan simpananmu dan menambah {n} koin.',
+    'pausedTitle': 'Penyimpanan dijeda',
+    'pausedBody': 'Kami tidak bisa menghubungi layanan simpan. Progresmu aman di perangkat ini.',
+    'retry': 'Coba lagi',
+    'dismiss': 'Tutup',
+    'tap': 'Ketuk untuk menutup'
   },
-  'loading': { 'tooLong': 'Memuat terlalu lama? Nonaktifkan pemblokir iklan lalu muat ulang.', 'boo': 'Dor!', 'laugh': 'Hahaha!' },
-  // Phones in landscape are covered by a rotate-your-phone overlay: the lane
-  // fills about a fifth of a wide frame, which is what put the HUD and the
-  // attack badge out at the edges where testers never looked.
-  'portrait': {
-    'title': 'Putar ponselmu',
-    'body': 'splatix dimainkan tegak.'
+  'adsBlocked': {
+    'title': 'Pemblokir iklan terdeteksi',
+    'body': 'Splatix gratis berkat iklan. Matikan pemblokirmu lalu muat ulang.',
+    'allowPrefix': 'Izinkan iklan di',
+    'allowSuffix': 'lalu muat ulang halaman.',
+    'gotIt': 'Oke'
   },
-  'license': { 'denied': 'Akses ditolak: silakan beli lisensi.' }
+  'license': {
+    'denied': 'Salinan ini tidak dapat diverifikasi'
+  }
 }
