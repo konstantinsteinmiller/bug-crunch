@@ -35,6 +35,14 @@ const world = ref<WorldId>(1)
 const style = ref<JuiceStyleId>('ooze')
 const tab = ref<'bugs' | 'shoes' | 'bosses' | 'props' | 'fx'>('bugs')
 
+// The narrowing lives HERE and not in the template. A template expression is
+// compiled to plain JavaScript, so `tab = k as any` inside one is a TypeScript
+// cast in a JavaScript string: the browser threw `SyntaxError: Unexpected
+// identifier 'as'` on the route's own chunk, the view never mounted, and the
+// splash sat at 100% saying "still loading" with nothing behind it.
+const setTab = (k: string): void => { tab.value = k as typeof tab.value }
+const setWorld = (w: number): void => { world.value = w as WorldId }
+
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let raf = 0
 
@@ -190,10 +198,10 @@ watch([tab, world, style], () => draw())
         |  phone.
       .bar
         button(v-for="k in ['bugs', 'shoes', 'bosses', 'props', 'fx']" :key="k"
-          :class="{ on: tab === k }" @click="tab = k as any") {{ k }}
+          :class="{ on: tab === k }" @click="setTab(k)") {{ k }}
         span.sep
         button.ghost(v-for="w in [1, 2, 3, 4]" :key="`w${w}`"
-          :class="{ on: world === w }" @click="world = w as any") world {{ w }}
+          :class="{ on: world === w }" @click="setWorld(w)") world {{ w }}
         span.sep
         button.ghost(v-for="s in JUICE_STYLES" :key="s"
           :class="{ on: style === s }" @click="style = s") {{ s }}

@@ -1,4 +1,4 @@
-# Splatix — store copy
+# Bug Crunch — store copy
 
 Everything a portal listing needs, in the order the forms usually ask for it.
 Each section is inside its own character budget; the counts in the headings are
@@ -11,7 +11,7 @@ the limits, not the actual lengths.
 > Squish the bugs before they take the picnic! Drag your shoe, tap to stomp,
 > hold to SLAM — chain squishes for Splat Fever.
 
-`137 characters.`
+`121 characters.`
 
 ---
 
@@ -24,7 +24,7 @@ the limits, not the actual lengths.
 > speeds up with it. Fill the Juice vial and unleash SPLAT FEVER: ten seconds of
 > a giant golden boot that flattens everything it touches.
 >
-> 40 levels, 4 worlds, 9 bugs, 4 bosses and 6 shoes to unlock. No reading
+> 40 levels, 4 worlds, 10 bugs, 4 bosses and 6 shoes to unlock. No reading
 > required — just tap.
 
 `461 characters.`
@@ -47,13 +47,24 @@ squishes; the bar under your score shows how close you are.
    further, and cracks armour a tap cannot.
 5. **Do not stomp the spiky ones.** The caterpillar hurts. Herd it, wait it out,
    or buy the steel boot.
-6. **Fill the vial, then hit FEVER.** Every squish adds juice, and a chain adds
+6. **Watch out for the runners.** Sprinter ants see your shoe coming and bolt.
+   Chasing one never works. Hold still until it stops, tap where it *will* be, or
+   herd it onto a crumb pile or into honey and take it there.
+7. **Fill the vial, then hit FEVER.** Every squish adds juice, and a chain adds
    more. When the vial on the left is full the flame button lights up: tap it for
    ten seconds of the giant golden boot, where nothing is armoured and nothing is
    safe.
-7. **Three stars a level.** One for clearing it, two more for the level's own
+8. **Three stars a level.** One for clearing it, two more for the level's own
    challenges — a chain to reach, a time to beat, an accuracy to hold. Stars open
    new worlds and unlock better shoes in the Locker.
+9. **Open the chest.** A treasure chest sits beside your coins and fills while
+   you are away. Tap it when it is full — and if you leave it alone for ten
+   minutes it turns gold and pays four times as much.
+10. **Spend your coins.** New shoes are in the Locker. Each one is a different
+    way to play, not just a bigger number: the steel boot ignores spikes, the
+    bunny slipper is invisible to the bugs that dodge, the roller skate ploughs a
+    line. Short of coins? Some shoes can be unlocked by watching a short video
+    instead.
 
 Every tenth level is a **boss**: a huge bug with three phases and a health bar.
 Watch the call-out above the bar — it tells you what it is about to do.

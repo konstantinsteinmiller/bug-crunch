@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'キャンセル',
   'close': '閉じる',
   'ok': 'OK',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'アリ',
+    'sprinter': 'ダッシュアリ',
     'beetle': 'カブトムシ',
     'flea': 'ノミ',
     'caterpillar': 'イモムシ',
@@ -105,7 +106,28 @@ export default {
     'wear': 'はく',
     'worn': 'そうび中',
     'needStars': 'あと {n} スター',
-    'needCoins': 'あと {n} コイン'
+    'needCoins': 'あと {n} コイン',
+    'price': 'ねだん: {n}コイン',
+    'starGate': 'スター{n}こで かいきん',
+    'adUnlock': 'どうがを見てアンロック'
+  },
+  'chest': {
+    'label': 'たからばこ',
+    'ready': 'たからばこを {n}コインで ひらく',
+    'filling': 'たからばこ — たまっています',
+    'spent': 'たからばこ — あしたまで からっぽ'
+  },
+  'reveal': {
+    'world': 'あたらしい ステージ！',
+    'shoe': 'あたらしい くつ！',
+    'stars': 'スターの もくひょう たっせい！',
+    'record': 'ハイスコア こうしん！',
+    'chest': 'おたから！',
+    'foe': 'あたらしい むし！',
+    'starsTotal': 'スター{n}こ',
+    'recordScore': '{n}てん',
+    'recordBeat': 'まえのきろく: {n}',
+    'chestCoins': '+{n}コイン'
   },
   'fever': {
     'filling': 'スプラットフィーバー: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': '長おししてはなすと強ぶみ',
       'desktop': 'ボタン長おしで強ぶみ'
+    },
+    'sprinter': {
+      'touch': 'ダッシュアリは にげる — とまったところを ふもう',
+      'desktop': 'ダッシュアリは くつから にげる — じっとして クリック'
     },
     'beetle': {
       'touch': 'カブトはこうら持ち — 長おしして叩く',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': '広告ブロッカーを検出',
-    'body': 'Splatix は広告のおかげで無料です。ブロッカーをオフにして再読み込みしてください。',
+    'body': 'Bug Crunch は広告のおかげで無料です。ブロッカーをオフにして再読み込みしてください。',
     'allowPrefix': '次のサイトで広告を許可:',
     'allowSuffix': 'そしてページを再読み込み。',
     'gotIt': 'わかった'

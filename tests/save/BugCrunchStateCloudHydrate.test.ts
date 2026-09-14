@@ -11,14 +11,14 @@ import { nextTick } from 'vue'
 //   then commits those defaults over the real cloud save and the loss becomes
 //   permanent.
 //
-// The whole game state lives in ONE `splatix_state` blob (an allowlisted payload
-// key), so the strategy mirrors it verbatim. `reloadSplatixState()` is wired into
+// The whole game state lives in ONE `bugcrunch_state` blob (an allowlisted payload
+// key), so the strategy mirrors it verbatim. `reloadBugCrunchState()` is wired into
 // the `saveDataVersion` bump inside `useSaveStatus` — and the ORDER matters: the
 // blob must be re-read BEFORE the bump, or every `watch(saveDataVersion)`
 // consumer re-reads the stale pre-hydrate snapshot and the bug survives.
 
 const MANIFEST_KEY = '__save_internal__crazy_keys'
-const STATE_KEY = 'splatix_state'
+const STATE_KEY = 'bugcrunch_state'
 
 const makeFakeData = (seed: Record<string, string> = {}) => {
   const store = new Map<string, string>(Object.entries(seed))
@@ -42,24 +42,24 @@ beforeEach(() => {
 const seededCloud = async () => {
   const { META_KEY } = await import('@/utils/save/SaveMergePolicy')
   const cloudBlob = {
-    sx_coins: 1250,
-    sx_total_coins: 4300,
-    sx_best_level: 14,
-    sx_best_score: 88_400,
-    sx_best_combo: 20,
-    sx_runs: 19,
-    sx_total_squishes: 4200,
+    bc_coins: 1250,
+    bc_total_coins: 4300,
+    bc_best_level: 14,
+    bc_best_score: 88_400,
+    bc_best_combo: 20,
+    bc_runs: 19,
+    bc_total_squishes: 4200,
     // Three levels three-starred, two of them at two. Seven stars — past the
     // steel boot's gate (9? no: 7 is short of it) and well past world 2's.
-    sx_level_stars: { '1': 3, '2': 3, '3': 3, '4': 2, '5': 2 },
-    sx_shoes_owned: ['sneaker', 'steelBoot'],
-    sx_shoe: 'steelBoot',
-    sx_user_sound: 0.4,
-    sx_user_language: 'es',
-    sx_juice_style: 'confetti',
+    bc_level_stars: { '1': 3, '2': 3, '3': 3, '4': 2, '5': 2 },
+    bc_shoes_owned: ['sneaker', 'steelBoot'],
+    bc_shoe: 'steelBoot',
+    bc_user_sound: 0.4,
+    bc_user_language: 'es',
+    bc_juice_style: 'confetti',
     // The level the player was on when they closed the tab. A level's layout is
     // regenerated from this number alone, so this single field IS the resume.
-    sx_level: 14
+    bc_level: 14
   }
   const meta = {
     savedAt: '2026-05-19T00:00:00.000Z',
@@ -92,14 +92,14 @@ const bootCloudOnly = async (data: ReturnType<typeof makeFakeData>) => {
   return manager
 }
 
-describe('splatix_state cloud hydrate → composable refresh', () => {
+describe('bugcrunch_state cloud hydrate → composable refresh', () => {
   it('hydrates the blob into localStorage before the app graph reads it', async () => {
     const data = await seededCloud()
     await bootCloudOnly(data)
 
     const blob = JSON.parse(window.localStorage.getItem(STATE_KEY) || '{}')
-    expect(blob.sx_best_level).toBe(14)
-    expect(blob.sx_coins).toBe(1250)
+    expect(blob.bc_best_level).toBe(14)
+    expect(blob.bc_coins).toBe(1250)
   })
 
   it('refreshes the progress composable — the player is NOT a fresh user', async () => {
@@ -150,7 +150,7 @@ describe('splatix_state cloud hydrate → composable refresh', () => {
     // gives the NEXT test fresh modules but cannot cancel a timer already
     // scheduled by this one — and when it fired it would write this test's blob
     // into the next test's store, which reads as a phantom hydrate.
-    const { flushPersist } = await import('@/use/useSplatixState')
+    const { flushPersist } = await import('@/use/useBugCrunchState')
     flushPersist()
   })
 
@@ -165,7 +165,7 @@ describe('splatix_state cloud hydrate → composable refresh', () => {
       const k = localStorage.key(i)
       if (k) raw.push(k)
     }
-    expect(raw.filter((k) => k.startsWith('sx_'))).toEqual([])
+    expect(raw.filter((k) => k.startsWith('bc_'))).toEqual([])
   })
 })
 
@@ -175,16 +175,16 @@ describe('hydrate failure modes', () => {
     const manager = await bootCloudOnly(data)
 
     // A trivial post-boot write must not clobber the hydrated fields.
-    const { setState } = await import('@/use/useSplatixState')
+    const { setState } = await import('@/use/useBugCrunchState')
     const { flushSaveNow } = await import('@/use/useSaveStatus')
-    setState('sx_onboarded', true)
+    setState('bc_onboarded', true)
     await flushSaveNow()
     await manager.flush()
 
     const cloudBlob = JSON.parse(data.store.get(STATE_KEY) || '{}')
-    expect(cloudBlob.sx_best_level).toBe(14)
-    expect(cloudBlob.sx_coins).toBe(1250)
-    expect(cloudBlob.sx_onboarded).toBe(true)
+    expect(cloudBlob.bc_best_level).toBe(14)
+    expect(cloudBlob.bc_coins).toBe(1250)
+    expect(cloudBlob.bc_onboarded).toBe(true)
   })
 
   it('retries a transient SDK failure before letting a returning player boot fresh', async () => {
@@ -213,7 +213,7 @@ describe('hydrate failure modes', () => {
 
       expect(manager.hydrateState).toBe('success-with-data')
       const blob = JSON.parse(window.localStorage.getItem(STATE_KEY) || '{}')
-      expect(blob.sx_best_level).toBe(14)
+      expect(blob.bc_best_level).toBe(14)
     } finally {
       vi.clearAllTimers()
       vi.useRealTimers()
@@ -253,7 +253,7 @@ describe('hydrate failure modes', () => {
     const data = makeFakeData({
       [MANIFEST_KEY]: JSON.stringify([STATE_KEY, META_KEY]),
       // A save written by a build where `jetBoot` existed and this one does not.
-      [STATE_KEY]: JSON.stringify({ sx_shoe: 'jetBoot', sx_shoes_owned: ['jetBoot'] }),
+      [STATE_KEY]: JSON.stringify({ bc_shoe: 'jetBoot', bc_shoes_owned: ['jetBoot'] }),
       [META_KEY]: JSON.stringify({
         savedAt: '2026-05-19T00:00:00.000Z',
         progressScore: 500, schemaVersion: 1, maxStage: 1
@@ -284,7 +284,7 @@ describe('reload round-trip', () => {
     // ── Session 2: a cold boot against the same cloud store. ──
     // Drain session 1's pending persist timer first — a late fire would write
     // session 1's blob into session 2 and read as a phantom hydrate.
-    const { flushPersist } = await import('@/use/useSplatixState')
+    const { flushPersist } = await import('@/use/useBugCrunchState')
     flushPersist()
     vi.resetModules()
     localStorage.clear()

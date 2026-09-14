@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'İptal',
   'close': 'Kapat',
   'ok': 'Tamam',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Karıncalar',
+    'sprinter': 'Koşucu Karıncalar',
     'beetle': 'Böcekler',
     'flea': 'Pireler',
     'caterpillar': 'Tırtıllar',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Giy',
     'worn': 'Giyili',
     'needStars': '{n} yıldız daha',
-    'needCoins': '{n} altın daha'
+    'needCoins': '{n} altın daha',
+    'price': 'Fiyat: {n} altın',
+    'starGate': '{n} yıldızda açılır',
+    'adUnlock': 'Açmak için video izle'
+  },
+  'chest': {
+    'label': 'Hazine sandığı',
+    'ready': 'Sandığı {n} altına aç',
+    'filling': 'Hazine sandığı — doluyor',
+    'spent': 'Hazine sandığı — yarına kadar boş'
+  },
+  'reveal': {
+    'world': 'Ezmek için yeni bir yer!',
+    'shoe': 'Yeni ayakkabı!',
+    'stars': 'Yıldız hedefi!',
+    'record': 'Yeni rekor!',
+    'chest': 'Hazine!',
+    'foe': 'Yeni bir böcek!',
+    'starsTotal': '{n} yıldız',
+    'recordScore': '{n} puan',
+    'recordBeat': 'Eski rekor: {n}',
+    'chestCoins': '+{n} altın'
   },
   'fever': {
     'filling': 'Splat Ateşi: %{n} dolu',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Basılı tut, bırak — güçlü vuruş',
       'desktop': 'Düğmeyi basılı tut — güçlü vuruş'
+    },
+    'sprinter': {
+      'touch': 'Koşucular kaçar — durdukları yere bas',
+      'desktop': 'Koşucular ayakkabıdan kaçar — kıpırdama, sonra tıkla'
     },
     'beetle': {
       'touch': 'Böceklerin kabuğu var — tut ve vur',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Reklam engelleyici bulundu',
-    'body': 'Splatix reklamlar sayesinde ücretsiz. Engelleyiciyi kapat ve sayfayı yenile.',
+    'body': 'Bug Crunch reklamlar sayesinde ücretsiz. Engelleyiciyi kapat ve sayfayı yenile.',
     'allowPrefix': 'Şurada reklamlara izin ver:',
     'allowSuffix': 've sayfayı yenile.',
     'gotIt': 'Anladım'

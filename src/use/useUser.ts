@@ -4,7 +4,7 @@ import { mobileCheck } from '@/utils/function'
 import { DIFFICULTY, type Difficulties } from '@/utils/enums'
 import { isDbInitialized, isSplashScreenVisible } from '@/use/useMatch'
 import { saveDataVersion } from '@/use/useSaveStatus'
-import { getState, setState, hasState } from '@/use/useSplatixState'
+import { getState, setState, hasState } from '@/use/useBugCrunchState'
 import {
   SOUND_KEY, MUSIC_KEY, LANGUAGE_KEY, DIFFICULTY_KEY, MUSIC_TRACK_KEY,
   JUICE_STYLE_KEY, HIGH_VIS_KEY, SINGLE_TAP_KEY
@@ -49,9 +49,9 @@ export const version: string = APP_VERSION
 
 // ─── Persisted settings ────────────────────────────────────────────────────
 //
-// Splatix persists EIGHT user settings — difficulty, sound volume, music
+// Bug Crunch persists EIGHT user settings — difficulty, sound volume, music
 // volume, locale, music track, juice style, high-vis ring, single-tap mode —
-// as fields inside the single `splatix_state`
+// as fields inside the single `bugcrunch_state`
 // blob (keys catalogued in `src/keys.ts`), never as their own localStorage
 // entries. On a platform build the blob goes through the patched
 // `SaveManager.setItem` and is mirrored to the SDK cloud store automatically.
@@ -191,7 +191,7 @@ isSplashScreenVisible.value = false
 //     produced `cardQuestUserLanguage`, `cardQuestSoundVolume`, etc.
 //   • `chaosArena*` keys — the interim prefix from the
 //     2026-05-04 build. We no longer mirror the locale hint to
-//     sessionStorage at all (the value lives in `ts_user_language`,
+//     sessionStorage at all (the value lives in `bc_user_language`,
 //     which flows through `sdk.data` on CG), so any existing
 //     `chaosArena*` entry is also dead data.
 // Fire-and-forget — errors are swallowed because there is nothing to

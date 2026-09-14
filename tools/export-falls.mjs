@@ -288,8 +288,8 @@ try {
     await sleep(1000)
   }
   console.log(`page: ${APP} — ${title || '(no title)'}`)
-  if (!/splatix/i.test(title)) {
-    throw new Error(`not splatix: the page at ${APP} is titled "${title}". `
+  if (!/bug-crunch/i.test(title)) {
+    throw new Error(`not bug-crunch: the page at ${APP} is titled "${title}". `
       + 'Start this project\'s dev server (pnpm dev --port 2050) or pass its URL.')
   }
 

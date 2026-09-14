@@ -152,7 +152,7 @@ const runOnce = async (qs) => {
     // layer's own debounced persist and loses, and the arm then measures the
     // tutorial while claiming to measure stage 22.
     await send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `try { localStorage.setItem('splatix_state', JSON.stringify({
+      source: `try { localStorage.setItem('bugcrunch_state', JSON.stringify({
         ts_stage: ${STAGE}, ts_coins: 50000, ts_best_stage: ${STAGE - 1},
         ts_onboarded: true, ts_tutorial_seen: true, ts_results_seen: 6,
         ts_shop_spotlight_seen: true, ts_guard_hint_seen: true,

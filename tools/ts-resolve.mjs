@@ -19,7 +19,7 @@ const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
 const withTs = (specifier) => (/\.[cm]?[jt]s$/.test(specifier) ? specifier : `${specifier}.ts`)
 
-// ─── splatix: `import.meta.env` for tool runs ───────────────────────────
+// ─── bug-crunch: `import.meta.env` for tool runs ───────────────────────────
 //
 // This project's manifest chain is NOT env-free: `artSheet.ts` reaches
 // `art.ts` (the art flag) and `utils/function.ts` (the base URL), and both read

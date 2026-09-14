@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Annuler',
   'close': 'Fermer',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Fourmis',
+    'sprinter': 'Fourmis sprinteuses',
     'beetle': 'Scarabées',
     'flea': 'Puces',
     'caterpillar': 'Chenilles',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Porter',
     'worn': 'Portée',
     'needStars': '{n} étoiles de plus',
-    'needCoins': '{n} pièces de plus'
+    'needCoins': '{n} pièces de plus',
+    'price': 'Prix : {n} pièces',
+    'starGate': 'Débloqué à {n} étoiles',
+    'adUnlock': 'Regarde une vidéo pour débloquer'
+  },
+  'chest': {
+    'label': 'Coffre au trésor',
+    'ready': 'Ouvrir le coffre pour {n} pièces',
+    'filling': 'Coffre au trésor — en remplissage',
+    'spent': 'Coffre au trésor — vide jusqu’à demain'
+  },
+  'reveal': {
+    'world': 'Un nouvel endroit à écraser !',
+    'shoe': 'De nouvelles chaussures !',
+    'stars': 'Palier d’étoiles !',
+    'record': 'Nouveau record !',
+    'chest': 'Trésor !',
+    'foe': 'Une nouvelle bestiole !',
+    'starsTotal': '{n} étoiles',
+    'recordScore': '{n} points',
+    'recordBeat': 'Ancien record : {n}',
+    'chestCoins': '+{n} pièces'
   },
   'fever': {
     'filling': 'Fièvre Splat : {n}% pleine',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Maintiens puis relâche pour une grosse frappe',
       'desktop': 'Maintiens le bouton pour une grosse frappe'
+    },
+    'sprinter': {
+      'touch': 'Les sprinteuses fuient — tape où elles s’arrêtent',
+      'desktop': 'Les sprinteuses fuient la chaussure — reste immobile, puis clique'
     },
     'beetle': {
       'touch': 'Les scarabées ont une carapace : maintiens et frappe',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Bloqueur de pub détecté',
-    'body': 'Splatix est gratuit grâce aux pubs. Désactive ton bloqueur et recharge.',
+    'body': 'Bug Crunch est gratuit grâce aux pubs. Désactive ton bloqueur et recharge.',
     'allowPrefix': 'Autorise les pubs sur',
     'allowSuffix': 'et recharge la page.',
     'gotIt': 'Compris'

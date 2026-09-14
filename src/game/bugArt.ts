@@ -1,7 +1,7 @@
 /**
  * ─── Drawing the bugs ───────────────────────────────────────────────────────
  *
- * Splatix ships with ZERO gameplay bitmaps of its own making. Every bug is
+ * Bug Crunch ships with ZERO gameplay bitmaps of its own making. Every bug is
  * drawn here with Canvas 2D in a hand-inked, cozy-cute register — thick warm
  * outlines, soft fills, glossy eyes with a highlight, a blush — and baked into
  * frame strips at runtime. That keeps the download tiny, keeps the art crisp at
@@ -24,7 +24,7 @@
  *
  * ── Why the bake ──
  *
- * A dense late board is ~28 live bodies plus a boss. Drawing nine outlined,
+ * A dense late board is ~28 live bodies plus a boss. Drawing ten outlined,
  * shaded, eight-legged creatures per frame from paths costs more than the rest
  * of the renderer put together; blitting 28 cached canvases costs almost
  * nothing. The bake is sliced across idle frames so it never stalls the first
@@ -241,7 +241,7 @@ const sheen = (
   ctx.restore()
 }
 
-// ─── The nine drawings ──────────────────────────────────────────────────────
+// ─── The ten drawings ───────────────────────────────────────────────────────
 //
 // Each takes a context already translated to the frame's centre, scaled so that
 // ONE UNIT IS THE BODY RADIUS, with the creature facing −y. `t` is 0..1 through
@@ -288,6 +288,118 @@ const drawAnt: Draw = (ctx, s, t) => {
   eye(ctx, -0.2, -0.06, 0.2, 0, -0.4)
   eye(ctx, 0.2, -0.06, 0.2, 0, -0.4)
   blush(ctx, 0.34, 0.2, 0.13)
+  ctx.restore()
+}
+
+/**
+ * The sprinter ant.
+ *
+ * Deliberately the ANT's silhouette — three lobes in a line, six legs, two
+ * antennae — because the rule it teaches is "this one runs", and a creature
+ * that also changed shape would have made the player learn two things. The
+ * whole job of this drawing is to be unmistakably the same animal and
+ * unmistakably a DIFFERENT ONE, at 24 px, moving, on a red picnic blanket.
+ *
+ * Four cues do that, in the order they survive shrinking:
+ *
+ *   1. COLOUR. Teal, against the ant's chestnut. Hue is the only channel that
+ *      still works when a creature is eleven pixels across, and teal is the one
+ *      hue in the cast that is far from every floor the game owns — the picnic
+ *      red, the backyard green, the attic brown and the arcade indigo.
+ *   2. The gold CHEVRON on the abdomen. One pale arrow-head pointing the way it
+ *      is going. It is two pixels wide on a phone and it is still the thing a
+ *      six-year-old names the creature by.
+ *   3. The long REAR LEGS, swept back into a V past the abdomen. Nothing else
+ *      in the cast has a leg outside its own body circle, so the V is a
+ *      silhouette nobody confuses with an ant even in a splat's worth of blur.
+ *   4. The ANTENNAE lie BACK rather than curling up. Same trick a cartoonist
+ *      uses on a running child's hair: swept-back means moving.
+ */
+const drawSprinter: Draw = (ctx, s, t) => {
+  const seed = seedOf(s.id)
+  // A SURGE, not a bob. The ant bobs up and down on the spot; this one's body
+  // shoves forward and settles back inside the cycle, which is what a running
+  // thing does — and at 24 px a body that moves 1 px along its own axis reads,
+  // while a body that moves 1 px across it does not.
+  const surge = Math.sin(t * Math.PI * 2) * 0.085
+  const lw = 0.11
+
+  // ── The rear legs, first, so the abdomen sits on their roots ──
+  //
+  // Out AND back the whole way, never back in: the first cut put the knee at
+  // ±1.04 and the foot at ±0.50, so the curve bowed out and returned, and at
+  // 64 px the pair read as two little loops hanging off the abdomen rather than
+  // as legs. A V has to open monotonically or it is not a V.
+  for (const sgn of [-1, 1] as const) {
+    const kick = gait(t, sgn > 0 ? 0 : 1) * 0.18
+    const footX = sgn * (0.86 + kick * 0.22)
+    ctx.beginPath()
+    ctx.moveTo(sgn * 0.28, 0.24 + surge)
+    ctx.quadraticCurveTo(sgn * (0.62 + kick * 0.3), 0.82, footX, 1.24 + kick * 0.18)
+    inked(ctx, lw * 1.3)
+    ctx.stroke()
+    // A blunt pad on the end: at 24 px a line that tapers into nothing simply
+    // vanishes, and the V stops reading as a pair of legs.
+    ctx.beginPath()
+    ctx.arc(footX, 1.24 + kick * 0.18, lw * 1.2, 0, Math.PI * 2)
+    paint(ctx, s.shade, lw * 0.6)
+  }
+
+  // Four front legs, tripod-phased like every other walker in the cast — but
+  // rooted LOW and swept back. Rooted high and splayed sideways (the ant's
+  // arrangement) they came out level with the swept antennae, and the front of
+  // the creature read as four whiskers.
+  for (let i = 0; i < 2; i++) {
+    const y = -0.16 + i * 0.36 + surge
+    const p = gait(t, i)
+    leg(ctx, -0.32, y, 0.66, Math.PI * 0.76, p, lw)
+    leg(ctx, 0.32, y, 0.66, Math.PI * 0.24, -p, lw)
+  }
+
+  // Abdomen — narrower and longer than the ant's 0.56 × 0.70. Same animal,
+  // built for running.
+  blob(ctx, 0, 0.76 + surge, 0.45, 0.8, seed + 1, 0.06)
+  paint(ctx, s.body, lw * 1.4)
+  sheen(ctx, 0, 0.76 + surge, 0.45, 0.8)
+
+  // The chevron. Drawn as a stroke rather than a filled shape so it keeps a
+  // constant weight at every scale instead of collapsing into a dot — and
+  // seated in the MIDDLE of the abdomen, not across its shoulder, so that at
+  // 200 px it is a marking on an animal rather than a chevron with an animal
+  // attached.
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(-0.29, 0.94 + surge)
+  ctx.lineTo(0, 0.62 + surge)
+  ctx.lineTo(0.29, 0.94 + surge)
+  ctx.strokeStyle = s.accent
+  ctx.lineWidth = 0.18
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.stroke()
+  ctx.restore()
+
+  // Waist and head.
+  blob(ctx, 0, 0.06 + surge, 0.28, 0.32, seed + 2, 0.06)
+  paint(ctx, s.shade, lw * 1.3)
+
+  blob(ctx, 0, -0.64 + surge, 0.5, 0.46, seed + 3, 0.05)
+  paint(ctx, s.body, lw * 1.4)
+  sheen(ctx, 0, -0.64 + surge, 0.5, 0.46)
+
+  // Swept back, and they trail a little further out on the beat the body
+  // surges — the only part of the drawing that is allowed to look blown about.
+  const wig = Math.sin(t * Math.PI * 2) * 0.16
+  antenna(ctx, -0.3, -0.86 + surge, 0.6, -Math.PI * 0.88 + wig, -0.5, lw * 0.85, s.accent)
+  antenna(ctx, 0.3, -0.86 + surge, 0.6, -Math.PI * 0.12 - wig, 0.5, lw * 0.85, s.accent)
+
+  ctx.save()
+  ctx.translate(0, -0.64 + surge)
+  // Wide, over-large, and looking hard UP the panel. This one is watching the
+  // player, which is the whole of its behaviour said in its face.
+  eye(ctx, -0.23, -0.04, 0.22, 0, -0.55)
+  eye(ctx, 0.23, -0.04, 0.22, 0, -0.55)
+  blush(ctx, 0.36, 0.22, 0.12, 'rgba(120,240,220,0.5)')
   ctx.restore()
 }
 
@@ -675,6 +787,7 @@ const drawRobobug: Draw = (ctx, s, t) => {
 
 const DRAWERS: Record<BugId, Draw> = {
   ant: drawAnt,
+  sprinter: drawSprinter,
   beetle: drawBeetle,
   flea: drawFlea,
   caterpillar: drawCaterpillar,

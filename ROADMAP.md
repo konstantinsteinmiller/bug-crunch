@@ -1,12 +1,17 @@
-# Splatix — retention roadmap
+# Bug Crunch — retention roadmap
 
 Eighteen features, ordered by **expected return per day of work**, with the
 metric each one is meant to move and the actual files it would be built in.
 
+> **Since this list was written, four of its neighbours have shipped** — not
+> from this list, but from a playtest. They are recorded at the bottom under
+> *Already built*, because a roadmap that still proposes what exists is a
+> roadmap nobody trusts.
+
 Nothing here is a rewrite. Every item lands on top of the shipped systems:
-`splatix_state` (one save blob, `src/use/useSplatixState.ts`), the pure level
+`bugcrunch_state` (one save blob, `src/use/useBugCrunchState.ts`), the pure level
 generator (`src/game/stages.ts`), the pure objective evaluator
-(`src/game/stars.ts`), the headless simulation (`src/use/useSplatixGame.ts`),
+(`src/game/stars.ts`), the headless simulation (`src/use/useBugCrunchGame.ts`),
 and the drop-in art pipeline (`src/game/art.ts`).
 
 **The four metrics, and what moves them**
@@ -47,15 +52,15 @@ within 3 s.
 
 **Moves:** D1 retention.
 
-`sx_level` is saved, so a returning player resumes on the right level — but they
+`bc_level` is saved, so a returning player resumes on the right level — but they
 resume on a cold start that looks exactly like a first start. Nothing tells them
 they were four squishes from a three-star clear.
 
-*Build it:* on boot, if `sx_failed_levels[level] > 0` or the player's best on
+*Build it:* on boot, if `bc_failed_levels[level] > 0` or the player's best on
 this level is under three stars, show a two-line "last time" card over the level
 banner: the stars they hold, and the single objective they missed (already
 computed — `evaluate(spec.objectives, tally)` and the banked
-`sx_level_stars`). It dismisses on the first pointer-down, so it costs a
+`bc_level_stars`). It dismisses on the first pointer-down, so it costs a
 returning player nothing and a new player never sees it.
 
 ---
@@ -70,9 +75,9 @@ row is the streak.
 
 *Build it:* `levelSpec` already takes a seed and `startLevel` already accepts
 `seed`. Add `dailySpec(dateKey)` beside `levelSpec` in `stages.ts` — same eased
-curves, difficulty pinned to the player's `sx_best_level`, roster filtered by
-`rosterForLevel(..., bestLevel)`. Store `sx_daily_done` (date string) and
-`sx_daily_streak` in the save blob; both are prefixed fields, so
+curves, difficulty pinned to the player's `bc_best_level`, roster filtered by
+`rosterForLevel(..., bestLevel)`. Store `bc_daily_done` (date string) and
+`bc_daily_streak` in the save blob; both are prefixed fields, so
 `SaveMergePolicy` carries them to the cloud with everything else. Entry point:
 a badge on the HUD's level chip, not a modal — the brief rules out daily-login
 modals, and a badge is not one.
@@ -93,7 +98,7 @@ being kind"; they conclude they are bad at it and close the tab.
 *Build it:* on the second consecutive failure of a level, show a "the bugs are
 slowing down" flash on the level banner and bump `relief` one step. On the
 fourth, offer a one-off free **Slow-Mo Start** (the first ten seconds at 0.75
-speed). Both read from `sx_failed_levels`, which is already banked per level.
+speed). Both read from `bc_failed_levels`, which is already banked per level.
 Keep the quota untouched — slowing the board helps the player who could not keep
 up, shrinking the quota deletes the objective they were failing.
 
@@ -107,7 +112,7 @@ When a level is cleared with more than 25 s left on the clock, do not go to the
 result screen immediately: run a three-second **Overtime** where the board
 floods and every squish is pure score, with the clock counting down in red.
 
-*Build it:* in `useSplatixGame.finish`, when `won && timeLeft > 25`, enter a new
+*Build it:* in `useBugCrunchGame.finish`, when `won && timeLeft > 25`, enter a new
 `phase: 'overtime'` instead of `'won'`, set `spawnMs` to its floor and
 `maxAlive` to double, and finish for real when the timer expires. The renderer
 needs no new state; the HUD swaps its rail for an OVERTIME banner. Feed the
@@ -125,8 +130,8 @@ Six shoes exist and exactly one is worn. A player who has bought the roller
 skate rarely takes it off, because switching means opening the Locker between
 levels. Let them carry three and swap mid-level on a long cooldown.
 
-*Build it:* `sx_shoe` becomes `sx_loadout: ShoeId[]` (cap 3, migrate the old
-scalar on read — `useSplatixState` already versions the blob). `startLevel`
+*Build it:* `bc_shoe` becomes `bc_loadout: ShoeId[]` (cap 3, migrate the old
+scalar on read — `useBugCrunchState` already versions the blob). `startLevel`
 takes the first; add `swapShoe(id)` to the sim, gated on a 12 s cooldown and
 forbidden mid-slam. The Locker's cards get a slot picker; the HUD gets a small
 shoe-swap dial above the vial.
@@ -141,7 +146,7 @@ Nine bugs and four bosses already have art, flavour and stats. A card per
 species, unlocked by squishing N of them, is a collection that fills itself out
 of play the player was doing anyway.
 
-*Build it:* `sx_kind_totals: Partial<Record<BugId, number>>`, incremented from
+*Build it:* `bc_kind_totals: Partial<Record<BugId, number>>`, incremented from
 the same place `tally.byKind` is. A card flips at 10 / 50 / 200. The card face is
 `paintBug` at a large size plus the spec's own numbers — no new art. Surface it
 behind the Locker's existing modal as a second tab, so no new button lands on
@@ -157,7 +162,7 @@ The board already tracks time and squishes. Show, on the objective rail, a thin
 second marker at the pace of the player's best clear of this level. Beating your
 own ghost is the cheapest replay motivation there is, and it needs no server.
 
-*Build it:* bank `sx_level_pace[level] = squishes-per-second` on a clear that
+*Build it:* bank `bc_level_pace[level] = squishes-per-second` on a clear that
 beats the previous. `SplatHud`'s rail gets a `ghost` prop — one absolutely
 positioned 2 px marker at `pace * elapsed / quota`.
 
@@ -187,7 +192,7 @@ Stars gate worlds and price shoes, and that is all they do. Add payouts at 15 /
 re-clearing an old level for its missed star has a destination.
 
 *Build it:* pure addition to `stages.ts` (`STAR_REWARDS`), banked as
-`sx_star_rewards_claimed`. The result screen already knows `previousStars` and
+`bc_star_rewards_claimed`. The result screen already knows `previousStars` and
 `stars`; show the next threshold under the star row.
 
 ---
@@ -303,9 +308,43 @@ it from the same place the primer is chosen in `GameScene.vue`.
 A player who comes back after three weeks should be told, in one line and one
 picture, what is new. `APP_VERSION` is already injected at build time.
 
-*Build it:* store `sx_seen_version`; when it differs from `APP_VERSION` and a
+*Build it:* store `bc_seen_version`; when it differs from `APP_VERSION` and a
 `WHATS_NEW[version]` entry exists, show a single banner over the level banner —
 never a modal, never a gate. One i18n key per release.
+
+---
+
+---
+
+## Already built (playtest, 2026-09-13/14)
+
+These were not on the list above; they came out of playing the game and are
+done, tested and in the browser. Where one of them displaces an item above, that
+item says so.
+
+* **An idle treasure chest.** Fills on wall-clock time, pays 20 coins at three
+  minutes and 80 at ten, capped at 240 a calendar day in the player's own
+  timezone. The cap was set against `levelPayout`: playing earns ~50 coins/min
+  across the campaign and the chest ~8, and a whole perfect day of idling is
+  still less than the cheapest shoe. `useTreasureChest.ts`, and the numbers are
+  pinned as a *relationship* so re-pricing a shoe fails the test.
+* **Reward reveals.** A world opening, a shoe unlocked, a star milestone, a
+  personal best, a big chest prize and a species met for the first time each get
+  their own gift screen, queued, before the result screen.
+  `campaignRewards.ts` + `RewardRevealModal.vue`.
+* **A thirteen-lesson wordless tutorial.** Every mechanic and both halves of the
+  shop flow. `game/tutorial.ts` + `useTutorial.ts`. This is the answer to
+  **#17 (bug behaviours that teach)** in a more general form; #17's slow-motion
+  first-sighting beat is still worth doing on top of it.
+* **A rewarded-video unlock in the Locker.** Watch a video instead of paying
+  coins, star gate still enforced, and the button is not rendered at all when no
+  video is ready. **This is the game's one rewarded slot, so it displaces #12
+  (combo insurance)** — a second rewarded prompt during a run would be the
+  second interruption in a game built to have none.
+* **The sprinter ant, and a re-cut opening.** 1-1 through 1-6 now each introduce
+  exactly one new creature or floor object, with a problem always one level
+  ahead of its answer. Part of what **#1 (the "next up" strip)** was for is now
+  handled by the levels themselves; the strip is still worth building.
 
 ---
 

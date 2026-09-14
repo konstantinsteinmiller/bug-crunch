@@ -1,5 +1,5 @@
 /**
- * ─── Driving Splatix ────────────────────────────────────────────────────────
+ * ─── Driving Bug Crunch ────────────────────────────────────────────────────────
  *
  * Everything game-specific lives here, so the scenario modules read as beat
  * sheets. `record.mjs` and `lib/` are the skill's, copied verbatim; this file,
@@ -15,7 +15,7 @@
  *
  * ── Why this game is STAGED and then PLAYED ──
  *
- * Splatix has no track. There is a board, a clock, a director that spawns
+ * Bug Crunch has no track. There is a board, a clock, a director that spawns
  * bodies on a timer, and one shoe that goes where the player points. Nothing
  * arrives on its own: the interesting moments — a ×20 chain, a full vial, the
  * gilded boot clearing a swarm — happen because somebody is PLAYING WELL, and
@@ -77,7 +77,7 @@ const frameMsFor = (ctx) => 1000 / ctx.fps
 // ─── The save fixture ───────────────────────────────────────────────────────
 
 /**
- * One `splatix_state` blob (`src/keys.ts`, `src/use/useSplatixState.ts`).
+ * One `bugcrunch_state` blob (`src/keys.ts`, `src/use/useBugCrunchState.ts`).
  *
  * Pin EVERY flag that can put something in front of the board: the wordless
  * tutorial, the control primers, the per-species hints, the Locker badge. A
@@ -90,55 +90,62 @@ const frameMsFor = (ctx) => 1000 / ctx.fps
  * could want.
  */
 export const saveFixture = (over = {}) => ({
-  sx_level: 14,
-  sx_best_level: 14,
-  sx_level_stars: {
+  bc_level: 14,
+  bc_best_level: 14,
+  bc_level_stars: {
     1: 3, 2: 3, 3: 3, 4: 3, 5: 2, 6: 3, 7: 2, 8: 3, 9: 3, 10: 3,
     11: 3, 12: 2, 13: 3
   },
-  sx_coins: 420,
-  sx_total_coins: 3100,
-  sx_runs: 31,
-  sx_total_squishes: 980,
-  sx_best_score: 18_400,
-  sx_best_combo: 20,
-  sx_shoe: 'steelBoot',
-  sx_shoes_owned: ['sneaker', 'steelBoot'],
+  bc_coins: 420,
+  bc_total_coins: 3100,
+  bc_runs: 31,
+  bc_total_squishes: 980,
+  bc_best_score: 18_400,
+  bc_best_combo: 20,
+  bc_shoe: 'steelBoot',
+  bc_shoes_owned: ['sneaker', 'steelBoot'],
 
   // ── Nothing may be taught during a clip ──
-  sx_tutorial_seen: true,
-  sx_onboarded: true,
-  sx_results_seen: 20,
-  sx_locker_spotlight: true,
-  sx_hints_seen: {
-    move: true, slam: true, beetle: true, flea: true, spike: true, stink: true,
-    fever: true, honey: true, web: true, belt: true, sweeper: true, boss: true,
-    pods: true
+  bc_tutorial_seen: true,
+  bc_onboarded: true,
+  bc_results_seen: 20,
+  bc_locker_spotlight: true,
+  bc_hints_seen: {
+    move: true, slam: true, sprinter: true, beetle: true, flea: true, spike: true,
+    stink: true, fever: true, honey: true, web: true, belt: true, sweeper: true,
+    boss: true, pods: true
+  },
+  // The wordless lessons, all of them already behind the player. A clip that
+  // opens on a hand glyph explaining the stomp is a clip of a tutorial.
+  bc_taught: {
+    move: true, stomp: true, goal: true, chain: true, slam: true, spike: true,
+    dodge: true, fever: true, boss: true, stars: true, chest: true,
+    locker: true, buy: true
   },
 
   // The relief system, pinned flat: a failure record hands the next attempt a
   // slower board and a longer clock, and that may not differ between the
   // success take and the fail take of the same level.
-  sx_failed_levels: {},
+  bc_failed_levels: {},
 
   // Nothing here posts a score (`preview.config.mjs` points the board at a dead
   // endpoint), but a run already "submitted" is the second belt.
-  sx_submitted_score: 9_999_999,
+  bc_submitted_score: 9_999_999,
 
   // The look, pinned: a clip must not inherit a previous session's toggles.
-  sx_juice_style: 'ooze',
-  sx_high_vis: false,
-  sx_single_tap: false,
-  sx_user_difficulty: 'medium',
-  sx_music_track: 'cozy',
+  bc_juice_style: 'ooze',
+  bc_high_vis: false,
+  bc_single_tap: false,
+  bc_user_difficulty: 'medium',
+  bc_music_track: 'cozy',
 
   // Silent at the source as well as at the browser (`--mute-audio`): the audio
   // graph never starts, so no `AudioContext.currentTime` runs alongside a clock
   // the recorder owns.
-  sx_user_sound: 0,
-  sx_user_music: 0,
-  sx_mobile_mute: true,
-  sx_haptics: false,
+  bc_user_sound: 0,
+  bc_user_music: 0,
+  bc_mobile_mute: true,
+  bc_haptics: false,
   ...over
 })
 
@@ -155,12 +162,12 @@ export const saveFixture = (over = {}) => ({
  * lands; a level that is genuinely out of reach ends the same way every time,
  * and "out of reach" here is one shoe.
  */
-export const STARTER_LOADOUT = { sx_shoe: 'sneaker', sx_shoes_owned: ['sneaker'] }
+export const STARTER_LOADOUT = { bc_shoe: 'sneaker', bc_shoes_owned: ['sneaker'] }
 
 /** Written into the page BEFORE the app's first line, so the game boots into
- *  it. `useSplatixState` reads `splatix_state` once, at module load. */
+ *  it. `useBugCrunchState` reads `bugcrunch_state` once, at module load. */
 export const seedSaveScript = (save) => {
-  try { localStorage.setItem('splatix_state', JSON.stringify(save)) } catch { /* private mode */ }
+  try { localStorage.setItem('bugcrunch_state', JSON.stringify(save)) } catch { /* private mode */ }
   // The recorder's own flag is read by `src/game/previewFeed.ts` from the URL —
   // nothing to do here — but the ART flag persists, and a context that inherits
   // "off" from a previous session would record the procedural game.
@@ -187,7 +194,7 @@ export const boot = async (ctx, { save, level } = {}) => {
   // renderer bakes a level's bug strips off `getLevel().roster` — booting on
   // one cast and staging another makes the first seconds of the take bake the
   // cast it is actually about, six milliseconds at a time.
-  const blob = save ?? saveFixture(level ? { sx_level: level } : {})
+  const blob = save ?? saveFixture(level ? { bc_level: level } : {})
   // The runner has already opened the page at the FULL recording URL — the
   // resolved port and every parameter: the config's (`tier`, `art`), the
   // format's, the clean feed's (`feed=…`), the scenario's, `--url-param`.
@@ -219,7 +226,7 @@ export const boot = async (ctx, { save, level } = {}) => {
 
   await ctx.evaluate(() => { /** @type {any} */ (window).__preview.hold(true) })
 
-  const status = await warmArt(ctx, level ?? blob.sx_level)
+  const status = await warmArt(ctx, level ?? blob.bc_level)
   ctx.log.info(`art: ${status.enabled ? `${status.probes} probes warmed` : 'overrides OFF'}`)
   return url
 }
@@ -678,7 +685,7 @@ export const scoutLevel = async (ctx, { level, seed = 7 }) => {
     const G = P.game
     const D = w.__drive
 
-    const before = JSON.parse(JSON.stringify(P.state.splatixState.value))
+    const before = JSON.parse(JSON.stringify(P.state.bugCrunchState.value))
     P.hold(true)
     D.reset(arg.seed)
     P.play(arg.level)

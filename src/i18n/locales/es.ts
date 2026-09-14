@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Cancelar',
   'close': 'Cerrar',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Hormigas',
+    'sprinter': 'Hormigas veloces',
     'beetle': 'Escarabajos',
     'flea': 'Pulgas',
     'caterpillar': 'Orugas',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Poner',
     'worn': 'Puesta',
     'needStars': '{n} estrellas más',
-    'needCoins': '{n} monedas más'
+    'needCoins': '{n} monedas más',
+    'price': 'Precio: {n} monedas',
+    'starGate': 'Se abre con {n} estrellas',
+    'adUnlock': 'Mira un vídeo para desbloquear'
+  },
+  'chest': {
+    'label': 'Cofre del tesoro',
+    'ready': 'Abre el cofre por {n} monedas',
+    'filling': 'Cofre del tesoro — llenándose',
+    'spent': 'Cofre del tesoro — vacío hasta mañana'
+  },
+  'reveal': {
+    'world': '¡Nuevo lugar para pisar!',
+    'shoe': '¡Zapatos nuevos!',
+    'stars': '¡Meta de estrellas!',
+    'record': '¡Nuevo récord!',
+    'chest': '¡Tesoro!',
+    'foe': '¡Un bicho nuevo!',
+    'starsTotal': '{n} estrellas',
+    'recordScore': '{n} puntos',
+    'recordBeat': 'Récord anterior: {n}',
+    'chestCoins': '+{n} monedas'
   },
   'fever': {
     'filling': 'Fiebre Splat: {n}% llena',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Mantén y suelta para un pisotón fuerte',
       'desktop': 'Mantén el botón para un pisotón fuerte'
+    },
+    'sprinter': {
+      'touch': 'Las veloces huyen — pisa donde se paran',
+      'desktop': 'Las veloces huyen del zapato — quédate quieto y haz clic'
     },
     'beetle': {
       'touch': 'Los escarabajos tienen caparazón: mantén y golpea',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Bloqueador de anuncios detectado',
-    'body': 'Splatix es gratis gracias a los anuncios. Desactiva tu bloqueador y recarga.',
+    'body': 'Bug Crunch es gratis gracias a los anuncios. Desactiva tu bloqueador y recarga.',
     'allowPrefix': 'Permite anuncios en',
     'allowSuffix': 'y recarga la página.',
     'gotIt': 'Entendido'

@@ -1,4 +1,4 @@
-# Splatix — art to-do
+# Bug Crunch — art to-do
 
 Everything in this game is **drawn by code today** and renders at ship quality.
 This file is the list of slots a painted asset can replace, in the order that
@@ -18,7 +18,8 @@ is used instead of the drawing. Delete the file and the drawing comes back.
 | `prop` | `public/images/props/` | floor objects — single stills |
 | `fx` | `public/images/fx/` | rings, bursts, haze — single stills |
 | `bg` | `public/images/bg/` | one **seamless** floor tile per world |
-| `ui` | `public/images/ui/` | the result banner and the HUD marks |
+| `ui` | `public/images/ui/` | the result banner, the HUD marks and every button glyph |
+| brand | `public/images/logo/` | the wordmark and the splash mascot — painted, never probed |
 
 **Switch the layer on** with `VITE_ENABLE_ART_OVERRIDES=true` in `.env.local`,
 or from the debug overlay at run time. It ships **off** so a missing painting can
@@ -33,6 +34,16 @@ pnpm art:export      # export the reference sheets the prompts point at
 pnpm slice-sheets    # cut a returned sheet into per-id webp files
 pnpm compress-folder # squeeze public/images before shipping
 ```
+
+**The icon set is painted nine at a time.** `PROMPTS-GRIDS.md` holds seven
+*contact sheets* covering all fifty-seven square `ui` slots — a 3×3 lattice of
+different icons that the slicer cuts into nine separate files, because the index
+entry for a grid carries a target per cell instead of one for the sheet. Paint
+them as sets: the reason they share a generation is that the painter balances
+stroke weight, corner radius and margin across the nine in one pass, which is
+the half of an icon set that cannot be done one icon at a time. If one cell
+comes back wrong, re-roll that slot alone from `PROMPTS-STILLS.md` — every
+square slot still has a single-icon sheet of its own.
 
 `/art-sheets` (dev route) renders the reference sheet for every drawable at the
 exact box, frame count and anchor the renderer expects. **Paint over that sheet.**
@@ -155,6 +166,57 @@ width without the art in them distorting.
 
 ---
 
+## Priority 7 — every button glyph
+
+The icon set (`src/components/icons/iconPaths.ts`) is ~57 solid vector glyphs in
+one 24×24 box, and `GameIcon` now probes a painting for each of them before it
+draws the path — so the WHOLE UI is paintable, not just the seven marks the HUD
+draws on a canvas. No call site opts in; the id comes from
+`artCatalogue.artIdForGlyph`.
+
+Six glyphs are already a HUD mark and share its painting rather than getting one
+of their own: `boot`→`ui/locker`, `flame`→`ui/fever`, `star`→`ui/star`,
+`clock`→`ui/timer`, `target`→`ui/target`, `trophy`→`ui/trophy`. Every other
+glyph is `ui/icon-<name>.webp`.
+
+Two registers, and the manifest knows which is which:
+
+* **Marks** — the affordances (play, pause, close, the arrows, the cog). These
+  stay FLAT WHITE SILHOUETTES. They sit white on saturated candy plastic at
+  16–24 px, where an illustration goes to mud; painting one buys a better
+  silhouette, never a picture.
+* **Objects** — the nouns (chest, coin, gem, gift, skull, bug, splat…). Full
+  house style: flat saturated colour, the ink contour, one cel shadow, light
+  from the upper left. This is the half that is worth the generations.
+
+They are LAST on purpose: fifty-one small marks is most of a week's quota, and a
+button glyph is the one thing in the game that already looks finished. They also
+ride the last preload tier (`artPreload.remainingArtWants`) — the splash waits
+for the HUD marks and nothing else.
+
+---
+
+## Priority 8 — the brand: the logo and the greeter
+
+| Slot | File | Notes |
+| --- | --- | --- |
+| Wordmark | `logo/logo_512x512.png` (+ 256/192 and the `icons/` copies) | The PWA manifest, the favicon and every portal store page read it. |
+| Mascot | `logo/mascot.webp` | The ant that floats out on the loading screen, shouts BOO and then giggles at its own prank. |
+
+Neither is ever probed: the splash must be the same picture on a portal build
+with the art layer OFF, so both are read straight off disk and their manifest
+targets are explicit (`artCatalogue.ART_BRAND`). `node scripts/make-brand.mjs`
+writes ship-quality placeholders at exactly those paths and the slicer writes
+over them — the same drop-in contract every other drawable has.
+
+The mascot is authored TOP-DOWN like the rest of the cast. The splash animates
+that one file with CSS (a float, a lunge on the shout, a shoulder-shake on the
+laugh) and those beats are written against a creature seen from above; a
+front-facing character would also stop being the bug on the blanket and start
+being a logo with a face.
+
+---
+
 ## Not a painting
 
 These stay procedural, deliberately:
@@ -173,7 +235,7 @@ These stay procedural, deliberately:
 ## What is already in `public/images`
 
 Three files survived the chassis copy and are **genuine reuse** — they match a
-Splatix slot by name, so the moment the art layer is switched on they are used:
+Bug Crunch slot by name, so the moment the art layer is switched on they are used:
 
 | File | Slot | Why it fits |
 | --- | --- | --- |
@@ -186,7 +248,7 @@ Everything else the chassis left behind has been moved to
 
 * `ribbon-ironplate.webp` — was at `ui/ribbon.webp`, which IS probed. A dark iron
   plate with gold studs is the other game's result banner; switching the art
-  layer on would have silently replaced Splatix's red comic ribbon with it.
+  layer on would have silently replaced Bug Crunch's red comic ribbon with it.
 * `ring-heal / ring-heat / ring-shock` — chrome and rusted-stone rings. Nothing
   probes those names, but they sit one rename away from `ring-stomp`,
   `ring-slam` and `ring-fever`, and they are the wrong art direction for a
@@ -209,4 +271,13 @@ probe reads. The drawing underneath is always there.
 
 The logo, favicon, mascot and splash tile are generated by
 `node scripts/make-brand.mjs` and are ship-quality placeholders — replace the SVG
-in that script rather than the output files, so every size stays in step.
+in that script rather than the output files, so every size stays in step. The
+logo and the mascot are ALSO manifest slots (Priority 8), so the painted versions
+drop in over exactly those paths.
+
+The splash TILE is different: `pnpm art:bg-tile` derives it from the paintings
+themselves — each sprite is trimmed to its ink, stretched to the full luminance
+range and posterised to three greys, which keeps the outline and the big shadow
+masses and throws the rest away. Nothing is traced by hand, so repainting a
+sprite and re-running it follows the art. It skips a cast member that is not
+painted yet and refuses to overwrite the committed tile below four motifs.

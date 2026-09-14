@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Anuluj',
   'close': 'Zamknij',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Mrówki',
+    'sprinter': 'Mrówki biegacze',
     'beetle': 'Żuki',
     'flea': 'Pchły',
     'caterpillar': 'Gąsienice',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Załóż',
     'worn': 'Założone',
     'needStars': 'Jeszcze {n} gwiazdek',
-    'needCoins': 'Jeszcze {n} monet'
+    'needCoins': 'Jeszcze {n} monet',
+    'price': 'Cena: {n} monet',
+    'starGate': 'Odblokowane przy {n} gwiazdkach',
+    'adUnlock': 'Obejrzyj film, aby odblokować'
+  },
+  'chest': {
+    'label': 'Skrzynia skarbów',
+    'ready': 'Otwórz skrzynię za {n} monet',
+    'filling': 'Skrzynia skarbów — napełnia się',
+    'spent': 'Skrzynia skarbów — pusta do jutra'
+  },
+  'reveal': {
+    'world': 'Nowe miejsce do deptania!',
+    'shoe': 'Nowe buty!',
+    'stars': 'Próg gwiazdek!',
+    'record': 'Nowy rekord!',
+    'chest': 'Skarb!',
+    'foe': 'Nowy robal!',
+    'starsTotal': '{n} gwiazdek',
+    'recordScore': '{n} punktów',
+    'recordBeat': 'Stary rekord: {n}',
+    'chestCoins': '+{n} monet'
   },
   'fever': {
     'filling': 'Gorączka Splat: {n}% pełna',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Przytrzymaj i puść, żeby mocno uderzyć',
       'desktop': 'Przytrzymaj przycisk, żeby mocno uderzyć'
+    },
+    'sprinter': {
+      'touch': 'Biegacze uciekają — nadepnij tam, gdzie staną',
+      'desktop': 'Biegacze uciekają przed butem — stój i kliknij'
     },
     'beetle': {
       'touch': 'Żuki mają pancerz — przytrzymaj i uderz',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Wykryto blokadę reklam',
-    'body': 'Splatix jest darmowy dzięki reklamom. Wyłącz blokadę i odśwież stronę.',
+    'body': 'Bug Crunch jest darmowy dzięki reklamom. Wyłącz blokadę i odśwież stronę.',
     'allowPrefix': 'Zezwól na reklamy na',
     'allowSuffix': 'i odśwież stronę.',
     'gotIt': 'Rozumiem'

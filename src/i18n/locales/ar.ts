@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'إلغاء',
   'close': 'إغلاق',
   'ok': 'حسناً',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'النمل',
+    'sprinter': 'نمل عدّاء',
     'beetle': 'الخنافس',
     'flea': 'البراغيث',
     'caterpillar': 'اليرقات',
@@ -105,7 +106,28 @@ export default {
     'wear': 'ارتدِ',
     'worn': 'مرتدى',
     'needStars': 'تحتاج {n} نجوم أخرى',
-    'needCoins': 'تحتاج {n} عملة أخرى'
+    'needCoins': 'تحتاج {n} عملة أخرى',
+    'price': 'السعر: {n} عملة',
+    'starGate': 'يُفتح عند {n} نجمة',
+    'adUnlock': 'شاهد فيديو لفتحه'
+  },
+  'chest': {
+    'label': 'صندوق الكنز',
+    'ready': 'افتح صندوق الكنز مقابل {n} عملة',
+    'filling': 'صندوق الكنز — يمتلئ',
+    'spent': 'صندوق الكنز — فارغ حتى الغد'
+  },
+  'reveal': {
+    'world': 'مكان جديد للدَّعس!',
+    'shoe': 'حذاء جديد!',
+    'stars': 'هدف النجوم!',
+    'record': 'رقم قياسي جديد!',
+    'chest': 'كنز!',
+    'foe': 'حشرة جديدة!',
+    'starsTotal': '{n} نجمة',
+    'recordScore': '{n} نقطة',
+    'recordBeat': 'الرقم السابق: {n}',
+    'chestCoins': '+{n} عملة'
   },
   'fever': {
     'filling': 'حُمّى Splat: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'اضغط مطوّلاً ثم أفلت لضربة قوية',
       'desktop': 'اضغط الزر مطوّلاً لضربة قوية'
+    },
+    'sprinter': {
+      'touch': 'العدّاءات تهرب — ادعس حيث تتوقف',
+      'desktop': 'العدّاءات تهرب من الحذاء — اثبت ثم انقر'
     },
     'beetle': {
       'touch': 'الخنافس لها أصداف — اضغط مطوّلاً ثم اضرب',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'تم رصد مانع إعلانات',
-    'body': 'Splatix مجانية بفضل الإعلانات. أوقف مانع الإعلانات ثم أعد تحميل الصفحة.',
+    'body': 'Bug Crunch مجانية بفضل الإعلانات. أوقف مانع الإعلانات ثم أعد تحميل الصفحة.',
     'allowPrefix': 'اسمح بالإعلانات على',
     'allowSuffix': 'ثم أعد تحميل الصفحة.',
     'gotIt': 'فهمت'

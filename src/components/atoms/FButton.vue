@@ -77,7 +77,26 @@ const props = withDefaults(defineProps<Props>(), {
   emphasis: 1
 })
 
-defineEmits(['click'])
+/**
+ * `click` carries the ORIGINAL `MouseEvent`, and that payload is load-bearing.
+ *
+ * It used to emit nothing — a bare `$emit('click')` — which quietly broke every
+ * consumer that wrote `@click.stop` — and buying a shoe was one of them. On a
+ * COMPONENT, Vue cannot attach a real listener to a DOM node, so it compiles
+ * `.stop` / `.prevent` / `.self` to `withModifiers(handler, ['stop'])`, and
+ * that wrapper's first statement is `event.stopPropagation()` on **argument
+ * zero of the emit**. With no payload that argument is `undefined`, so the
+ * card's Buy button threw `Cannot read properties of undefined (reading
+ * 'stopPropagation')` before the wrapped handler ever ran: the purchase never
+ * happened, and because the throw was inside the event dispatch nothing in the
+ * UI changed to say so.
+ *
+ * Forwarding `$event` fixes the whole class of bug rather than that one call
+ * site — `.stop`, `.prevent` and `.self` all work on an `FButton` now, exactly
+ * as a caller reading the template would expect. Handlers that take no
+ * arguments are unaffected: JavaScript discards the extra argument.
+ */
+defineEmits<{ (e: 'click', event: MouseEvent): void }>()
 
 const { t, te } = useI18n()
 
@@ -214,7 +233,7 @@ const styleVars = computed(() => {
     ]"
     :aria-label="resolvedAriaLabel"
     :disabled="isDisabled"
-    @click="!isDisabled && $emit('click')"
+    @click="!isDisabled && $emit('click', $event)"
   )
     //- 3D depth plate behind the body.
     span.f-button__shadow(aria-hidden="true")

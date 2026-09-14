@@ -59,6 +59,69 @@ describe('the bestiary', () => {
     const debutants = BUGS.filter((b) => b.debut === 1).map((b) => b.id)
     expect(debutants).toEqual(['ant'])
   })
+
+  // The complaint this pacing was written against: "the first 3 levels feel
+  // like playing the same mechanics 3 times". Two designs sharing a debut is
+  // the shape of that problem — one of them is met, the other is noise.
+  it('never debuts two designs on the same level of world 1', () => {
+    const debuts = BUGS.filter((b) => b.debut <= 10).map((b) => b.debut)
+    expect(debuts.length).toBeGreaterThan(3)
+    expect(new Set(debuts).size).toBe(debuts.length)
+  })
+
+})
+
+// The hook the opening is built on. Everything asserted here is the reason it
+// is a DIFFERENT creature from the flea rather than a second one.
+describe('the sprinter ant', () => {
+  const sprinter = bugSpec('sprinter')
+  const ant = bugSpec('ant')
+  const flea = bugSpec('flea')
+
+  it('arrives on level 2 — the first thing the game adds after the ant', () => {
+    expect(sprinter.debut).toBe(2)
+    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 1)).toHaveLength(0)
+    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 2)).toHaveLength(1)
+  })
+
+  it('is the ant plus exactly one rule, so only the rule has to be learned', () => {
+    expect(sprinter.motion).toBe(ant.motion)
+    expect(sprinter.hp).toBe(1)
+    expect(sprinter.armor).toBe(0)
+    expect(sprinter.spiky).toBe(false)
+    expect(sprinter.stinks).toBe(false)
+    expect(sprinter.segments).toBe(0)
+    expect(sprinter.airborne).toBe(false)
+  })
+
+  it('sprints, and does NOT dodge — they are different questions', () => {
+    expect(sprinter.sprints).toBe(true)
+    expect(sprinter.dodges).toBe(false)
+    expect(flea.dodges).toBe(true)
+    expect(flea.sprints).toBe(false)
+  })
+
+  it('is the only sprinter in the cast, and nothing does both', () => {
+    expect(BUGS.filter((b) => b.sprints).map((b) => b.id)).toEqual(['sprinter'])
+    for (const b of BUGS) expect(b.dodges && b.sprints).toBe(false)
+  })
+
+  it('pays more than a plain ant, and less than the flea it is not', () => {
+    expect(sprinter.score).toBeGreaterThan(ant.score)
+    expect(sprinter.score).toBeLessThan(flea.score)
+  })
+
+  // The vial is a reward for VOLUME, and pricing a hook's juice by how annoying
+  // it is would have made the meter about hooks. Mass, like everything else.
+  it('prices its juice by mass rather than by difficulty', () => {
+    expect(sprinter.size).toBeLessThan(ant.size)
+    expect(sprinter.juice).toBeLessThanOrEqual(ant.juice)
+  })
+
+  it('costs the spawn director more attention than an ant and less than a beetle', () => {
+    expect(sprinter.cost).toBeGreaterThan(ant.cost)
+    expect(sprinter.cost).toBeLessThan(bugSpec('beetle').cost)
+  })
 })
 
 describe('resolveStomp', () => {

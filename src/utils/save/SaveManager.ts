@@ -6,7 +6,7 @@ import type {
 } from './types'
 import { isInternalKey } from './types'
 import { SAVE_KEYS } from './SaveMergePolicy'
-import { STATE_KEY } from '@/use/useSplatixState'
+import { STATE_KEY } from '@/use/useBugCrunchState'
 import { BlobStorage, type BlobStorageOptions } from './BlobStorage'
 
 // ─── SaveManager ───────────────────────────────────────────────────────────
@@ -400,11 +400,11 @@ const shouldRunSanityGuard = (state: HydrateState, local: LocalStorageAccessor):
 }
 
 /**
- * Read one field out of the consolidated `splatix_state` blob, falling back to a
+ * Read one field out of the consolidated `bugcrunch_state` blob, falling back to a
  * top-level key read.
  *
- * This indirection is load-bearing: splatix persists everything INSIDE one
- * localStorage entry, so a naive `local.get('sx_best_level')` always returns
+ * This indirection is load-bearing: bug-crunch persists everything INSIDE one
+ * localStorage entry, so a naive `local.get('bc_best_level')` always returns
  * null and `localLooksFresh` would report "fresh" for every player — making the
  * boot-sanity guard fire (and cost 3 s of boot latency) on every single launch
  * of a returning player, while telling us nothing.

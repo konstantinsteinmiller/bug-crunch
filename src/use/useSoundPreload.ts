@@ -24,7 +24,7 @@ import { loadAudioBuffer } from '@/use/useAssets'
 // parallel and fight for the AudioContext's decoder pool. Adding a new
 // SFX = add the basename here (no `.ogg`, no path prefix).
 const GAMEPLAY_SFX: ReadonlyArray<string> = [
-  // Splatix synthesises its whole combat layer (see `useGameAudio`), so this
+  // Bug Crunch synthesises its whole combat layer (see `useGameAudio`), so this
   // list is only the handful of cues where a RECORDED sound is unmistakably
   // better than a built one: the coin, the three celebration stings, the
   // time-up sting, the unlock, and the modal chime.

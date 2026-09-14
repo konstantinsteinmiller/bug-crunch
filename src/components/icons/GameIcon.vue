@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { ICON_PATHS } from './iconPaths'
 import type { GameIconName } from './iconNames'
+import { artIdForGlyph } from '@/game/artCatalogue'
+import { useArtImage } from '@/use/useArtImage'
 
 /**
  * ─── The one icon component ─────────────────────────────────────────────────
@@ -29,14 +31,43 @@ import type { GameIconName } from './iconNames'
  *
  * The SVG fills its box, so the *caller* owns sizing — set a width/height on
  * the parent and the glyph follows. Colour comes from `currentColor`.
+ *
+ * ─── The painted rung ───────────────────────────────────────────────────────
+ *
+ * Every glyph in this set is also a slot in the art manifest, so a painted mark
+ * can replace the vector one WITHOUT a call site opting in — which is the whole
+ * point: there are getting on for sixty of these across the HUD, the modals, the
+ * Locker and the result screen, and a painted icon set that only reached the
+ * handful of buttons somebody remembered to pass an `art` prop to would be a
+ * half-painted UI, which looks worse than an unpainted one.
+ *
+ * The id is `artCatalogue.artIdForGlyph`: the HUD mark where this glyph already
+ * IS one (`boot` → `ui/locker`), so the canvas and the DOM share one painting,
+ * and `ui/icon-<name>` otherwise. With the art layer off — which is how every
+ * portal build ships — nothing is probed and this is the same component it was.
+ *
+ * `ArtIcon` still exists and still sits above this: it is for the marks that
+ * have a canvas DRAWING as well as a glyph (the banner, the fever vial), and its
+ * fallback lands here, where the same probe is a cache hit rather than a second
+ * request.
  */
 const props = defineProps<{ name: GameIconName }>()
 
 const d = computed(() => (ICON_PATHS[props.name] ?? ICON_PATHS.help).join(''))
+
+const painted = useArtImage('ui', () => artIdForGlyph(props.name))
 </script>
 
 <template lang="pug">
+  img.game-icon.is-painted(
+    v-if="painted"
+    :src="painted"
+    alt=""
+    draggable="false"
+    aria-hidden="true"
+  )
   svg.game-icon(
+    v-else
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="currentColor"
@@ -54,4 +85,10 @@ const d = computed(() => (ICON_PATHS[props.name] ?? ICON_PATHS.help).join(''))
   // The glyph is decoration painted on top of a button; never let it swallow
   // the press that was aimed at the button underneath it.
   pointer-events: none
+
+// A painting sits in the glyph's box rather than stretching to it: the vector
+// is authored square with its own margin and a painted mark is not always, so
+// `contain` is what keeps the two interchangeable in a row of buttons.
+.game-icon.is-painted
+  object-fit: contain
 </style>

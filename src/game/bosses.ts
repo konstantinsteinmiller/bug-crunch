@@ -15,7 +15,7 @@
  * asks for it nine levels later — long enough to have forgotten the button,
  * close enough that remembering is a small pleasure rather than a wall.
  *
- * Pure data. `useSplatixGame` runs the scripts; `bugArt` draws the bodies.
+ * Pure data. `useBugCrunchGame` runs the scripts; `bugArt` draws the bodies.
  */
 
 import type { BugId } from '@/game/bugs'

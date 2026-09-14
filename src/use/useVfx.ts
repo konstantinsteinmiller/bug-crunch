@@ -736,7 +736,7 @@ export const resetVfx = (): void => {
 /**
  * …or keep them, and move them.
  *
- * Splatix does not scroll, so nothing calls this today. It survives because the
+ * Bug Crunch does not scroll, so nothing calls this today. It survives because the
  * cost of keeping it is one function and the cost of NOT having it, the first
  * time a mode wants a moving board, is every pool growing its own copy.
  */

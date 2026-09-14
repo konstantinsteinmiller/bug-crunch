@@ -22,7 +22,13 @@ export const GAME_ICON_NAMES = [
   // `chest` is now the IDLE chest on the HUD, which pays coins for waiting.
   // They were one glyph until the chest became a thing of its own; two
   // buttons that do different things may not wear the same drawing.
-  'settings', 'shop', 'chest', 'anvil', 'video', 'ads', 'book', 'info', 'help',
+  // `video` is a CAMCORDER — "this records" — and it marks the result screen's
+  // ×3. `movie` is a FILM STRIP — "this plays" — and it marks the offer to
+  // WATCH one: the Locker's ad-unlock button. Two glyphs rather than one
+  // because they sit on opposite sides of the same transaction, and a child
+  // who has learnt that the camcorder means "claim my bonus" must not read the
+  // Locker's button as the same promise.
+  'settings', 'shop', 'chest', 'anvil', 'video', 'movie', 'ads', 'book', 'info', 'help',
   // Audio
   'music', 'music-off', 'sound', 'sound-off',
   // Progression
@@ -31,7 +37,7 @@ export const GAME_ICON_NAMES = [
   'plus', 'minus', 'left', 'right', 'up', 'down',
   // Game nouns
   'coin', 'gem', 'heart', 'flask', 'wheel', 'gift', 'fullscreen', 'share',
-  // ── Splatix's own nouns ─────────────────────────────────────────────────
+  // ── Bug Crunch's own nouns ─────────────────────────────────────────────────
   // The five things this game is about, in the shared set because every one of
   // them appears on at least two surfaces: a HUD chip AND a result chip, or a
   // Locker row AND the button that opens it. A glyph re-traced per component is

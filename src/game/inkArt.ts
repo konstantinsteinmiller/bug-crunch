@@ -32,7 +32,7 @@ export type Pt = [number, number]
  * The one ink colour the whole game is outlined in.
  *
  * Warm near-black rather than `#000`: pure black reads as vector clip-art, and
- * everything in Splatix is meant to look drawn. One constant, because a cast
+ * everything in Bug Crunch is meant to look drawn. One constant, because a cast
  * outlined in three slightly different blacks reads as three casts.
  */
 export const INK = '#2b1b2e'

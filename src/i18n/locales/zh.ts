@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': '取消',
   'close': '关闭',
   'ok': '好',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': '蚂蚁',
+    'sprinter': '疾跑蚂蚁',
     'beetle': '甲虫',
     'flea': '跳蚤',
     'caterpillar': '毛毛虫',
@@ -105,7 +106,28 @@ export default {
     'wear': '穿上',
     'worn': '已穿',
     'needStars': '还差 {n} 颗星',
-    'needCoins': '还差 {n} 金币'
+    'needCoins': '还差 {n} 金币',
+    'price': '价格：{n} 金币',
+    'starGate': '{n} 颗星解锁',
+    'adUnlock': '看视频解锁'
+  },
+  'chest': {
+    'label': '宝箱',
+    'ready': '用 {n} 金币打开宝箱',
+    'filling': '宝箱 — 正在装满',
+    'spent': '宝箱 — 明天再来'
+  },
+  'reveal': {
+    'world': '新的踩踏场地！',
+    'shoe': '新鞋子！',
+    'stars': '星星里程碑！',
+    'record': '新纪录！',
+    'chest': '宝藏！',
+    'foe': '新虫子！',
+    'starsTotal': '{n} 颗星',
+    'recordScore': '{n} 分',
+    'recordBeat': '旧纪录：{n}',
+    'chestCoins': '+{n} 金币'
   },
   'fever': {
     'filling': '狂踩模式：{n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': '长按再松开可以重踩',
       'desktop': '长按按钮可以重踩'
+    },
+    'sprinter': {
+      'touch': '疾跑蚂蚁会逃 — 踩它停下的地方',
+      'desktop': '疾跑蚂蚁躲鞋子 — 先别动，再点击'
     },
     'beetle': {
       'touch': '甲虫有壳 — 长按重踩',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': '检测到广告拦截器',
-    'body': 'Splatix 靠广告才能免费。请关闭拦截器并刷新页面。',
+    'body': 'Bug Crunch 靠广告才能免费。请关闭拦截器并刷新页面。',
     'allowPrefix': '允许以下网站的广告：',
     'allowSuffix': '然后刷新页面。',
     'gotIt': '知道了'

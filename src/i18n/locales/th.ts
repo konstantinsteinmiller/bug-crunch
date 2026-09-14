@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'ยกเลิก',
   'close': 'ปิด',
   'ok': 'ตกลง',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'มด',
+    'sprinter': 'มดนักวิ่ง',
     'beetle': 'ด้วง',
     'flea': 'หมัด',
     'caterpillar': 'หนอนผีเสื้อ',
@@ -105,7 +106,28 @@ export default {
     'wear': 'ใส่',
     'worn': 'กำลังใส่',
     'needStars': 'ขาดอีก {n} ดาว',
-    'needCoins': 'ขาดอีก {n} เหรียญ'
+    'needCoins': 'ขาดอีก {n} เหรียญ',
+    'price': 'ราคา: {n} เหรียญ',
+    'starGate': 'ปลดล็อกที่ {n} ดาว',
+    'adUnlock': 'ดูวิดีโอเพื่อปลดล็อก'
+  },
+  'chest': {
+    'label': 'หีบสมบัติ',
+    'ready': 'เปิดหีบรับ {n} เหรียญ',
+    'filling': 'หีบสมบัติ — กำลังเติม',
+    'spent': 'หีบสมบัติ — ว่างจนถึงพรุ่งนี้'
+  },
+  'reveal': {
+    'world': 'ที่เหยียบใหม่!',
+    'shoe': 'รองเท้าใหม่!',
+    'stars': 'หมุดหมายดาว!',
+    'record': 'สถิติใหม่!',
+    'chest': 'สมบัติ!',
+    'foe': 'แมลงตัวใหม่!',
+    'starsTotal': '{n} ดาว',
+    'recordScore': '{n} คะแนน',
+    'recordBeat': 'สถิติเดิม: {n}',
+    'chestCoins': '+{n} เหรียญ'
   },
   'fever': {
     'filling': 'Splat ฟีเวอร์: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'กดค้างแล้วปล่อยเพื่อกระทืบแรง',
       'desktop': 'กดปุ่มค้างเพื่อกระทืบแรง'
+    },
+    'sprinter': {
+      'touch': 'มดนักวิ่งจะหนี — เหยียบตรงที่มันหยุด',
+      'desktop': 'มดนักวิ่งหนีรองเท้า — อยู่นิ่ง ๆ แล้วคลิก'
     },
     'beetle': {
       'touch': 'ด้วงมีเปลือก — กดค้างแล้วกระทืบ',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'พบตัวบล็อกโฆษณา',
-    'body': 'Splatix เล่นฟรีได้เพราะโฆษณา กรุณาปิดตัวบล็อกแล้วโหลดหน้าใหม่',
+    'body': 'Bug Crunch เล่นฟรีได้เพราะโฆษณา กรุณาปิดตัวบล็อกแล้วโหลดหน้าใหม่',
     'allowPrefix': 'อนุญาตโฆษณาบน',
     'allowSuffix': 'แล้วโหลดหน้าใหม่',
     'gotIt': 'เข้าใจแล้ว'

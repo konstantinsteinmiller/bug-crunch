@@ -1,4 +1,4 @@
-# preview-video — splatix's clips, generated rather than filmed
+# preview-video — bug-crunch's clips, generated rather than filmed
 
 ```bash
 pnpm preview:video                       # every format, both scenarios
@@ -68,7 +68,7 @@ drawn.
 
 ## How a clip is built
 
-1. `boot()` — seed `splatix_state`, navigate, wait out both splashes, then FREEZE
+1. `boot()` — seed `bugcrunch_state`, navigate, wait out both splashes, then FREEZE
    the simulation (`__preview.hold(true)`) and hold until every painting the
    game can ask for has decoded.
 2. `levelRun()` — **scout**: play the whole level frozen and unrendered (a
@@ -166,6 +166,6 @@ dpr 2.
   floor rather than bigger bugs. That is the game on a desktop, and it is why
   the landscape clips read as busier than the portrait ones.
 - **The vial carries between levels.** `startLevel` keeps `fever.juice` on
-  purpose (see `useSplatixGame`), so a scouting run that fills it leaves it full
+  purpose (see `useBugCrunchGame`), so a scouting run that fills it leaves it full
   for the take. Every staging call therefore follows `play()` with
   `resetVial()`.

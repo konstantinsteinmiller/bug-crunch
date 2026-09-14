@@ -2,7 +2,7 @@
  * ─── The bestiary ───────────────────────────────────────────────────────────
  *
  * Pure data. No canvas, no Vue, no DOM — `bugArt.ts` knows how to DRAW these
- * and `useSplatixGame.ts` knows how to RUN them; this file is the single place
+ * and `useBugCrunchGame.ts` knows how to RUN them; this file is the single place
  * that says what each one IS. It loads under plain Node, which is what lets the
  * art bench (`pnpm art:prompts`) and the unit tests read it directly.
  *
@@ -24,6 +24,7 @@
  * assumption the previous tier taught:
  *
  *   ant          nothing — it is the assumption
+ *   sprinter     the target watches YOU            → anticipate, bait, or wait
  *   beetle       a tap is not always enough        → slam, or a piercing shoe
  *   flea         the target does not wait          → feint, or silent tread
  *   caterpillar  stomping is not always free       → steel, or leave it
@@ -35,7 +36,7 @@
  */
 
 export type BugId =
-  | 'ant' | 'beetle' | 'flea' | 'centipede' | 'caterpillar'
+  | 'ant' | 'sprinter' | 'beetle' | 'flea' | 'centipede' | 'caterpillar'
   | 'stinkbug' | 'pinatafly' | 'moth' | 'robobug'
 
 /** How a body moves across the floor. Read by the simulation's steering step. */
@@ -85,6 +86,26 @@ export interface BugSpec {
   armor: number
   /** Senses the foot shadow and leaps clear after a short tell. */
   dodges: boolean
+  /**
+   * BOLTS. Deliberately not the same flag as `dodges`, because they are two
+   * different questions wearing the same word "evasive":
+   *
+   *   dodges  — a REFLEX test. A short tell, then a 17 u leap in a randomised
+   *             direction at the last possible instant. You beat it by being
+   *             fast (or by taking the silent shoe, or by gluing it in honey).
+   *   sprints — an ANTICIPATION test. It notices the shoe while the shoe is
+   *             still travelling toward it, flashes a long tell, then RUNS —
+   *             straight away from the foot, no randomness at all, further and
+   *             for longer than the flea leaps — and then STOPS DEAD, winded.
+   *             You beat it by not chasing: tap where it is going, or wait out
+   *             the four-tenths of a second it spends standing still, or bait
+   *             it onto a crumb pile, or let it run itself into honey.
+   *
+   * The whole point of the second one is that it is LEARNABLE by a six-year-old
+   * in one level: the run is predictable, the stop is generous, and once the
+   * player has understood it the bug is cheaper to kill than a plain ant.
+   */
+  sprints: boolean
   /** Spikes. A stomp from a shoe without `spikeProof` hurts the player. */
   spiky: boolean
   /** Bursts a haze cloud on a direct squish (blurs + slows the foot). */
@@ -125,15 +146,47 @@ export const BUGS: readonly BugSpec[] = [
     id: 'ant', name: 'ant',
     hp: 1, size: 3.2, speed: 13, motion: 'march',
     score: 10, juice: 0.060, armor: 0,
-    dodges: false, spiky: false, stinks: false, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [255, 74, 158], body: '#8c3a24', shade: '#5e2415', accent: '#ffd9a8',
     coins: 0, cost: 1, debut: 1
+  }),
+  bug({
+    // ── The sprinter ant ──
+    //
+    // The game's SECOND level, and the first time a target has an opinion about
+    // the player. Everything about it is the ant except one rule, on purpose:
+    // same march, same straight lines, same one hit point, so the only new
+    // thing a child has to learn on 1-2 is "the teal one runs".
+    //
+    // `speed` 15 against the ant's 13. Only a shade faster at rest — the
+    // sprinter is not a fast bug, it is a bug that has ONE fast move, and a
+    // sprinter that also out-walked the ant would have been two lessons.
+    //
+    // `size` 3.0 against the ant's 3.2: leaner, which is the silhouette cue
+    // that survives to 24 px, and still comfortably over the 2.5 u thumb floor.
+    //
+    // `score` 24 — between the ant (10) and the flea (30). It is worth more
+    // than an ant because it costs a decision, and less than a flea because the
+    // decision is one a player makes once and then owns forever.
+    //
+    // `juice` is priced by MASS like every other entry, not by difficulty, so
+    // it is slightly UNDER the ant's: (3.0 / 3.2)² × 0.060 ≈ 0.053. A hook that
+    // also filled the vial faster would have made the vial about hooks.
+    //
+    // `cost` 2 against the ant's 1: one sprinter takes about twice an ant's
+    // worth of the player's attention, and nothing like a beetle's (4).
+    id: 'sprinter', name: 'sprinter',
+    hp: 1, size: 3.0, speed: 15, motion: 'march',
+    score: 24, juice: 0.053, armor: 0,
+    dodges: false, sprints: true, spiky: false, stinks: false, segments: 0, airborne: false,
+    goo: [46, 232, 196], body: '#1f8f8a', shade: '#0d4f4d', accent: '#ffe27a',
+    coins: 0, cost: 2, debut: 2
   }),
   bug({
     id: 'beetle', name: 'beetle',
     hp: 3, size: 4.8, speed: 7, motion: 'crawl',
     score: 45, juice: 0.150, armor: 2,
-    dodges: false, spiky: false, stinks: false, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [66, 225, 122], body: '#2f7a45', shade: '#17442a', accent: '#b8f2c6',
     coins: 0, cost: 4, debut: 4
   }),
@@ -141,7 +194,7 @@ export const BUGS: readonly BugSpec[] = [
     id: 'flea', name: 'flea',
     hp: 1, size: 2.8, speed: 20, motion: 'hop',
     score: 30, juice: 0.070, armor: 0,
-    dodges: true, spiky: false, stinks: false, segments: 0, airborne: false,
+    dodges: true, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [120, 200, 255], body: '#4a4358', shade: '#262030', accent: '#cdb8ff',
     coins: 0, cost: 3, debut: 6
   }),
@@ -149,7 +202,7 @@ export const BUGS: readonly BugSpec[] = [
     id: 'caterpillar', name: 'caterpillar',
     hp: 1, size: 4.3, speed: 5, motion: 'crawl',
     score: 35, juice: 0.100, armor: 0,
-    dodges: false, spiky: true, stinks: false, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: true, stinks: false, segments: 0, airborne: false,
     goo: [180, 255, 90], body: '#93c33a', shade: '#5b7f18', accent: '#fff3a8',
     coins: 0, cost: 5, debut: 11
   }),
@@ -157,7 +210,7 @@ export const BUGS: readonly BugSpec[] = [
     id: 'stinkbug', name: 'stinkbug',
     hp: 1, size: 4.0, speed: 6, motion: 'wander',
     score: 40, juice: 0.090, armor: 0,
-    dodges: false, spiky: false, stinks: true, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: true, segments: 0, airborne: false,
     goo: [186, 120, 255], body: '#5b4a7a', shade: '#312545', accent: '#d9c4ff',
     coins: 0, cost: 5, debut: 14
   }),
@@ -165,7 +218,7 @@ export const BUGS: readonly BugSpec[] = [
     id: 'centipede', name: 'centipede',
     hp: 1, size: 3.3, speed: 17, motion: 'serpentine',
     score: 25, juice: 0.060, armor: 0,
-    dodges: false, spiky: false, stinks: false, segments: 6, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 6, airborne: false,
     goo: [255, 160, 60], body: '#b5622b', shade: '#6e3412', accent: '#ffd28a',
     coins: 0, cost: 6, debut: 21
   }),
@@ -173,15 +226,19 @@ export const BUGS: readonly BugSpec[] = [
     id: 'pinatafly', name: 'pinatafly',
     hp: 5, size: 3.8, speed: 26, motion: 'zigzag',
     score: 120, juice: 0.180, armor: 0,
-    dodges: false, spiky: false, stinks: false, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [255, 214, 64], body: '#f5c42b', shade: '#c58a00', accent: '#fff6d0',
-    coins: 6, cost: 4, debut: 3
+    // Held back from 3 to 5. At 3 it shared a level with nothing else new and
+    // arrived at weight 10 of 90, so most players met one piñata in the whole
+    // of world 1 and never learned it was a thing to chase. At 5 it gets a
+    // level of its own — see the world-1 block in `stages.ts`.
+    coins: 6, cost: 4, debut: 5
   }),
   bug({
     id: 'moth', name: 'moth',
     hp: 2, size: 4.6, speed: 11, motion: 'drift',
     score: 60, juice: 0.110, armor: 0,
-    dodges: false, spiky: false, stinks: false, segments: 0, airborne: true,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: true,
     goo: [214, 226, 255], body: '#9c93b5', shade: '#5d5570', accent: '#fdf6d8',
     coins: 0, cost: 5, debut: 21
   }),
@@ -189,7 +246,7 @@ export const BUGS: readonly BugSpec[] = [
     id: 'robobug', name: 'robobug',
     hp: 2, size: 4.4, speed: 15, motion: 'scurry',
     score: 80, juice: 0.130, armor: 3,
-    dodges: false, spiky: false, stinks: false, segments: 0, airborne: false,
+    dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [90, 240, 255], body: '#48566e', shade: '#232c3d', accent: '#6ef0ff',
     coins: 1, cost: 7, debut: 31
   })

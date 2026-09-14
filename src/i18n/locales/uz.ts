@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Bekor qilish',
   'close': 'Yopish',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Chumolilar',
+    'sprinter': 'Yugurchi chumolilar',
     'beetle': 'Qoʻngʻizlar',
     'flea': 'Burgalar',
     'caterpillar': 'Qurtlar',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Kiyish',
     'worn': 'Kiyilgan',
     'needStars': 'Yana {n} yulduz',
-    'needCoins': 'Yana {n} tanga'
+    'needCoins': 'Yana {n} tanga',
+    'price': 'Narxi: {n} tanga',
+    'starGate': '{n} yulduzda ochiladi',
+    'adUnlock': 'Ochish uchun video ko‘r'
+  },
+  'chest': {
+    'label': 'Xazina sandig‘i',
+    'ready': 'Sandiqni {n} tangaga och',
+    'filling': 'Xazina sandig‘i — to‘lmoqda',
+    'spent': 'Xazina sandig‘i — ertagacha bo‘sh'
+  },
+  'reveal': {
+    'world': 'Bosadigan yangi joy!',
+    'shoe': 'Yangi poyabzal!',
+    'stars': 'Yulduz marrasi!',
+    'record': 'Yangi rekord!',
+    'chest': 'Xazina!',
+    'foe': 'Yangi hasharot!',
+    'starsTotal': '{n} yulduz',
+    'recordScore': '{n} ochko',
+    'recordBeat': 'Eski rekord: {n}',
+    'chestCoins': '+{n} tanga'
   },
   'fever': {
     'filling': 'Splat isitmasi: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Bosib turing va qoʻyib yuboring — kuchli zarba',
       'desktop': 'Tugmani bosib turing — kuchli zarba'
+    },
+    'sprinter': {
+      'touch': 'Yugurchilar qochadi — to‘xtagan joyiga bos',
+      'desktop': 'Yugurchilar poyabzaldan qochadi — qimirlama, keyin bos'
     },
     'beetle': {
       'touch': 'Qoʻngʻizlarda qobiq bor — bosib turib uring',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Reklama bloklagich aniqlandi',
-    'body': 'Splatix reklama tufayli bepul. Bloklagichni oʻchirib, sahifani qayta yuklang.',
+    'body': 'Bug Crunch reklama tufayli bepul. Bloklagichni oʻchirib, sahifani qayta yuklang.',
     'allowPrefix': 'Quyidagida reklamaga ruxsat bering:',
     'allowSuffix': 'va sahifani qayta yuklang.',
     'gotIt': 'Tushunarli'

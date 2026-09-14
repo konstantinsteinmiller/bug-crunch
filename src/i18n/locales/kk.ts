@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Бас тарту',
   'close': 'Жабу',
   'ok': 'Жарайды',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Құмырсқалар',
+    'sprinter': 'Жүгіруші құмырсқалар',
     'beetle': 'Қоңыздар',
     'flea': 'Бүргелер',
     'caterpillar': 'Жұлдызқұрттар',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Кию',
     'worn': 'Киілген',
     'needStars': 'Тағы {n} жұлдыз',
-    'needCoins': 'Тағы {n} монета'
+    'needCoins': 'Тағы {n} монета',
+    'price': 'Бағасы: {n} тиын',
+    'starGate': '{n} жұлдызда ашылады',
+    'adUnlock': 'Ашу үшін бейне көр'
+  },
+  'chest': {
+    'label': 'Қазына сандығы',
+    'ready': 'Сандықты {n} тиынға аш',
+    'filling': 'Қазына сандығы — толып жатыр',
+    'spent': 'Қазына сандығы — ертеңге дейін бос'
+  },
+  'reveal': {
+    'world': 'Таптайтын жаңа орын!',
+    'shoe': 'Жаңа аяқ киім!',
+    'stars': 'Жұлдыз белесі!',
+    'record': 'Жаңа рекорд!',
+    'chest': 'Қазына!',
+    'foe': 'Жаңа жәндік!',
+    'starsTotal': '{n} жұлдыз',
+    'recordScore': '{n} ұпай',
+    'recordBeat': 'Ескі рекорд: {n}',
+    'chestCoins': '+{n} тиын'
   },
   'fever': {
     'filling': 'Splat қызуы: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Басып тұрып жіберсеңіз күшті соққы',
       'desktop': 'Түймені басып тұрсаңыз күшті соққы'
+    },
+    'sprinter': {
+      'touch': 'Жүгірушілер қашады — тоқтаған жерін тапта',
+      'desktop': 'Жүгірушілер аяқ киімнен қашады — қозғалма, сосын бас'
     },
     'beetle': {
       'touch': 'Қоңыздың қабығы бар — басып тұрып соғыңыз',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Жарнама бөгегіші табылды',
-    'body': 'Splatix жарнаманың арқасында тегін. Бөгегішті өшіріп, бетті қайта жүктеңіз.',
+    'body': 'Bug Crunch жарнаманың арқасында тегін. Бөгегішті өшіріп, бетті қайта жүктеңіз.',
     'allowPrefix': 'Мына жерде жарнамаға рұқсат беріңіз:',
     'allowSuffix': 'содан соң бетті қайта жүктеңіз.',
     'gotIt': 'Түсінікті'

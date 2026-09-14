@@ -29,13 +29,13 @@
 //      per session so it isn't spammy.
 //
 //   3. **PORTAL_KEYS allowlist.** Only mirror the consolidated state
-//      blob (`splatix_state`), NOT internal-scratch keys or debug-only
+//      blob (`bugcrunch_state`), NOT internal-scratch keys or debug-only
 //      flags. The latter should stay local-only by design — they
 //      shouldn't roam across devices.
 
 import type { HydrateState, LocalStorageAccessor, SaveStrategy } from './types'
 import { isInternalKey } from './types'
-import { STATE_KEY } from '@/use/useSplatixState'
+import { STATE_KEY } from '@/use/useBugCrunchState'
 import { META_KEY } from './SaveMergePolicy'
 import { isDebug } from '@/use/useMatch'
 

@@ -138,6 +138,138 @@ describe('levelSpec', () => {
   })
 })
 
+/**
+ * ─── The opening ────────────────────────────────────────────────────────────
+ *
+ * These pin the pacing rewrite, and they exist because the failure they guard
+ * against is invisible from inside the data: every level had a roster and a
+ * hazard list and looked fine, and the first three of them were the same level
+ * three times. What was missing was not a number, it was a DIFFERENCE.
+ */
+describe('the opening teaches one thing at a time', () => {
+  /** Everything a level can put in front of the player that has to be learned. */
+  const taught = (level: number): string[] => {
+    const s = levelSpec(level)
+    return [
+      ...s.roster.map((r) => `bug:${r.id}`),
+      ...s.hazards.map((h) => `hazard:${h}`)
+    ]
+  }
+
+  it('adds exactly one new creature or floor object on every level to 1-6', () => {
+    const seen = new Set<string>()
+    const added: number[] = []
+    for (let level = 1; level <= 6; level++) {
+      const now = taught(level)
+      added.push(now.filter((k) => !seen.has(k)).length)
+      for (const k of now) seen.add(k)
+    }
+    // 1-1 IS the ant; 1-2 through 1-6 each bring one more thing and no more.
+    expect(added).toEqual([1, 1, 1, 1, 1, 1])
+  })
+
+  it('never takes anything away once it has been taught', () => {
+    const seen = new Set<string>()
+    for (let level = 1; level <= 9; level++) {
+      const now = new Set(taught(level))
+      for (const k of seen) expect(now.has(k)).toBe(true)
+      for (const k of now) seen.add(k)
+    }
+  })
+
+  // A problem and its answer are two levels apart, never one: an answer handed
+  // over on the same level as the problem is a hint, not a lesson.
+  it('keeps a problem one level ahead of its answer', () => {
+    // The sprinter arrives on a bare floor; the crumb pile that baits it is next.
+    expect(levelSpec(2).roster.map((r) => r.id)).toContain('sprinter')
+    expect(levelSpec(2).hazards).toHaveLength(0)
+    expect(levelSpec(3).hazards).toContain('crumbs')
+    // The flea arrives without honey; honey is the level after.
+    expect(levelSpec(6).roster.map((r) => r.id)).toContain('flea')
+    expect(levelSpec(6).hazards).not.toContain('honey')
+    expect(levelSpec(7).hazards).toContain('honey')
+  })
+
+  it('never debuts a creature and a floor object on the same level', () => {
+    let hazards = new Set(levelSpec(1).hazards.map(String))
+    let kinds = new Set(levelSpec(1).roster.map((r) => String(r.id)))
+    for (let level = 2; level <= 9; level++) {
+      const s = levelSpec(level)
+      const newKinds = s.roster.filter((r) => !kinds.has(String(r.id))).length
+      const newHazards = s.hazards.filter((h) => !hazards.has(String(h))).length
+      expect(newKinds === 0 || newHazards === 0).toBe(true)
+      kinds = new Set(s.roster.map((r) => String(r.id)))
+      hazards = new Set(s.hazards.map(String))
+    }
+  })
+
+  it('points a debut level\'s stars at the thing it is teaching', () => {
+    const asks = (level: number): string[] =>
+      levelSpec(level).objectives.map((o) => (o.kind === 'kind' ? o.id : o.kind))
+    expect(asks(2)).toContain('sprinter')
+    expect(asks(4)).toContain('beetle')
+    expect(asks(5)).toContain('pinatafly')
+    expect(asks(6)).toContain('flea')
+  })
+
+  /** That bug's share of one roll of `roster`. */
+  const share = (roster: readonly { id: string; weight: number }[], id: string): number => {
+    const total = roster.reduce((n, r) => n + r.weight, 0)
+    return total > 0 ? (roster.find((r) => r.id === id)?.weight ?? 0) / total : 0
+  }
+
+  /**
+   * A "squish N of them" star has to be payable by the board it is printed on.
+   *
+   * The measure is the expected number of that kind among the kills the quota
+   * asks for. It is deliberately CONSERVATIVE — far more bodies arrive over a
+   * level than the quota's worth get killed, and a player chasing a star hunts
+   * its target rather than killing uniformly — so clearing it by a hair is
+   * comfortable in practice and failing it is not survivable at all.
+   */
+  it('rolls enough of a debutant for its own star to be payable', () => {
+    for (const level of [2, 4, 5, 6]) {
+      const s = levelSpec(level)
+      const ask = s.objectives.find((o) => o.kind === 'kind')
+      expect(ask).toBeDefined()
+      if (!ask || ask.kind !== 'kind') continue
+      expect(s.quota * share(s.roster, ask.id)).toBeGreaterThanOrEqual(ask.n)
+    }
+  })
+
+  /**
+   * …and a debut level is never a WORSE place to meet the debutant than an
+   * ordinary level of the same world.
+   *
+   * The counterpart rule to the one above, and the one that stops the fix for
+   * it being "weight the new thing up until the star passes". 1-4 and 1-6 pin
+   * no roster at all for exactly that reason: an armoured debutant weighted up
+   * on a level a weak player cannot slam through does not die, does not free
+   * its slot in `maxAlive`, and turns the board into a floor of beetles — the
+   * scout measured 2 kills of an 18 quota against 12 at the world's own weight.
+   */
+  it('never makes a debut level a rarer place to meet its debutant', () => {
+    for (const [level, id] of [[2, 'sprinter'], [4, 'beetle'], [5, 'pinatafly'], [6, 'flea']] as const) {
+      expect(share(levelSpec(level).roster, id)).toBeGreaterThanOrEqual(share(WORLDS[1].roster, id))
+    }
+  })
+
+  // The rule the whole funnel rests on, restated where the pacing can break it.
+  it('still opens on a level nothing can punish a wrong tap on', () => {
+    const one = levelSpec(1)
+    expect(one.roster).toHaveLength(1)
+    expect(one.hazards).toHaveLength(0)
+    for (const r of one.roster) {
+      const spec = bugSpec(r.id)
+      expect(spec.spiky).toBe(false)
+      expect(spec.armor).toBe(0)
+      expect(spec.dodges).toBe(false)
+      expect(spec.sprints).toBe(false)
+      expect(spec.hp).toBe(1)
+    }
+  })
+})
+
 describe('world gating', () => {
   it('opens world 1 to everybody', () => {
     expect(WORLDS[1].starGate).toBe(0)

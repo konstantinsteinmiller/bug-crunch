@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Hủy',
   'close': 'Đóng',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Kiến',
+    'sprinter': 'Kiến chạy nhanh',
     'beetle': 'Bọ cánh cứng',
     'flea': 'Bọ chét',
     'caterpillar': 'Sâu bướm',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Mang',
     'worn': 'Đang mang',
     'needStars': 'Còn thiếu {n} sao',
-    'needCoins': 'Còn thiếu {n} xu'
+    'needCoins': 'Còn thiếu {n} xu',
+    'price': 'Giá: {n} xu',
+    'starGate': 'Mở ở {n} sao',
+    'adUnlock': 'Xem video để mở khoá'
+  },
+  'chest': {
+    'label': 'Rương kho báu',
+    'ready': 'Mở rương lấy {n} xu',
+    'filling': 'Rương kho báu — đang đầy dần',
+    'spent': 'Rương kho báu — trống đến mai'
+  },
+  'reveal': {
+    'world': 'Nơi mới để giẫm!',
+    'shoe': 'Giày mới!',
+    'stars': 'Mốc sao!',
+    'record': 'Kỷ lục mới!',
+    'chest': 'Kho báu!',
+    'foe': 'Một con bọ mới!',
+    'starsTotal': '{n} sao',
+    'recordScore': '{n} điểm',
+    'recordBeat': 'Kỷ lục cũ: {n}',
+    'chestCoins': '+{n} xu'
   },
   'fever': {
     'filling': 'Cuồng Splat: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Giữ rồi thả để nện mạnh',
       'desktop': 'Giữ nút để nện mạnh'
+    },
+    'sprinter': {
+      'touch': 'Kiến chạy nhanh bỏ chạy — giẫm chỗ chúng dừng',
+      'desktop': 'Kiến chạy nhanh né giày — đứng yên rồi bấm'
     },
     'beetle': {
       'touch': 'Bọ cánh cứng có vỏ — giữ rồi nện',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Phát hiện trình chặn quảng cáo',
-    'body': 'Splatix miễn phí nhờ quảng cáo. Hãy tắt trình chặn rồi tải lại trang.',
+    'body': 'Bug Crunch miễn phí nhờ quảng cáo. Hãy tắt trình chặn rồi tải lại trang.',
     'allowPrefix': 'Cho phép quảng cáo trên',
     'allowSuffix': 'rồi tải lại trang.',
     'gotIt': 'Đã hiểu'

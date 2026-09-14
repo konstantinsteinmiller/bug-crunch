@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Скасувати',
   'close': 'Закрити',
   'ok': 'Ок',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Мурахи',
+    'sprinter': 'Мурахи-бігуни',
     'beetle': 'Жуки',
     'flea': 'Блохи',
     'caterpillar': 'Гусениці',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Взути',
     'worn': 'Взуто',
     'needStars': 'Ще {n} зірок',
-    'needCoins': 'Ще {n} монет'
+    'needCoins': 'Ще {n} монет',
+    'price': 'Ціна: {n} монет',
+    'starGate': 'Відкриється за {n} зірок',
+    'adUnlock': 'Переглянь відео, щоб відкрити'
+  },
+  'chest': {
+    'label': 'Скриня зі скарбами',
+    'ready': 'Відкрити скриню за {n} монет',
+    'filling': 'Скриня — наповнюється',
+    'spent': 'Скриня — порожня до завтра'
+  },
+  'reveal': {
+    'world': 'Нове місце для тупотіння!',
+    'shoe': 'Нове взуття!',
+    'stars': 'Зірковий рубіж!',
+    'record': 'Новий рекорд!',
+    'chest': 'Скарб!',
+    'foe': 'Нова комаха!',
+    'starsTotal': '{n} зірок',
+    'recordScore': '{n} очок',
+    'recordBeat': 'Старий рекорд: {n}',
+    'chestCoins': '+{n} монет'
   },
   'fever': {
     'filling': 'Splat-гарячка: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Утримуй і відпусти — потужний удар',
       'desktop': 'Утримуй кнопку — потужний удар'
+    },
+    'sprinter': {
+      'touch': 'Бігуни тікають — тупай там, де вони спиняться',
+      'desktop': 'Бігуни тікають від черевика — завмри, потім клікни'
     },
     'beetle': {
       'touch': 'У жуків панцир — утримуй і бий',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Виявлено блокувальник реклами',
-    'body': 'Splatix безкоштовний завдяки рекламі. Вимкни блокувальник і перезавантаж сторінку.',
+    'body': 'Bug Crunch безкоштовний завдяки рекламі. Вимкни блокувальник і перезавантаж сторінку.',
     'allowPrefix': 'Дозволь рекламу на',
     'allowSuffix': 'і перезавантаж сторінку.',
     'gotIt': 'Зрозуміло'

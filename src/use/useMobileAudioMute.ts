@@ -26,7 +26,7 @@
 import { ref, watch } from 'vue'
 import { mobileCheck } from '@/utils/function'
 import { suspendAllAudio, resumeAllAudio, killOneShotSfx } from '@/use/useAssets'
-import { getState, setState } from '@/use/useSplatixState'
+import { getState, setState } from '@/use/useBugCrunchState'
 import { saveDataVersion } from '@/use/useSaveStatus'
 import { MOBILE_MUTE_KEY } from '@/keys'
 

@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Batal',
   'close': 'Tutup',
   'ok': 'Oke',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Semut',
+    'sprinter': 'Semut Pelari',
     'beetle': 'Kumbang',
     'flea': 'Kutu loncat',
     'caterpillar': 'Ulat',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Pakai',
     'worn': 'Dipakai',
     'needStars': 'Kurang {n} bintang',
-    'needCoins': 'Kurang {n} koin'
+    'needCoins': 'Kurang {n} koin',
+    'price': 'Harga: {n} koin',
+    'starGate': 'Terbuka di {n} bintang',
+    'adUnlock': 'Tonton video untuk membuka'
+  },
+  'chest': {
+    'label': 'Peti harta',
+    'ready': 'Buka peti seharga {n} koin',
+    'filling': 'Peti harta — sedang terisi',
+    'spent': 'Peti harta — kosong sampai besok'
+  },
+  'reveal': {
+    'world': 'Tempat baru untuk diinjak!',
+    'shoe': 'Sepatu baru!',
+    'stars': 'Tonggak bintang!',
+    'record': 'Rekor baru!',
+    'chest': 'Harta!',
+    'foe': 'Serangga baru!',
+    'starsTotal': '{n} bintang',
+    'recordScore': '{n} poin',
+    'recordBeat': 'Rekor lama: {n}',
+    'chestCoins': '+{n} koin'
   },
   'fever': {
     'filling': 'Demam Splat: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Tahan lalu lepas untuk hantaman keras',
       'desktop': 'Tahan tombol untuk hantaman keras'
+    },
+    'sprinter': {
+      'touch': 'Si pelari kabur — injak di tempat ia berhenti',
+      'desktop': 'Si pelari kabur dari sepatu — diam dulu, lalu klik'
     },
     'beetle': {
       'touch': 'Kumbang bercangkang — tahan lalu hantam',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Pemblokir iklan terdeteksi',
-    'body': 'Splatix gratis berkat iklan. Matikan pemblokirmu lalu muat ulang.',
+    'body': 'Bug Crunch gratis berkat iklan. Matikan pemblokirmu lalu muat ulang.',
     'allowPrefix': 'Izinkan iklan di',
     'allowSuffix': 'lalu muat ulang halaman.',
     'gotIt': 'Oke'

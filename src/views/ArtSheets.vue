@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import {
-  WALKS, STILLS, framesOf, colsOf, rowsOf, promptDocs,
-  type WalkSpec, type StillSpec
+  WALKS, STILLS, GRIDS, framesOf, colsOf, rowsOf, promptDocs,
+  type WalkSpec, type StillSpec, type GridSpec
 } from '@/game/artSheet'
 import { paintBug, paintBoss, BUG_R_FRAC } from '@/game/bugArt'
 import { paintShoe } from '@/game/footArt'
@@ -16,11 +16,13 @@ import type { BossId } from '@/game/bosses'
 import { hazardSpec, type HazardId } from '@/game/hazards'
 import type { WorldId } from '@/game/stages'
 import { SHOE_BOX } from '@/game/artBoxes'
+import { ICON_PATHS } from '@/components/icons/iconPaths'
+import { isGameIconName } from '@/components/icons/iconNames'
 
 /**
  * `/art-sheets` — the reference bench.
  *
- * Splatix has no art folder. Every bug, shoe, prop and effect is a few hundred
+ * Bug Crunch has no art folder. Every bug, shoe, prop and effect is a few hundred
  * canvas operations, which is exactly what you want in a bundle and exactly what
  * you cannot hand to somebody who paints. This screen bakes the whole cast onto
  * the sheets described in `artSheet.ts` and writes them into `art-sheets/`
@@ -284,9 +286,36 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
         ctx.lineJoin = 'round'
         ctx.lineWidth = s.h * 0.06
         ctx.strokeStyle = '#2b1b2e'
-        ctx.strokeText('SPLATIX', 0, 0)
+        ctx.strokeText('BUG CRUNCH', 0, 0)
         ctx.fillStyle = '#ffd93c'
-        ctx.fillText('SPLATIX', 0, 0)
+        ctx.fillText('BUG CRUNCH', 0, 0)
+      } else if (s.id === 'mascot') {
+        // The splash's greeter is the game's own ant, through the game's own
+        // painter — the reference has to be the creature the player meets on
+        // level 1-1, or the loading screen introduces somebody else.
+        ctx.translate(cx, cy)
+        paintBug(ctx, 'ant', half * 0.68, 0)
+      } else if (s.id.startsWith('icon-')) {
+        // A button glyph, filled from the SAME `Path2D` list `GameIcon` renders
+        // as SVG — so the reference is provably the silhouette on the button,
+        // down to which sub-paths punch holes. Filled white on the transparent
+        // canvas, exactly as `paintUiIcon` does for the six HUD marks; the
+        // magenta ground is laid under it afterwards.
+        const name = s.id.slice('icon-'.length)
+        const subPaths = isGameIconName(name) ? ICON_PATHS[name] : null
+        if (subPaths?.length) {
+          const box = half * 1.5
+          ctx.translate(cx - box / 2, cy - box / 2)
+          ctx.scale(box / 24, box / 24)
+          // One `Path2D` filled once, never one fill per sub-path: the glyphs are
+          // authored under the nonzero winding rule, so a counter-wound sub-path
+          // is a HOLE (the lock's keyhole, the counter of `info`) and filling
+          // them separately paints every one of those holes solid.
+          const path = new Path2D()
+          for (const d of subPaths) path.addPath(new Path2D(d))
+          ctx.fillStyle = '#ffffff'
+          ctx.fill(path, 'nonzero')
+        }
       } else {
         ctx.translate(cx, cy)
         paintUiIcon(ctx, s.id as UiIconId, half * 1.5, { procedural: true })
@@ -351,6 +380,35 @@ const renderStill = (s: StillSpec): HTMLCanvasElement => {
     g.drawImage(panel, (i % cols) * s.w, Math.floor(i / cols) * s.h)
   }
   return onGround(grid, s.bg)
+}
+
+/**
+ * One contact sheet: N different stills, each in a cell of its own.
+ *
+ * The lattice is laid out exactly as a walk's is — cells are an integer multiple
+ * of the cell box from the origin, no gutters — because that is what lets the
+ * slicer cut the return with integer arithmetic.
+ *
+ * No fit is measured and none is wanted. A fit is a single box describing where
+ * THE subject sits in a panel, and there is no "the subject" here: a cell holding
+ * a flat `minus` bar and a cell holding a chest fill their cells to completely
+ * different fractions, and one number folded into the prompt for both would be
+ * wrong for at least one of them. Every member already carries `fit: false`.
+ */
+const renderGrid = (g: GridSpec): HTMLCanvasElement => {
+  const grid = document.createElement('canvas')
+  grid.width = g.cell * g.cols
+  grid.height = g.cell * g.rows
+  const ctx = grid.getContext('2d')!
+  g.members.forEach((m, i) => {
+    const panel = renderStillAlpha(m, 0)
+    // Members are square by construction, but they are not all authored at the
+    // same square: a HUD mark is drawn at 512 and a button glyph at 256. Scaled
+    // to the common cell rather than blitted, so the two registers arrive the
+    // same size on the sheet — which is the whole point of putting them on one.
+    ctx.drawImage(panel, (i % g.cols) * g.cell, Math.floor(i / g.cols) * g.cell, g.cell, g.cell)
+  })
+  return onGround(grid, 'magenta')
 }
 
 /**
@@ -451,6 +509,37 @@ const buildIndex = () => ({
       maxEdge: s.maxEdge,
       target: s.target,
       ...(s.extra ? { extra: s.extra } : {})
+    })),
+    // A contact sheet is the one entry with no `target` of its own: it writes a
+    // FILE PER CELL, so the targets are on the cells and the slicer takes them
+    // from there rather than synthesising one per panel off the sheet's.
+    // `frames` still counts the cells — that is what the cut divides by — but
+    // no cell carries a `frame`, which is what keeps them out of the strip
+    // composer and sends each one straight to a file of its own.
+    ...GRIDS.map((g) => ({
+      id: g.id,
+      file: `${g.file}.png`,
+      width: g.cell * g.cols,
+      height: g.cell * g.rows,
+      cols: g.cols,
+      rows: g.rows,
+      frames: g.members.length,
+      kind: g.kind,
+      panel: { w: g.cell, h: g.cell },
+      anchor: 'centre' as const,
+      tight: true,
+      bg: 'magenta' as const,
+      maxEdge: g.maxEdge,
+      cells: g.members.map((m, i) => ({
+        id: m.id,
+        label: m.name,
+        variant: `cell ${i + 1}/${g.members.length}`,
+        x: (i % g.cols) * g.cell,
+        y: Math.floor(i / g.cols) * g.cell,
+        w: g.cell,
+        h: g.cell,
+        target: m.target
+      }))
     }))
   ]
 })
@@ -484,6 +573,13 @@ const preview = async (): Promise<void> => {
     id: 'stills', title: 'Every still', url: key.toDataURL('image/png'),
     dims: `${STILLS.length} stills`
   })
+  for (const g of GRIDS) {
+    const cv = renderGrid(g)
+    out.push({
+      id: g.file, title: `${g.name} — contact sheet`, url: cv.toDataURL('image/png'),
+      dims: `${cv.width}x${cv.height} · ${g.cols}x${g.rows} · ${g.members.length} icons`
+    })
+  }
   previews.value = out
 }
 
@@ -522,9 +618,24 @@ const exportSheets = async (): Promise<void> => {
     }
     await put('key-stills.png', { dataUrl: renderKey(stillKeys, 192, 8).toDataURL('image/png') })
 
+    // After the stills, and deliberately: a grid is built out of the same
+    // `renderStillAlpha` its members are, so if a member's painter is broken the
+    // single sheet shows it first and the grid is not the thing being debugged.
+    for (const g of GRIDS) {
+      status.value = `rendering ${g.file}`
+      await tick()
+      await put(`${g.file}.png`, { dataUrl: renderGrid(g).toDataURL('image/png') })
+    }
+
     // The text is the manifest's (`promptDocs`), so this route and
     // `pnpm art:prompts` write byte-identical documents.
-    const docs = promptDocs()
+    //
+    // The measured fits go WITH it. `art:prompts` reads them back out of
+    // `sheet-index.json` and folds a SIZE IN FRAME sentence into every block;
+    // handing this route none would make the two routes disagree on exactly the
+    // sheets that have just been re-measured — and the one thing this export is
+    // for is that they cannot.
+    const docs = promptDocs(Object.fromEntries(fits))
     for (const [name, text] of Object.entries(docs)) await put(name, { text })
 
     await put('sheet-index.json', { text: JSON.stringify(buildIndex(), null, 2) + '\n' })
@@ -551,7 +662,7 @@ const uiIds: UiIconId[] = UI_ICON_IDS
         |  painting is registered against. Export writes into #[code art-sheets/].
       p.lede
         | #[strong {{ WALKS.length }}] walk sheets · #[strong {{ STILLS.length }}] stills ·
-        |  #[strong {{ uiIds.length }}] HUD marks
+        |  #[strong {{ uiIds.length }}] HUD marks · #[strong {{ GRIDS.length }}] contact sheets
       .bar
         button(:disabled="busy" @click="exportSheets") {{ busy ? 'Exporting…' : 'Export all sheets' }}
         button.ghost(:disabled="busy" @click="preview") Re-render preview

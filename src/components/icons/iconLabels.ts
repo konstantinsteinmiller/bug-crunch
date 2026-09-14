@@ -28,6 +28,10 @@ export const ICON_LABEL_KEYS: Partial<Record<GameIconName, string>> = {
   home: 'ui.home',
   back: 'ui.back',
   info: 'ui.info',
+  // The film strip is only ever the offer to WATCH one, so it is named by the
+  // thing that offer buys. `te()` guards the lookup, so the key's absence in a
+  // locale degrades to the glyph name rather than reading a raw path aloud.
+  movie: 'locker.adUnlock',
   // Named by the screens they open.
   settings: 'options.title',
   shop: 'upgrades.title',

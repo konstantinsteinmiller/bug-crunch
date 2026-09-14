@@ -10,7 +10,7 @@ import type { SplatWord } from '@/game/combo'
 /**
  * ─── The comic layer ────────────────────────────────────────────────────────
  *
- * Splatix is a game about hitting things, and the single loudest piece of
+ * Bug Crunch is a game about hitting things, and the single loudest piece of
  * feedback it has is the WORD that pops out of an impact: SQUISH!, CRUNCH!,
  * SPLAT!, ULTRA SPLAT! The reference sheets are built around them. They are
  * drawn here, on the canvas, in the game's own display face, because a DOM

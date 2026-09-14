@@ -278,7 +278,18 @@ const TARGETS = (index.walks ?? []).map((a) => ({
   width: a.width, height: a.height,
   frames: a.frames, cols: a.cols, rows: a.rows,
   target: a.target,
-  cells: Array.from({ length: a.frames }, (_, i) => ({
+  // A contact sheet, told apart by the index having written its own cells.
+  contact: Array.isArray(a.cells),
+  // A CONTACT SHEET carries its own cells, each with a target of its own: N
+  // different objects that become N files, rather than N panels of one animation
+  // that become one strip. It is told apart by nothing more than the index
+  // having written `cells` — and by those cells having no `frame`, which is what
+  // routes each one straight to a file instead of into the strip composer.
+  //
+  // Taken verbatim. Re-deriving the rects here from `panel` would work today and
+  // would be a trap the first time a sheet wants an uneven lattice; the bench
+  // measured them, and the bench is the thing that drew them.
+  cells: a.cells ?? Array.from({ length: a.frames }, (_, i) => ({
     id: `${a.id}#${i}`,
     label: a.id,
     variant: `frame ${i + 1}/${a.frames}`,
@@ -900,7 +911,7 @@ try {
           + ` ${wantCols}x${wantRows}. Check the result before shipping it.`)
       } else if (got.cols === wantCols && got.rows === wantRows) {
         console.log(`  · grid reads ${got.cols}x${got.rows}, as asked`)
-      } else if (FRAMES_OVERRIDE && FRAMES_OVERRIDE === got.cols * got.rows) {
+      } else if (!sheet.contact && FRAMES_OVERRIDE && FRAMES_OVERRIDE === got.cols * got.rows) {
         console.warn(`  ! grid reads ${got.cols}x${got.rows} = ${got.cols * got.rows} panels,`
           + ` not ${wantCols}x${wantRows} — taking it as a ${FRAMES_OVERRIDE}-frame cycle.`)
         sheet = { ...sheet, cols: got.cols, rows: got.rows, frames: got.cols * got.rows }
@@ -908,7 +919,7 @@ try {
         console.warn('  ! the whole sheet reads as ONE panel. Either the creatures'
           + ' touch each other or the background is not one flat colour.')
         console.warn(`    Cutting the nominal ${wantCols}x${wantRows} anyway.`)
-      } else if (TAKE_ROWS && got.cols === wantCols && got.rows > wantRows && got.rows >= TAKE_ROWS) {
+      } else if (!sheet.contact && TAKE_ROWS && got.cols === wantCols && got.rows > wantRows && got.rows >= TAKE_ROWS) {
         // The columns are right and there are too many rows: the model filled
         // the air above a low creature with more of the same. The top rows are
         // the cycle it was asked for; the rest are cut off and never written.
@@ -947,20 +958,35 @@ try {
 
       // Rebuild the cells on whatever grid we settled on. The index's rects
       // describe the sheet that went OUT; this describes the one that came in.
+      //
+      // A CONTACT SHEET keeps its own cells and only has their RECTS re-derived.
+      // Everything else about them is the contract: each carries the file it
+      // becomes and the position it must be read from, and the sheet itself has
+      // no target to hand down — synthesising one per panel the way a walk does
+      // gives every cell `undefined`, which is a sheet that slices to nothing.
+      // The count cannot change either, which is why the two re-gridding
+      // branches above refuse it: there is no honest way to map nine named files
+      // onto a different number of cells.
       const pw = sheet.width / sheet.cols
       const ph = sheet.height / sheet.rows
+      const rect = (i) => ({
+        x: (i % sheet.cols) * pw,
+        y: Math.floor(i / sheet.cols) * ph,
+        w: pw,
+        h: ph
+      })
       sheet = {
         ...sheet,
-        cells: Array.from({ length: sheet.frames }, (_, i) => ({
-          id: `${sheet.id}#${i}`,
-          label: sheet.id,
-          variant: `frame ${i + 1}/${sheet.frames}`,
-          x: (i % sheet.cols) * pw,
-          y: Math.floor(i / sheet.cols) * ph,
-          w: pw, h: ph,
-          target: sheet.target,
-          frame: i
-        }))
+        cells: sheet.contact
+          ? sheet.cells.map((c, i) => ({ ...c, ...rect(i) }))
+          : Array.from({ length: sheet.frames }, (_, i) => ({
+            id: `${sheet.id}#${i}`,
+            label: sheet.id,
+            variant: `frame ${i + 1}/${sheet.frames}`,
+            ...rect(i),
+            target: sheet.target,
+            frame: i
+          }))
       }
     }
 
@@ -1021,16 +1047,30 @@ try {
       // no-op for every strip in the game: a pass meant to shrink the payload
       // took 128 px off each block and left the seventeen monster strips —
       // by far the heaviest thing shipped — at full size.
+      // A CONTACT-SHEET cell is capped the same way a walk frame is, and it has
+      // to be: `out` below is the size the cell came back at, which for a grid
+      // is the sheet's resolution divided by the lattice. A 3x3 icon sheet
+      // returned at 1024 hands each cell 341 px for a manifest that asks for
+      // 128 — seven times the pixels of a glyph that is never drawn above 24 CSS
+      // px, fifty-seven times over. Never upsampled either: `edgeCap` is a cap,
+      // not a size, so a sheet that came back small stays small.
+      // `contact` is tested BEFORE `walk`, and the order is load-bearing: every
+      // entry in the index is modelled here as a walk (the real kind is on
+      // `artKind`), so a walk-first test would shadow this branch completely.
       outW: sheet.kind === 'scenery'
         ? c.w
-        : sheet.kind === 'walk'
-          ? Math.round(walkEdge(sheet, c, sy) * (c.w / c.h))
-          : undefined,
+        : sheet.contact
+          ? Math.min(edgeCap(sheet), Math.round(c.w * sx))
+          : sheet.kind === 'walk'
+            ? Math.round(walkEdge(sheet, c, sy) * (c.w / c.h))
+            : undefined,
       outH: sheet.kind === 'scenery'
         ? c.h
-        : sheet.kind === 'walk'
-          ? walkEdge(sheet, c, sy)
-          : undefined,
+        : sheet.contact
+          ? Math.min(edgeCap(sheet), Math.round(c.h * sy))
+          : sheet.kind === 'walk'
+            ? walkEdge(sheet, c, sy)
+            : undefined,
       out: SIZE_FORCED ? SIZE : (sheet.kind === 'cell'
         ? Math.min(512, Math.round(Math.max(c.w * sx, c.h * sy)))
         : Math.round(c.w * sx))

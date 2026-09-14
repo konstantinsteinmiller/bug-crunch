@@ -4,8 +4,9 @@ import { useI18n } from 'vue-i18n'
 import FModal from '@/components/molecules/FModal.vue'
 import { bestScore } from '@/use/useSplatProgress'
 import { playerDisplayName } from '@/use/usePlayerIdentity'
+import { formatCount } from '@/utils/localeNumber'
 import {
-  OUTSIDE_BOARD, boardSize, ensureBoard, leaderboard, leaderboardFailed,
+  ensureBoard, leaderboard, leaderboardFailed,
   leaderboardPending, playerTotal, rankFor
 } from '@/use/useLeaderboard'
 
@@ -13,8 +14,8 @@ import {
  * ─── The global board ───────────────────────────────────────────────────────
  *
  * The top 100 by BEST SINGLE-LEVEL SCORE, with the deepest level as the second
- * column — two players on 120 000 points are not the same player, and how far
- * into the campaign they got is the thing they compare.
+ * column — two players on the same points total are not the same player, and
+ * how far into the campaign they got is the thing they compare.
  *
  * Four states, and three of them are not the happy one: still loading, nothing
  * to show, and the endpoint is unreachable. All three have to say something
@@ -27,7 +28,21 @@ import {
  */
 
 const model = defineModel<boolean>({ required: true })
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+/**
+ * Group a number for the player's language.
+ *
+ * Read `locale.value` INSIDE the call, not once at setup: this modal is mounted
+ * for the whole session, so a formatter captured at first paint would keep
+ * English commas on a board the player has since switched to German.
+ *
+ * It earns its place from four digits up, which three of these four columns
+ * reach: the board is 2 531 players, ranks run to #2,531, and the top scores are
+ * five digits (13,625). See `src/utils/localeNumber.ts`, which also explains why
+ * the digits stay Latin.
+ */
+const fmt = (n: number): string => formatCount(n, locale.value)
 
 const entries = computed(() => leaderboard.value?.entries ?? [])
 
@@ -57,11 +72,17 @@ const onBoard = computed(() => entries.value.some((e) => isYou(e.name)))
 /** The player's own rank, for the footer. `0` means "nothing to say yet". */
 const ownRank = computed(() => rankFor(bestScore.value))
 
-/** Below the cut the exact rank is unknowable — the server only publishes its
- *  top slice — so the honest label is "past the last row we can see". */
-const ownRankLabel = computed(() =>
-  ownRank.value === OUTSIDE_BOARD ? `${boardSize.value}+` : String(ownRank.value)
-)
+/** The player's placing, grouped for their language.
+ *
+ *  There is no "past the last row we can see" branch any more. `rankFor` never
+ *  returns a sentinel — below the published cut it estimates and pins the
+ *  answer — so this renders a number or the footer does not render at all. */
+const ownRankLabel = computed(() => fmt(ownRank.value))
+
+/** The bare placing, for the rare board that gave a rank but no population —
+ *  a `/score` reply landing before any `/top` has. Built in `<script>` because
+ *  pug reads a leading `#` in a template as an id shorthand. */
+const ownRankHash = computed(() => `#${ownRankLabel.value}`)
 
 const showOwnRank = computed(() => !onBoard.value && ownRank.value !== 0)
 
@@ -102,18 +123,26 @@ watch(model, (open) => {
           :key="`${entry.rank}-${entry.name}-${i}`"
           :class="{ 'is-you': isYou(entry.name) }"
         )
-          span.board-row__rank {{ entry.rank }}
+          span.board-row__rank {{ fmt(entry.rank) }}
           span.board-row__name
             span.board-row__name-text {{ entry.name }}
             span.board-row__you(v-if="isYou(entry.name)") {{ t('leaderboard.you') }}
-          span.board-row__score {{ entry.score }}
+          span.board-row__score {{ fmt(entry.score) }}
           span.board-row__level {{ entry.squad }}
 
       //- Where the player stands when they are not up there. The reason a
       //- player outside the top 100 opens this screen at all.
+      //-
+      //- ONE message, not a rank span plus an "of N" span. `yourRank` is a whole
+      //- sentence in every locale and several of them order it the other way
+      //- round — Japanese is "{total} 人中 #{n} 位", Korean and Turkish likewise
+      //- put the population first — so a split into two spans renders those
+      //- languages backwards. It also rendered "You are #1,130 of  of 154,331"
+      //- in the rest, because `yourRank` already contains `of {total}` and was
+      //- only ever handed `{ n }`, leaving a dangling "of ".
       div.board__footer(v-if="showOwnRank")
-        span.board__footer-rank {{ t('leaderboard.yourRank', { n: ownRankLabel }) }}
-        span.board__footer-total(v-if="playerTotal > 0") {{ t('leaderboard.of', { n: playerTotal }) }}
+        span.board__footer-rank(v-if="playerTotal > 0") {{ t('leaderboard.yourRank', { n: ownRankLabel, total: fmt(playerTotal) }) }}
+        span.board__footer-rank(v-else) {{ ownRankHash }}
 </template>
 
 <style scoped lang="sass">
@@ -244,8 +273,4 @@ $cols: clamp(1.6rem, 8vw, 2.4rem) minmax(0, 1fr) clamp(2rem, 9vw, 3rem) clamp(2.
   text-transform: uppercase
   font-size: clamp(0.68rem, 3.2vw, 0.95rem)
   text-shadow: 2px 2px 0 #000
-
-.board__footer-total
-  color: #9fb2d0
-  font-size: clamp(0.55rem, 2.4vw, 0.75rem)
 </style>

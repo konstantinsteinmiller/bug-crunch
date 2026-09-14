@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import * as sim from '@/use/useSplatixGame'
-import type { GameEvent } from '@/use/useSplatixGame'
+import * as sim from '@/use/useBugCrunchGame'
+import type { Bug, GameEvent } from '@/use/useBugCrunchGame'
 import { COMBO_WINDOW_MS } from '@/game/combo'
 import { levelSpec } from '@/game/stages'
 
@@ -11,7 +11,7 @@ import { levelSpec } from '@/game/stages'
  * suites beside it: a real level is started, real frames are stepped, real
  * pointer input goes in, and the score, the chain, the vial, the tally and the
  * end-of-level verdict come out. Nothing is mocked, because nothing here needs
- * to be — `useSplatixGame` touches no canvas, no audio context and no DOM.
+ * to be — `useBugCrunchGame` touches no canvas, no audio context and no DOM.
  *
  * Three details make it deterministic enough to assert on:
  *
@@ -285,6 +285,224 @@ describe('armour and spikes', () => {
     const events = tapAt(50, 90)
     expect(kinds(events)).not.toContain('spike')
     expect(sim.tally.value.spikes).toBe(0)
+  })
+})
+
+/**
+ * ─── The sprinter ant ───────────────────────────────────────────────────────
+ *
+ * The one bug in the cast whose behaviour is different on a phone from what it
+ * is on a desktop, which is exactly why it is worth driving headlessly: the
+ * touch half cannot be seen by looking at the pointer half, and neither half is
+ * visible from a pure-function test of `bugs.ts`.
+ *
+ * Every case here runs on LEVEL 2 — the sprinter's own level. It has no
+ * hazards to ground anything, a quota of 12 so a handful of test taps cannot
+ * accidentally finish the level out from under a case, and it is the board a
+ * real player meets this creature on.
+ */
+describe('the sprinter ant', () => {
+  /** A body at (x, y) walking AWAY from where the cases park the shoe. */
+  const oneSprinter = (x = 50, y = 60): Bug => {
+    clearFloor()
+    footAt(20, 20)
+    const b = sim.spawnBug('sprinter', x, y)!
+    b.heading = -Math.PI / 2
+    return b
+  }
+
+  /** Drive the shoe at a body from 70 u away, stopping 20 u short of it — an
+   *  approach, which is the thing a pointer sprinter reacts to. */
+  const rushAt = (b: Bug): void => {
+    footAt(b.x, b.y + 70)
+    sim.aim(b.x, b.y + 20)
+  }
+
+  /** Step frames, reporting whether the body was ever mid-bolt. */
+  const watchBolt = (b: Bug, ms: number): boolean => {
+    let bolted = false
+    for (let t = 0; t < ms; t += FRAME) {
+      vi.advanceTimersByTime(FRAME)
+      sim.step(FRAME)
+      if (b.bolt > 0) bolted = true
+    }
+    return bolted
+  }
+
+  describe('on a pointer', () => {
+    it('bolts when the shoe comes for it', () => {
+      start(2)
+      const b = oneSprinter()
+      const y0 = b.y
+      rushAt(b)
+      expect(watchBolt(b, 1100)).toBe(true)
+      // Straight away from the foot, which was below it — and a long way.
+      expect(y0 - b.y).toBeGreaterThan(20)
+    })
+
+    // The whole counter-play, and the thing that makes it a different creature
+    // from the flea: a flea leaps at whatever is over it, a sprinter runs from
+    // whatever is COMING. Stop moving and it never goes.
+    it('ignores a shoe that is merely sitting next to it', () => {
+      start(2)
+      const b = oneSprinter()
+      footAt(b.x, b.y + 14)
+      expect(watchBolt(b, 1500)).toBe(false)
+      expect(b.sense).toBe(0)
+    })
+
+    it('stops DEAD when the run ends, which is the whole kill window', () => {
+      start(2)
+      const b = oneSprinter()
+      rushAt(b)
+      expect(watchBolt(b, 1100)).toBe(true)
+      expect(b.bolt).toBe(0)
+      expect(b.stun).toBeGreaterThan(0)
+      const x = b.x
+      const y = b.y
+      run(200)
+      expect(b.x).toBe(x)
+      expect(b.y).toBe(y)
+      // …and a stationary one-hit body is a free squish.
+      expect(kinds(tapAt(b.x, b.y))).toContain('squish')
+      expect(b.alive).toBe(false)
+    })
+
+    it('will not bolt twice in a row — after one it is just an ant', () => {
+      start(2)
+      const b = oneSprinter()
+      rushAt(b)
+      expect(watchBolt(b, 1100)).toBe(true)
+      // Immediately again, well inside the lockout.
+      b.x = 50
+      b.y = 60
+      b.heading = -Math.PI / 2
+      rushAt(b)
+      expect(watchBolt(b, 1000)).toBe(false)
+    })
+
+    it('…but it IS a lockout and not a one-shot: it bolts again later', () => {
+      start(2)
+      const b = oneSprinter()
+      rushAt(b)
+      expect(watchBolt(b, 1100)).toBe(true)
+      footAt(20, 20)
+      run(4000)
+      b.x = 50
+      b.y = 60
+      b.heading = -Math.PI / 2
+      rushAt(b)
+      expect(watchBolt(b, 1100)).toBe(true)
+    })
+
+    // Same perk, same reason as the flea: the Bunny Slipper is quiet. It does
+    // NOT hide a stomp, because a stomp is loud in any shoe — see below.
+    it('never hears a silent shoe coming', () => {
+      start(2, { shoe: 'bunnySlipper' })
+      const b = oneSprinter()
+      rushAt(b)
+      expect(watchBolt(b, 1500)).toBe(false)
+    })
+  })
+
+  describe('on touch', () => {
+    // A finger has no hover, so there is nothing for a phone player's approach
+    // to be sensed by — and a sprinter that fled from a finger on its way down
+    // would be a bug nobody on a phone could ever catch.
+    it('does not flee from an approaching finger, because there is none', () => {
+      start(2)
+      sim.setTouch(true)
+      const b = oneSprinter()
+      rushAt(b)
+      expect(watchBolt(b, 1500)).toBe(false)
+      expect(b.sense).toBe(0)
+    })
+
+    it('bolts once when a stomp lands NEAR it instead of on it', () => {
+      start(2)
+      sim.setTouch(true)
+      const b = oneSprinter()
+      const r = sim.stompRadius()
+      // Outside the kill circle (r + its own size), inside the scare band.
+      const gap = r + b.spec.size + 4
+      const y0 = b.y
+      tapAt(b.x, b.y + gap)
+      expect(b.alive).toBe(true)
+      expect(watchBolt(b, 900)).toBe(true)
+      expect(y0 - b.y).toBeGreaterThan(20)
+    })
+
+    it('is not scared by a stomp on the far side of the board', () => {
+      start(2)
+      sim.setTouch(true)
+      const b = oneSprinter()
+      tapAt(b.x, b.y + sim.stompRadius() * 4)
+      expect(watchBolt(b, 900)).toBe(false)
+    })
+
+    it('is still scared by a near miss in a silent shoe — a stomp is a stomp', () => {
+      start(2, { shoe: 'bunnySlipper' })
+      sim.setTouch(true)
+      const b = oneSprinter()
+      const gap = sim.stompRadius() + b.spec.size + 3
+      tapAt(b.x, b.y + gap)
+      expect(b.alive).toBe(true)
+      expect(watchBolt(b, 900)).toBe(true)
+    })
+  })
+
+  // 1-7's lesson, pinned. Honey grounds a sprinter exactly as it grounds a
+  // flea — without it the answer world 1 hands over would quietly not work.
+  //
+  // Each case carries its own CONTROL on the same board: the identical rush
+  // against a body standing on bare floor a few metres away. Without that, a
+  // "did not bolt" assertion passes just as happily when the sprinter is broken
+  // as when the honey is working.
+  describe('in honey', () => {
+    /** Level 7 is the honey level. Its first puddle is the one used here. */
+    const puddle = (): { x: number; y: number } => {
+      const h = sim.getHazards().find((p) => p.id === 'honey')
+      expect(h).toBeDefined()
+      return { x: h!.x, y: h!.y }
+    }
+
+    /** A patch of level 7's floor with nothing on it. */
+    const BARE = { x: 80, y: 60 }
+
+    const at = (x: number, y: number): Bug => {
+      clearFloor()
+      footAt(20, 20)
+      const b = sim.spawnBug('sprinter', x, y)!
+      b.heading = -Math.PI / 2
+      return b
+    }
+
+    it('cannot bolt away from an approaching shoe, where bare floor could', () => {
+      start(7)
+      const control = at(BARE.x, BARE.y)
+      rushAt(control)
+      expect(watchBolt(control, 1100)).toBe(true)
+
+      const p = puddle()
+      const stuck = at(p.x, p.y)
+      rushAt(stuck)
+      expect(watchBolt(stuck, 1500)).toBe(false)
+    })
+
+    it('cannot bolt away from a near miss either', () => {
+      start(7)
+      sim.setTouch(true)
+      // Outside the kill circle, inside the scare band.
+      const gap = sim.stompRadius() + 3.0 + 4
+      const control = at(BARE.x, BARE.y)
+      tapAt(control.x, control.y + gap)
+      expect(watchBolt(control, 900)).toBe(true)
+
+      const p = puddle()
+      const stuck = at(p.x, p.y)
+      tapAt(stuck.x, stuck.y + gap)
+      expect(watchBolt(stuck, 900)).toBe(false)
+    })
   })
 })
 

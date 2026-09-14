@@ -1,29 +1,29 @@
 import { ref, type Ref } from 'vue'
 
 /**
- * ─── `splatix_state` — the single persisted state object ───────────────────────
+ * ─── `bugcrunch_state` — the single persisted state object ───────────────────────
  *
- * EVERY persisted value splatix touches — meta progression, the resumable
+ * EVERY persisted value bug-crunch touches — meta progression, the resumable
  * run snapshot, user settings, retention bookkeeping — lives inside ONE
- * in-memory record (`splatixState`), and exactly ONE localStorage key is ever
- * written: `splatix_state`.
+ * in-memory record (`bugCrunchState`), and exactly ONE localStorage key is ever
+ * written: `bugcrunch_state`.
  *
  * Why one object:
  *   • Non-platform builds → a single localStorage entry, zero pollution.
  *   • Platform builds → `SaveManager` proxies `localStorage.setItem`, so the
- *     cloud payload is literally `{ splatix_state, __save_meta__ }`. One object
+ *     cloud payload is literally `{ bugcrunch_state, __save_meta__ }`. One object
  *     round-trips to CrazyGames `sdk.data` / GamePix / Playgama / Yandex /
  *     Glitch instead of dozens of per-key writes.
  *
  * Field names inside the record are catalogued in `src/keys.ts` and are all
- * `sx_`-prefixed. They are a contract with the player base: renaming one
+ * `bc_`-prefixed. They are a contract with the player base: renaming one
  * strands existing players' progress on the old field.
  *
  * Writes are debounced (trailing edge, hard-capped) and hard-flushed on
  * `pagehide` / tab-hide so a close mid-burst never drops data.
  */
 
-export const STATE_KEY = 'splatix_state'
+export const STATE_KEY = 'bugcrunch_state'
 
 /** Persisted values may be bare strings ("en"), stringified numbers ("120"),
  *  or stringified JSON. JSON.parse round-trips numbers/objects; bare strings
@@ -55,7 +55,7 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null
 let firstDirtyAt = 0
 
 /** Force the debounced blob write to happen NOW — cancels the pending timer and
- *  writes `splatix_state` to localStorage synchronously. Called from the
+ *  writes `bugcrunch_state` to localStorage synchronously. Called from the
  *  page-hide handlers below and (via `useSaveStatus.flushSaveNow`) at hard
  *  checkpoints (wave cleared, run ended, tech purchased) so the cloud push
  *  starts immediately instead of waiting out the debounce. */
@@ -65,7 +65,7 @@ export const flushPersist = (): void => {
     persistTimer = null
   }
   firstDirtyAt = 0
-  persistRaw(splatixState.value)
+  persistRaw(bugCrunchState.value)
 }
 
 const schedulePersist = (): void => {
@@ -77,7 +77,7 @@ const schedulePersist = (): void => {
   persistTimer = setTimeout(() => {
     persistTimer = null
     firstDirtyAt = 0
-    persistRaw(splatixState.value)
+    persistRaw(bugCrunchState.value)
   }, delay)
 }
 
@@ -105,7 +105,7 @@ const buildInitial = (): Record<string, any> => {
     }
   } catch { /* corrupt → start fresh */ }
 
-  // Generic fold: if a player somehow has individual `sx_*` entries in raw
+  // Generic fold: if a player somehow has individual `bc_*` entries in raw
   // localStorage (defensive per-key write, or a mid-migration snapshot from an
   // older client), fold them into the blob once and remove them. The blob takes
   // precedence when both exist.
@@ -114,7 +114,7 @@ const buildInitial = (): Record<string, any> => {
     const stragglers: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
-      if (k && k.startsWith('sx_')) stragglers.push(k)
+      if (k && k.startsWith('bc_')) stragglers.push(k)
     }
     for (const k of stragglers) {
       const raw = localStorage.getItem(k)
@@ -132,21 +132,21 @@ const buildInitial = (): Record<string, any> => {
 /** The single in-memory aggregate of all persisted game state.
  *  `Record<string, any>` by design — this is a heterogeneous bag keyed by the
  *  constants in `src/keys.ts`; consumers narrow via `getState<T>()`. */
-export const splatixState: Ref<Record<string, any>> = ref(buildInitial())
+export const bugCrunchState: Ref<Record<string, any>> = ref(buildInitial())
 
 /** Read a value out of the blob. `fallback` is returned when the key is absent.
  *  The type parameter is advisory — the layer does not validate shape. */
 export const getState = <T = unknown>(key: string, fallback?: T): T => {
-  const v = splatixState.value[key]
+  const v = bugCrunchState.value[key]
   return (v === undefined ? fallback : v) as T
 }
 
-export const hasState = (key: string): boolean => splatixState.value[key] !== undefined
+export const hasState = (key: string): boolean => bugCrunchState.value[key] !== undefined
 
 export const setState = (key: string, value: unknown): void => {
-  // Replace the record identity so `watch(splatixState)` (shallow) fires for every
+  // Replace the record identity so `watch(bugCrunchState)` (shallow) fires for every
   // consumer that mirrors a field into its own ref.
-  splatixState.value = { ...splatixState.value, [key]: value }
+  bugCrunchState.value = { ...bugCrunchState.value, [key]: value }
   schedulePersist()
 }
 
@@ -154,15 +154,15 @@ export const setState = (key: string, value: unknown): void => {
  *  schedule. Used by the run-snapshot writer, which touches half a dozen keys
  *  at each wave boundary and would otherwise fan out six watcher passes. */
 export const setStates = (patch: Record<string, unknown>): void => {
-  splatixState.value = { ...splatixState.value, ...patch }
+  bugCrunchState.value = { ...bugCrunchState.value, ...patch }
   schedulePersist()
 }
 
 export const removeState = (key: string): void => {
-  if (splatixState.value[key] === undefined) return
-  const next = { ...splatixState.value }
+  if (bugCrunchState.value[key] === undefined) return
+  const next = { ...bugCrunchState.value }
   delete next[key]
-  splatixState.value = next
+  bugCrunchState.value = next
   schedulePersist()
 }
 
@@ -170,12 +170,12 @@ export const removeState = (key: string): void => {
  *  (`useSaveStatus.bumpSaveDataVersion`) so cloud-sourced updates land
  *  in-memory BEFORE any composable's `saveDataVersion` watcher re-reads its
  *  keys — the ordering is load-bearing for correct hydration. */
-export const reloadSplatixState = (): void => {
-  splatixState.value = buildInitial()
+export const reloadBugCrunchState = (): void => {
+  bugCrunchState.value = buildInitial()
 }
 
 /** Test-only: wipe both the in-memory blob and the persisted entry. */
-export const __resetSplatixState = (): void => {
-  splatixState.value = {}
+export const __resetBugCrunchState = (): void => {
+  bugCrunchState.value = {}
   try { localStorage.removeItem(STATE_KEY) } catch { /* harmless */ }
 }

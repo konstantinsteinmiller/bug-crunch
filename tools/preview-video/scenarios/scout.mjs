@@ -43,11 +43,11 @@ export default {
   label: 'Level timeline (no clip)',
 
   async setup(ctx) {
-    const level = Number(param(ctx, 'scoutLevel')) || saveFixture().sx_level
+    const level = Number(param(ctx, 'scoutLevel')) || saveFixture().bc_level
     const policy = param(ctx, 'scoutPolicy') ?? 'ace'
     const loadout = param(ctx, 'scoutShoe') === 'starter' ? STARTER_LOADOUT : {}
 
-    await boot(ctx, { level, save: saveFixture({ sx_level: level, ...loadout }) })
+    await boot(ctx, { level, save: saveFixture({ bc_level: level, ...loadout }) })
     await installDrive(ctx, { level, seed: 7, policy })
 
     const line = await ctx.evaluate((arg) => {
@@ -140,7 +140,7 @@ export default {
 
     const s = (v) => (v === null || v === undefined ? '—' : `${v.toFixed(1)}s`)
 
-    ctx.log.info(`── level ${line.level} (${line.label}), ${policy}${loadout.sx_shoe ? ` in the ${loadout.sx_shoe}` : ''}`)
+    ctx.log.info(`── level ${line.level} (${line.label}), ${policy}${loadout.bc_shoe ? ` in the ${loadout.bc_shoe}` : ''}`)
     ctx.log.info(`   quota ${line.quota} in ${line.time}s · roster ${line.roster.join(', ')}`)
     ctx.log.info(`   hazards ${line.hazards.length ? line.hazards.join(', ') : 'none'}${line.boss ? ` · boss ${line.boss}` : ''}`)
     ctx.log.info(`   first squish ${s(line.firstSquish)} · half quota ${s(line.halfQuota)}`)

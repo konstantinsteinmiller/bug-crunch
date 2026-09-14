@@ -1,4 +1,4 @@
-# SPLATIX — Game Implementation Plan
+# BUG CRUNCH — Game Implementation Plan
 
 > Living document. If a session runs out of context, resume from the first
 > unchecked box. Every phase is independently shippable: the game must BUILD and
@@ -9,7 +9,7 @@
 ## 0. What this repo is
 
 A fresh copy of the **Survivalist** web-game chassis (Vue 3 + Vite + TS + pug +
-Tailwind + SASS), already renamed to `splatix`, with the gameplay art deleted.
+Tailwind + SASS), already renamed to `bug-crunch`, with the gameplay art deleted.
 Everything below the gameplay line is production-grade and **stays**:
 
 | Kept as-is | Where |
@@ -115,23 +115,23 @@ portal compliance); no reward-ad UI is shown.
 
 ---
 
-## 2. State — `splatix_state`
+## 2. State — `bugcrunch_state`
 
-ONE in-memory `Record<string, any>`, ONE localStorage key (`splatix_state`),
-ONE cloud blob. Field names are `sx_`-prefixed and catalogued in `src/keys.ts`.
+ONE in-memory `Record<string, any>`, ONE localStorage key (`bugcrunch_state`),
+ONE cloud blob. Field names are `bc_`-prefixed and catalogued in `src/keys.ts`.
 
 ```
-sx_coins           sx_total_coins      sx_stars          sx_level_stars
-sx_level           sx_best_score       sx_best_combo     sx_shoes_owned
-sx_shoe            sx_runs             sx_total_squishes sx_tutorial_seen
-sx_onboarded       sx_hints_seen       sx_results_seen   sx_juice_style
-sx_high_vis        sx_single_tap       sx_locker_spotlight
-sx_user_sound      sx_user_music       sx_user_language  sx_user_difficulty
-sx_music_track     sx_haptics
+bc_coins           bc_total_coins      bc_stars          bc_level_stars
+bc_level           bc_best_score       bc_best_combo     bc_shoes_owned
+bc_shoe            bc_runs             bc_total_squishes bc_tutorial_seen
+bc_onboarded       bc_hints_seen       bc_results_seen   bc_juice_style
+bc_high_vis        bc_single_tap       bc_locker_spotlight
+bc_user_sound      bc_user_music       bc_user_language  bc_user_difficulty
+bc_music_track     bc_haptics
 ```
 
 Hydration contract (proved end-to-end with Chrome MCP, see Phase 12):
-`SaveManager.init()` → `reloadSplatixState()` → `saveDataVersion` bump →
+`SaveManager.init()` → `reloadBugCrunchState()` → `saveDataVersion` bump →
 every composable re-reads. A returning player must never see fresh defaults.
 
 ---
@@ -143,8 +143,8 @@ every composable re-reads. A returning player must never see fresh defaults.
 > the build disagreed, and why the build won.
 
 ### Phase 1 — Foundation rename and prune ✅
-- [x] `useTowerState.ts` → `useSplatixState.ts` (`splatix_state`, `sx_`)
-- [x] `src/keys.ts` rewritten for Splatix
+- [x] `useTowerState.ts` → `useBugCrunchState.ts` (`bugcrunch_state`, `bc_`)
+- [x] `src/keys.ts` rewritten for Bug Crunch
 - [x] `SaveMergePolicy` / `BlobStorage` / `CrazyGamesStrategy` / `main.ts` prefix updates
 - [x] Delete Survivalist gameplay modules + components + tests
 - [x] `.env*` secrets cleared (game ids, glitch tokens, leaderboard url)
@@ -172,8 +172,8 @@ leaves the frame behind the HEEL, not the toe: out of the toe it read as two
 antennae on a board covered in insects.
 
 ### Phase 4 — Simulation ✅
-- [x] `use/useSplatixGame.ts` — fixed-step sim, pooled entities, foot state machine
-- [x] Persistent splat-decal layer with a budget (in `useSplatixArt`, not a
+- [x] `use/useBugCrunchGame.ts` — fixed-step sim, pooled entities, foot state machine
+- [x] Persistent splat-decal layer with a budget (in `useBugCrunchArt`, not a
       separate `decals.ts` — it needs the camera and the world transform)
 - [x] Bug AI: crawl, hop, scurry, dodge, segment trail, airborne bob, boss phases
 - [x] Hazards, conveyors, sweepers, magnets, salt, cobweb, honey, crumbs
@@ -191,7 +191,7 @@ antennae on a board covered in insects.
   at a time from empty: the first two seconds of every level were a floor.
 
 ### Phase 5 — Renderer ✅
-- [x] `use/useSplatixArt.ts` — drawScene, camera shake, decal layer, fever lights
+- [x] `use/useBugCrunchArt.ts` — drawScene, camera shake, decal layer, fever lights
 - [x] `use/useVfx.ts` — goo, confetti and bubble emitters per juice style
 - [x] Quality tiers wired (`high`/`medium`/`low`/`min`) with DPR caps
 
@@ -230,7 +230,7 @@ and centred so a 1440 px desktop does not stretch the score strip into a
 
 ### Phase 11 — Pipelines ✅
 - [x] Art sheets export + prompts for the new cast
-- [x] `preview-video` scenarios rewritten for Splatix (`scout`, `success`,
+- [x] `preview-video` scenarios rewritten for Bug Crunch (`scout`, `success`,
       `success-30s`, `fail`, `fail-30s`) with a page-side autopilot
 - [x] `art-todo.md`, `sound-todo.md`
 
@@ -247,6 +247,59 @@ and centred so a 1440 px desktop does not stretch the score strip into a
 
 ### Phase 13 — Docs ✅
 - [x] `description.md`, `ROADMAP.md` (18 retention features), `README.md`
+
+---
+
+## 3a. Round two — the playtest pass (2026-09-13/14)
+
+A review of the built game produced seven things, all of them done. Recorded
+here because several are *repairs of shipped features*, and a plan that only
+lists what was planned hides what was wrong.
+
+### What was broken
+
+* **Buying a shoe did nothing.** `FButton` emitted `click` with no payload while
+  `ShoeCard` bound `@click.stop`; Vue's modifier calls `.stopPropagation()` on
+  argument zero, threw inside event dispatch, and the purchase never ran. Fixed
+  at the source — the button forwards its native event — so `.stop` / `.prevent`
+  work for every consumer. The regression test was verified non-vacuous by
+  reverting the one-line fix.
+* **Buying was also undiscoverable.** A card only showed its price when
+  expanded. A collapsed card now carries the price and the star gate, and an
+  affordable one is marked.
+* **A lesson could point at (0, 0).** Aiming and the lesson clock were gated
+  together on canvas input, and the result screen makes the canvas
+  non-interactive — so a lesson armed there never aimed. Aiming now happens every
+  frame; only the clock waits for the player.
+
+### What was added
+
+* **A thirteen-lesson wordless curriculum** (`game/tutorial.ts`,
+  `use/useTutorial.ts`, a rewritten `TutorialOverlay`) replacing the three
+  hard-coded opening beats. Seven gestures, including `flow` — an arrow from a
+  squished bug to the bar it just filled, which is how the game finally explains
+  its own goal — and `avoid`, the only lesson whose answer is "don't". A test
+  fails if a mechanic has no lesson.
+* **The treasure chest**, ported from the Survivalist chassis with every coin
+  figure re-derived against `levelPayout`.
+* **Reward reveals** before the result screen, queued, six kinds.
+* **A rewarded-video unlock** in the Locker — the game's one rewarded slot.
+* **The sprinter ant** and a re-cut opening: 1-1 to 1-6 each introduce exactly
+  one new thing, with a problem always one level ahead of its answer.
+* **The art pipeline, generating.** The manifest grew from 7 UI slots to 58 (every
+  button glyph, the logo, the greeter mascot); `GameIcon` itself now probes, so
+  any glyph is paintable with no call-site change. 19 of 100 slots are painted.
+  Three tools were broken and are fixed: `art:prompts` crashed, `art:status`
+  imported the wrong game's modules, and the Art Desk parsed zero jobs because
+  the prompt documents were emitted in the wrong shape.
+* **`/#/bug-lab` never mounted** — `@click="tab = k as any"` put TypeScript inside
+  a pug attribute string, which ships as plain JS. Fixed.
+
+### Measured, then reverted
+
+Weighting a debutant bug up on its own level made a weak player's clear on 1-4 go
+from 12/18 to **2/18**: an armoured body they will not slam holds its `maxAlive`
+slot forever and the board stops refilling. Reverted, and written into a test.
 
 ---
 

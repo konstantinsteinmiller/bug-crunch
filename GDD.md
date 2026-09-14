@@ -1,5 +1,5 @@
 # GAME DESIGN DOCUMENT (GDD)
-# **SPLATIX**
+# **BUG CRUNCH**
 *Target Audience: Ages 6–15 | Genre: Top-Down 2D Action / Arcade Stomper | Platform: Mobile (iOS/Android), PC, Nintendo Switch*
 
 ---
@@ -7,7 +7,7 @@
 ## 1. Executive Summary & Core Concept
 
 ### 1.1 Elevator Pitch
-**SPLATIX** is a high-energy, 2D top-down arcade action game where players control a giant foot/shoe overhead to stomp, slide, and squish swarms of quirky cartoon bugs and squishy targets. Built around the satisfying tactile feedback of vivid splash animations and punchy audio design, *SPLATFOOT* expands simple bug-squishing into a deep, engaging arcade experience featuring reactive enemy AI, customizable footwear loadouts, combo mechanics, and interactive stage hazards.
+**BUG CRUNCH** is a high-energy, 2D top-down arcade action game where players control a giant foot/shoe overhead to stomp, slide, and squish swarms of quirky cartoon bugs and squishy targets. Built around the satisfying tactile feedback of vivid splash animations and punchy audio design, *SPLATFOOT* expands simple bug-squishing into a deep, engaging arcade experience featuring reactive enemy AI, customizable footwear loadouts, combo mechanics, and interactive stage hazards.
 
 ### 1.2 Core Pillars
 1. **Sensory Juice & Tactile Satisfaction**: Every stomp delivers visual, audio, and haptic feedback. Vibrant multi-colored goo, popping eye-balls, screen-shake, and comic-book visual effects make squishing irresistible.

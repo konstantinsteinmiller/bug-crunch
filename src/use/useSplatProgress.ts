@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue'
-import { getState, setState, setStates } from '@/use/useSplatixState'
+import { getState, setState, setStates } from '@/use/useBugCrunchState'
 import { saveDataVersion, flushSaveNow } from '@/use/useSaveStatus'
 import {
   BEST_COMBO_KEY, BEST_LEVEL_KEY, BEST_SCORE_KEY, COINS_KEY, FAILED_LEVELS_KEY,
@@ -16,7 +16,7 @@ import type { RunTally } from '@/game/stars'
  * ─── Meta progression ───────────────────────────────────────────────────────
  *
  * Coins, stars, the level the player is on, and what they have already failed.
- * Every field is a property of the one `splatix_state` blob; nothing here
+ * Every field is a property of the one `bugcrunch_state` blob; nothing here
  * writes its own localStorage key.
  *
  * ── Why the refs are mirrored rather than computed ──

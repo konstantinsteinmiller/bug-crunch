@@ -23,7 +23,7 @@ import {
   getBoard, getBoss, getBugCount, getBugs, getFoot, getHazards, getHazes,
   getJuiceStyle, getLevel, getPods, getShoe, isFever, isTouchInput,
   segmentAt, stompRadius, type Bug, type GameEvent
-} from '@/use/useSplatixGame'
+} from '@/use/useBugCrunchGame'
 import { CHARGE_TELL_MS, CHARGE_WINDUP_MS, POD_HATCH_MS, POD_SIZE, BEAM_HALF, BEAM_TELL_MS } from '@/game/bosses'
 import { HIDE_READOUTS } from '@/game/previewFeed'
 

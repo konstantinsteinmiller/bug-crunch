@@ -117,8 +117,16 @@ const indexByStem = (index) => {
     for (const t of s.singles ?? []) out.set(stem(t.file), { aliases: [], cells: cellsOf(t.cells) })
   }
   // Walks and bands answer to a bare id in the slicer too (`bonecap.png`).
+  //
+  // A contact sheet is in this same list and is the one entry with no `target`
+  // of its own: it writes a file per cell, so its cells are read as they were
+  // written instead of one being synthesised off the sheet. That is what makes
+  // the desk count it nine-painted-of-nine rather than one-of-one.
   for (const a of [...(index?.walks ?? []), ...(index?.scenery ?? [])]) {
-    out.set(stem(a.file), { aliases: [a.id], cells: [{ id: a.id, label: a.id, target: a.target }] })
+    out.set(stem(a.file), {
+      aliases: [a.id],
+      cells: a.cells ? cellsOf(a.cells) : [{ id: a.id, label: a.id, target: a.target }]
+    })
   }
   return out
 }

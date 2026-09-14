@@ -22,12 +22,15 @@
  *
  * EIGHT, and eight is the cap rather than a target: past that the tile stops
  * being a set of things you recognise and turns into wallpaper. They are the
- * eight the game is actually about — the survivor you are growing, the boss
- * at the end of the road, the chest and the coin you are playing for, the
- * barrel in the way, a skill, a weapon, and the anvil you spend it all on.
- * The gate is the notable absence: it is the core mechanic, but the painting
- * is a bare goalpost (the operator is drawn over it at runtime) and a faint
- * empty rectangle reads as a smudge, not as a gate.
+ * eight this game is actually about — the ant you stomp, the sprinter that
+ * runs, the beetle you cannot stomp yet, the moth overhead, the sneaker doing
+ * the stomping, the mascot that greets you, the coin you are playing for and
+ * the piata fly that drops it.
+ *
+ * A member whose painting is not on disk yet is SKIPPED, not fatal. The whole
+ * set arrives over days and the tile has to be rebuildable on any of them — but
+ * a tile built from one motif is wallpaper of a different kind, so the run
+ * refuses to overwrite the committed file below `MIN_MOTIFS`.
  *
  * ── Seamless by construction ──
  *
@@ -46,7 +49,7 @@
  *
  * Not part of the app build — the webp is committed.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -165,15 +168,25 @@ const ALPHA_FLOOR = 24
  * sticker sheet tilts things, so the grid does not read as a grid.
  */
 const CAST = [
-  { file: 'heroes/teal.webp', frames: 8, frame: 3, size: 96, at: [56, 62], turn: -6 },
-  { file: 'ui/chest.webp', size: 86, at: [200, 44], turn: 4 },
-  { file: 'rounds/rocket.webp', size: 88, at: [332, 80], turn: 18 },
+  { file: 'bugs/ant.webp', frames: 8, frame: 2, size: 92, at: [56, 62], turn: -6 },
+  { file: 'logo/mascot.webp', size: 88, at: [200, 44], turn: 4 },
+  { file: 'bugs/moth.webp', frames: 8, frame: 4, size: 94, at: [332, 80], turn: 18 },
   { file: 'props/coin.webp', size: 74, at: [122, 176], turn: 0 },
-  { file: 'monsters/marrowknight.webp', frames: 8, frame: 0, size: 104, at: [266, 190], turn: -3 },
-  { file: 'props/barrel.webp', size: 88, at: [30, 292], turn: 5 },
-  { file: 'ui/forge.webp', size: 80, at: [186, 320], turn: -4 },
-  { file: 'ui/skill-grenade.webp', size: 78, at: [334, 288], turn: 12 }
+  { file: 'shoes/sneaker.webp', size: 104, at: [266, 190], turn: -3 },
+  { file: 'bugs/beetle.webp', frames: 8, frame: 0, size: 88, at: [30, 292], turn: 5 },
+  { file: 'bugs/sprinter.webp', frames: 8, frame: 3, size: 82, at: [186, 320], turn: -4 },
+  { file: 'bugs/pinatafly.webp', frames: 8, frame: 2, size: 84, at: [334, 288], turn: 12 }
 ]
+
+/**
+ * Fewest motifs worth overwriting the committed tile for.
+ *
+ * The splash is the first thing every player sees and the tile is committed, so
+ * a run that can only find two paintings must leave the existing file alone
+ * rather than replace a full backdrop with a nearly empty one. Four is the point
+ * at which the pattern still reads as a set of things.
+ */
+const MIN_MOTIFS = 4
 
 /**
  * Grow or shrink a mask by `r` with a square kernel, separably.
@@ -317,9 +330,14 @@ const lineArt = (rgba, w, h, ss) => {
   return out
 }
 
-/** Load one cast member and return it as a line-drawn, trimmed, sized PNG. */
+/** Load one cast member and return it as a line-drawn, trimmed, sized PNG — or
+ *  null while its painting is still a drawing in the renderer. */
 const render = async (member) => {
   const file = resolve(SRC, member.file)
+  if (!existsSync(file)) {
+    console.warn(`  · skipped ${member.file} — not painted yet`)
+    return null
+  }
   const meta = await sharp(file).metadata()
   const frames = member.frames ?? 1
   const fw = Math.round(meta.width / frames)
@@ -379,11 +397,20 @@ const render = async (member) => {
 
 const main = async () => {
   const drawn = await Promise.all(CAST.map(render))
+  const found = drawn.filter(Boolean).length
+  if (found < MIN_MOTIFS) {
+    console.warn(
+      `bg-tile: only ${found} of ${CAST.length} motifs are painted (need ${MIN_MOTIFS}) — `
+      + `leaving ${OUT} as it is. Paint more of the cast, then run this again.`
+    )
+    return
+  }
 
   // The 3x3 supercanvas. The middle cell is the tile; the eight round it are
   // what makes the edges meet.
   const layers = []
   for (let i = 0; i < CAST.length; i++) {
+    if (!drawn[i]) continue
     const { buf, w, h } = drawn[i]
     const [cx, cy] = CAST[i].at.map((v) => v * SCALE)
     for (let dx = -1; dx <= 1; dx++) {
@@ -406,20 +433,68 @@ const main = async () => {
     .png()
     .toBuffer()
 
-  const tile = await sharp(big)
+  // Cut the middle cell out, then FLOOD the fully transparent pixels with one
+  // flat colour.
+  //
+  // WebP stores RGB unpremultiplied, and libwebp REWRITES the colour under
+  // transparent pixels to whatever compresses best. So whatever the resampler
+  // left there — a ghost of every sprite's own fringe, about 31 000 pixels of
+  // it — gets smeared further by the encoder, and the tile's two opposite
+  // edges end up disagreeing on colour in places where they agree perfectly on
+  // alpha. Invisible on screen; read as a SEAM by anything that compares the
+  // edges (`tests/ui/splashTiles.test.ts`), and paid for in bytes on the
+  // splash's critical path.
+  //
+  // Flooding with one constant leaves the encoder a flat plane to compress and
+  // makes both edges agree by construction. The constant is the body tone
+  // rather than black, so that any renderer which DOES sample a transparent
+  // pixel's colour (a mip level, a stretched blit) pulls the drawing's own
+  // light grey out of the void instead of a dark rim.
+  //
+  // ONE LEVEL OF ALPHA is what makes the flood stick. WebP discards the colour
+  // under FULLY transparent pixels — lossy and lossless both; there is no sharp
+  // option for libwebp's `-exact` — so a scrub of the input does not survive the
+  // encoder. A pixel at alpha 1 is not transparent, so its colour is kept, and
+  // 1/255 under a layer drawn at 0.16 opacity is 0.0006 of a channel: three
+  // orders of magnitude below anything a screen can show. Measured on the
+  // eight-motif tile, the wrap goes from 1019 channel jumps to 36 — and the file
+  // can stay a lossy encode (71 kB against 85 kB near-lossless), because there
+  // is no longer an empty region for the encoder to invent colour in.
+  //
+  // Only alpha EXACTLY zero is touched; a partly transparent edge pixel keeps
+  // the colour that makes its anti-aliasing work.
+  const cut = await sharp(big)
     .extract({ left: TILE_PX, top: TILE_PX, width: TILE_PX, height: TILE_PX })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const VOID = INK[2]
+  for (let i = 0; i < cut.info.width * cut.info.height; i++) {
+    if (cut.data[i * 4 + 3] === 0) {
+      cut.data[i * 4] = VOID.r
+      cut.data[i * 4 + 1] = VOID.g
+      cut.data[i * 4 + 2] = VOID.b
+      cut.data[i * 4 + 3] = 1
+    }
+  }
+
+  const tile = await sharp(cut.data, {
+    raw: { width: cut.info.width, height: cut.info.height, channels: 4 }
+  })
     // q75 / effort 6 is this project's measured house setting — the point where
     // `scripts/compress-images.mjs` found sharp's webp matches what TinyPNG
-    // returns. Nothing here needs more: it is a three-tone drawing shown at a
-    // sixth of its opacity, and it is on the splash's critical path.
-    .webp({ quality: 75, effort: 6, alphaQuality: 90 })
+    // returns — and the alpha channel is kept LOSSLESS because on a keyed layer
+    // the alpha IS the drawing: quantising it lands the two opposite edges of a
+    // wrapping motif on different levels, and that is a seam that walks across
+    // the screen as the tile pans.
+    .webp({ quality: 75, effort: 6, alphaQuality: 100 })
     .toBuffer()
 
   mkdirSync(dirname(OUT), { recursive: true })
   writeFileSync(OUT, tile)
   console.log(
     `bg-tile → ${OUT} (${TILE_PX}x${TILE_PX} for a ${TILE}px CSS tile, ` +
-    `${(tile.length / 1024).toFixed(1)} kB, ${CAST.length} motifs)`
+    `${(tile.length / 1024).toFixed(1)} kB, ${found} of ${CAST.length} motifs painted)`
   )
 }
 

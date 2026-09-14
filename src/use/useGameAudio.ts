@@ -5,7 +5,7 @@ import useSounds from '@/use/useSound'
 import type { JuiceStyleId } from '@/game/juiceStyle'
 
 /**
- * ─── Splatix audio ──────────────────────────────────────────────────────────
+ * ─── Bug Crunch audio ──────────────────────────────────────────────────────────
  *
  * Two sources, one entry point (`playFx`):
  *

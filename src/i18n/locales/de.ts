@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Abbrechen',
   'close': 'Schließen',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Ameisen',
+    'sprinter': 'Flitzameisen',
     'beetle': 'Käfer',
     'flea': 'Flöhe',
     'caterpillar': 'Raupen',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Anziehen',
     'worn': 'Getragen',
     'needStars': 'Noch {n} Sterne',
-    'needCoins': 'Noch {n} Münzen'
+    'needCoins': 'Noch {n} Münzen',
+    'price': 'Preis: {n} Münzen',
+    'starGate': 'Ab {n} Sternen',
+    'adUnlock': 'Video ansehen und freischalten'
+  },
+  'chest': {
+    'label': 'Schatztruhe',
+    'ready': 'Schatztruhe für {n} Münzen öffnen',
+    'filling': 'Schatztruhe — füllt sich',
+    'spent': 'Schatztruhe — bis morgen leer'
+  },
+  'reveal': {
+    'world': 'Neuer Ort zum Stampfen!',
+    'shoe': 'Neue Schuhe!',
+    'stars': 'Sternziel erreicht!',
+    'record': 'Neuer Bestwert!',
+    'chest': 'Schatz!',
+    'foe': 'Ein neues Krabbeltier!',
+    'starsTotal': '{n} Sterne',
+    'recordScore': '{n} Punkte',
+    'recordBeat': 'Alter Bestwert: {n}',
+    'chestCoins': '+{n} Münzen'
   },
   'fever': {
     'filling': 'Platsch-Fieber: {n}% voll',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Halten, dann loslassen für einen Wuchtschlag',
       'desktop': 'Taste halten für einen Wuchtschlag'
+    },
+    'sprinter': {
+      'touch': 'Flitzer rennen weg — tippe, wo sie stehen bleiben',
+      'desktop': 'Flitzer fliehen vor dem Schuh — still halten, dann klicken'
     },
     'beetle': {
       'touch': 'Käfer haben Panzer — halten und zuschlagen',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Werbeblocker erkannt',
-    'body': 'Splatix ist dank Werbung kostenlos. Bitte schalte deinen Werbeblocker aus und lade neu.',
+    'body': 'Bug Crunch ist dank Werbung kostenlos. Bitte schalte deinen Werbeblocker aus und lade neu.',
     'allowPrefix': 'Werbung erlauben auf',
     'allowSuffix': 'und die Seite neu laden.',
     'gotIt': 'Alles klar'

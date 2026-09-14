@@ -1,4 +1,4 @@
-# Splatix — sound to-do
+# Bug Crunch — sound to-do
 
 Every cue in this game is **synthesised at run time today** (Web Audio:
 noise bursts, tones, bells, crackle, and a convolver reverb) except six, which

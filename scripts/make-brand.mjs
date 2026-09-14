@@ -4,7 +4,7 @@
  *
  *   pnpm brand
  *
- * Splatix has no art folder, and the two places that genuinely need a BITMAP
+ * Bug Crunch has no art folder, and the two places that genuinely need a BITMAP
  * rather than a drawing are outside the renderer entirely:
  *
  *   • the LOGO — the PWA manifest, the favicon, and every portal's store page
@@ -14,13 +14,27 @@
  *
  * Both are rendered here from SVG through sharp, so they are reproducible, they
  * are in the repo's own hand, and they can be regenerated the moment the
- * wordmark changes. When the art pipeline produces a painted logo
- * (`art-sheets` → `still-ui-logo`), the slicer writes over exactly these paths
- * and this script stops being the source — which is the same drop-in contract
- * every other drawable in the game has.
+ * wordmark changes. When the art pipeline produces a painted logo or mascot
+ * (`art-sheets` → `still-ui-logo`, `still-ui-mascot`), the slicer writes over
+ * exactly these paths and this script stops being the source — which is the same
+ * drop-in contract every other drawable in the game has.
+ *
+ * WHICH IS WHY IT DOES NOT OVERWRITE. A file that is already on disk is left
+ * alone and reported, because by the time anybody runs this again the file at
+ * that path is probably a painting, and this script cannot tell the difference:
+ * both are just a webp at `logo/mascot.webp`. Re-running it to refresh the
+ * wordmark would quietly swap the painted greeter back for the placeholder ant,
+ * and the only symptom would be that the splash looked worse.
+ *
+ *   node scripts/make-brand.mjs            # fill in whatever is missing
+ *   node scripts/make-brand.mjs --force    # rewrite the placeholders anyway
+ *
+ * The SPLASH TILE is no longer written here at all. `pnpm art:bg-tile` derives
+ * it from the paintings themselves, which is a thing an SVG in this file cannot
+ * do; see `tools/bg-tile.mjs`.
  */
 import sharp from 'sharp'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -163,6 +177,11 @@ const mascotSvg = (S) => {
 
 // ─── The splash tile ────────────────────────────────────────────────────────
 //
+// RETIRED as an output: `pnpm art:bg-tile` writes the tile now, from the game's
+// own paintings rather than from stencils, so repainting a sprite and re-running
+// it follows the art — which an SVG in this file can never do. The generator is
+// kept because it is still the clearest statement of what the tile has to BE.
+//
 // Seamless by construction: every mark is drawn at its place AND at every
 // wrapped copy that could still touch the tile, so nothing is cut at an edge.
 
@@ -237,11 +256,39 @@ const tileSvg = (S) => {
 
 // ─── Write ──────────────────────────────────────────────────────────────────
 
+const FORCE = process.argv.includes('--force')
+
+/** Written files and skipped ones, for the one line at the end. */
+const wrote = []
+const kept = []
+
+/** True when this path should be (re)written. See the header: a file already on
+ *  disk is very likely a painting, and a placeholder must never replace one. */
+const claim = (path) => {
+  const full = out(path)
+  if (!FORCE && existsSync(full)) {
+    kept.push(path)
+    return null
+  }
+  wrote.push(path)
+  return full
+}
+
+// Referenced so the retired generator above is not dead to a bundler or a
+// linter; see its header for why it is kept.
+void tileSvg
+
 const run = async () => {
   const logo = Buffer.from(logoSvg(1024))
 
-  const png = (size, path) => sharp(logo).resize(size, size).png({ compressionLevel: 9 }).toFile(out(path))
-  const webp = (size, path) => sharp(logo).resize(size, size).webp({ quality: 90, effort: 6 }).toFile(out(path))
+  const png = async (size, path) => {
+    const to = claim(path)
+    if (to) await sharp(logo).resize(size, size).png({ compressionLevel: 9 }).toFile(to)
+  }
+  const webp = async (size, path) => {
+    const to = claim(path)
+    if (to) await sharp(logo).resize(size, size).webp({ quality: 90, effort: 6 }).toFile(to)
+  }
 
   await Promise.all([
     png(512, 'public/images/logo/logo_512x512.png'),
@@ -255,16 +302,20 @@ const run = async () => {
   // The favicon. A 32 px PNG renamed to `.ico` is served and rendered correctly
   // by every browser this game ships to — a real multi-size ICO container would
   // need a second dependency for no visible gain.
-  const fav = await sharp(logo).resize(32, 32).png({ compressionLevel: 9 }).toBuffer()
-  writeFileSync(out('public/favicon.ico'), fav)
+  const favTo = claim('public/favicon.ico')
+  if (favTo) writeFileSync(favTo, await sharp(logo).resize(32, 32).png({ compressionLevel: 9 }).toBuffer())
 
-  const tile = Buffer.from(tileSvg(800))
-  await sharp(tile).webp({ quality: 82, effort: 6, alphaQuality: 100 }).toFile(out('public/images/bg/bg-tile_800x800.webp'))
+  const mascotTo = claim('public/images/logo/mascot.webp')
+  if (mascotTo) {
+    await sharp(Buffer.from(mascotSvg(512))).webp({ quality: 92, effort: 6 }).toFile(mascotTo)
+  }
 
-  const mascot = Buffer.from(mascotSvg(512))
-  await sharp(mascot).webp({ quality: 92, effort: 6 }).toFile(out('public/images/logo/mascot.webp'))
-
-  console.log('brand: wrote the logo (6 files), the favicon, the mascot and the splash tile.')
+  console.log(`brand: wrote ${wrote.length} file(s)${wrote.length ? `\n  + ${wrote.join('\n  + ')}` : ''}`)
+  if (kept.length) {
+    console.log(`  kept ${kept.length} file(s) that already exist (very likely painted — pass --force to replace):`)
+    for (const k of kept) console.log(`  = ${k}`)
+  }
+  console.log('  the splash tile is built by `pnpm art:bg-tile`, from the paintings.')
 }
 
 run().catch((e) => {

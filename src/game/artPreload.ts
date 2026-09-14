@@ -26,9 +26,9 @@ import { BUG_IDS, type BugId } from '@/game/bugs'
 import { SHOE_IDS, STARTER_SHOE, isShoeId, type ShoeId } from '@/game/shoes'
 import { BOSS_IDS } from '@/game/bosses'
 import { levelSpec, clampLevel, worldOf, WORLD_COUNT } from '@/game/stages'
-import { ART_CATALOGUE } from '@/game/artCatalogue'
+import { ART_CATALOGUE, UI_GLYPH_ART_IDS, UI_HUD_MARKS } from '@/game/artCatalogue'
 import { artSettled, artOverridesEnabled, type ArtWant } from '@/game/art'
-import { getState } from '@/use/useSplatixState'
+import { getState } from '@/use/useBugCrunchState'
 import { LEVEL_KEY, SHOE_KEY } from '@/keys'
 
 /** The level this boot will open on, read straight from the persisted blob.
@@ -62,7 +62,12 @@ export const criticalArtWants = (): ArtWant[] => {
   wants.push(['shoe', bootShoe()])
   wants.push(['bg', `floor-${worldOf(level)}`])
   for (const id of STOMP_FX) wants.push(['fx', id])
-  for (const id of ART_CATALOGUE.ui) wants.push(['ui', id])
+  // The HUD's own marks only. The glyph slots (`icon-*`) outnumber them five to
+  // one, sit on buttons rather than on the field, and every one of them has a
+  // vector path underneath it that is already in the bundle — holding the splash
+  // for fifty button icons would spend the whole tier-0 budget on the part of the
+  // screen a player is least likely to be looking at. They ride tier 2.
+  for (const id of UI_HUD_MARKS) wants.push(['ui', id])
   return wants
 }
 
@@ -88,6 +93,10 @@ const remainingArtWants = (): ArtWant[] => {
   for (const id of BOSS_IDS) wants.push(['boss', id])
   for (const id of ART_CATALOGUE.prop) wants.push(['prop', id])
   for (let w = 1; w <= WORLD_COUNT; w++) wants.push(['bg', `floor-${w}`])
+  // The button glyphs, last of everything: a painted glyph that arrives after
+  // the vector one has been on screen for a second is a button that got nicer,
+  // not a glitch — which is the opposite of a bug design popping in mid-walk.
+  for (const id of UI_GLYPH_ART_IDS) wants.push(['ui', id])
   return wants
 }
 

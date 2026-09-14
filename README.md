@@ -1,4 +1,4 @@
-# splatix
+# bug-crunch
 
 A mobile-first 2D **bug squisher**. You are a shoe. Drag it around a picnic
 blanket, an attic floor or an arcade carpet and flatten everything crawling on
@@ -8,9 +8,9 @@ it before the clock runs out. Squish fast and the **Splat Chain** climbs — ×2
 seconds. Some bugs have shells a tap bounces off, some have spikes that hurt,
 and every tenth level is a boss the size of a dinner plate.
 
-40 levels · 4 worlds · 9 bugs · 4 bosses · 6 shoes. No reading required.
+40 levels · 4 worlds · 10 bugs · 4 bosses · 6 shoes. No reading required.
 
-WIP: [playable demo](https://konstantinsteinmiller.github.io/splatix/)
+WIP: [playable demo](https://konstantinsteinmiller.github.io/bug-crunch/)
 
 Built with Vue 3 + TypeScript + Canvas 2D, shipping to CrazyGames, Playgama,
 GamePix, GameMonetize, GameDistribution, Glitch.fun, itch.io, Wavedash, Poki and
@@ -23,29 +23,44 @@ Yandex Games from one codebase.
 ```bash
 pnpm install
 pnpm dev          # http://localhost:2050
-pnpm test         # 595 unit, integration + simulation tests
+pnpm test         # 748 unit, integration + simulation tests
 pnpm type-check   # vue-tsc
 pnpm build        # type-check + production build
 ```
 
 ## Highlights
 
-* **No art payload.** The nine-bug cast, the four bosses, the six shoes, the
-  four floors and every effect are hand-inked vector art *baked to frame strips
-  at runtime*. Nothing gameplay-related ships as a bitmap, so the game is
-  interactive the moment the JS parses. Drop-in painted overrides are wired and
-  documented in [`art-todo.md`](./art-todo.md).
+* **No art payload.** The ten-bug cast, the four bosses, the six shoes, the four
+  floors and every effect are hand-inked vector art *baked to frame strips at
+  runtime*. Nothing gameplay-related ships as a bitmap, so the game is
+  interactive the moment the JS parses. A painted layer drops in per drawable
+  with no renderer change — 19 of the 100 catalogued slots are painted so far and
+  the rest are still drawn; `VITE_ENABLE_ART_OVERRIDES` ships **off** and
+  `?art=on` turns the painted layer on for a look. See
+  [`art-todo.md`](./art-todo.md).
 * **Synthesised audio.** A Fever second can fire forty squishes; any sample set
   would turn into a jam, so stomps, squelches, ricochets and the chain chime are
   generated per event with per-cue throttles. The chain chime climbs a
   **pentatonic ladder** that wraps every three octaves — a long chain is a
   rising phrase, not a dog whistle. See [`sound-todo.md`](./sound-todo.md).
 * **One save object.** All persisted state lives in a single in-memory
-  `splatix_state` record written to exactly one localStorage key, which the
+  `bugcrunch_state` record written to exactly one localStorage key, which the
   platform save layer mirrors to the SDK cloud store as one object.
-* **Wordless onboarding.** The tutorial has no text, no OK button and nothing to
-  dismiss. Three beats — move, tap, hold — and you leave each one by *doing* it.
-  It is correct in all 21 locales because there is nothing in it to translate.
+* **Wordless onboarding, for every mechanic.** Not a three-beat opener — a
+  **curriculum of thirteen lessons** (`src/game/tutorial.ts`) that the scene arms
+  as the game reaches each one: move, stomp, *the goal of the game*, the chain,
+  the slam, spikes, dodgers, Fever, the boss, the stars, the chest, the shop, and
+  the purchase. No text, no OK button, nothing to dismiss; every lesson retires
+  the moment the player does the thing, and every one is correct in all 21
+  locales because there is nothing in it to translate. Adding a mechanic without
+  adding its lesson fails a test.
+* **A reason to come back.** An idle **treasure chest** on the HUD fills on
+  wall-clock time and pays 20 coins at three minutes, 80 at ten, capped at 240 a
+  calendar day in the player's own timezone — deliberately about a sixth of what
+  playing earns, and less per day than the cheapest shoe costs.
+* **Gifts, not a list.** A world opening, a star milestone, a new species met, a
+  personal best: each is *presented* on its own reveal screen before the result
+  screen rather than listed as a chip on it.
 * **Fully responsive, every orientation.** 320×658 portrait through desktop
   fullscreen, landscape phones included, safe-area insets throughout, no fixed
   pixel sizing in the UI. Everything in the world is sized off one unit —
@@ -65,7 +80,7 @@ pnpm build        # type-check + production build
 
 | Beat | What happens |
 |---|---|
-| **Learn** | First run only, and without a single word: a hand glyph drags along a dotted track with a ghost shoe behind it, then drops onto an ant, then presses and *holds* while a ring fills. Each beat retires when you do it. There is no OK button — a tutorial you can click past is a tutorial that teaches clicking past tutorials. |
+| **Learn** | Without a single word, and not only at the start: thirteen lessons, each armed the moment the game reaches what it is about. A hand drags along a dotted track; it drops onto an ant; an arrow travels from a squished bug up to the bar it just filled — *that is what this game wants from you*; a hand presses and **holds** while a ring fills; a hand reaches for a caterpillar and **recoils**. Each retires when you do it, and there is no OK button — a tutorial you can click past is a tutorial that teaches clicking past tutorials. |
 | **Move** | The shoe goes where you point, always. On touch it rides slightly **above** your finger so your thumb never covers the target. The dashed ring on the floor is the stomp circle, exactly — if the ring and the hitbox ever disagreed the game would feel like it was cheating, and this is a game for children. |
 | **Squish** | A tap is a quick stomp: everything inside the circle goes splat, in its own colour, leaving a permanent decal on the floor. |
 | **Chain** | Squish again within 1.5 s and the multiplier climbs a **ladder** — ×1, ×2, ×3, ×5, ×8, ×12, ×20, ×30, ×40, ×50 — rather than a counter. The rungs are far apart on purpose: the gap is the tension and the jump is the payoff. The HUD badge grows, changes colour and drains its ring in real time. |
@@ -78,8 +93,11 @@ pnpm build        # type-check + production build
 | **Read the board** | Fleas sense the shadow and leap clear. Moths are only stompable at the bottom of their bob. Stink bugs burst into a haze that blurs and slows the foot. A centipede dies instantly to a blow on the head and loses a segment to anything else. |
 | **Boss** | Every tenth level. Three scripted phases with a call-out above the health bar — stomp, pods, charge, spin, shield, beam, summon — and a counter window on the charge that a slam answers for double damage. The starter shoe can open every phase of every boss with a slam: no shell is ever a paywall. |
 | **Stars** | Three objectives a level. The first is always "clear it", so a player who can beat a level always gets something; the other two are the reasons to come back — a chain to reach, an accuracy to hold, a species to hunt, a Fever to trigger. |
+| **Run them down** | The **sprinter ant** does not wait to be stomped: it senses a shoe coming *at* it, tells for a third of a second, then bolts — one fixed, learnable move, not a random scatter. Stand still and tap, tap where it will stop, bait it onto a crumb pile, or let it run into honey. On touch there is no hover to flee, so it bolts once on a near miss instead. |
 | **Spend** | Stars gate worlds, coins buy shoes. Six shoes, and **no shoe is strictly better than the starter**: the steel boot ignores spikes and reaches further at half the agility, the bunny slipper is invisible to dodgers but can barely open a shell, the roller skate ploughs a line, the cleat punctures anything over a tiny circle, the electric sock kills things it never touched. |
+| **Or watch** | A shoe you cannot afford can be unlocked with a rewarded video instead — but only past its star gate. Ads substitute for *coins*, never for progress, and the offer is not rendered at all on a build where ads are unavailable or no video is ready. |
 | **Come back** | Fail a level twice and the bugs quietly slow down and the clock lengthens — the quota never shrinks, because slowing the board helps a player who could not keep up while shrinking the quota would delete the objective they were failing. |
+| **Wait** | The treasure chest on the HUD fills while you are not playing, and pays for a tap. It is the one thing in the game that rewards coming back tomorrow — and it is capped so it can never out-earn playing. |
 | **Compare** | Every finished run posts your **best score** to a global board. It is optional scenery: no network, no rank, no interruption to the game. |
 
 ## Architecture
@@ -91,6 +109,8 @@ src/game/          pure, testable domain — no Vue, no DOM
   combo.ts         the Splat Chain ladder, the Juice vial, Splat Fever
   stages.ts        the 40 levels: 4 world curves + hand-authored exceptions
   stars.ts         the objective language and its evaluator
+  tutorial.ts      the thirteen lessons, as data: gesture, anchor, bail-out
+  campaignRewards.ts what a finished level WON, as a list of reveals
   bosses.ts        4 bosses × 3 scripted phases
   hazards.ts       the 7 floor objects and their timings
   inkArt.ts        shared hand-inked vocabulary (blobs, cel tones, ink, light)
@@ -101,13 +121,15 @@ src/game/          pure, testable domain — no Vue, no DOM
   art.ts           the drop-in painted-override layer (probe → swap → re-bake)
 
 src/use/           reactive layer (module-level singletons)
-  useSplatixGame   the simulation — one `step(dtMs)`, no rendering, no DOM
-  useSplatixArt    the renderer — floor, decals, hazards, bodies, boss, shoe, FX
+  useBugCrunchGame   the simulation — one `step(dtMs)`, no rendering, no DOM
+  useBugCrunchArt    the renderer — floor, decals, hazards, bodies, boss, shoe, FX
   useVfx           pooled particles / floating text / decals + quality tiers
   useGameAudio     synth + sample cue router with per-cue throttling
   useSplatProgress stars, coins, the resume level, the relief record
-  useLocker        the six shoes: owned, affordable, equipped
-  useSplatixState  the single `splatix_state` blob + debounced persistence
+  useTutorial      the lesson director: what is on screen, what has been taught
+  useLocker        the six shoes: owned, affordable, equipped, ad-unlockable
+  useTreasureChest the idle chest's clock, its ladder and its daily ledger
+  useBugCrunchState  the single `bugcrunch_state` blob + debounced persistence
   useLeaderboard   the global score board — never throws, blocks or delays a run
 
 src/platforms/     platform registry, CSP, capability gates, resolvers
@@ -138,19 +160,22 @@ cap moves with it.
 Everything persists inside one object:
 
 ```text
-splatix_state = {
-  sx_coins, sx_total_coins,                    // economy
-  sx_shoe, sx_shoes_owned,                     // the Locker
-  sx_level, sx_best_level, sx_level_stars,     // the campaign
-  sx_failed_levels,                            // the relief record
-  sx_best_score, sx_best_combo, sx_runs, sx_total_squishes,
-  sx_tutorial_seen, sx_onboarded, sx_hints_seen,
-  sx_juice_style, sx_high_vis, sx_single_tap,  // accessibility
-  sx_user_language, sx_user_difficulty, ...    // settings
+bugcrunch_state = {
+  bc_coins, bc_total_coins,                    // economy
+  bc_shoe, bc_shoes_owned,                     // the Locker
+  bc_level, bc_best_level, bc_level_stars,     // the campaign
+  bc_failed_levels,                            // the relief record
+  bc_chest_at, bc_chest_day,                   // the idle chest + its daily cap
+  bc_taught,                                   // which wordless lessons are done
+  bc_bugs_seen,                                // species met, for the "new foe" card
+  bc_best_score, bc_best_combo, bc_runs, bc_total_squishes,
+  bc_tutorial_seen, bc_onboarded, bc_hints_seen,
+  bc_juice_style, bc_high_vis, bc_single_tap,  // accessibility
+  bc_user_language, bc_user_difficulty, ...    // settings
 }
 ```
 
-Every field is `sx_`-prefixed so the save layer's merge policy can allowlist the
+Every field is `bc_`-prefixed so the save layer's merge policy can allowlist the
 payload by prefix rather than by an enumeration that would drift.
 
 The load order is load-bearing and is what stops a returning player from being
@@ -159,14 +184,14 @@ rendered as a fresh install:
 1. `main.ts` **awaits** the platform SDK init before `saveManager.init()`.
 2. It **awaits** `saveManager.init()` before importing `App.vue`, so the whole
    module graph evaluates against hydrated storage.
-3. `reloadSplatixState()` runs **before** the `saveDataVersion` bump, so every
+3. `reloadBugCrunchState()` runs **before** the `saveDataVersion` bump, so every
    composable's watcher re-reads the hydrated blob rather than the stale one.
 4. If hydrate didn't return data **and** local looks fresh, `SaveManager` retries
    3× at 1 s spacing before letting the app boot.
 5. Hard checkpoints (level cleared, shoe bought, name changed) call
    `flushSaveNow()` to bypass both debounces.
 
-`tests/save/SplatixStateCloudHydrate.test.ts` covers all of it end to end,
+`tests/save/BugCrunchStateCloudHydrate.test.ts` covers all of it end to end,
 including transient-SDK-failure recovery, corrupt-blob degradation, and a
 full write → cold-boot → read round trip.
 
@@ -213,6 +238,20 @@ blank and ready to be filled before a deployment.
 * `pnpm preview:video` — records the portal preview clips by playing the real
   game with a scripted player against a virtual clock. `--scenarios scout
   --only-setup` prints a level's whole timeline in a couple of seconds.
+* `pnpm art:desk` — the generation desk: it drives a signed-in Gemini window one
+  painting at a time, slices each return back into `public/images/` and
+  compresses it. `pnpm art:status` says which of the 100 catalogued slots are
+  painted and which are still drawn.
+* **Contact sheets** (`GRIDS` in `artSheet.ts`, `PROMPTS-GRIDS.md`) — the icon
+  set is painted nine to a generation instead of one. Fifty-seven square `ui`
+  slots would otherwise be fifty-seven generations against a forty-a-day cap,
+  and — the part that actually matters — fifty-seven independently painted
+  silhouettes come back with fifty-seven stroke weights. A grid's index entry
+  has no `target` of its own: it carries a target **per cell**, which is what
+  makes one painting become nine files. The two registers (flat white *marks*,
+  full-colour *objects*) never share a sheet. A single cell that comes back
+  wrong is re-rolled from its own sheet in `PROMPTS-STILLS.md` for one
+  generation, not nine.
 * Type `cmarc` anywhere to toggle debug mode.
 * `localStorage.cheat = 'true'` + reload publishes the live simulation as
   `window.__run` and enables the cheat shortcuts (`ctrl+shift+alt` + `k` coins,

@@ -76,8 +76,8 @@ const useCheats = () => {
   // every player, to serve a dev-only feature that 99.99% of them never
   // trigger. Fetching it on the keypress costs a few ms exactly once, for the
   // developer.
-  const withGame = (fn: (game: typeof import('@/use/useSplatixGame')) => void): void => {
-    void import('@/use/useSplatixGame').then(fn).catch((e) => {
+  const withGame = (fn: (game: typeof import('@/use/useBugCrunchGame')) => void): void => {
+    void import('@/use/useBugCrunchGame').then(fn).catch((e) => {
       console.warn('[CHEAT] could not load the game module', e)
     })
   }
@@ -85,7 +85,7 @@ const useCheats = () => {
   /**
    * Hand the live simulation to the console as `window.__run`.
    *
-   * Reaching the sim from devtools with a bare `import('@/use/useSplatixGame')`
+   * Reaching the sim from devtools with a bare `import('@/use/useBugCrunchGame')`
    * does NOT work during development: Vite serves an HMR-updated module under a
    * versioned URL, so the import resolves to a second, inert copy of the
    * singleton and every mutation lands on an object nothing is rendering. The
@@ -95,7 +95,7 @@ const useCheats = () => {
    */
   const publishDebugHandle = (): void => {
     if (typeof window === 'undefined') return
-    void import('@/use/useSplatixGame').then((game) => {
+    void import('@/use/useBugCrunchGame').then((game) => {
       ;(window as unknown as Record<string, unknown>).__run = game
       console.warn('[CHEAT] window.__run is live (inspect / drive the running sim).')
     })

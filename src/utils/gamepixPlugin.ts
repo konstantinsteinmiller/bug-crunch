@@ -35,7 +35,7 @@ import { isGamepix } from '@/use/useUser'
 import { isDebug } from '@/use/useMatch'
 import { isPlatformPaused, isVisibilityHidden, pauseGame, resumeGame } from '@/use/useGamePause'
 import { setPlatformAudioMuted } from '@/use/useGamePauseAudio'
-import { getState } from '@/use/useSplatixState'
+import { getState } from '@/use/useBugCrunchState'
 import { BEST_LEVEL_KEY, RUNS_KEY } from '@/keys'
 
 // Score / level are read straight out of the persisted state blob rather than

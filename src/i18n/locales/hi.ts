@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'रद्द करें',
   'close': 'बंद करें',
   'ok': 'ठीक है',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'चींटियाँ',
+    'sprinter': 'दौड़ाक चींटियाँ',
     'beetle': 'भृंग',
     'flea': 'पिस्सू',
     'caterpillar': 'इल्लियाँ',
@@ -105,7 +106,28 @@ export default {
     'wear': 'पहनें',
     'worn': 'पहना हुआ',
     'needStars': '{n} और सितारे चाहिए',
-    'needCoins': '{n} और सिक्के चाहिए'
+    'needCoins': '{n} और सिक्के चाहिए',
+    'price': 'कीमत: {n} सिक्के',
+    'starGate': '{n} सितारों पर खुलेगा',
+    'adUnlock': 'खोलने के लिए वीडियो देखो'
+  },
+  'chest': {
+    'label': 'खज़ाने की पेटी',
+    'ready': '{n} सिक्कों के लिए पेटी खोलो',
+    'filling': 'खज़ाने की पेटी — भर रही है',
+    'spent': 'खज़ाने की पेटी — कल तक खाली'
+  },
+  'reveal': {
+    'world': 'कुचलने की नई जगह!',
+    'shoe': 'नए जूते!',
+    'stars': 'सितारों का पड़ाव!',
+    'record': 'नया रिकॉर्ड!',
+    'chest': 'खज़ाना!',
+    'foe': 'एक नया कीड़ा!',
+    'starsTotal': '{n} सितारे',
+    'recordScore': '{n} अंक',
+    'recordBeat': 'पुराना रिकॉर्ड: {n}',
+    'chestCoins': '+{n} सिक्के'
   },
   'fever': {
     'filling': 'स्प्लैट फ़ीवर: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'दबाए रखें, फिर छोड़ें — ज़ोरदार वार',
       'desktop': 'बटन दबाए रखें — ज़ोरदार वार'
+    },
+    'sprinter': {
+      'touch': 'दौड़ाक भाग जाती हैं — जहाँ रुकें वहाँ कुचलो',
+      'desktop': 'दौड़ाक जूते से भागती हैं — रुको, फिर क्लिक करो'
     },
     'beetle': {
       'touch': 'भृंगों का खोल होता है — दबाए रखकर वार करें',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'ऐड ब्लॉकर मिला',
-    'body': 'Splatix विज्ञापनों की वजह से मुफ़्त है। कृपया ब्लॉकर बंद करके पेज दोबारा लोड करें।',
+    'body': 'Bug Crunch विज्ञापनों की वजह से मुफ़्त है। कृपया ब्लॉकर बंद करके पेज दोबारा लोड करें।',
     'allowPrefix': 'यहाँ विज्ञापन की अनुमति दें:',
     'allowSuffix': 'और पेज दोबारा लोड करें।',
     'gotIt': 'समझ गया'

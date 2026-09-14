@@ -44,7 +44,7 @@ import { pokiGameplayStart, pokiGameplayStop } from '@/utils/pokiPlugin'
 // owns only the reactive wiring that feeds it. Pure and total, so the contract
 // can be asserted without mounting a canvas.
 //
-// The phase union is restated rather than imported from `useSplatixGame` on
+// The phase union is restated rather than imported from `useBugCrunchGame` on
 // purpose: that module is the whole simulation, and a platform-contract module
 // must not drag it into anything that imports it.
 export interface GameplayLiveInputs {

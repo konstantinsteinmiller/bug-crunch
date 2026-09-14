@@ -2,13 +2,12 @@
 import { computed } from 'vue'
 import { isMobilePortrait } from '@/use/useUser'
 import { mobileCheck } from '@/utils/function'
+import type { Lesson } from '@/game/tutorial'
 
 /**
- * ─── The first fifteen seconds ──────────────────────────────────────────────
+ * ─── How this game says anything ────────────────────────────────────────────
  *
- * The only thing standing between a stranger and this game is that they do not
- * yet know a shoe follows their finger. This teaches that, and two more things,
- * WITHOUT A SINGLE WORD.
+ * One overlay, seven animations, and not a single word in any of them.
  *
  * ── Why wordless ──
  *
@@ -18,91 +17,144 @@ import { mobileCheck } from '@/utils/function'
  * never having shown it. Every locale this game ships to gets the same overlay,
  * and it is correct in all of them because there is nothing in it to translate.
  *
- * ── The three beats ──
+ * ── The seven things it can say ──
  *
- *   0 · MOVE   a hand glyph drags back and forth along a dotted track, with a
- *              ghost shoe following it one beat behind. Retires the moment the
- *              player has moved the real foot for a second.
- *   1 · TAP    the hand drops onto a single ant, a burst pops, the ant is gone.
- *              Retires on the first successful squish.
- *   2 · HOLD   the hand presses and stays down; a ring fills around it; it
- *              releases and a big shockwave goes out. Retires on the first
- *              heavy slam.
+ *   drag   a hand slides along a dotted track, a ghost shoe one beat behind it
+ *   tap    a hand drops onto a point and a burst pops
+ *   hold   a hand presses and STAYS down, a ring fills, a big wave goes out
+ *   avoid  a hand reaches for a point and recoils — the only lesson in the game
+ *          whose answer is "do not", so it is the only one drawn in red
+ *   point  a hand pulses at a control, with a ring drawn round it
+ *   flow   an arrow travels from one point to another: THIS causes THAT. It is
+ *          how the game explains its own goal without saying it
+ *   watch  no hand at all — a ring breathing around something to look at
  *
  * ── Three rules it is built to ──
  *
  *   1. IT IS NOT A PAGE. There is no OK button and nothing to dismiss. The
- *      player leaves each beat by DOING it. A tutorial you can click past is a
- *      tutorial that teaches clicking past tutorials.
+ *      player leaves each lesson by DOING it. A tutorial you can click past is
+ *      a tutorial that teaches clicking past tutorials.
  *   2. IT NEVER EATS THE GESTURE. `pointer-events: none` all the way down, so
  *      the finger that is learning is playing, not being intercepted by the
  *      thing explaining.
  *   3. IT SHOWS THE PLAYER'S OWN DEVICE. A finger on touch, a cursor on
  *      desktop. The wrong glyph reads as a game built for somebody else.
  *
- * The board stays lit underneath: the scrim is a ring, not a sheet, so the one
- * thing the player is being asked to look at is the one thing not dimmed.
+ * ── Why it is `fixed` and above the modals ──
+ *
+ * Two of the lessons are about the SHOP, and the shop is an `FModal` at
+ * z-index 110. A lesson that pointed at the buy button from underneath it would
+ * be pointing at nothing. So the overlay is fixed to the viewport and sits above
+ * every panel — and those lessons carry `scrim: 'none'`, because the modal is
+ * already its own scrim and dimming it twice makes the thing being pointed at
+ * darker than the board behind it.
  */
 
 interface Props {
-  /** Which lesson is running: 0 move, 1 tap, 2 hold. */
-  beat: 0 | 1 | 2
-  /** 0..1 — how much of the current beat's requirement has been done. Drives
-   *  the ring, which is the only feedback that the gesture is working. */
-  progress: number
-  /** Where the lesson's demonstration sits, in CSS px from the top-left of the
-   *  canvas. The scene passes the foot's own position for beat 0 and the
-   *  tutorial ant's for beats 1 and 2, so the hand is always over the thing it
-   *  is talking about. */
+  /** The lesson to draw, or null for nothing. */
+  lesson: Lesson | null
+  /** Where it points, in CSS px from the top-left of the viewport. The scene
+   *  resolves this: the foot, a live bug, or a HUD element's own rect. */
   x: number
   y: number
+  /** The far end of a `flow` arrow. Ignored by every other gesture. */
+  toX?: number
+  toY?: number
+  /** 0..1 — how much of the requirement has been done. Drives the ring, which
+   *  is the only feedback that the gesture is working. */
+  progress: number
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { toX: 0, toY: 0 })
 
 const isTouch = computed(() => mobileCheck() || isMobilePortrait.value
   || (typeof window !== 'undefined' && navigator.maxTouchPoints > 0))
+
+const gesture = computed(() => props.lesson?.gesture ?? 'watch')
+const scrim = computed(() => props.lesson?.scrim ?? 'soft')
 
 /** Ring geometry, as stroke-dashoffset over a 100-unit circumference. */
 const dash = computed(() => `${Math.max(0, Math.min(1, props.progress)) * 100} 100`)
 
 const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }))
+
+// ─── The flow arrow ─────────────────────────────────────────────────────────
+//
+// Drawn as ONE rotated bar rather than an SVG line, so it costs a transform
+// instead of a layout: the scene moves both ends of it every frame (a bug
+// walks, and the HUD reflows on a rotation), and an SVG that re-resolves its
+// geometry sixty times a second on a phone is a frame budget nobody has.
+
+const flow = computed(() => {
+  const dx = props.toX - props.x
+  const dy = props.toY - props.y
+  return {
+    length: Math.hypot(dx, dy),
+    angle: (Math.atan2(dy, dx) * 180) / Math.PI
+  }
+})
+
+const flowStyle = computed(() => ({
+  left: `${props.x}px`,
+  top: `${props.y}px`,
+  width: `${flow.value.length}px`,
+  rotate: `${flow.value.angle}deg`
+}))
 </script>
 
 <template lang="pug">
   Transition(name="tut")
-    div.tut(:key="beat" aria-hidden="true")
-      //- A hole over the demonstration, dark everywhere else.
-      div.tut__scrim(:style="{ '--hx': x + 'px', '--hy': y + 'px' }")
+    div.tut(v-if="lesson" :key="lesson.id" aria-hidden="true")
+      //- A hole over the lesson, dark everywhere else — or a light wash, or
+      //- nothing at all. See `Scrim` in `game/tutorial.ts`.
+      div.tut__scrim(
+        v-if="scrim !== 'none'"
+        :class="`is-${scrim}`"
+        :style="{ '--hx': x + 'px', '--hy': y + 'px' }"
+      )
 
-      div.tut__stage(:style="stageStyle" :class="`beat-${beat}`")
-        //- BEAT 0 — the track the hand slides along. Only this beat has one.
-        div.tut__track(v-if="beat === 0")
+      //- ── flow: THIS causes THAT ──────────────────────────────────────────
+      div.tut__flow(v-if="gesture === 'flow'" :style="flowStyle")
+        div.tut__flow-line
+        div.tut__flow-dot
+        div.tut__flow-head
 
-        //- BEAT 1 / 2 — a target ring where the hand is going to land.
-        div.tut__target(v-if="beat > 0")
+      div.tut__stage(:style="stageStyle" :class="`is-${gesture}`")
+        //- drag — the track the hand slides along.
+        div.tut__track(v-if="gesture === 'drag'")
 
-        //- The charge ring. Beat 2 only: it fills as the demo hand holds, which
-        //- is exactly what the real charge ring on the real foot will do.
-        svg.tut__charge(v-if="beat === 2" viewBox="0 0 36 36")
+        //- Everything except a drag lands ON something, so it gets a target.
+        div.tut__target(v-if="gesture !== 'drag' && gesture !== 'flow'")
+
+        //- hold — the charge ring, which is exactly what the real charge ring
+        //- on the real foot is about to do.
+        svg.tut__charge(v-if="gesture === 'hold'" viewBox="0 0 36 36")
           circle.tut__charge-track(cx="18" cy="18" r="15.9155")
           circle.tut__charge-fill(cx="18" cy="18" r="15.9155")
 
-        //- The hand. One glyph, animated per beat.
-        div.tut__hand(:class="isTouch ? 'is-touch' : 'is-mouse'")
+        //- The hand. One glyph, animated per gesture. `watch` and `flow` have
+        //- none: there is nothing to do, only something to see.
+        div.tut__hand(
+          v-if="gesture !== 'watch' && gesture !== 'flow'"
+          :class="isTouch ? 'is-touch' : 'is-mouse'"
+        )
           svg(v-if="isTouch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round")
             path(d="M9 11V6a2 2 0 1 1 4 0v5")
             path(d="M13 8a2 2 0 1 1 4 0v6a6 6 0 0 1-6 6h-1a5 5 0 0 1-4.3-2.4L4 15a1.6 1.6 0 0 1 2.6-1.9L8 15")
           svg(v-else viewBox="0 0 24 24" fill="currentColor")
             path(d="M5 3l14 7.5-6 1.6L10.6 19z")
 
-        //- The tap ripple, on beats 1 and 2: it fires on the same clock the
-        //- hand lands on, so the cause and the effect are one animation.
-        div.tut__ripple(v-if="beat > 0")
-        div.tut__ripple.is-late(v-if="beat === 2")
+        //- The ripple, on the gestures that land: it fires on the same clock
+        //- the hand lands on, so cause and effect are one animation.
+        div.tut__ripple(v-if="gesture === 'tap' || gesture === 'hold'")
+        div.tut__ripple.is-late(v-if="gesture === 'hold'")
 
-      //- The progress ring, parked below the demonstration rather than on it —
-      //- on it, it would be mistaken for part of the lesson.
+        //- avoid — the bar across the target. The only red mark in the whole
+        //- tutorial, because it is the only lesson that means "not this".
+        div.tut__no(v-if="gesture === 'avoid'")
+
+      //- The progress ring, parked below the lesson rather than on it — on it,
+      //- it would be mistaken for part of the lesson.
       svg.tut__ring(:style="{ left: x + 'px', top: y + 'px' }" viewBox="0 0 36 36")
         circle.tut__ring-track(cx="18" cy="18" r="15.9155")
         circle.tut__ring-fill(cx="18" cy="18" r="15.9155" :stroke-dasharray="dash")
@@ -110,18 +162,27 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
 
 <style scoped lang="sass">
 .tut
-  position: absolute
+  // FIXED, and above every panel: two of the lessons are about the shop, which
+  // is an FModal at z-index 110.
+  position: fixed
   inset: 0
   // Rule 2: the gesture belongs to the game underneath, always.
   pointer-events: none
-  z-index: 30
+  z-index: 130
 
 .tut__scrim
   position: absolute
   inset: 0
+
   // A hole over the lesson rather than a sheet over the board: the thing being
   // demonstrated stays fully lit and everything else recedes.
-  background: radial-gradient(circle 30vmin at var(--hx) var(--hy), rgba(4, 4, 12, 0) 0%, rgba(4, 4, 12, 0.10) 45%, rgba(4, 4, 12, 0.44) 100%)
+  &.is-hole
+    background: radial-gradient(circle 30vmin at var(--hx) var(--hy), rgba(4, 4, 12, 0) 0%, rgba(4, 4, 12, 0.10) 45%, rgba(4, 4, 12, 0.44) 100%)
+
+  // A lesson that arrives MID-LEVEL must not black out the bug that is about to
+  // walk into the foot. Half the weight, and a much wider hole.
+  &.is-soft
+    background: radial-gradient(circle 46vmin at var(--hx) var(--hy), rgba(4, 4, 12, 0) 0%, rgba(4, 4, 12, 0.04) 55%, rgba(4, 4, 12, 0.22) 100%)
 
 .tut__stage
   position: absolute
@@ -129,7 +190,7 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   width: 0
   height: 0
 
-// ─── Beat 0 — the drag track ────────────────────────────────────────────────
+// ─── drag — the track ───────────────────────────────────────────────────────
 
 .tut__track
   position: absolute
@@ -142,7 +203,7 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   background: repeating-linear-gradient(90deg, rgba(255, 217, 60, 0.9) 0 10px, rgba(255, 217, 60, 0) 10px 20px)
   opacity: 0.8
 
-// ─── Beats 1 / 2 — the target ───────────────────────────────────────────────
+// ─── The target ─────────────────────────────────────────────────────────────
 
 .tut__target
   position: absolute
@@ -155,12 +216,36 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   border-radius: 999px
   animation: tut-target 1.6s ease-in-out infinite
 
+// A control is a rectangle, not a bug: the ring round it is wider and calmer,
+// so it reads as "this button" rather than "something is about to happen here".
+.is-point .tut__target
+  width: clamp(3.6rem, 17vmin, 6rem)
+  height: clamp(3.6rem, 17vmin, 6rem)
+  border-style: solid
+  border-color: rgba(255, 217, 60, 0.9)
+
+.is-avoid .tut__target
+  border-color: rgba(255, 90, 110, 0.95)
+
+.is-watch .tut__target
+  border-style: solid
+  border-color: rgba(255, 255, 255, 0.9)
+  animation: tut-watch 1.9s ease-in-out infinite
+
 @keyframes tut-target
   0%, 100%
     scale: 1
     opacity: 0.85
   50%
     scale: 1.12
+    opacity: 1
+
+@keyframes tut-watch
+  0%, 100%
+    scale: 1
+    opacity: 0.55
+  50%
+    scale: 1.18
     opacity: 1
 
 .tut__charge
@@ -193,6 +278,21 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   62%, 100%
     stroke-dasharray: 0 100
 
+// ─── avoid — the bar ────────────────────────────────────────────────────────
+
+.tut__no
+  position: absolute
+  left: 50%
+  top: 50%
+  translate: -50% -50%
+  rotate: -45deg
+  width: clamp(3rem, 14vmin, 5rem)
+  height: clamp(0.3rem, 1.4vmin, 0.5rem)
+  border-radius: 999px
+  background-color: #ff5a6e
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5)
+  animation: tut-target 1.6s ease-in-out infinite
+
 // ─── The hand ───────────────────────────────────────────────────────────────
 
 .tut__hand
@@ -208,9 +308,9 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
     width: 100%
     height: 100%
 
-// Beat 0: one axis, back and forth, at a pace a hand can copy. The pause at
-// each end is what makes it read as a deliberate drag rather than a slider.
-.beat-0 .tut__hand
+// drag: one axis, back and forth, at a pace a hand can copy. The pause at each
+// end is what makes it read as a deliberate drag rather than as a slider.
+.is-drag .tut__hand
   animation: tut-drag 2.4s ease-in-out infinite
 
 @keyframes tut-drag
@@ -221,8 +321,8 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   92%, 100%
     translate: -180% -30%
 
-// Beat 1: down, and away.
-.beat-1 .tut__hand
+// tap: down, and away.
+.is-tap .tut__hand
   animation: tut-tap 1.6s ease-in-out infinite
 
 @keyframes tut-tap
@@ -236,9 +336,9 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
     translate: -20% -120%
     scale: 1
 
-// Beat 2: down, HELD, then away — the hold is the lesson, so it is most of the
+// hold: down, HELD, then away — the hold is the lesson, so it is most of the
 // cycle.
-.beat-2 .tut__hand
+.is-hold .tut__hand
   animation: tut-hold 2.4s ease-in-out infinite
 
 @keyframes tut-hold
@@ -251,6 +351,32 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   70%, 100%
     translate: -20% -120%
     scale: 1
+
+// avoid: reaches, thinks better of it, and pulls back fast. The retreat is
+// quicker than the approach, which is what makes it read as a flinch.
+.is-avoid .tut__hand
+  color: #ff8a95
+  animation: tut-avoid 1.9s ease-in-out infinite
+
+@keyframes tut-avoid
+  0%
+    translate: -20% -150%
+  38%
+    translate: -20% -78%
+  46%
+    translate: -20% -84%
+  60%, 100%
+    translate: -20% -150%
+
+// point: hovers beside the control and nods at it, never covering it.
+.is-point .tut__hand
+  animation: tut-point 1.5s ease-in-out infinite
+
+@keyframes tut-point
+  0%, 100%
+    translate: 10% -10%
+  50%
+    translate: -6% -34%
 
 // ─── The ripple ─────────────────────────────────────────────────────────────
 
@@ -265,15 +391,15 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   border-radius: 999px
   opacity: 0
 
-.beat-1 .tut__ripple
+.is-tap .tut__ripple
   animation: tut-ripple 1.6s ease-out infinite
   animation-delay: 0.48s
 
-.beat-2 .tut__ripple
+.is-hold .tut__ripple
   animation: tut-ripple-big 2.4s ease-out infinite
   animation-delay: 1.39s
 
-.beat-2 .tut__ripple.is-late
+.is-hold .tut__ripple.is-late
   animation-delay: 1.52s
 
 @keyframes tut-ripple
@@ -293,6 +419,62 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
     scale: 3.4
     opacity: 0
     border-color: rgba(255, 217, 60, 0)
+
+// ─── flow — this causes that ────────────────────────────────────────────────
+
+.tut__flow
+  position: absolute
+  height: 0
+  transform-origin: 0 0
+  pointer-events: none
+
+.tut__flow-line
+  position: absolute
+  left: 0
+  top: -1.5px
+  width: 100%
+  height: 3px
+  border-radius: 999px
+  background: repeating-linear-gradient(90deg, rgba(255, 217, 60, 0.95) 0 12px, rgba(255, 217, 60, 0) 12px 22px)
+  opacity: 0.9
+
+// A bead running the length of it, because a dotted line is a connection and a
+// MOVING bead is a direction — and direction is the entire content of the
+// lesson that explains what the game wants.
+.tut__flow-dot
+  position: absolute
+  top: 50%
+  width: clamp(0.55rem, 2.4vmin, 0.85rem)
+  height: clamp(0.55rem, 2.4vmin, 0.85rem)
+  translate: -50% -50%
+  border-radius: 999px
+  background-color: #ffd93c
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 12px rgba(255, 217, 60, 0.9)
+  animation: tut-flow 1.5s cubic-bezier(0.45, 0, 0.35, 1) infinite
+
+.tut__flow-head
+  position: absolute
+  right: 0
+  top: 50%
+  width: 0
+  height: 0
+  translate: 0 -50%
+  border-top: clamp(0.35rem, 1.5vmin, 0.55rem) solid transparent
+  border-bottom: clamp(0.35rem, 1.5vmin, 0.55rem) solid transparent
+  border-left: clamp(0.55rem, 2.2vmin, 0.8rem) solid #ffd93c
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.7))
+
+@keyframes tut-flow
+  0%
+    left: 0
+    opacity: 0
+  12%
+    opacity: 1
+  88%
+    opacity: 1
+  100%
+    left: 100%
+    opacity: 0
 
 // ─── The progress ring ──────────────────────────────────────────────────────
 
@@ -323,6 +505,6 @@ const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }
   opacity: 0
 
 @media (prefers-reduced-motion: reduce)
-  .tut__hand, .tut__target, .tut__ripple, .tut__charge-fill
+  .tut__hand, .tut__target, .tut__ripple, .tut__charge-fill, .tut__no, .tut__flow-dot
     animation-duration: 4.8s
 </style>

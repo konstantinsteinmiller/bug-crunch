@@ -1,4 +1,4 @@
-import { getState, setState } from '@/use/useSplatixState'
+import { getState, setState } from '@/use/useBugCrunchState'
 import { flushSaveNow } from '@/use/useSaveStatus'
 import {
   ANON_NAME_KEY, PLAYER_ID_KEY, PLAYER_NAME_KEY, SDK_NAME_KEY
@@ -26,7 +26,7 @@ export interface PlayerIdentity {
 }
 
 /**
- * The id's own localStorage key, deliberately OUTSIDE the `ts_`-prefixed save
+ * The id's own localStorage key, deliberately OUTSIDE the `bc_`-prefixed save
  * blob.
  *
  * That prefix is exactly what the cloud save layer allowlists and mirrors, so a
@@ -34,8 +34,8 @@ export interface PlayerIdentity {
  * and the game would mint a second one, and the player would have two rows.
  * This copy exists to be the one thing a cloud round-trip cannot overwrite.
  */
-const DEVICE_UID_KEY = 'splatix_uid'
-const DEVICE_NAME_KEY = 'splatix_name'
+const DEVICE_UID_KEY = 'bug-crunch_uid'
+const DEVICE_NAME_KEY = 'bug-crunch_name'
 
 /** The shape the worker validates against. Keep the two in step. */
 const ID_RE = /^[a-zA-Z0-9_-]{8,64}$/

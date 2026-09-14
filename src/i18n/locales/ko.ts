@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': '취소',
   'close': '닫기',
   'ok': '확인',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': '개미',
+    'sprinter': '질주 개미',
     'beetle': '딱정벌레',
     'flea': '벼룩',
     'caterpillar': '애벌레',
@@ -105,7 +106,28 @@ export default {
     'wear': '착용',
     'worn': '착용 중',
     'needStars': '별 {n}개 더',
-    'needCoins': '코인 {n}개 더'
+    'needCoins': '코인 {n}개 더',
+    'price': '가격: {n} 코인',
+    'starGate': '별 {n}개에 열림',
+    'adUnlock': '영상 보고 잠금 해제'
+  },
+  'chest': {
+    'label': '보물 상자',
+    'ready': '{n} 코인으로 보물 상자 열기',
+    'filling': '보물 상자 — 채워지는 중',
+    'spent': '보물 상자 — 내일까지 비었음'
+  },
+  'reveal': {
+    'world': '새로운 무대!',
+    'shoe': '새 신발!',
+    'stars': '별 목표 달성!',
+    'record': '최고 기록 경신!',
+    'chest': '보물!',
+    'foe': '새로운 벌레!',
+    'starsTotal': '별 {n}개',
+    'recordScore': '{n}점',
+    'recordBeat': '이전 기록: {n}',
+    'chestCoins': '+{n} 코인'
   },
   'fever': {
     'filling': '스플랫 피버: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': '꾹 눌렀다 떼면 강한 내리찍기',
       'desktop': '버튼을 꾹 누르면 강한 내리찍기'
+    },
+    'sprinter': {
+      'touch': '질주 개미는 도망쳐요 — 멈추는 곳을 밟으세요',
+      'desktop': '질주 개미는 신발을 피해요 — 가만히 있다가 클릭'
     },
     'beetle': {
       'touch': '딱정벌레는 껍질이 있어요 — 꾹 눌렀다 내리쳐요',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': '광고 차단기 감지됨',
-    'body': 'Splatix는 광고 덕분에 무료예요. 차단기를 끄고 새로고침해 주세요.',
+    'body': 'Bug Crunch는 광고 덕분에 무료예요. 차단기를 끄고 새로고침해 주세요.',
     'allowPrefix': '다음에서 광고 허용:',
     'allowSuffix': '그리고 페이지를 새로고침하세요.',
     'gotIt': '알겠어요'

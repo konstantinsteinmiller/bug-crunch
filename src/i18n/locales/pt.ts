@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Cancelar',
   'close': 'Fechar',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Formigas',
+    'sprinter': 'Formigas velozes',
     'beetle': 'Besouros',
     'flea': 'Pulgas',
     'caterpillar': 'Lagartas',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Calçar',
     'worn': 'Calçado',
     'needStars': 'Mais {n} estrelas',
-    'needCoins': 'Mais {n} moedas'
+    'needCoins': 'Mais {n} moedas',
+    'price': 'Preço: {n} moedas',
+    'starGate': 'Abre com {n} estrelas',
+    'adUnlock': 'Vê um vídeo para desbloquear'
+  },
+  'chest': {
+    'label': 'Baú do tesouro',
+    'ready': 'Abrir o baú por {n} moedas',
+    'filling': 'Baú do tesouro — a encher',
+    'spent': 'Baú do tesouro — vazio até amanhã'
+  },
+  'reveal': {
+    'world': 'Novo lugar para pisar!',
+    'shoe': 'Sapatos novos!',
+    'stars': 'Meta de estrelas!',
+    'record': 'Novo recorde!',
+    'chest': 'Tesouro!',
+    'foe': 'Um bicho novo!',
+    'starsTotal': '{n} estrelas',
+    'recordScore': '{n} pontos',
+    'recordBeat': 'Recorde anterior: {n}',
+    'chestCoins': '+{n} moedas'
   },
   'fever': {
     'filling': 'Febre Splat: {n}% cheia',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Segura e larga para uma pisada forte',
       'desktop': 'Segura o botão para uma pisada forte'
+    },
+    'sprinter': {
+      'touch': 'As velozes fogem — pisa onde elas param',
+      'desktop': 'As velozes fogem do sapato — fica parado e clica'
     },
     'beetle': {
       'touch': 'Besouros têm carapaça: segura e bate',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Bloqueador de anúncios detetado',
-    'body': 'O Splatix é grátis graças aos anúncios. Desliga o bloqueador e recarrega.',
+    'body': 'O Bug Crunch é grátis graças aos anúncios. Desliga o bloqueador e recarrega.',
     'allowPrefix': 'Permite anúncios em',
     'allowSuffix': 'e recarrega a página.',
     'gotIt': 'Entendido'

@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Annulla',
   'close': 'Chiudi',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Formiche',
+    'sprinter': 'Formiche scattanti',
     'beetle': 'Scarabei',
     'flea': 'Pulci',
     'caterpillar': 'Bruchi',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Indossa',
     'worn': 'Indossata',
     'needStars': '{n} stelle in più',
-    'needCoins': '{n} monete in più'
+    'needCoins': '{n} monete in più',
+    'price': 'Prezzo: {n} monete',
+    'starGate': 'Si sblocca a {n} stelle',
+    'adUnlock': 'Guarda un video per sbloccare'
+  },
+  'chest': {
+    'label': 'Forziere',
+    'ready': 'Apri il forziere per {n} monete',
+    'filling': 'Forziere — si sta riempiendo',
+    'spent': 'Forziere — vuoto fino a domani'
+  },
+  'reveal': {
+    'world': 'Un nuovo posto da pestare!',
+    'shoe': 'Scarpe nuove!',
+    'stars': 'Traguardo di stelle!',
+    'record': 'Nuovo record!',
+    'chest': 'Tesoro!',
+    'foe': 'Un nuovo insetto!',
+    'starsTotal': '{n} stelle',
+    'recordScore': '{n} punti',
+    'recordBeat': 'Vecchio record: {n}',
+    'chestCoins': '+{n} monete'
   },
   'fever': {
     'filling': 'Febbre Splat: {n}% piena',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Tieni premuto e rilascia per una pestata forte',
       'desktop': 'Tieni premuto il tasto per una pestata forte'
+    },
+    'sprinter': {
+      'touch': 'Le scattanti scappano — pesta dove si fermano',
+      'desktop': 'Le scattanti scappano dalla scarpa — stai fermo, poi clicca'
     },
     'beetle': {
       'touch': 'Gli scarabei hanno il guscio: tieni premuto e colpisci',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Blocco pubblicità rilevato',
-    'body': 'Splatix è gratis grazie alla pubblicità. Disattiva il blocco e ricarica.',
+    'body': 'Bug Crunch è gratis grazie alla pubblicità. Disattiva il blocco e ricarica.',
     'allowPrefix': 'Consenti le pubblicità su',
     'allowSuffix': 'e ricarica la pagina.',
     'gotIt': 'Capito'

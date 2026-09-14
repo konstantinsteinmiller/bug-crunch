@@ -20,7 +20,7 @@ slicer already normalised the return onto that box, so a big number here means
 the normalisation was refused (a wild return) or switched off.
 
 (From the art-generation-pipeline skill's template; `cells` is adapted to
-splatix's index, which is `{ walks: [...] }` with one fit per sheet.)
+bug-crunch's index, which is `{ walks: [...] }` with one fit per sheet.)
 
 Requires Pillow. No other dependency.
 """

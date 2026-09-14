@@ -12,6 +12,8 @@ import ObjectiveList from '@/components/game/ObjectiveList.vue'
 import StarRow from '@/components/game/StarRow.vue'
 import CoinBadge from '@/components/organisms/CoinBadge.vue'
 import LockerModal from '@/components/organisms/LockerModal.vue'
+import TreasureChest from '@/components/organisms/TreasureChest.vue'
+import RewardRevealModal from '@/components/organisms/RewardRevealModal.vue'
 import OptionsModal from '@/components/organisms/OptionsModal.vue'
 import LeaderboardModal from '@/components/organisms/LeaderboardModal.vue'
 import FReward from '@/components/atoms/FReward.vue'
@@ -22,8 +24,8 @@ import FMuteButton from '@/components/atoms/FMuteButton.vue'
 import GameIcon from '@/components/icons/GameIcon.vue'
 import IconCoin from '@/components/icons/IconCoin.vue'
 
-import * as game from '@/use/useSplatixGame'
-import * as art from '@/use/useSplatixArt'
+import * as game from '@/use/useBugCrunchGame'
+import * as art from '@/use/useBugCrunchArt'
 import { playFx, setSquishVoice, warmAudio } from '@/use/useGameAudio'
 import { resetVfx, sampleFrame } from '@/use/useVfx'
 import { useMusic, setMusicRate } from '@/use/useSound'
@@ -39,17 +41,22 @@ import { isGameplayLive, restartGameplayBracket, syncGameplayLifecycle } from '@
 import { canShowInterstitial, markInterstitialShown } from '@/use/useAdGate'
 import { showMidgameAd } from '@/use/useAds'
 import { leaderboardEnabled, ensureBoard, playerTotal, rankFor, reportRun } from '@/use/useLeaderboard'
+import { formatCount } from '@/utils/localeNumber'
 import useSplatProgress from '@/use/useSplatProgress'
 import useLocker from '@/use/useLocker'
-import { getState, setState } from '@/use/useSplatixState'
-import { HINTS_SEEN_KEY, ONBOARDED_KEY, TUTORIAL_KEY } from '@/keys'
+import { getState, setState } from '@/use/useBugCrunchState'
+import { HINTS_SEEN_KEY, ONBOARDED_KEY, SEEN_BUGS_KEY, TUTORIAL_KEY } from '@/keys'
 import { levelLabel, levelSpec, worldOf, WORLDS, TOTAL_LEVELS } from '@/game/stages'
 import { bossPhaseTicks, bossSpec } from '@/game/bosses'
 import { starsEarned, evaluate, emptyTally, type RunTally } from '@/game/stars'
 import { FEVER_MS, comboMusicRate } from '@/game/combo'
-import { bugSpec } from '@/game/bugs'
+import { bugSpec, type BugId } from '@/game/bugs'
+import { blowPierce } from '@/game/shoes'
+import { rewardsForResult, nextSeenBugs, type CampaignReward } from '@/game/campaignRewards'
 import { warmNextLevelArt } from '@/game/artPreload'
 import { installPreviewSeam } from '@/game/previewFeed'
+import * as tutor from '@/use/useTutorial'
+import { type LessonId } from '@/game/tutorial'
 import { mobileCheck } from '@/utils/function'
 
 /**
@@ -78,13 +85,24 @@ import { mobileCheck } from '@/utils/function'
  * afford it.
  */
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+/**
+ * Group a number for the player's language — `154331` → `154,331` / `154.331`.
+ *
+ * Read `locale.value` INSIDE the call rather than building a formatter once at
+ * setup: this component is mounted for the whole session, so a formatter fixed
+ * at first paint would keep English commas on a board the player has since
+ * switched to German. See `src/utils/localeNumber.ts` for why the digits stay
+ * Latin.
+ */
+const fmt = (n: number): string => formatCount(n, locale.value)
 const { playSound } = useSounds()
 const { startBattleMusic, stopBattleMusic } = useMusic()
 const { preloadAssets } = useAssets()
 const { userJuiceStyle, userHighVis, userSingleTap } = useUser()
 const progress = useSplatProgress()
-const { equippedShoe, affordableShoes } = useLocker()
+const { equippedShoe, equippedSpec, affordableShoes, ownedShoes } = useLocker()
 
 // ─── Refs ───────────────────────────────────────────────────────────────────
 
@@ -95,6 +113,22 @@ const railRef = ref<HTMLElement | null>(null)
 
 const showResult = ref(false)
 const showLocker = ref(false)
+
+// ─── The gift screen ────────────────────────────────────────────────────────
+//
+// Things won during the campaign are PRESENTED before the result screen rather
+// than listed on it. A world opening, a star milestone, a new species met and a
+// personal best are four different feelings, and a row of chips on a summary
+// gives all four the same weight — which is to say none. `RewardRevealModal`
+// takes the queue and shows them one at a time, each with the burst the reward
+// overlay was built for, and hands control back when it is empty.
+const showReveals = ref(false)
+const pendingReveals = ref<CampaignReward[]>([])
+const onRevealsDone = (): void => { showResult.value = true }
+
+/** The wallet's own element, so the chest's coins have somewhere to fly to. */
+const coinBadgeRef = ref<InstanceType<typeof CoinBadge> | null>(null)
+const coinBadgeEl = computed<HTMLElement | null>(() => coinBadgeRef.value?.rootEl ?? null)
 const showOptions = ref(false)
 const showLeaderboard = ref(false)
 const showBanner = ref(false)
@@ -132,38 +166,69 @@ const summary = ref<Summary>({
 
 const summarySpec = computed(() => levelSpec(summary.value.level))
 
-// ─── The onboarding lesson ──────────────────────────────────────────────────
+// ─── The lessons ────────────────────────────────────────────────────────────
 //
-// Three beats, and the player leaves each one by DOING it. See
-// `TutorialOverlay.vue` for why there is nothing to dismiss.
+// The scene's half of the tutorial: WHEN each lesson becomes relevant, and
+// WHERE on the screen it points. Which lesson is on screen, and whether it has
+// ever been taught, belong to `useTutorial`; what it looks like belongs to
+// `TutorialOverlay`. See `game/tutorial.ts` for why there is a list at all.
 
-const tutorialSeen = ref(getState<boolean>(TUTORIAL_KEY, false) === true)
-const tutorialBeat = ref<0 | 1 | 2>(0)
-const tutorialProgress = ref(0)
-/** ms of qualifying action done in the current beat. */
-let beatMs = 0
 /**
- * How long the player has actually been PRESENT, so a beat cannot time out
- * before they have been asked.
+ * How long the player has actually been PRESENT.
  *
  * Counted from the first input, never from the wall clock. An interstitial, a
  * consent dialog or a tab opened in the background all leave the game running
- * with nobody looking at it, and a bail-out on wall time would dismiss the whole
+ * with nobody looking at it, and a bail-out on wall time would retire the whole
  * lesson before the player ever reached the game.
  */
-let presentMs = 0
 let sawInput = false
 
-const BEAT_MOVE_MS = 900
-const BEAT_BAILOUT_MS = 14_000
+/** The legacy flag: true once the opening three lessons are behind the player.
+ *  Still written, because the control-hint pill and the result screen read it. */
+const tutorialSeen = ref(getState<boolean>(TUTORIAL_KEY, false) === true)
 
-const tutorialActive = computed(() =>
-  !tutorialSeen.value && level.value === 1 && game.phase.value === 'play' && !showResult.value)
+const activeLesson = tutor.activeLesson
+const lessonSpecOf = tutor.activeSpec
+const lessonProgress = tutor.lessonProgress
 
-/** Where the lesson's hand is drawn, in CSS px. */
-const tutorialAt = ref({ x: 0, y: 0 })
+/** Where the lesson points, and (for a `flow`) where it points TO, in CSS px. */
+const lessonAt = ref({ x: 0, y: 0 })
+const lessonTo = ref({ x: 0, y: 0 })
+
+/**
+ * Is the lesson on screen right now?
+ *
+ * A board lesson stops with the game — every modal takes an app pause, and a
+ * lesson armed at the last second of a level must not tick its bail-out away
+ * behind the result screen. The META lessons are the exception: they are ABOUT
+ * those screens, so they run through the pause (`whilePaused`).
+ */
+const lessonShown = computed(() =>
+  lessonSpecOf.value !== null
+  && (!isGamePaused.value || lessonSpecOf.value.whilePaused === true))
+
+/**
+ * The centre of a HUD control, in viewport px.
+ *
+ * A LIST of selectors rather than one, because several of the things a lesson
+ * points at are owned by other components whose markup is allowed to change —
+ * and a lesson that silently points at (0, 0) because a class was renamed is
+ * worse than one that does not run. The first selector that resolves wins; if
+ * none do, the caller falls back to the foot and the lesson still reads.
+ */
+const elCentre = (...selectors: string[]): { x: number; y: number } | null => {
+  for (const sel of selectors) {
+    const el = document.querySelector(sel)
+    if (!el) continue
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0 && r.height <= 0) continue
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }
+  return null
+}
 
 const finishTutorial = (): void => {
+  if (tutorialSeen.value) return
   tutorialSeen.value = true
   setState(TUTORIAL_KEY, true)
 }
@@ -328,8 +393,12 @@ const loop = (now: number): void => {
   if (!isGamePaused.value) {
     game.step(dt)
     drainToWorld()
-    if (tutorialActive.value) stepTutorial(dt)
+    if (sawInput) { armBodyLessons(); armChestLesson() }
   }
+
+  // OUTSIDE the pause gate: the meta lessons are about the panels that cause
+  // the pause, and would never get a frame if they stopped with the board.
+  if (lessonShown.value) stepTutorial(dt)
 
   art.drawScene(ctx, window.innerWidth, window.innerHeight, isGamePaused.value ? 0 : dt)
 }
@@ -428,46 +497,237 @@ const pan = (x: number): number => {
 
 // ─── The tutorial's clock ───────────────────────────────────────────────────
 
-const stepTutorial = (dt: number): void => {
-  const foot = game.getFoot()
-  if (sawInput) presentMs += dt
-
-  if (tutorialBeat.value === 0) {
-    tutorialAt.value = { x: art.toX(foot.x), y: art.toY(foot.y) }
-    if (foot.speed > 4) beatMs += dt
-    tutorialProgress.value = Math.min(1, beatMs / BEAT_MOVE_MS)
-    if (beatMs >= BEAT_MOVE_MS || presentMs > BEAT_BAILOUT_MS) nextBeat()
-    return
-  }
-
-  // Beats 1 and 2 point at a live body when there is one, so the lesson is
-  // always over something the player can actually hit.
+/**
+ * The nearest live body the lesson can point at, or null.
+ *
+ * `want` filters by a predicate — the spike lesson has to land on a caterpillar
+ * and nothing else, or it teaches the player to avoid ants.
+ */
+const nearestBody = (want?: (id: string) => boolean): { x: number; y: number } | null => {
   const bugs = game.getBugs()
   const n = game.getBugCount()
-  const target = n > 0 ? bugs[0]! : null
-  tutorialAt.value = target
-    ? { x: art.toX(target.x), y: art.toY(target.y) }
-    : { x: art.toX(foot.x), y: art.toY(foot.y) }
-  tutorialProgress.value = 0
-  if (presentMs > BEAT_BAILOUT_MS * (tutorialBeat.value + 1)) nextBeat()
+  const foot = game.getFoot()
+  let best: { x: number; y: number } | null = null
+  let bestD = Infinity
+  for (let i = 0; i < n; i++) {
+    const b = bugs[i]!
+    if (!b.alive) continue
+    if (want && !want(b.id)) continue
+    const d = (b.x - foot.x) ** 2 + (b.y - foot.y) ** 2
+    if (d < bestD) { bestD = d; best = { x: b.x, y: b.y } }
+  }
+  return best
 }
 
-const nextBeat = (): void => {
-  beatMs = 0
-  if (tutorialBeat.value >= 2) { finishTutorial(); return }
-  tutorialBeat.value = (tutorialBeat.value + 1) as 0 | 1 | 2
-  tutorialProgress.value = 0
+/** Where each lesson points. World positions go through the art transform;
+ *  HUD controls are read off their own rects. */
+const aimLesson = (id: LessonId): void => {
+  const foot = game.getFoot()
+  const atFoot = { x: art.toX(foot.x), y: art.toY(foot.y) }
+  const world = (p: { x: number; y: number } | null) =>
+    (p ? { x: art.toX(p.x), y: art.toY(p.y) } : atFoot)
+
+  switch (id) {
+    case 'move':
+      lessonAt.value = atFoot
+      return
+    case 'stomp':
+    case 'chain':
+      lessonAt.value = world(nearestBody())
+      return
+    case 'goal': {
+      // The only lesson with two ends: a body on the floor, and the bar at the
+      // top of the screen that fills when it is squished.
+      lessonAt.value = world(nearestBody())
+      lessonTo.value = elCentre('.hud__rail') ?? { x: windowWidth.value / 2, y: 40 }
+      return
+    }
+    case 'slam':
+      lessonAt.value = world(
+        nearestBody((b) => blowPierce(equippedSpec.value, false) < bugSpec(b as never).armor)
+        ?? nearestBody()
+      )
+      return
+    case 'spike':
+      lessonAt.value = world(nearestBody((b) => bugSpec(b as never).spiky))
+      return
+    case 'dodge':
+      lessonAt.value = world(nearestBody((b) => bugSpec(b as never).dodges))
+      return
+    case 'boss': {
+      const boss = game.getBoss()
+      lessonAt.value = boss
+        ? { x: art.toX(boss.x), y: art.toY(boss.y) }
+        : (elCentre('.scene__boss') ?? atFoot)
+      return
+    }
+    case 'fever':
+      lessonAt.value = elCentre('.vial__button', '.scene__rail') ?? atFoot
+      return
+    case 'chest':
+      lessonAt.value = elCentre('.chest', '.scene__wallet') ?? atFoot
+      return
+    case 'locker':
+      lessonAt.value = elCentre('.scene__locker button', '.scene__locker') ?? atFoot
+      return
+    case 'buy':
+      lessonAt.value = elCentre(
+        '.shoe-card.is-affordable .f-button',
+        '.shoe-card.is-open .f-button',
+        '.shoe-card'
+      ) ?? atFoot
+      return
+    case 'stars':
+      lessonAt.value = elCentre('.result__stars', '.result') ?? atFoot
+  }
 }
 
-/** Beat 1 is over the moment a bug is squished. */
+/**
+ * One frame of the tutorial.
+ *
+ * AIMING happens every frame; the CLOCK only runs while the player is present.
+ * The two were one thing in the first cut, gated together on `sawInput`, and
+ * that put the result screen's star lesson in the top-left corner of the
+ * screen: `sawInput` is set from canvas input, the result screen makes the
+ * canvas non-interactive, and a player who reached it without having dragged
+ * the shoe first left the lesson pointing at (0, 0) — its initial value, never
+ * updated.
+ *
+ * `present` is therefore not just "touched the board". A lesson that lives on a
+ * PANEL was reached by pressing a button to get there, which is as present as a
+ * player ever is.
+ */
+const stepTutorial = (dt: number): void => {
+  const id = activeLesson.value
+  if (id === null) return
+  aimLesson(id)
+  const present = sawInput || lessonSpecOf.value?.whilePaused === true
+  if (!present) return
+  // `move` is the one lesson with no event to listen for — there is no "moved"
+  // signal, only a foot that is or is not travelling.
+  const doing = id === 'move' && game.getFoot().speed > 4
+  tutor.step(dt, doing)
+}
+
+/**
+ * The opening three run in ORDER, and each one arms the next.
+ *
+ * Armed here rather than at the level's start, which is where the first cut put
+ * them: at the level's start nothing has been taught yet, so the condition
+ * "`move` is done" was false and the stomp lesson was never armed at all — a
+ * new player was shown how to move and then left on an empty screen with no
+ * idea what to do with it. The lesson that follows a lesson has to be armed by
+ * the lesson before it.
+ */
+watch(() => tutor.isTaught('move'), (done) => {
+  if (done && !tutor.isTaught('stomp')) tutor.arm('stomp')
+}, { immediate: true })
+
+/** Squishing something retires the stomp lesson, and opens the two that only
+ *  make sense once the player has landed one. */
 watch(game.squished, (n, prev) => {
-  if (tutorialActive.value && tutorialBeat.value === 1 && n > prev) nextBeat()
+  if (n <= prev) return
+  tutor.complete('stomp')
+  if (!tutor.isTaught('goal')) tutor.arm('goal')
+  else if (n >= 2 && !tutor.isTaught('chain')) tutor.arm('chain')
 })
 
-/** Beat 2 is over the moment a charged slam lands. */
+/** A chain of two is the chain lesson, learned. */
+watch(game.chainCount, (n) => { if (n >= 2) tutor.complete('chain') })
+
+/** A charged slam retires the slam lesson — and the opening three. */
 watch(game.slams, (n, prev) => {
-  if (tutorialActive.value && tutorialBeat.value === 2 && n > prev) finishTutorial()
+  if (n > prev) { tutor.complete('slam'); finishTutorial() }
 })
+
+/** Spending the vial retires the Fever lesson. */
+watch(game.feverMs, (n, prev) => { if (n > 0 && prev <= 0) tutor.complete('fever') })
+
+/** The vial filling for the first time is the moment to point at the button. */
+watch(game.feverCharged, (ready) => {
+  if (ready) { teach('fever', 4200); tutor.arm('fever') }
+})
+
+/** Hitting the boss retires the boss lesson. */
+watch(game.bossHp, (hp, prev) => { if (hp < prev) tutor.complete('boss') })
+
+// ─── The meta lessons ───────────────────────────────────────────────────────
+//
+// The shop was the single loudest piece of feedback on the first build: a
+// reviewer reported that "skin buying does not work", and two of the three
+// reasons were that nobody knew the Locker existed and nobody knew a card had
+// to be pressed before it would sell them anything. So the game now points at
+// both, in order, and only at the moment the player can ACTUALLY afford
+// something — an arrow pointing at a shop you cannot buy from teaches
+// disappointment.
+
+/**
+ * The chest was opened.
+ *
+ * The wallet has ALREADY been paid by the component — the coins are mid-flight
+ * to the badge as this runs — so there is nothing to add here. Two things do
+ * belong here: the lesson is over, and a GOLD prize off the board is worth a
+ * gift screen. A gold prize mid-level is not: the coin burst is the feedback
+ * there, and a modal over a running clock is a punishment for claiming.
+ */
+const onChestClaimed = (p: { coins: number; gold: boolean }): void => {
+  tutor.complete('chest')
+  if (!p.gold || !showResult.value) return
+  pendingReveals.value = [{ kind: 'chest', coins: p.coins, gold: true }]
+  showReveals.value = true
+}
+
+/**
+ * The chest is claimable for the first time.
+ *
+ * Probed off the DOM rather than off the composable, and deliberately: the
+ * chest owns its own 1 Hz clock inside the component, and a second copy of that
+ * clock out here would be a second source of truth for when it is ready. What
+ * the lesson needs is not the state, it is the BUTTON — which it has to find
+ * anyway to point at.
+ */
+const armChestLesson = (): void => {
+  if (tutor.isTaught('chest')) return
+  if (document.querySelector('.chest.is-ready')) tutor.arm('chest')
+}
+
+/**
+ * The moment the player can first afford something.
+ *
+ * Armed here as well as on the result screen, because coins do not only arrive
+ * at the end of a level — the chest pays out mid-session — and "you have enough
+ * for a new shoe" is only interesting in the second it becomes true. The
+ * director's queue keeps it behind anything happening on the board (the shop
+ * lessons are the last two rungs of the curriculum), so it waits its turn
+ * rather than landing on top of a chain.
+ */
+watch(affordableShoes, (n, before) => {
+  if (n > 0 && before === 0) tutor.arm('locker')
+})
+
+/** The result screen is the natural pause to mention the shop in. */
+watch(showResult, (open) => {
+  if (!open) { tutor.shelve('stars'); tutor.shelve('locker'); return }
+  tutor.arm('stars')
+  if (affordableShoes.value > 0) tutor.arm('locker')
+})
+
+/** Opening it retires the first half and arms the second. */
+watch(showLocker, (open) => {
+  if (!open) { tutor.shelve('buy'); return }
+  tutor.complete('locker')
+  if (affordableShoes.value > 0) {
+    // One tick, so the modal's cards are in the DOM before the lesson tries to
+    // find the one it is pointing at.
+    void nextTick(() => { if (showLocker.value) tutor.arm('buy') })
+  }
+})
+
+/** A shoe actually bought is the lesson, learned — and the end of the shop
+ *  curriculum. */
+watch(ownedShoes, (now, before) => {
+  if (now.length > before.length) { tutor.complete('buy'); tutor.complete('locker') }
+}, { deep: false })
 
 // ─── Flow ───────────────────────────────────────────────────────────────────
 
@@ -499,16 +759,39 @@ const startLevel = (n: number): void => {
 let bannerTimer: ReturnType<typeof setTimeout> | null = null
 const hintTimers: ReturnType<typeof setTimeout>[] = []
 
-/** The one-shot lessons this level introduces. */
+/**
+ * What this level introduces — the text pills AND the wordless lessons.
+ *
+ * The two are not alternatives. A pill is a reminder for somebody who can read
+ * and already knows the game; a lesson is how a six-year-old finds out the
+ * mechanic exists at all. The pill retires on a timer, the lesson retires when
+ * the player does the thing.
+ *
+ * Lessons are armed on a DELAY rather than at the level's first frame, for the
+ * same reason the pills are: a level opens on a banner and a board filling up,
+ * and an instruction laid over that is one more thing competing for the same
+ * glance. The exception is the very first level, where there is nothing else to
+ * be looking at and the control is the only thing that matters.
+ */
 const teachLevelHints = (): void => {
   for (const id of hintTimers) clearTimeout(id)
   hintTimers.length = 0
   const s = spec.value
   if (!onboarded.value) teach('move', 5200)
+
+  // The opening three, in order, and only in the first level: move, then the
+  // stomp, and the goal follows the first squish (see the `squished` watcher).
+  if (!tutor.isTaught('move')) tutor.arm('move')
+  if (tutor.isTaught('move') && !tutor.isTaught('stomp')) tutor.arm('stomp')
+
   const ids = new Set(s.roster.map((r) => r.id))
   hintTimers.push(setTimeout(() => {
-    if (s.boss) { teach('boss', 5000); return }
+    if (s.boss) { teach('boss', 5000); tutor.arm('boss'); return }
     if (ids.has('caterpillar')) teach('spike')
+    // Before the beetle: the sprinter debuts on 1-2 and the beetle on 1-4, and
+    // a primer that arrives two levels after the thing it is about is not a
+    // primer.
+    else if (ids.has('sprinter')) teach('sprinter')
     else if (ids.has('beetle')) teach('beetle')
     else if (ids.has('flea')) teach('flea')
     else if (ids.has('stinkbug')) teach('stink')
@@ -523,6 +806,38 @@ const teachLevelHints = (): void => {
   }, 9000))
 }
 
+/**
+ * Lessons that wait for their subject to be ON THE BOARD.
+ *
+ * A roster says a caterpillar *can* appear; it does not say one has. Pointing
+ * at where a spiky bug would be if there were one teaches nothing, so these are
+ * armed from the frame loop the moment the thing actually exists — which is
+ * also the first moment the player could be hurt by not knowing.
+ */
+const armBodyLessons = (): void => {
+  if (game.phase.value !== 'play' || showResult.value) return
+  const bugs = game.getBugs()
+  const n = game.getBugCount()
+  let sawArmour = false
+  let sawSpike = false
+  let sawDodge = false
+  for (let i = 0; i < n; i++) {
+    const b = bugs[i]!
+    if (!b.alive) continue
+    // Armoured FOR THIS SHOE. A beetle is armour 2 and the steel boot pierces 4,
+    // so a player wearing it taps straight through — and teaching them to charge
+    // for it would be teaching a slower way to do what they were already doing.
+    if (blowPierce(equippedSpec.value, false) < b.spec.armor) sawArmour = true
+    if (b.spec.spiky) sawSpike = true
+    if (b.spec.dodges) sawDodge = true
+  }
+  // Spikes first: it is the only one of the three that costs the player
+  // something to learn the hard way.
+  if (sawSpike && !equippedSpec.value.spikeProof) tutor.arm('spike')
+  if (sawArmour) tutor.arm('slam')
+  if (sawDodge) tutor.arm('dodge')
+}
+
 const teachForBoss = (): void => {
   const s = spec.value
   if (!s.boss) return
@@ -531,15 +846,14 @@ const teachForBoss = (): void => {
   else if (p?.script === 'charge') teach('boss', 4200)
 }
 
-/** The vial filling for the first time is worth saying once. */
-watch(game.feverCharged, (ready) => {
-  if (ready) teach('fever', 4200)
-})
-
 const onLevelEnd = async (won: boolean): Promise<void> => {
   const tally = game.tally.value
   const stars = starsEarned(spec.value.objectives, tally)
   const previousStars = progress.starsFor(level.value)
+  // Read BEFORE banking: `bankLevel` moves both of these, and a reveal that
+  // compared a number with itself would announce every run as a record.
+  const starsBefore = progress.totalStars.value
+  const bestBefore = progress.bestScore.value
   const banked = progress.bankLevel(level.value, stars, tally)
 
   summary.value = {
@@ -585,7 +899,27 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
     try { await showMidgameAd() } catch { /* no fill — carry on */ }
   }
 
-  showResult.value = true
+  // ── What this run WON, before what it scored ──
+  //
+  // The gift screen goes first and the result screen follows it, because the
+  // two are answering different questions: "what did you just earn" and "how
+  // did you do". Opened with an empty queue the modal closes immediately and
+  // still emits `done`, so this is never a place a player can get stuck.
+  const seen = getState<BugId[]>(SEEN_BUGS_KEY, [])
+  pendingReveals.value = rewardsForResult({
+    tally: banked.tally,
+    unlockedWorld: banked.unlockedWorld,
+    starsBefore,
+    starsAfter: progress.totalStars.value,
+    isRecord: banked.isRecord,
+    previousBest: bestBefore,
+    seenBugs: seen
+  })
+  const nextSeen = nextSeenBugs(seen, banked.tally)
+  if (nextSeen !== seen) setState(SEEN_BUGS_KEY, nextSeen)
+
+  if (pendingReveals.value.length > 0) showReveals.value = true
+  else showResult.value = true
   warmNextLevelArt(won ? level.value + 1 : level.value)
 }
 
@@ -611,7 +945,14 @@ const onRetry = (): void => {
 const resultRank = computed(() => {
   if (!leaderboardEnabled) return null
   const rank = rankFor(progress.bestScore.value)
-  return rank > 0 ? `#${rank.toLocaleString()}` : null
+  // `#` is built here rather than in the template: pug reads a leading `#` as
+  // an id shorthand and will not parse `#{rank}`.
+  //
+  // Grouped through the GAME's locale, not `toLocaleString()`'s no-argument
+  // form, which follows the browser's locale instead — a player running the
+  // game in English on a German system was being shown `1.130` beside an
+  // otherwise English screen.
+  return rank > 0 ? `#${fmt(rank)}` : null
 })
 
 const resultCompact = computed(() => isMobileLandscape.value || isShortViewport.value)
@@ -641,6 +982,12 @@ const gameplayLive = computed(() => isGameplayLive({
   adShowing: isAdShowing.value,
   visibilityHidden: isVisibilityHidden.value,
   platformPaused: isPlatformPaused.value,
+  // Always false, and deliberately so. The portal bracket asks "is the player
+  // playing?", and during a lesson they are: the overlay is
+  // `pointer-events: none`, the clock runs and the bugs keep walking. Only the
+  // lessons that land on a MODAL pause anything, and those are already covered
+  // by `anyModalOpen`. Reporting a stop for each of thirteen lessons would flap
+  // the bracket across a whole campaign for no player-visible reason.
   tutorialActive: false
 }))
 
@@ -740,7 +1087,15 @@ const onStarLand = (): void => playFx('star')
           :quota="spec.quota"
           :stars="progress.starsFor(level)"
         )
-        CoinBadge.scene__wallet
+        //- The wallet column: what the player has, and the one thing on the
+        //- HUD that pays them for coming back.
+        div.scene__wallet
+          CoinBadge(ref="coinBadgeRef")
+          TreasureChest(
+            v-if="!showResult && !showReveals"
+            :target-el="coinBadgeEl"
+            @claimed="onChestClaimed"
+          )
 
       //- The boss bar, under the strip and clear of the chain badge.
       div.scene__boss(v-if="bossShown")
@@ -813,14 +1168,17 @@ const onStarLand = (): void => playFx('star')
         :boss="spec.boss"
       )
 
-      //- The wordless lesson. Also inside the HUD layer, for the same reason:
-      //- the gesture it is teaching must reach the canvas underneath it.
+      //- The wordless lesson. Inside the HUD layer for the same reason the rest
+      //- of it is — the gesture it teaches must reach the canvas underneath —
+      //- but `position: fixed` and above every panel, because two of the
+      //- lessons are about the shop and the shop is a modal.
       TutorialOverlay(
-        v-if="tutorialActive"
-        :beat="tutorialBeat"
-        :progress="tutorialProgress"
-        :x="tutorialAt.x"
-        :y="tutorialAt.y"
+        :lesson="lessonShown ? lessonSpecOf : null"
+        :progress="lessonProgress"
+        :x="lessonAt.x"
+        :y="lessonAt.y"
+        :to-x="lessonTo.x"
+        :to-y="lessonTo.y"
       )
 
     //- ── Result screen ─────────────────────────────────────────────────────
@@ -873,7 +1231,7 @@ const onStarLand = (): void => playFx('star')
             GameIcon.result__chip-icon(name="trophy")
             span.sr-only {{ t('leaderboard.title') }}
             span.result__chip-value {{ resultRank }}
-            span.result__chip-of(v-if="playerTotal > 0") {{ t('result.rankOf', { n: playerTotal }) }}
+            span.result__chip-of(v-if="playerTotal > 0") {{ t('result.rankOf', { n: fmt(playerTotal) }) }}
 
         div.result__unlock(v-if="summary.unlockedWorld")
           GameIcon.result__unlock-icon(name="unlock")
@@ -908,6 +1266,13 @@ const onStarLand = (): void => playFx('star')
             :aria-label="summary.cleared ? t('result.nextLevel') : t('result.tryAgain')"
             @click="summary.cleared ? onNext() : onRetry()"
           )
+
+    //- Before FReward in the tree, because it plays before it on screen.
+    RewardRevealModal(
+      v-model="showReveals"
+      :reward="pendingReveals"
+      @done="onRevealsDone"
+    )
 
     LockerModal(v-model="showLocker")
     OptionsModal(:is-open="showOptions" @close="showOptions = false")
@@ -965,6 +1330,10 @@ const onStarLand = (): void => playFx('star')
 
 .scene__wallet
   flex: 0 0 auto
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: clamp(0.2rem, 1.4vmin, 0.5rem)
   pointer-events: auto
 
 .scene__boss

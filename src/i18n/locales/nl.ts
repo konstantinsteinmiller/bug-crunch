@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Annuleren',
   'close': 'Sluiten',
   'ok': 'Ok',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Mieren',
+    'sprinter': 'Sprintmieren',
     'beetle': 'Kevers',
     'flea': 'Vlooien',
     'caterpillar': 'Rupsen',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Aandoen',
     'worn': 'Aan',
     'needStars': 'Nog {n} sterren',
-    'needCoins': 'Nog {n} munten'
+    'needCoins': 'Nog {n} munten',
+    'price': 'Prijs: {n} munten',
+    'starGate': 'Vrij bij {n} sterren',
+    'adUnlock': 'Bekijk een video om te ontgrendelen'
+  },
+  'chest': {
+    'label': 'Schatkist',
+    'ready': 'Open de schatkist voor {n} munten',
+    'filling': 'Schatkist — wordt gevuld',
+    'spent': 'Schatkist — leeg tot morgen'
+  },
+  'reveal': {
+    'world': 'Nieuwe plek om te stampen!',
+    'shoe': 'Nieuwe schoenen!',
+    'stars': 'Sterrenmijlpaal!',
+    'record': 'Nieuw record!',
+    'chest': 'Schat!',
+    'foe': 'Een nieuw beestje!',
+    'starsTotal': '{n} sterren',
+    'recordScore': '{n} punten',
+    'recordBeat': 'Oud record: {n}',
+    'chestCoins': '+{n} munten'
   },
   'fever': {
     'filling': 'Splatkoorts: {n}% vol',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Houd vast en laat los voor een harde klap',
       'desktop': 'Houd de knop vast voor een harde klap'
+    },
+    'sprinter': {
+      'touch': 'Sprinters rennen weg — tik waar ze stoppen',
+      'desktop': 'Sprinters vluchten voor je schoen — sta stil en klik'
     },
     'beetle': {
       'touch': 'Kevers hebben een schild: vasthouden en toeslaan',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Adblocker gevonden',
-    'body': 'Splatix is gratis dankzij advertenties. Zet je adblocker uit en herlaad.',
+    'body': 'Bug Crunch is gratis dankzij advertenties. Zet je adblocker uit en herlaad.',
     'allowPrefix': 'Sta advertenties toe op',
     'allowSuffix': 'en herlaad de pagina.',
     'gotIt': 'Begrepen'

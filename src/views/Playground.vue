@@ -4,7 +4,7 @@ import { BUGS, type BugId } from '@/game/bugs'
 import { SHOES, shoeSpec, type ShoeId } from '@/game/shoes'
 import { BOSS_IDS, bossSpec, type BossId } from '@/game/bosses'
 import { HAZARDS, type HazardId } from '@/game/hazards'
-import { ART_CATALOGUE } from '@/game/artCatalogue'
+import { ART_BRAND, ART_CATALOGUE } from '@/game/artCatalogue'
 import {
   artOverridesEnabled, artOverrideSource, refreshArtOverrides, setArtOverrides, spriteFor
 } from '@/game/art'
@@ -16,6 +16,9 @@ import { blitBanner, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, BANNE
 import { paintSmokeRef } from '@/use/useVfx'
 import type { WorldId } from '@/game/stages'
 import { SHOE_BOX } from '@/game/artBoxes'
+import { ICON_PATHS } from '@/components/icons/iconPaths'
+import { isGameIconName } from '@/components/icons/iconNames'
+import { prependBaseUrl } from '@/utils/function'
 
 /**
  * `/playground` — the verification scene.
@@ -57,7 +60,19 @@ const refresh = (): void => {
 
 interface Row { key: string; label: string; target: string; painted: boolean }
 
+/**
+ * Bumped after every redraw.
+ *
+ * `spriteFor` is a plain function, not a ref — deliberately, because the field
+ * asks it per drawable per frame — so a computed that calls it never
+ * invalidates on its own. Probes settle a second or two after the page opens,
+ * which is exactly when a freshly sliced painting arrives, so without this the
+ * page would go on saying "drawn only" over a cell that is visibly painted.
+ */
+const probeTick = ref(0)
+
 const rows = computed<Row[]>(() => {
+  void probeTick.value
   const out: Row[] = []
   const add = (kind: Parameters<typeof spriteFor>[0], id: string, label: string): void => {
     out.push({
@@ -170,7 +185,24 @@ const drawProcedural = (
         blitBanner(ctx, 4, CELL / 2 - CELL * 0.12, CELL - 8, CELL * 0.24, { procedural: true })
         return
       }
-      if (UI_ICON_IDS.includes(id as UiIconId)) paintUiIcon(ctx, id as UiIconId, half * 1.4, { procedural: true })
+      if (UI_ICON_IDS.includes(id as UiIconId)) {
+        paintUiIcon(ctx, id as UiIconId, half * 1.4, { procedural: true })
+      } else if (id.startsWith('icon-')) {
+        // The vector glyph the painting has to beat, filled from the same
+        // `Path2D` list `GameIcon` renders — one path, nonzero, so the holes
+        // that are meant to be holes stay holes.
+        const name = id.slice('icon-'.length)
+        const subPaths = isGameIconName(name) ? ICON_PATHS[name] : null
+        if (subPaths?.length) {
+          const box = half * 1.4
+          ctx.translate(-box / 2, -box / 2)
+          ctx.scale(box / 24, box / 24)
+          const path = new Path2D()
+          for (const d of subPaths) path.addPath(new Path2D(d))
+          ctx.fillStyle = '#ffffff'
+          ctx.fill(path, 'nonzero')
+        }
+      }
       break
   }
   ctx.restore()
@@ -226,7 +258,26 @@ const draw = async (): Promise<void> => {
   }
   // Keep the floor cache honest with whatever the flag now says.
   void floorTile(world.value)
+  probeTick.value++
 }
+
+/**
+ * The brand bitmaps, at the sizes they are actually shown.
+ *
+ * Neither is probed — the splash reads them off disk on every build — so they
+ * have no drawn/painted A/B to sit in the grid above. What they DO need is the
+ * same acceptance test everything else gets: the mascot is 200-340 px on the
+ * splash but the logo lands on a portal tile at 64, and a wordmark that is mud
+ * at 64 is a store listing nobody clicks.
+ */
+const BRAND_SIZES = [24, 40, 64, 120, 200]
+const brand = Object.entries(ART_BRAND).map(([name, rel]) => ({
+  name,
+  rel,
+  // Cache-busted per page load so a freshly sliced painting is not served from
+  // the last visit's memory cache — the whole reason to open this page.
+  src: `${prependBaseUrl(rel)}?v=${Date.now()}`
+}))
 
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -257,6 +308,22 @@ void BANNER
         button(@click="toggle") Painted art: {{ artOn ? 'ON' : 'OFF' }}
         button.ghost(@click="refresh") Re-probe
         span.status {{ paintedCount }} / {{ rows.length }} painted · source: {{ source }}
+
+    section.brand
+      h2 Brand — never probed, always shipped
+      p.lede
+        | The splash reads these off disk on every build, art layer or not. Each one
+        |  at the sizes it is actually seen at.
+      .brand-rows
+        .brand-row(v-for="b in brand" :key="b.name")
+          .meta
+            strong {{ b.name }}
+            code {{ b.rel }}
+          .brand-sizes
+            figure(v-for="px in BRAND_SIZES" :key="px")
+              .shot(:style="{ width: `${px}px`, height: `${px}px` }")
+                img(:src="b.src" :alt="b.name")
+              figcaption {{ px }} px
 
     .grid(ref="gridRef")
       .row(v-for="row in rows" :key="row.key" :class="{ 'is-missing': !row.painted }")
@@ -294,6 +361,56 @@ h1
   max-width: 70ch
   margin: 0 0 14px
   color: #9aa7b4
+
+.brand
+  margin: 0 0 26px
+  padding: 14px
+  border: 1px solid #242c36
+  border-radius: 8px
+  background: #11161d
+
+h2
+  margin: 0 0 4px
+  font-size: 16px
+
+.brand-rows
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.brand-row
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  gap: 16px
+
+.brand-sizes
+  display: flex
+  align-items: flex-end
+  gap: 14px
+
+  figure
+    margin: 0
+    text-align: center
+
+  figcaption
+    color: #7d8894
+    font-family: ui-monospace, monospace
+    font-size: 11px
+
+// A checker under each one, so a bitmap that lost its transparency says so.
+.shot
+  display: grid
+  place-items: center
+  background-image: linear-gradient(45deg, #222833 25%, transparent 25%), linear-gradient(-45deg, #222833 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222833 75%), linear-gradient(-45deg, transparent 75%, #222833 75%)
+  background-size: 12px 12px
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0
+  background-color: #1a1f28
+
+  img
+    width: 100%
+    height: 100%
+    object-fit: contain
 
 .bar
   display: flex

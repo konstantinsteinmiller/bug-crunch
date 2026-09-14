@@ -80,6 +80,10 @@ export const WORLDS: Record<WorldId, WorldSpec> = {
     id: 1, theme: 'picnic', starGate: 0, boss: 'queenAnt',
     roster: [
       { id: 'ant', weight: 62 },
+      // The sprinter is an ant with one extra rule, so it rides the ant's own
+      // weight class — a clear minority of the picnic, common enough that a
+      // player meets one every few seconds on the levels it is open on.
+      { id: 'sprinter', weight: 26 },
       { id: 'pinatafly', weight: 10 },
       { id: 'beetle', weight: 18 },
       { id: 'flea', weight: 16 }
@@ -96,6 +100,11 @@ export const WORLDS: Record<WorldId, WorldSpec> = {
     id: 2, theme: 'backyard', starGate: 12, boss: 'beetleKing',
     roster: [
       { id: 'ant', weight: 34 },
+      // Still a picnic ant, and still worth meeting: world 2 hands it honey and
+      // a mower to be herded into, which is the second half of the lesson.
+      // Worlds 3 and 4 drop it — the attic and the arcade have fauna of their
+      // own, and a cast that never loses anybody gets thinner every world.
+      { id: 'sprinter', weight: 20 },
       { id: 'beetle', weight: 26 },
       { id: 'caterpillar', weight: 22 },
       { id: 'stinkbug', weight: 18 },
@@ -245,6 +254,58 @@ const optionals = (world: WorldId, index: number, quota: number): [Objective, Ob
  * buried in the generator.
  */
 const OVERRIDES: Record<number, Partial<LevelSpec>> = {
+  // ═══ World 1: one new idea per level, and never two ═══════════════════════
+  //
+  // The opening used to be three levels of the same level. 1-1 was ants; 1-2
+  // was ants with a crumb pile the player does nothing with; 1-3 was ants with
+  // a piñata fly that, at weight 10 of 90, most players met once. Three minutes
+  // of "tap the brown thing" is the whole of the retention funnel, and it was
+  // spending them proving there was nothing else to learn.
+  //
+  // It now introduces EXACTLY ONE thing every level up to the boss:
+  //
+  //   1-1   the ant           the assumption
+  //   1-2   the sprinter      the first target that reacts to YOU
+  //   1-3   the crumb pile    the floor helps — and it is how you bait a sprinter
+  //   1-4   the beetle        a tap is not enough: the slam
+  //   1-5   the piñata fly    a target worth chasing
+  //   1-6   the flea          a target that will not wait
+  //   1-7   honey             the answer to the flea AND the sprinter
+  //   1-8   the salt shaker   a floor object the PLAYER sets off
+  //   1-9   all of it at once
+  //   1-10  the Goliath Queen
+  //
+  // Two rhythms are load-bearing in that order. First, a problem and its answer
+  // are two levels apart, never one: the sprinter on 1-2 is answered by the
+  // crumb pile on 1-3, the flea on 1-6 by honey on 1-7. Handing over the answer
+  // on the same level as the problem is not a lesson, it is a hint. Second, a
+  // hazard never debuts on the same level as a creature — which is why 1-5 and
+  // 1-6 pin `hazards` below, where the generic slice (`1 + floor(index / 4)` of
+  // the world's pool) would otherwise have poured honey in underneath a debut.
+  //
+  // ── Why SOME debut levels pin a ROSTER, and two deliberately do not ──
+  //
+  // A debut whose debutant is a sixth of the roll is a debut a third of players
+  // never notice, so 1-2 and 1-5 weight their own new creature up for one level
+  // and hand the world's ordinary mix back afterwards.
+  //
+  // 1-4 and 1-6 were written the same way and then MEASURED, with the headless
+  // scout playing them on the `average` policy in the starter sneaker — the
+  // weakest player the game has to carry:
+  //
+  //   1-4, beetle at the world weight (17 %)  →  12 of an 18 quota
+  //   1-4, beetle weighted up to 24 %         →   2 of an 18 quota
+  //
+  // Six times worse, and the cause is that an armoured body a weak player will
+  // not slam does not DIE: it sits in `maxAlive` forever, the board stops
+  // refilling, and the level turns into a floor of beetles being tapped. An
+  // armoured debutant is the one kind that must never be weighted up.
+  //
+  // So 1-4 and 1-6 keep the world's mix, and their stars came down to match the
+  // density the sprinter's arrival diluted them to (3 beetles, 3 fleas). The
+  // quota/time/maxAlive/spawn curves are untouched by any of this — those were
+  // measured, and a roster changes which bodies arrive, never how many.
+
   // ── 1-1: the lesson ──
   // A guaranteed win, on purpose. The whole level is eight ants walking in
   // straight lines with a generous clock and nothing that can punish a wrong
@@ -256,26 +317,74 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
     hazards: [],
     objectives: [{ kind: 'clear' }, { kind: 'combo', n: 3 }, { kind: 'noMiss', n: 12 }]
   },
-  // 1-2 introduces the crumb pile, which is the first thing on the floor that
-  // is not a bug — and it PULLS ants, so the first lesson about the floor is
-  // that the floor helps.
-  2: { quota: 12, time: 58, maxAlive: 5, spawnMs: [1350, 900], speed: 0.80, hazards: ['crumbs'] },
-  // 1-3: the piñata fly's debut. One target worth chasing.
+  // 1-2: the sprinter ant, and NOTHING else.
+  //
+  // The board is 1-1's board — a bare floor, no hazard, a gentle clock — so the
+  // single thing that is different about it is that some of the ants look at
+  // you and run. Half the roll, because a new player has to meet several before
+  // the rule becomes a rule rather than a glitch.
+  //
+  // The stars point straight at the lesson: four sprinters says "you have to
+  // actually catch these", and a miss budget says how — a player who chases one
+  // across the board burns fifteen taps on bare floor, and a player who waits
+  // out the four-tenths of a second it spends winded burns none.
+  2: {
+    quota: 12, time: 58, maxAlive: 5, spawnMs: [1350, 900], speed: 0.80,
+    hazards: [],
+    roster: [{ id: 'ant', weight: 50 }, { id: 'sprinter', weight: 50 }],
+    objectives: [
+      { kind: 'clear' }, { kind: 'kind', id: 'sprinter', n: 4 }, { kind: 'noMiss', n: 10 }
+    ]
+  },
+  // 1-3: the crumb pile. The first thing on the floor that is not a bug — and
+  // it PULLS ants and sprinters alike, so the first lesson about the floor is
+  // that the floor HELPS, and it arrives one level after the creature it is the
+  // answer to. A pile gathers a knot the player can take three at a time, which
+  // is why the star is a chain rather than a kind count. (The hazard itself
+  // comes off the curve: world 1's first hazard is the pile.)
   3: {
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'pinatafly', n: 1 }, { kind: 'combo', n: 4 }]
+    objectives: [{ kind: 'clear' }, { kind: 'combo', n: 5 }, { kind: 'noMiss', n: 10 }]
   },
   // 1-4: the beetle. The shell is the first "a tap is not enough".
   4: {
     hazards: ['crumbs'],
     objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'beetle', n: 3 }, { kind: 'noSpike' }]
   },
-  // 1-6: the flea. The first target that moves when you aim at it.
-  6: {
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 4 }, { kind: 'combo', n: 6 }]
+  // 1-5: the piñata fly. One target worth chasing — and the first level where
+  // chasing is the RIGHT answer, two levels after the one where it was the
+  // wrong one. Held back from 1-3 so it gets a level of its own instead of
+  // being a rare surprise on somebody else's.
+  //
+  // `hazards` pinned to the pile: honey belongs to 1-7, and the slice would
+  // have poured it in here.
+  5: {
+    hazards: ['crumbs'],
+    roster: [
+      { id: 'ant', weight: 44 }, { id: 'sprinter', weight: 20 },
+      { id: 'beetle', weight: 16 }, { id: 'pinatafly', weight: 16 }
+    ],
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'pinatafly', n: 2 }, { kind: 'combo', n: 6 }]
   },
-  // 1-8: honey. The answer to the flea, handed over two levels after the
-  // problem — long enough to have felt it, soon enough to still care.
-  8: { hazards: ['honey', 'crumbs'] },
+  // 1-6: the flea. The first target that moves when you aim at it — which is a
+  // different question from the sprinter's, and the level is deliberately bare
+  // of honey so the player feels the question before they are handed the tool.
+  6: {
+    hazards: ['crumbs'],
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 3 }, { kind: 'combo', n: 6 }]
+  },
+  // 1-7: honey. The answer to the flea, handed over one level after the
+  // problem, and the answer to the sprinter five levels after that one — a
+  // puddle grounds both of them, and a sprinter that runs into one stops.
+  // Stated here rather than left to the slice so a reader looking for "when
+  // does honey arrive" finds it in the table with everything else.
+  7: { hazards: ['crumbs', 'honey'] },
+  // 1-8: the salt shaker. The first floor object the PLAYER sets off rather
+  // than walks around: a stomp on it panics everything in the cloud into a
+  // straight line, which is the cheapest big chain in world 1 — hence the star.
+  8: {
+    hazards: ['crumbs', 'honey', 'salt'],
+    objectives: [{ kind: 'clear' }, { kind: 'combo', n: 8 }, { kind: 'noMiss', n: 8 }]
+  },
 
   // ── World 2 ──
   // 2-2: the caterpillar. The first time stomping is a mistake.

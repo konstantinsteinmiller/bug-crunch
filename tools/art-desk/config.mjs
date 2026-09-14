@@ -24,7 +24,22 @@ const DEFAULTS = {
   indexFile: 'art-sheets/sheet-index.json',
   // Where the slicer's `target` paths are relative to.
   outDir: 'public',
-  slice: ['node', 'tools/slice-sheets.mjs', '{painting}'],
+  // `--drop-borders` is ON for the queue, and it is a considered trade rather
+  // than a convenience.
+  //
+  // Gemini rules a walk sheet like a comic strip perhaps one time in three,
+  // whatever the prompt says — "DO NOT DRAW THE GRID" in capitals did not stop
+  // it. Without the flag the slicer refuses the return, the desk re-rolls, and
+  // the re-roll rules it again: two generations off a shared daily cap for a
+  // painting that was otherwise fine, which is what happened to the beetle.
+  //
+  // What the flag actually does is paint the rules out along the cut lines. The
+  // risk the slicer warns about is real — a ruled return often carries CAPTIONS
+  // too, and those it cannot remove — so this is only safe alongside the rule
+  // that every accepted painting is looked at at 24 px before it is kept
+  // (`/#/playground`, `/#/bug-lab`). Look at it. The flag buys the generation
+  // back; it does not decide whether the art is good.
+  slice: ['node', 'tools/slice-sheets.mjs', '{painting}', '--drop-borders'],
   compressRoot: 'public/images',
   // --fresh: the slicer has just written NEW originals over files that may
   // have backups from an earlier cut — see processFile in the compressor.

@@ -129,6 +129,22 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M2.3 8.9A2.8 2.8 0 0 1 5.1 6.1L12.1 6.1A2.8 2.8 0 0 1 14.9 8.9L14.9 15.1A2.8 2.8 0 0 1 12.1 17.9L5.1 17.9A2.8 2.8 0 0 1 2.3 15.1L2.3 8.9Z',
     'M19.29 8.67A1.4 1.4 0 0 1 21.5 9.81L21.5 14.19A1.4 1.4 0 0 1 19.29 15.33L16.76 13.53A1.1 1.1 0 0 1 16.3 12.63L16.3 11.37A1.1 1.1 0 0 1 16.76 10.47L19.29 8.67Z'
   ],
+  // A film strip: one rounded slab with six sprocket holes punched through it,
+  // three down each edge. The holes are sub-paths wound the OTHER WAY ROUND
+  // (down the left edge first, arcs at sweep 0) so the nonzero rule cuts them
+  // out instead of filling them in — same trick as the lock's keyhole. Drawn
+  // wide rather than as a tall reel because it has to stay legible inside a
+  // ~1rem square on a shoe card, where a reel's two spools collapse into one
+  // grey blob.
+  'movie': [
+    'M4.6 4.6L19.4 4.6A2.1 2.1 0 0 1 21.5 6.7L21.5 17.3A2.1 2.1 0 0 1 19.4 19.4L4.6 19.4A2.1 2.1 0 0 1 2.5 17.3L2.5 6.7A2.1 2.1 0 0 1 4.6 4.6Z',
+    'M4.2 7.55L4.2 8.15A0.6 0.6 0 0 0 4.8 8.75L5.9 8.75A0.6 0.6 0 0 0 6.5 8.15L6.5 7.55A0.6 0.6 0 0 0 5.9 6.95L4.8 6.95A0.6 0.6 0 0 0 4.2 7.55Z',
+    'M4.2 11.7L4.2 12.3A0.6 0.6 0 0 0 4.8 12.9L5.9 12.9A0.6 0.6 0 0 0 6.5 12.3L6.5 11.7A0.6 0.6 0 0 0 5.9 11.1L4.8 11.1A0.6 0.6 0 0 0 4.2 11.7Z',
+    'M4.2 15.85L4.2 16.45A0.6 0.6 0 0 0 4.8 17.05L5.9 17.05A0.6 0.6 0 0 0 6.5 16.45L6.5 15.85A0.6 0.6 0 0 0 5.9 15.25L4.8 15.25A0.6 0.6 0 0 0 4.2 15.85Z',
+    'M17.5 7.55L17.5 8.15A0.6 0.6 0 0 0 18.1 8.75L19.2 8.75A0.6 0.6 0 0 0 19.8 8.15L19.8 7.55A0.6 0.6 0 0 0 19.2 6.95L18.1 6.95A0.6 0.6 0 0 0 17.5 7.55Z',
+    'M17.5 11.7L17.5 12.3A0.6 0.6 0 0 0 18.1 12.9L19.2 12.9A0.6 0.6 0 0 0 19.8 12.3L19.8 11.7A0.6 0.6 0 0 0 19.2 11.1L18.1 11.1A0.6 0.6 0 0 0 17.5 11.7Z',
+    'M17.5 15.85L17.5 16.45A0.6 0.6 0 0 0 18.1 17.05L19.2 17.05A0.6 0.6 0 0 0 19.8 16.45L19.8 15.85A0.6 0.6 0 0 0 19.2 15.25L18.1 15.25A0.6 0.6 0 0 0 17.5 15.85Z'
+  ],
   // Megaphone rather than a speaker so it can't be mistaken for `sound`. The
   // waves are centred on the mouth, so every point of them is beyond the mouth
   // plane and none can collide with the cone.
@@ -305,7 +321,7 @@ export const ICON_PATHS: Record<GameIconName, string[]> = {
     'M15.25 18.8A2.95 2.95 0 1 1 21.15 18.8A2.95 2.95 0 1 1 15.25 18.8Z'
   ],
 
-  // ── Splatix's own nouns ────────────────────────────────────────────
+  // ── Bug Crunch's own nouns ────────────────────────────────────────────
   // Solid, bold, and legible at 16px in a HUD chip. Limbs are kept at or above
   // ~2.3 units in the 24-unit box, which is the floor the contact sheet found:
   // anything thinner greys into the candy-plastic gradient behind it.

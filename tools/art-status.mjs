@@ -6,10 +6,10 @@
  *   pnpm art:status -- --all     # list every id, present or not
  *
  * From the art-generation-pipeline skill (`templates/art-status.mjs`), adapted
- * to splatix: the runtime catalogue (`ART_CATALOGUE`) lists the STILLS,
- * while the strips are keyed by ids the renderer takes from the game itself —
- * monster designs, survivor outfits, and the boss roster for deaths — so those
- * are read from the same sources here.
+ * to bug-crunch: the runtime catalogue (`ART_CATALOGUE`) lists the STILLS, while
+ * the strips and the two rosters that are not stills are keyed by ids the
+ * renderer takes from the game itself — the bug designs, the shoes and the
+ * bosses — so those are read from the same modules the renderer reads.
  *
  * The question this answers is "I sliced the art and only half the game
  * changed". A miss is SILENT by design — `spriteFor` treats a 404 as "keep
@@ -28,17 +28,17 @@ const PUBLIC = join(ROOT, 'public')
 const ALL = process.argv.includes('--all')
 const load = (rel) => import(pathToFileURL(join(ROOT, 'src', ...rel.split('/'))).href)
 
-const { ART_CATALOGUE } = await load('game/artCatalogue.ts')
+const { ART_CATALOGUE, ART_BRAND } = await load('game/artCatalogue.ts')
 const { ART_FOLDERS } = await load('game/art.ts')
-const { MONSTERS } = await load('game/monsters.ts')
-const { OUTFITS } = await load('game/heroSprites.ts')
-const { bossDesigns } = await load('game/foes.ts')
+const { BUG_IDS } = await load('game/bugs.ts')
+const { SHOE_IDS } = await load('game/shoes.ts')
+const { BOSS_IDS } = await load('game/bosses.ts')
 
 const catalogue = {
-  monster: MONSTERS.map((m) => m.id),
-  hero: OUTFITS.map((o) => o.id),
-  ...ART_CATALOGUE,
-  death: bossDesigns()
+  bug: [...BUG_IDS],
+  shoe: [...SHOE_IDS],
+  boss: [...BOSS_IDS],
+  ...ART_CATALOGUE
 }
 const artTarget = (kind, id) => `${ART_FOLDERS[kind]}/${id}.webp`
 
@@ -72,6 +72,19 @@ for (const [kind, ids] of Object.entries(catalogue)) {
     console.log(`    missing: ${shown}${missing.length > 12 ? `, …and ${missing.length - 12} more` : ''}`)
   }
 }
+
+// The brand bitmaps are painted through the same pipeline and never probed — the
+// splash and the PWA manifest read them straight off disk — so they are counted
+// here rather than folded into a kind that `spriteFor` would then go looking for.
+const brand = []
+for (const [name, rel] of Object.entries(ART_BRAND)) {
+  const file = join(PUBLIC, rel)
+  const here = existsSync(file)
+  brand.push(`${here ? '\u2713' : '\u00b7'} ${name.padEnd(8)} ${rel}`
+    + (here ? ` \u2014 ${(statSync(file).size / 1024).toFixed(0)} kB` : ' \u2014 missing'))
+}
+console.log(`\nbrand (painted, never probed \u2014 a placeholder from \`node scripts/make-brand.mjs\` counts):`)
+for (const line of brand) console.log(`  ${line}`)
 
 if (ALL) console.log(rows.join('\n'))
 console.log(`\n${present} painted, ${absent} still drawn, ${present + absent} in the catalogue.`)

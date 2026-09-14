@@ -57,7 +57,7 @@ export default {
   async setup(ctx) {
     // Same career, wrong shoe. Everything else — the level, the stars, the
     // hint flags, the muted audio — is the success clips' fixture.
-    await boot(ctx, { level: LEVEL, save: saveFixture({ sx_level: LEVEL, ...STARTER_LOADOUT }) })
+    await boot(ctx, { level: LEVEL, save: saveFixture({ bc_level: LEVEL, ...STARTER_LOADOUT }) })
     await installDrive(ctx, { level: LEVEL, seed: SEED, policy: 'average' })
 
     const at = await levelRun(ctx, {

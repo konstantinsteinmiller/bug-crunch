@@ -135,7 +135,7 @@ const ART_SHEET_DIR = resolve(fileURLToPath(new URL('./art-sheets', import.meta.
 const SAFE_SHEET_NAME = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,79}$/
 
 const artSheetsPlugin = (): Plugin => ({
-  name: 'splatix-art-sheets',
+  name: 'bug-crunch-art-sheets',
   apply: 'serve',
   // The sheets land inside the project root, so without this the dev server
   // watches its own output: the first PNG written triggers a full page reload,
@@ -261,7 +261,7 @@ const readSnapshotFile = (file: string): LeaderboardSnapshotFile | null => {
  *   target bakes the real snapshot as the bottom rung of its offline ladder.
  */
 const leaderboardSnapshotPlugin = (seeded: boolean): Plugin => ({
-  name: 'splatix-leaderboard-snapshot',
+  name: 'bug-crunch-leaderboard-snapshot',
   buildStart() {
     if (seeded) {
       // Nothing to fetch: the seed is generated from a curve, committed, and
@@ -270,8 +270,13 @@ const leaderboardSnapshotPlugin = (seeded: boolean): Plugin => ({
       const seed = readSnapshotFile(SEED_FILE)
       if (seed) {
         console.log(
+          // `dist` is a histogram over SCORE — a point total — not over stages.
+          // It said "top stage" for as long as the seed put a stage number in
+          // `score`, which was the bug that made every player on these builds
+          // rank #1; the label is part of how that stayed invisible.
           `[leaderboard] baking the SEEDED board — ${seed.total} players / `
-          + `${seed.entries.length} rows, top stage ${seed.dist[0]?.[0] ?? 0}. `
+          + `${seed.entries.length} rows, top score ${seed.dist[0]?.[0] ?? 0}, `
+          + `deepest level ${seed.entries[0]?.squad ?? 0}. `
           + 'This build cannot post scores, so the board is modelled.'
         )
       } else {
@@ -782,7 +787,15 @@ export default defineConfig(({ mode, command }) => {
           '@/use/ads/GameDistributionProvider': fileURLToPath(new URL('./src/use/ads/GameDistributionProvider.stub.ts', import.meta.url))
         }),
         ...(env.VITE_APP_PLAYGAMA === 'true' ? {} : {
-          '@/use/ads/PlaygamaProvider': fileURLToPath(new URL('./src/use/ads/PlaygamaProvider.stub.ts', import.meta.url))
+          '@/use/ads/PlaygamaProvider': fileURLToPath(new URL('./src/use/ads/PlaygamaProvider.stub.ts', import.meta.url)),
+          // The provider stub alone kept `bridge.playgama.com` out of the ENTRY
+          // chunk and NOT out of the artifact: `FLogoProgress.vue`, `main.ts`,
+          // `useGameplayLifecycle.ts` and `resolveSaveStrategy.ts` all reach the
+          // plugin through a dynamic `import()`, and a dynamic import is a chunk
+          // boundary — Rollup emits `playgamaPlugin-*.js` whether or not the
+          // branch around it can ever run. Same stub-swap as gamepixPlugin and
+          // pokiPlugin below. Caught by `pnpm deploy:poki --gates-only`.
+          '@/utils/playgamaPlugin': fileURLToPath(new URL('./src/utils/playgamaPlugin.stub.ts', import.meta.url))
         }),
         ...(env.VITE_APP_GAMEPIX === 'true' ? {} : {
           '@/use/ads/GamepixProvider': fileURLToPath(new URL('./src/use/ads/GamepixProvider.stub.ts', import.meta.url)),
@@ -804,7 +817,12 @@ export default defineConfig(({ mode, command }) => {
           // `resolveAdProvider` statically imports the provider, so those hosts
           // were landing in EVERY other platform's bundle (found in the Poki
           // entry chunk). Same stub-swap fix as the four providers above.
-          '@/use/ads/YandexProvider': fileURLToPath(new URL('./src/use/ads/YandexProvider.stub.ts', import.meta.url))
+          '@/use/ads/YandexProvider': fileURLToPath(new URL('./src/use/ads/YandexProvider.stub.ts', import.meta.url)),
+          // …and that fixed the ENTRY chunk only. `an.yandex.ru` still shipped
+          // as its own lazy `yandexPlugin-*.js`, pulled in by the dynamic
+          // `import()` in `FLogoProgress.vue` and `main.ts`. Swap the module,
+          // not just the provider.
+          '@/utils/yandexPlugin': fileURLToPath(new URL('./src/utils/yandexPlugin.stub.ts', import.meta.url))
         }),
         ...(env.VITE_APP_POKI === 'true' ? {} : {
           '@/use/ads/PokiProvider': fileURLToPath(new URL('./src/use/ads/PokiProvider.stub.ts', import.meta.url)),

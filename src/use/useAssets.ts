@@ -2,12 +2,12 @@ import { ref } from 'vue'
 import { prependBaseUrl } from '@/utils/function'
 import { primeBugs, bugsReady, bakeProgress01, bakeSlice } from '@/game/bugArt'
 import { levelCast, clampLevel } from '@/game/stages'
-import { getState } from '@/use/useSplatixState'
+import { getState } from '@/use/useBugCrunchState'
 import { LEVEL_KEY } from '@/keys'
 import { artOverridesEnabled, preloadArtOverrides } from '@/game/art'
 import { criticalArtWants, preloadRemainingArt } from '@/game/artPreload'
 
-// Splatix draws all gameplay art programmatically (Canvas 2D) and uses inline
+// Bug Crunch draws all gameplay art programmatically (Canvas 2D) and uses inline
 // SVG for HUD icons, so the preloader has NO bitmaps of its own to decode. What
 // it does wait for is the BUG BAKE - the cast's frame strips, drawn into
 // offscreen canvases at runtime - because a bug whose strip is not ready draws
@@ -285,7 +285,7 @@ const decodeImage = (src: string): Promise<void> => {
 // ─── Off-hot-path background warm-up ───────────────────────────────────────
 // Runs ONCE, after the splash has hidden (hot path done + first paint).
 //
-// Splatix draws every bug, prop and floor procedurally, so there is no gameplay
+// Bug Crunch draws every bug, prop and floor procedurally, so there is no gameplay
 // art to decode here: the deferred work is the painted-art tiers and the SFX
 // buffer decode. Doing it on an idle slot means the first squish of a session
 // does not pay a decode cost mid-frame, without delaying first paint.
@@ -321,7 +321,7 @@ const runBackgroundWarmup = (): void => {
 export default () => {
   const preloadAssets = async (): Promise<void> => {
     // ── HOT PATH ──
-    // Splatix has NO gameplay bitmaps: bugs, props, floors and the result
+    // Bug Crunch has NO gameplay bitmaps: bugs, props, floors and the result
     // screen's banner are all drawn from code. Nothing is on the critical image
     // path but the renderer chunk and the cast's own bake.
     //

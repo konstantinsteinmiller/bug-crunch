@@ -10,6 +10,7 @@ import useLocker from '@/use/useLocker'
 import { coins, totalStars } from '@/use/useSplatProgress'
 import useSounds from '@/use/useSound'
 import { playFx } from '@/use/useGameAudio'
+import { canOfferReward, isRewardGated } from '@/use/useAdGate'
 import type { ShoeId } from '@/game/shoes'
 
 /**
@@ -32,12 +33,28 @@ import type { ShoeId } from '@/game/shoes'
  * A shop that makes them press a second button to get what they bought reads as
  * a bug. `buy()` therefore equips; the only separate action is swapping between
  * shoes they already own.
+ *
+ * ── The second currency ──
+ *
+ * A shoe past its star gate but short of its price can also be paid for with a
+ * rewarded video. That offer is resolved ONCE here and handed down to every
+ * card, rather than six cards each asking the ad stack the same question — and
+ * it is resolved as "can a video actually be filled right now", not "does this
+ * build have ads at all". `isRewardGated` is the honest provider check (a build
+ * with no provider hands rewards over for free, which is fine for a ×3 coin
+ * bonus and absurd for a 900-coin shoe) and `canOfferReward` adds SDK
+ * readiness, the rewarded throttle and the rate limit. Where either is false no
+ * film button is rendered at all: an offer that cannot be filled reads as the
+ * game being broken.
  */
 
 const model = defineModel<boolean>({ required: true })
 const { t } = useI18n()
 const { playSound } = useSounds()
-const { lockerRows, equippedShoe, buy, equip, owns } = useLocker()
+const { lockerRows, equippedShoe, buy, equip, owns, unlockWithAd, adUnlockInFlight } = useLocker()
+
+/** Is a rewarded video genuinely available to spend on a shoe right now? */
+const adReady = computed(() => isRewardGated && canOfferReward.value)
 
 /** Which card is expanded. One at a time: six open cards is a wall of numbers,
  *  and the grid has to stay scannable on a phone. */
@@ -55,6 +72,25 @@ const onAct = (id: ShoeId): void => {
     return
   }
   if (buy(id)) {
+    playFx('unlock')
+  }
+}
+
+/**
+ * Pay for a shoe with a rewarded video.
+ *
+ * The card is opened FIRST and deliberately. `unlockWithAd` hands control to an
+ * ad that covers the whole screen for tens of seconds, and a player who comes
+ * back to a grid that looks exactly as it did has no idea which of six shoes
+ * they just earned — so the card they paid for is expanded before the video
+ * starts and is still the open one when it ends, wearing its "Worn" plate.
+ *
+ * The unlock sound is the same `unlock` cue a purchase plays: the shoe arrived
+ * the same way as far as the player is concerned, and only the price differed.
+ */
+const onAdUnlock = async (id: ShoeId): Promise<void> => {
+  openCard.value = id
+  if (await unlockWithAd(id)) {
     playFx('unlock')
   }
 }
@@ -90,8 +126,11 @@ const equippedName = computed(() => t(`shoes.${equippedShoe.value}.name`))
           :coins-short="row.coinsShort"
           :equipped="row.spec.id === equippedShoe"
           :open="openCard === row.spec.id"
+          :ad-ready="adReady"
+          :ad-busy="adUnlockInFlight"
           @select="onSelect(row.spec.id)"
           @act="onAct(row.spec.id)"
+          @ad-unlock="onAdUnlock(row.spec.id)"
         )
 
     template(#footer)

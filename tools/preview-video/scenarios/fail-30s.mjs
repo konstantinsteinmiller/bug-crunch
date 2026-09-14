@@ -40,7 +40,7 @@ export default {
   label: 'The Matriarch, in the wrong shoe',
 
   async setup(ctx) {
-    await boot(ctx, { level: LEVEL, save: saveFixture({ sx_level: LEVEL, ...STARTER_LOADOUT }) })
+    await boot(ctx, { level: LEVEL, save: saveFixture({ bc_level: LEVEL, ...STARTER_LOADOUT }) })
     await installDrive(ctx, { level: LEVEL, seed: SEED, policy: 'average' })
 
     const at = await levelRun(ctx, {

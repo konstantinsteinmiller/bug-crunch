@@ -11,10 +11,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Splatix">
+  <meta name="apple-mobile-web-app-title" content="Bug Crunch">
   <meta name="description" content="Stomp, slam and slide your way through swarms of googly-eyed bugs. Build a Splat Chain, fill the Juice vial and let the Gilded Boot loose.">
   <link rel="manifest" href="/manifest.json">
-  <title>Splatix</title>
+  <title>Bug Crunch</title>
   <style>
       /* The splash paints before any JS runs, so its colours are inlined here
          rather than pulled from the app's stylesheet. They match the scene's
@@ -47,11 +47,13 @@
 
       /* The panning backdrop.
          ------------------------------------------------------------------
-         Six of the game's own marks — an ant, a splat, a sole, a star and a
-         coin — as faint white silhouettes on one seamless tile
-         (public/images/bg/bg-tile_800x800.webp, written by `pnpm brand`),
-         drifting down and to the right the way a Brawl Stars loading screen
-         does.
+         The game's own cast — the ant, the sprinter, the beetle, the moth, the
+         piñata fly, the sneaker, the mascot and the coin — flattened to faint
+         three-tone line drawings on one seamless tile
+         (public/images/bg/bg-tile_800x800.webp, written by `pnpm art:bg-tile`
+         from the PAINTINGS themselves, so repainting a sprite and re-running it
+         follows the art), drifting down and to the right the way a Brawl Stars
+         loading screen does.
 
          The layer is one tile bigger than the screen up and to the left, and
          slides exactly one tile down-right before it loops, so the loop has
@@ -64,7 +66,7 @@
          attributes against the build's base but leaves `url()` inside an
          inline <style> alone, and `./` resolves against this document
          wherever it is deployed — the site root, a `--base=./` portal zip, or
-         the `/splatix/` GitHub path — where a leading slash would only
+         the `/bug-crunch/` GitHub path — where a leading slash would only
          work for the first.
 
          It is a file both splashes name, so it arrives a beat after the first
@@ -192,7 +194,7 @@
       </div>
     </div>
     <div class="splash-logo">
-      <img src="/images/logo/logo_512x512.png" alt="Splatix" width="512" height="512" fetchpriority="high">
+      <img src="/images/logo/logo_512x512.png" alt="Bug Crunch" width="512" height="512" fetchpriority="high">
     </div>
     <span class="splash-progress">0%</span>
   </div>

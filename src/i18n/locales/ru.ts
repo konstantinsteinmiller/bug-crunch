@@ -2,7 +2,7 @@
 // of truth — see `tests/i18nParity.test.ts`. Every `{placeholder}` must survive
 // translation; a dropped one renders as literal text and reads as a bug.
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Отмена',
   'close': 'Закрыть',
   'ok': 'Ок',
@@ -36,6 +36,7 @@ export default {
   },
   'bugs': {
     'ant': 'Муравьи',
+    'sprinter': 'Муравьи-бегуны',
     'beetle': 'Жуки',
     'flea': 'Блохи',
     'caterpillar': 'Гусеницы',
@@ -105,7 +106,28 @@ export default {
     'wear': 'Надеть',
     'worn': 'Надето',
     'needStars': 'Ещё {n} звёзд',
-    'needCoins': 'Ещё {n} монет'
+    'needCoins': 'Ещё {n} монет',
+    'price': 'Цена: {n} монет',
+    'starGate': 'Откроется при {n} звёздах',
+    'adUnlock': 'Посмотри видео, чтобы открыть'
+  },
+  'chest': {
+    'label': 'Сундук с сокровищами',
+    'ready': 'Открыть сундук за {n} монет',
+    'filling': 'Сундук — наполняется',
+    'spent': 'Сундук — пуст до завтра'
+  },
+  'reveal': {
+    'world': 'Новое место для топота!',
+    'shoe': 'Новая обувь!',
+    'stars': 'Звёздный рубеж!',
+    'record': 'Новый рекорд!',
+    'chest': 'Сокровище!',
+    'foe': 'Новая букашка!',
+    'starsTotal': '{n} звёзд',
+    'recordScore': '{n} очков',
+    'recordBeat': 'Прошлый рекорд: {n}',
+    'chestCoins': '+{n} монет'
   },
   'fever': {
     'filling': 'Splat-лихорадка: {n}%',
@@ -132,6 +154,10 @@ export default {
     'slam': {
       'touch': 'Удерживай и отпусти — мощный удар',
       'desktop': 'Удерживай кнопку — мощный удар'
+    },
+    'sprinter': {
+      'touch': 'Бегуны удирают — топай там, где они встанут',
+      'desktop': 'Бегуны удирают от ботинка — замри, потом кликни'
     },
     'beetle': {
       'touch': 'У жуков панцирь — удерживай и бей',
@@ -266,7 +292,7 @@ export default {
   },
   'adsBlocked': {
     'title': 'Обнаружен блокировщик рекламы',
-    'body': 'Splatix бесплатен благодаря рекламе. Отключи блокировщик и перезагрузи страницу.',
+    'body': 'Bug Crunch бесплатен благодаря рекламе. Отключи блокировщик и перезагрузи страницу.',
     'allowPrefix': 'Разреши рекламу на',
     'allowSuffix': 'и перезагрузи страницу.',
     'gotIt': 'Понятно'

@@ -91,7 +91,7 @@ export const HIDE_READOUTS = FEED_ON
 /** The shape published on `window.__preview`. */
 export interface PreviewSeam {
   feed: FeedLevel
-  game: typeof import('@/use/useSplatixGame')
+  game: typeof import('@/use/useBugCrunchGame')
   vfx: typeof import('@/use/useVfx')
   /** The painted-art layer and its want lists — a recording holds until every
    *  painting the level can ask for has decoded, or the clip would swap from
@@ -103,7 +103,7 @@ export interface PreviewSeam {
    *  bookkeeping of the first run back: a clear moves the resume level, banks
    *  stars and coins, and clears the failure record that hands out relief, so
    *  the take would be a measurably different level from the one measured. */
-  state: typeof import('@/use/useSplatixState')
+  state: typeof import('@/use/useBugCrunchState')
   /** Freeze the scene's simulation while a run is staged, and let it go again.
    *  Refcount-safe: it holds at most one app pause at a time. */
   hold: (on: boolean) => void
@@ -140,12 +140,12 @@ export const installPreviewSeam = (
 ): void => {
   if (!SEAM_ON) return
   void Promise.all([
-    import('@/use/useSplatixGame'),
+    import('@/use/useBugCrunchGame'),
     import('@/use/useVfx'),
     import('@/use/useGamePause'),
     import('@/game/art'),
     import('@/game/artPreload'),
-    import('@/use/useSplatixState')
+    import('@/use/useBugCrunchState')
   ]).then(([game, vfx, pause, art, artPreload, state]) => {
     let release: (() => void) | null = null
     const seam: PreviewSeam = {

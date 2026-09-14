@@ -13,6 +13,8 @@ import { mobileCheck } from '@/utils/function'
  * is its own kind of failure.
  *
  *   move       the only control there is, and the only hint every player sees
+ *   sprinter   an ant that runs from the shoe — the first body that has to be
+ *              anticipated rather than reached
  *   slam       hold to charge, which is the answer to everything armoured
  *   beetle     a shell that taps bounce off
  *   flea       a target that moves when you aim at it
@@ -41,7 +43,7 @@ import { mobileCheck } from '@/utils/function'
  */
 
 export type HintId =
-  | 'move' | 'slam' | 'beetle' | 'flea' | 'spike' | 'stink' | 'fever'
+  | 'move' | 'slam' | 'sprinter' | 'beetle' | 'flea' | 'spike' | 'stink' | 'fever'
   | 'honey' | 'web' | 'belt' | 'sweeper' | 'boss' | 'pods'
 
 interface Props {

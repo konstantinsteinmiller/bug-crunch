@@ -67,6 +67,7 @@ import useAssets from '@/use/useAssets'
 import { stopLoading } from '@/use/useCrazyGames'
 import { armFirstLoadInterstitial, notifySplashGone } from '@/use/useFirstLoadInterstitial'
 import { prependBaseUrl } from '@/utils/function'
+import { ART_BRAND } from '@/game/artCatalogue'
 
 const { t } = useI18n()
 
@@ -82,8 +83,14 @@ const { t } = useI18n()
 // The cost is ~60 KB on the boot path, spent while the sprite bake (which is
 // what the loading bar is actually waiting for) does its several seconds of
 // work. It is the only thing the player looks at in that window.
-const MASCOT_SRC = prependBaseUrl('images/logo/mascot.webp')
-const LOGO_SRC = prependBaseUrl('images/logo/logo_512x512.png')
+//
+// The two paths come from `ART_BRAND` rather than being typed here, because they
+// are also manifest slots: the art pipeline paints both and the slicer writes
+// over exactly these files. Spelling them out in a third place (after the
+// manifest and the static splash in `index.html`) is how a repaint lands on disk
+// and never reaches the screen.
+const MASCOT_SRC = prependBaseUrl(ART_BRAND.mascot)
+const LOGO_SRC = prependBaseUrl(ART_BRAND.logo)
 
 // ─── The gag's clock ────────────────────────────────────────────────────────
 //
@@ -547,18 +554,30 @@ $greet-w: clamp(200px, 58vmin, 340px)
 
 // --- The title -------------------------------------------------------------
 //
-// The logo file is the PWA's 512 icon, so the wordmark sits inside a mostly
-// transparent square — measured, its ink runs from y=216 to y=295 of 512. Shown
-// square it would push the percentage off a landscape phone, so the window
-// crops to a band around the ink: 0.398..0.600 of the file's height, which is
-// the ink plus a little air.
+// The logo file is the PWA's 512 icon, so the wordmark sits inside a square with
+// transparent margins, and this window crops to the ink so the card is not
+// mostly empty air. Shown square it would push the percentage off a landscape
+// phone.
+//
+// THE TWO NUMBERS ARE MEASURED, not chosen, and they have to be re-measured
+// whenever the logo is repainted. On the painted wordmark (`still-ui-logo`) the
+// ink runs y = 84..427 of 512:
+//
+//   top     84 / 512 = 0.1641  →  margin-top: -16.41%
+//   height 344 / 512 = 0.6719  →  aspect-ratio: 512 / 344
+//
+// To re-measure after a repaint: alpha bbox of `public/images/logo/
+// logo_512x512.png` at a threshold of 40. The placeholder from
+// `scripts/make-brand.mjs` is a different shape entirely (its ink was a thin
+// band at 0.398..0.600), so a build that still has the placeholder shows the
+// wordmark small and centred rather than wrong — which is the right way round.
 //
 // The offset is a percentage MARGIN, which resolves against the containing
 // block's WIDTH — the same number the image is scaled to — so the crop holds at
 // every size without a media query.
 .greet-logo
   width: 100%
-  aspect-ratio: 512 / 103
+  aspect-ratio: 512 / 344
   overflow: hidden
 
   img
@@ -568,7 +587,7 @@ $greet-w: clamp(200px, 58vmin, 340px)
     // the static splash from reflowing when the file lands) and those are
     // presentational hints that would otherwise pin the height at 512 px.
     height: auto
-    margin-top: -39.84%
+    margin-top: -16.41%
 
 .percentage-text
   font-size: clamp(0.9rem, 4vw, 1.35rem)

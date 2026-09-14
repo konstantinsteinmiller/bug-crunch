@@ -3,7 +3,7 @@
 // this folder mirror the shape. Vite ships each non-English locale as its own
 // lazy chunk (see `src/i18n/index.ts`).
 export default {
-  'gameName': 'Splatix',
+  'gameName': 'Bug Crunch',
   'cancel': 'Cancel',
   'close': 'Close',
   'ok': 'Ok',
@@ -57,6 +57,7 @@ export default {
   // into a sentence that already carries a number.
   'bugs': {
     'ant': 'Ants',
+    'sprinter': 'Sprinter Ants',
     'beetle': 'Beetles',
     'flea': 'Fleas',
     'caterpillar': 'Caterpillars',
@@ -141,7 +142,43 @@ export default {
     'wear': 'Wear',
     'worn': 'Worn',
     'needStars': '{n} more stars',
-    'needCoins': '{n} more coins'
+    'needCoins': '{n} more coins',
+    // Screen-reader only: the collapsed card shows the NUMBER beside a coin or
+    // a star, which needs no words for a player who can see it and needs all of
+    // them for a player who cannot.
+    'price': 'Price: {n} coins',
+    'starGate': 'Unlocks at {n} stars',
+    'adUnlock': 'Watch a video to unlock'
+  },
+
+  // ─── The treasure chest ───────────────────────────────────────────────────
+  // Screen-reader text for the HUD chest. The chest itself says everything it
+  // has to say with a picture, a payout chip and a countdown.
+  'chest': {
+    'label': 'Treasure chest',
+    'ready': 'Open the treasure chest for {n} coins',
+    'filling': 'Treasure chest — filling up',
+    'spent': 'Treasure chest — empty until tomorrow'
+  },
+
+  // ─── The gift screen ──────────────────────────────────────────────────────
+  //
+  // Headlines on the ribbon (rendered uppercase, so two or three words), and
+  // captions under the picture. The prize's own NAME is never here: a world is
+  // `worlds.<theme>`, a shoe is `shoes.<id>.name`, a bug is `bugs.<id>`. A gift
+  // screen that invented a second name for something the player has already met
+  // would be introducing a stranger.
+  'reveal': {
+    'world': 'New place to stomp!',
+    'shoe': 'New shoes!',
+    'stars': 'Star milestone!',
+    'record': 'New best score!',
+    'chest': 'Treasure!',
+    'foe': 'A new bug!',
+    'starsTotal': '{n} stars',
+    'recordScore': '{n} points',
+    'recordBeat': 'Old best: {n}',
+    'chestCoins': '+{n} coins'
   },
 
   // ─── Splat Fever ──────────────────────────────────────────────────────────
@@ -182,6 +219,10 @@ export default {
     'slam': {
       'touch': 'Hold, then let go for a big slam',
       'desktop': 'Hold the button for a big slam'
+    },
+    'sprinter': {
+      'touch': 'Sprinters run off — stomp where they stop',
+      'desktop': 'Sprinters run from your shoe — hold still, then tap'
     },
     'beetle': {
       'touch': 'Beetles have shells — hold to slam them',
@@ -341,7 +382,7 @@ export default {
   // sentence with a domain in the middle.
   'adsBlocked': {
     'title': 'Ad blocker detected',
-    'body': 'Splatix is free because of ads. Please turn your ad blocker off and reload.',
+    'body': 'Bug Crunch is free because of ads. Please turn your ad blocker off and reload.',
     'allowPrefix': 'Allow ads on',
     'allowSuffix': 'and reload the page.',
     'gotIt': 'Got it'

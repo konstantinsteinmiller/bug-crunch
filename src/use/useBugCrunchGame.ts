@@ -28,7 +28,7 @@ import { DEFAULT_JUICE_STYLE, type JuiceStyleId } from '@/game/juiceStyle'
  *
  * One module owns the whole world: the foot, every body on the floor, the
  * hazards, the boss script, the chain, the vial and the clock. The renderer
- * (`useSplatixArt`) reads this and draws it; `GameScene.vue` feeds it input and
+ * (`useBugCrunchArt`) reads this and draws it; `GameScene.vue` feeds it input and
  * shows the HUD. Nothing here touches a canvas or the DOM.
  *
  * ── Units ──
@@ -100,6 +100,98 @@ const DODGE_TELL_MS = 250
 const DODGE_LEAP_U = 17
 const DODGE_LEAP_MS = 300
 
+// ─── The sprinter's bolt ────────────────────────────────────────────────────
+//
+// The flea's dodge and the sprinter's bolt share the `sense` clock — which is
+// what makes them share the "!" the renderer already pops over a body that is
+// about to move — and nothing else. See `BugSpec.sprints` for the design split.
+// Every number below is chosen against the flea's so the two read as different
+// creatures rather than as one creature with two speeds.
+
+/** How far a sprinter notices a shoe, in multiples of its own size, on top of
+ *  the shoe's shadow radius. 6.0 × 3.0 u + a sneaker's 9 u ≈ 27 u, against the
+ *  flea's ≈ 24: it gives ground EARLY, where the flea waits. */
+const SPRINT_SENSE = 6.0
+
+/**
+ * …but only while the shoe is actually COMING FOR IT.
+ *
+ * This is the whole counter-play and the reason the bug is fair. A shoe parked
+ * next to a sprinter never spooks it; a shoe travelling toward it at more than
+ * `SPRINT_APPROACH_U_S`, within `SPRINT_APPROACH_DOT` of straight at it, does.
+ * So the answer a player learns is "stop moving, then tap" — which is a skill a
+ * six-year-old can execute, unlike out-reacting a flea.
+ */
+const SPRINT_APPROACH_U_S = 9
+const SPRINT_APPROACH_DOT = 0.3
+
+/**
+ * The tell, ms. Longer than the flea's 250 on purpose.
+ *
+ * The renderer pops its alert at `sense > 60`, so this is ~260 ms of visible
+ * warning against the flea's ~190. At 250 the first pass read as "the ant
+ * teleported"; at 320 a child watching the board sees the mark, and the bug
+ * becomes a thing you can learn instead of a thing that happens to you.
+ */
+const SPRINT_TELL_MS = 320
+
+/**
+ * The run: this far, over this long — 24 u in 500 ms, so 48 u/s.
+ *
+ * Against the flea's 17 u in 300 ms (57 u/s): the sprinter is SLOWER and goes
+ * 40 % further over 65 % more time. That difference is the whole read. A leap
+ * is a thing that has already happened by the time you notice; a run is a thing
+ * you watch, and watching it is what lets a player aim at where it will stop.
+ *
+ * And it is dead straight away from the foot — the flea's leap adds ±0.6 rad of
+ * randomness and this adds none, because a hook the player cannot predict is
+ * not a hook, it is noise.
+ */
+const SPRINT_RUN_U = 24
+const SPRINT_RUN_MS = 500
+
+/**
+ * …and then it stops DEAD, winded, for this long.
+ *
+ * Carried on `stun`, which already means "cannot move, and the renderer wobbles
+ * it" — so the pause costs no new state and already looks like what it is. This
+ * pause IS the kill: it is nearly half a second of a stationary, unarmoured,
+ * one-hit body, which is why a sprinter is CHEAPER than an ant to a player who
+ * has understood it and more expensive to one who chases.
+ */
+const SPRINT_WINDED_MS = 450
+
+/** Lockout after a bolt ends, ms. For these two-and-a-bit seconds it is just an
+ *  ant, which is what stops a panicking child from herding one across the whole
+ *  board with a spray of taps. */
+const SPRINT_COOLDOWN_MS = 2400
+
+/**
+ * A stomp that lands this far from a sprinter — as a multiple of the blow's own
+ * radius — scares it into a bolt.
+ *
+ * This is the TOUCH rule the whole design is built around: a finger has no
+ * hover, so on a phone there is no "the shoe is coming for it" to sense. What
+ * there is, is a tap that landed beside it rather than on it, and that is
+ * exactly the moment a real ant bolts. The band runs from the edge of the kill
+ * circle out to 2.2 × the radius — about three body-widths of "nearly".
+ *
+ * It fires on a mouse too. A stomp is loud on any device, and one bug with one
+ * behaviour is worth more than a bug that is two different bugs per platform.
+ */
+const SPRINT_SCARE_SCALE = 2.2
+
+/**
+ * …and the tell a scared sprinter still gets before it goes, ms.
+ *
+ * Short, because the player has already been given a warning — their own tap,
+ * landing next to the thing. But not zero: a body that moves on the same frame
+ * as the stomp reads as a bug in the game rather than a bug on the floor, and
+ * this is the only window a touch player ever gets to see the "!" that a
+ * pointer player sees for 320 ms.
+ */
+const SPRINT_SCARE_TELL_MS = 140
+
 /** How long a body is stunned by a steel boot's slam. */
 const STUN_FADE_MS = 140
 
@@ -158,8 +250,19 @@ export interface Bug {
   heading: number
   /** Behaviour clock, ms. */
   t: number
-  /** Dodger: how long the shadow has been on it. */
+  /**
+   * How long this body has been about to move.
+   *
+   * Shared by the flea and the sprinter, and read by the renderer, which pops
+   * the "!" once it is over 60 ms. Negative means a flea is mid-leap and its
+   * launch velocity owns it; the renderer's `> 60` guard skips that.
+   */
   sense: number
+  /** Sprinter: ms of bolt still running. */
+  bolt: number
+  /** Sprinter: ms before it may bolt again. Ticks through the run and the
+   *  winded pause, so the lockout is measured from the END of the last one. */
+  boltCd: number
   /** ms of stun left. */
   stun: number
   /** ms of hold (cobweb) left. */
@@ -285,7 +388,7 @@ export type Phase = 'intro' | 'play' | 'won' | 'lost'
 const makeBug = (): Bug => ({
   alive: false, id: 'ant', spec: bugSpec('ant'),
   x: 0, y: 0, vx: 0, vy: 0, dmg: 0, cycle: 0, heading: 0, t: 0,
-  sense: 0, stun: 0, held: 0, panic: 0, dip: 0, lastSlide: -1e9,
+  sense: 0, bolt: 0, boltCd: 0, stun: 0, held: 0, panic: 0, dip: 0, lastSlide: -1e9,
   segs: 0, trail: null, trailN: 0, phase: 0, fromBoss: false
 })
 
@@ -566,6 +669,8 @@ const takeBug = (): Bug | null => {
   b.cycle = rnd()
   b.t = 0
   b.sense = 0
+  b.bolt = 0
+  b.boltCd = 0
   b.stun = 0
   b.held = 0
   b.panic = 0
@@ -969,6 +1074,8 @@ const land = (): void => {
   // The boss is resolved BEFORE the stomp event, because a blow that landed on
   // it is a hit — see `bossStomp` — and the event carries `hit` to the renderer.
   const hitBugs = resolveArea(foot.x, foot.y, r, heavy, false)
+  // After the blow has been resolved, so nothing it killed is scared by it.
+  scareSprinters(foot.x, foot.y, r)
   const hitBoss = boss ? bossStomp(foot.x, foot.y, r, heavy) : false
   const hit = hitBugs || hitBoss
   if (heavy) slams.value++
@@ -1305,7 +1412,13 @@ const applyTerrain = (b: Bug, dt: number): number => {
     if (h.id === 'crumbs') {
       // Crumbs PULL: ants path toward them, which is how a level makes a swarm
       // walk into one place the player can slam.
-      if (b.id === 'ant') {
+      //
+      // Sprinters too, and that is the whole of 1-3. A crumb pile is BAIT: a
+      // sprinter walking toward a pile is a sprinter walking toward a spot the
+      // player already knows, and standing still beside that spot is exactly
+      // the thing that does not set it off. The answer to the level before it,
+      // handed over one level later.
+      if (b.id === 'ant' || b.id === 'sprinter') {
         const a = Math.atan2(h.y - b.y, h.x - b.x)
         b.heading += Math.sin(a - b.heading) * 0.06
       }
@@ -1315,6 +1428,93 @@ const applyTerrain = (b: Bug, dt: number): number => {
 }
 
 // ─── Bug behaviour ──────────────────────────────────────────────────────────
+
+/**
+ * Is the shoe COMING FOR this body?
+ *
+ * Near is not enough and this is the point. The sprinter's whole counter-play
+ * is "stop moving, then tap", so the test is on the foot's travel: it has to be
+ * inside the sense ring, moving faster than `SPRINT_APPROACH_U_S`, and heading
+ * within `SPRINT_APPROACH_DOT` of straight at the body.
+ *
+ * Deliberately NOT the flea's test. The flea reads the SHADOW — it leaps when
+ * something is over it, however that something got there — so a player beats a
+ * flea by being quick and beats a sprinter by being still. Two bugs, two verbs.
+ */
+const footClosingOn = (b: Bug, shadowR: number): boolean => {
+  if (foot.speed < SPRINT_APPROACH_U_S) return false
+  const sense = shadowR + b.spec.size * SPRINT_SENSE
+  const dx = b.x - foot.x
+  const dy = b.y - foot.y
+  const d2 = dx * dx + dy * dy
+  if (d2 > sense * sense) return false
+  const d = Math.sqrt(d2)
+  // Standing exactly on it counts; there is no direction to test.
+  if (d < 1e-3) return true
+  return (Math.cos(foot.heading) * dx + Math.sin(foot.heading) * dy) / d > SPRINT_APPROACH_DOT
+}
+
+/** Commit a sprinter to its run: straight away from the foot, no randomness. */
+const startBolt = (b: Bug): void => {
+  const a = Math.atan2(b.y - foot.y, b.x - foot.x)
+  const sp = SPRINT_RUN_U / (SPRINT_RUN_MS / 1000)
+  b.heading = a
+  b.vx = Math.cos(a) * sp
+  b.vy = Math.sin(a) * sp
+  b.bolt = SPRINT_RUN_MS
+  // Measured from the END of the winded pause, so the lockout is two and a bit
+  // seconds of plain ant rather than two and a bit seconds that are mostly the
+  // bolt the player just watched.
+  b.boltCd = SPRINT_RUN_MS + SPRINT_WINDED_MS + SPRINT_COOLDOWN_MS
+  b.sense = 0
+}
+
+/**
+ * A stomp landed at (x, y) with radius `r`. Anything sprint-capable that it
+ * NEARLY hit bolts.
+ *
+ * The touch half of the design — a finger has no hover, so the near miss is the
+ * only thing a phone can offer as "the shoe came for it" — and it runs on a
+ * mouse too, because a stomp is loud whatever pushed it.
+ *
+ * Called from `land()` AFTER `resolveArea`, so anything the blow actually
+ * killed is already out of the pool and cannot be scared posthumously.
+ */
+const scareSprinters = (x: number, y: number, r: number): void => {
+  for (let i = 0; i < bugCount; i++) {
+    const b = bugs[i]!
+    if (!b.spec.sprints) continue
+    if (b.bolt > 0 || b.boltCd > 0 || b.stun > 0 || b.held > 0) continue
+    const d2 = dist2(x, y, b.x, b.y)
+    // Outside the kill circle — a blow that reached it was not a near miss,
+    // it was a hit that failed some other test — and inside the scare band.
+    const near = r * SPRINT_SCARE_SCALE + b.spec.size
+    if (d2 <= (r + b.spec.size) * (r + b.spec.size) || d2 > near * near) continue
+    if (groundedAt(b)) continue
+    // Arm the SHARED tell rather than bolting on the spot: one code path, and
+    // the "!" gets its moment on a phone too.
+    b.sense = Math.max(b.sense, SPRINT_TELL_MS - SPRINT_SCARE_TELL_MS)
+  }
+}
+
+/**
+ * Is this body standing in something that pins it (honey, cobweb)?
+ *
+ * `applyTerrain` already zeroes `sense` every step for a grounded body, so a
+ * tell armed inside a puddle can never finish — which makes this check
+ * redundant TODAY, and only today. It is the order of `stepFoot` before
+ * `stepBugs` that makes it redundant, and the rule it is protecting (honey is
+ * the answer to the sprinter, taught on 1-7) is worth more than one loop over
+ * at most four hazards on the frames a stomp lands. Stated at the site so that
+ * reordering the step cannot silently delete a lesson.
+ */
+const groundedAt = (b: Bug): boolean => {
+  for (const h of hazards) {
+    if (!hazardSpec(h.id).grounds) continue
+    if (dist2(b.x, b.y, h.x, h.y) < h.r * h.r) return true
+  }
+  return false
+}
 
 const stepBugs = (dt: number): void => {
   const s = dt / 1000
@@ -1327,11 +1527,71 @@ const stepBugs = (dt: number): void => {
     if (b.stun > 0) { b.stun -= dt; b.cycle += s * 0.4 }
     if (b.held > 0) b.held -= dt
     if (b.panic > 0) b.panic -= dt
+    if (b.boltCd > 0) b.boltCd -= dt
 
     let speed = spec.speed * level.speed * difficulty * relief
     if (b.panic > 0) speed *= SALT_PANIC_SPEED
-    speed *= applyTerrain(b, dt)
+    // Kept, rather than folded straight into `speed`, because a bolt is not
+    // driven by `speed` and still has to be slowed by the floor it crosses.
+    const terrain = applyTerrain(b, dt)
+    speed *= terrain
     if (b.stun > 0 || b.held > 0) speed = 0
+
+    // ── The sprinter's bolt ──
+    //
+    // Two ways in, one way out. A pointer player is felt coming while the shoe
+    // is still travelling; a touch player has no hover to be felt, so what
+    // scares this one is a tap that landed beside it (`scareSprinters`, off the
+    // back of `land()`). Both arm the SAME tell clock, so the "!" the renderer
+    // already draws over a flea is the same warning here, and the move that
+    // follows it is the same move either way.
+    //
+    // A silent shoe hides the approach exactly as it hides it from a flea. It
+    // does not hide a stomp, because a stomp is a stomp.
+    //
+    // Note what is NOT here: nothing cancels an armed tell. Honey and cobweb
+    // zero `sense` every step from inside `applyTerrain` above, so a grounded
+    // sprinter can never finish one — but a player who merely changed their
+    // mind cannot un-frighten it. A tell that can be taken back teaches
+    // nothing, and this creature exists to be learned.
+    // A stunned or held body cannot start a tell and cannot finish one it had
+    // going: the clock FREEZES rather than resetting, so a steel boot's slam
+    // buys the player the pause and not a fresh start on the same warning.
+    if (spec.sprints && b.bolt <= 0 && b.stun <= 0 && b.held <= 0) {
+      const armed = b.sense > 0
+      const stalked = !touch && !shoe.silent
+        && b.boltCd <= 0 && footClosingOn(b, shadowR)
+      if (armed || stalked) {
+        b.sense += dt
+        if (b.sense >= SPRINT_TELL_MS) startBolt(b)
+      }
+    }
+
+    if (b.bolt > 0) {
+      // Mid-run: the launch velocity owns it. No steering, no crumb pull, no
+      // wander — it is running in a straight line away from a shoe, and the
+      // player has to be able to say exactly where it will stop.
+      b.bolt -= dt
+      const k = b.held > 0 ? 0 : terrain
+      b.x += b.vx * s * k
+      b.y += b.vy * s * k
+      // Legs at a blur: far faster than the walk cycle would ever drive them.
+      b.cycle = (b.cycle + s * 3.4) % 1
+      const bx = b.x
+      const by = b.y
+      bounce(b)
+      // A bolt that reaches the edge of the board ENDS there rather than
+      // grinding along it. A cornered sprinter is a stationary sprinter, and
+      // that is the reward for herding one instead of chasing it.
+      if (b.x !== bx || b.y !== by) b.bolt = 0
+      if (b.bolt <= 0) {
+        b.bolt = 0
+        b.vx = 0
+        b.vy = 0
+        b.stun = Math.max(b.stun, SPRINT_WINDED_MS)
+      }
+      continue
+    }
 
     // ── The dodge ──
     // A silent shoe never triggers it, which is the Bunny Slipper's whole perk.
