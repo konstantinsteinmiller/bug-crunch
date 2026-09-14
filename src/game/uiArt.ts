@@ -433,6 +433,128 @@ export const blitBanner = (
   ctx.drawImage(src, sw - capS, 0, capS, sh, x + w - capD, y, capD, h)
 }
 
+// ─── The treasure chest ─────────────────────────────────────────────────────
+
+/**
+ * The HUD's idle chest, centred on the origin, `size` px square.
+ *
+ * A CANVAS twin of the inline SVG in `TreasureChest.vue`, authored in the same
+ * 64-unit box and built from the same path data, so the reference sheet the art
+ * pipeline exports is provably the chest the player sees rather than a second
+ * drawing of one. The SVG stays the thing on screen: it carries the cooldown
+ * clip region and the gold-phase sparkles, which are STATE, not art, and have
+ * no business in a reference.
+ *
+ * It has to exist because `images/ui/chest.webp` is the one UI mark with no
+ * glyph behind it. Every other one maps to a shared icon path through
+ * `UI_ICON_GLYPH`, which is how `paintUiIcon` draws their references — and the
+ * chest is a full-colour drawing with a domed lid, a lip band, cel shading and
+ * a clasp, none of which a 24x24 button silhouette carries. Without this the
+ * exporter's `ui` branch fell through to `paintUiIcon(ctx, 'chest', …)`, which
+ * finds no glyph, returns silently, and writes a BLANK MAGENTA SQUARE as the
+ * reference a painter is then asked to work from.
+ *
+ * The four rules it keeps are the ones every drawable in this game keeps
+ * (`inkArt.ts`): one ink colour, one key light from the upper left, fat even
+ * ink with generous radii because the chest is ~38 px tall on a phone, and warm
+ * honey wood with a butter-gold clasp — no grey, no black, no rivets. It is a
+ * present, not a strongbox.
+ */
+export const paintChest = (ctx: CanvasRenderingContext2D, size: number): void => {
+  const k = size / 64
+  ctx.save()
+  ctx.translate(-size / 2, -size / 2)
+  ctx.scale(k, k)
+
+  /** A vertical gradient across one part's own box, as the SVG's
+   *  `objectBoundingBox` gradients are. */
+  const grad = (y0: number, y1: number, top: string, bottom: string): CanvasGradient => {
+    const g = ctx.createLinearGradient(0, y0, 0, y1)
+    g.addColorStop(0, top)
+    g.addColorStop(1, bottom)
+    return g
+  }
+
+  const lid = new Path2D('M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z')
+  const body = new Path2D()
+  body.roundRect(9.5, 34, 45, 20, 4.5)
+  const lip = new Path2D()
+  lip.roundRect(7, 30, 50, 6.5, 3.2)
+  const clasp = new Path2D()
+  clasp.roundRect(26.5, 28, 11, 14, 3.2)
+
+  // Contact shadow, offset down-and-right, so the chest sits on the HUD rather
+  // than floating over it.
+  ctx.save()
+  ctx.globalAlpha = 0.16
+  ctx.fillStyle = INK
+  ctx.beginPath()
+  ctx.ellipse(33.5, 55.5, 21, 3.6, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // ── The box: body, lid, lip — each filled then inked, in that order ──
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = INK
+  ctx.lineWidth = 2.6
+  ctx.fillStyle = grad(34, 54, '#ffc76f', '#e8862a')
+  ctx.fill(body)
+  ctx.stroke(body)
+  ctx.fillStyle = grad(12.5, 33, '#ffe6ab', '#f5a842')
+  ctx.fill(lid)
+  ctx.stroke(lid)
+  ctx.fillStyle = grad(30, 36.5, '#ffe6ab', '#f5a842')
+  ctx.fill(lip)
+  ctx.stroke(lip)
+
+  // ── Cel shading: drawn shapes with hard edges, each clipped to its own part
+  // so the body's shadow cannot spill onto the lid. Never a computed gradient —
+  // a cel painter puts the dark where it reads.
+  ctx.save()
+  ctx.clip(body)
+  ctx.globalAlpha = 0.42
+  ctx.fillStyle = '#c96a16'
+  ctx.fill(new Path2D('M44 32 C47.5 40 47 48 43.5 56 L58 56 L58 32 Z'))
+  ctx.restore()
+
+  ctx.save()
+  ctx.clip(lid)
+  ctx.globalAlpha = 0.36
+  ctx.fillStyle = '#d98a22'
+  ctx.fill(new Path2D('M43 10 C49 16 50.5 25 49.5 35 L59 35 L59 10 Z'))
+  // The key light: one soft smear on the top-left shoulder.
+  ctx.globalAlpha = 0.55
+  ctx.fillStyle = '#fff6df'
+  ctx.beginPath()
+  ctx.ellipse(22, 21.5, 8, 3.6, (-22 * Math.PI) / 180, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  // One plank seam, low on the body where it will not collide with the clasp.
+  // Two lines turn to mush at HUD size.
+  ctx.save()
+  ctx.globalAlpha = 0.5
+  ctx.strokeStyle = '#c96a16'
+  ctx.lineWidth = 1.8
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(12.5, 48.5)
+  ctx.lineTo(51.5, 48.5)
+  ctx.stroke()
+  ctx.restore()
+
+  // ── The clasp, and the keyhole: a disc and a tapering slot, ink on gold ──
+  ctx.fillStyle = grad(28, 42, '#fff0b4', '#efb02c')
+  ctx.strokeStyle = INK
+  ctx.lineWidth = 2.4
+  ctx.fill(clasp)
+  ctx.stroke(clasp)
+  ctx.fillStyle = INK
+  ctx.fill(new Path2D('M32 33.2 a2.1 2.1 0 1 1 0.01 0 M30.9 35.2 h2.2 l0.7 3.4 h-3.6 Z'))
+
+  ctx.restore()
+}
+
 // ─── UI marks the art pipeline can repaint ──────────────────────────────────
 
 /**

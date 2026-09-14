@@ -101,3 +101,56 @@ describe('GameIcon', () => {
     expect(w.find('svg.game-icon').exists()).toBe(true)
   })
 })
+
+/**
+ * ─── A mark's colour belongs to the game, not to the painting ───────────────
+ *
+ * The vector rung is `fill="currentColor"` and obeys `color:` for free; an
+ * `<img>` obeys nothing. For a glyph whose colour is STATE that is not a
+ * cosmetic difference, it is an inversion — with the art layer on, every star
+ * the player had just EARNED rendered silver-grey (the untinted greyscale
+ * painting) beside an unearned socket rendering warm gold, so the result screen
+ * said the star they had not won was the special one.
+ *
+ * So a mark in `TINTED_GLYPHS` reaches the page as a MASK filled with
+ * `currentColor`. These pin both halves: the renderer masks exactly that set,
+ * and the manifest asks for a silhouette for exactly that set — a mark painted
+ * in colour and then masked to its own alpha, or painted flat white and then
+ * shown untinted, is the same bug wearing the other shoe.
+ */
+describe('painted marks are tinted by the stylesheet', () => {
+  beforeEach(() => {
+    spriteFor.mockReset()
+    spriteFor.mockReturnValue(null)
+  })
+
+  it('masks a MARK so `color` reaches it, instead of blitting it', () => {
+    spriteFor.mockImplementation((_k, id) =>
+      id === 'star' ? fakePainting('/images/ui/star.webp') : null)
+    const w = mount(GameIcon, { props: { name: 'star' } })
+    const span = w.find('span.game-icon.is-tinted')
+    expect(span.exists()).toBe(true)
+    expect(span.attributes('style')).toContain('/images/ui/star.webp')
+    // Never as a picture: an `<img>` here is the grey-star bug.
+    expect(w.find('img.game-icon').exists()).toBe(false)
+    expect(span.attributes('aria-hidden')).toBe('true')
+  })
+
+  it('blits an OBJECT as painted — its colours are its own', () => {
+    spriteFor.mockImplementation((_k, id) =>
+      id === 'icon-gem' ? fakePainting('/images/ui/icon-gem.webp') : null)
+    const w = mount(GameIcon, { props: { name: 'gem' } })
+    expect(w.find('img.game-icon').exists()).toBe(true)
+    expect(w.find('span.game-icon.is-tinted').exists()).toBe(false)
+  })
+
+  it('falls back to the vector when a mark has no painting', () => {
+    const w = mount(GameIcon, { props: { name: 'star' } })
+    expect(w.find('svg.game-icon').exists()).toBe(true)
+    expect(w.find('span.game-icon.is-tinted').exists()).toBe(false)
+  })
+
+  // The other half — that the MANIFEST asks for a silhouette for exactly this
+  // set — is pinned in `artManifest.test.ts`, which is the file that already
+  // imports the bench manifest without mocking the renderer out from under it.
+})

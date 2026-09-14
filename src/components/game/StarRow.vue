@@ -76,26 +76,39 @@ watch(() => props.stars, run)
 </template>
 
 <style scoped lang="sass">
+// ─── Sizing ──────────────────────────────────────────────────────────────────
+//
+// `cqmin`, not `vmin`: inside the reward overlay these resolve against the
+// overlay's own box (see `FReward.vue`), and on the level banner — where there
+// is no size container — they fall back to the small viewport, which is what
+// `vmin` meant here before.
+//
+// The rem CEILINGS are a resolution budget, not a taste call. A painted mark is
+// `images/ui/star.webp`; drawn larger than its source it is a blur, and this row
+// is the first thing on the result screen. 4.2rem = 67.2 CSS px wants 134 device
+// px at dpr 2 and 202 at dpr 3 — 0.53x and 0.79x of a 256px sheet, so the mark is
+// never asked for pixels it does not have. The old 4.8rem was 1.2x / 1.8x of the
+// 128px sheet these were cut at, which is the blur the row was reported for.
 .stars
   display: flex
   align-items: center
   justify-content: center
-  gap: clamp(0.3rem, 2vmin, 0.8rem)
+  gap: clamp(0.25rem, 1.8cqmin, 0.7rem)
 
 .stars__socket
+  --star-edge: clamp(2rem, 10.5cqmin, 3.4rem)
   position: relative
   display: flex
   align-items: center
   justify-content: center
-  width: clamp(2.2rem, 11vmin, 4rem)
-  height: clamp(2.2rem, 11vmin, 4rem)
+  width: var(--star-edge)
+  height: var(--star-edge)
 
   // The middle star sits a little higher, the way every mobile game's star row
   // does. It is what stops three identical marks reading as a progress bar.
   &:nth-child(2)
-    width: clamp(2.7rem, 13.5vmin, 4.8rem)
-    height: clamp(2.7rem, 13.5vmin, 4.8rem)
-    margin-bottom: clamp(0.3rem, 2vmin, 0.8rem)
+    --star-edge: clamp(2.4rem, 12.8cqmin, 4.2rem)
+    margin-bottom: clamp(0.25rem, 1.8cqmin, 0.7rem)
 
 .stars__empty, .stars__full
   position: absolute
@@ -113,11 +126,15 @@ watch(() => props.stars, run)
   rotate: -25deg
   filter: drop-shadow(0 0 0 rgba(255, 217, 60, 0))
 
+// The glow is a FRACTION OF THE STAR, not 12 hard pixels. At the sizes this row
+// actually runs at — 40-67px — a 12px blur is a quarter of the mark's radius of
+// haze laid over its own outline, which is most of why a painted star read as
+// soft. 0.14 of the edge keeps the halo and gives the silhouette back.
 .is-lit .stars__full
   opacity: 1
   scale: 1
   rotate: 0deg
-  filter: drop-shadow(0 0 12px rgba(255, 217, 60, 0.85))
+  filter: drop-shadow(0 0 calc(var(--star-edge) * 0.14) rgba(255, 217, 60, 0.8))
   transition: opacity 120ms ease-out, scale 420ms cubic-bezier(0.18, 0.89, 0.32, 1.28), rotate 420ms cubic-bezier(0.18, 0.89, 0.32, 1.28), filter 320ms ease-out
 
 .stars__burst
@@ -146,9 +163,9 @@ watch(() => props.stars, run)
 
 @keyframes star-shimmer
   0%, 100%
-    filter: drop-shadow(0 0 10px rgba(255, 217, 60, 0.7))
+    filter: drop-shadow(0 0 calc(var(--star-edge) * 0.12) rgba(255, 217, 60, 0.7))
   50%
-    filter: drop-shadow(0 0 20px rgba(255, 255, 190, 1))
+    filter: drop-shadow(0 0 calc(var(--star-edge) * 0.22) rgba(255, 255, 190, 1))
 
 @media (prefers-reduced-motion: reduce)
   .is-lit .stars__full

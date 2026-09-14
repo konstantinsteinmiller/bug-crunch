@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Koʻpi bilan {n} marta adash',
     'score': '{n} ochko toʻpla'
   },
+  'quests': {
+    'onTrack': '{objective} — yoʻlida',
+    'progress': '{objective} — {n}% bajarildi',
+    'missed': '{objective} — qoʻldan ketdi'
+  },
   'hints': {
     'move': {
       'touch': 'Harakat uchun bosing',

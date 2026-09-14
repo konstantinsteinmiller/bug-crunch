@@ -139,6 +139,7 @@ aside h4 { margin: 0 0 8px; font-size: 13px; display: flex; align-items: center;
         <button class="go" id="start">▶ Start</button>
         <button class="stop" id="stopq">■ Stop</button>
         <button id="signIn" title="Opens the desk's Chrome profile WITHOUT its automation port, the only way Google lets you sign in. Sign in, then close that window.">Sign in</button>
+        <button id="switched" hidden title="Tells the desk a DIFFERENT Google account is now signed in, so the per-account allowance starts again and a parked queue carries on.">Switched account</button>
         <button id="openGem" title="Open the desk's own Chrome window at Gemini, to watch it work">Gemini window</button>
       </div>
       <div class="btnrow">
@@ -151,7 +152,7 @@ aside h4 { margin: 0 0 8px; font-size: 13px; display: flex; align-items: center;
         <div class="settings">
           <span>gap between generations (s)</span><input type="number" id="s-gap" min="0">
           <span>+ random jitter up to (s)</span><input type="number" id="s-jit" min="0">
-          <span>generations per day, all projects</span><input type="number" id="s-cap" min="0">
+          <span>generations per Google account</span><input type="number" id="s-acc" min="0">
           <span>re-rolls per job</span><input type="number" id="s-ret" min="0">
         </div>
       </details>
@@ -423,16 +424,19 @@ document.addEventListener('dragstart', (e) => {
 const fmtS = (ms) => `${Math.max(0, Math.round(ms / 1000))} s`
 const renderAuto = () => {
   const a = S.auto ?? {}
-  $('#gemdot').className = `dot${a.running ? ' run' : a.lastError ? ' bad' : ''}`
-  $('#used').textContent = `${a.usedToday ?? 0}/${a.settings?.dailyCap ?? '?'} today`
-  const phase = a.running
-    ? (a.nextAt ? `next one in ${fmtS(a.nextAt - Date.now())}` : `${a.current ?? ''} — ${a.phase}`)
-    : a.lastError ? `stopped: ${a.lastError}` : `idle${a.queue?.length ? ` — ${a.queue.length} queued, press Start` : ''}`
+  $('#used').textContent = `${a.usedOnAccount ?? 0}/${a.settings?.accountCap ?? '?'} on this account · ${a.usedToday ?? 0} today`
+  const phase = a.needsAccount
+    ? `PAUSED — this account has had ${a.usedOnAccount ?? 0} generations. Sign a different Google account in, then press "Switched account".`
+    : a.running
+      ? (a.nextAt ? `next one in ${fmtS(a.nextAt - Date.now())}` : `${a.current ?? ''} — ${a.phase}`)
+      : a.lastError ? `stopped: ${a.lastError}` : `idle${a.queue?.length ? ` — ${a.queue.length} queued, press Start` : ''}`
   $('#phase').textContent = phase
+  $('#gemdot').className = `dot${a.needsAccount ? ' bad' : a.running ? ' run' : a.lastError ? ' bad' : ''}`
+  $('#switched').hidden = !a.needsAccount
   $('#start').disabled = !!a.running || !a.queue?.length
   $('#stopq').disabled = !a.running
   $('#qlist').innerHTML = (a.queue ?? []).map((s) => `<li class="${a.running && s === a.current ? 'cur' : ''}"><span>${esc(s)}</span>${a.running && s === a.current ? '<span>▶</span>' : `<button data-deq="${esc(s)}">×</button>`}</li>`).join('')
-  for (const [id, k] of [['#s-gap', 'gapSeconds'], ['#s-jit', 'jitterSeconds'], ['#s-cap', 'dailyCap'], ['#s-ret', 'retries']]) {
+  for (const [id, k] of [['#s-gap', 'gapSeconds'], ['#s-jit', 'jitterSeconds'], ['#s-acc', 'accountCap'], ['#s-ret', 'retries']]) {
     if (document.activeElement !== $(id)) $(id).value = a.settings?.[k] ?? ''
   }
 }
@@ -507,8 +511,11 @@ $('#queueTodo').addEventListener('click', () => {
 })
 $('#qlist').addEventListener('click', (e) => { const s = e.target.closest('[data-deq]')?.dataset.deq; if (s) post('/api/auto', { action: 'dequeue', stems: [s] }).then((a) => { S.auto = a; renderAuto(); renderList() }) })
 $('#openGem').addEventListener('click', () => post('/api/gemini/open').then((s) => toast(`${s.launched ? 'Opened' : 'Already open:'} the desk's Gemini window.`)).catch((e) => toast(e.message, true, 8000)))
+$('#switched').addEventListener('click', () => post('/api/gemini/account-switched')
+  .then((a) => { S.auto = a; renderAuto(); toast('Allowance reset. A queue that was parked carries on from where it stopped.', false, 6000) })
+  .catch((e) => toast(e.message, true, 8000)))
 $('#signIn').addEventListener('click', () => post('/api/gemini/signin').then(() => toast('Sign in to Google in the window that opened, then CLOSE it. Once is enough for every project.', false, 9000)).catch((e) => toast(e.message, true, 8000)))
-for (const [id, k] of [['#s-gap', 'gapSeconds'], ['#s-jit', 'jitterSeconds'], ['#s-cap', 'dailyCap'], ['#s-ret', 'retries']]) {
+for (const [id, k] of [['#s-gap', 'gapSeconds'], ['#s-jit', 'jitterSeconds'], ['#s-acc', 'accountCap'], ['#s-ret', 'retries']]) {
   $(id).addEventListener('change', (e) => post('/api/auto', { action: 'settings', settings: { [k]: e.target.value } }).then((a) => { S.auto = a; renderAuto() }))
 }
 document.addEventListener('keydown', (e) => {

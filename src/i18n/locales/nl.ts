@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Mis hoogstens {n} stampen',
     'score': 'Scoor {n} punten'
   },
+  'quests': {
+    'onTrack': '{objective} — op koers',
+    'progress': '{objective} — {n}% gedaan',
+    'missed': '{objective} — gemist'
+  },
   'hints': {
     'move': {
       'touch': 'Tik om te bewegen',

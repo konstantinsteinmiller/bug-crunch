@@ -288,7 +288,10 @@ try {
     await sleep(1000)
   }
   console.log(`page: ${APP} — ${title || '(no title)'}`)
-  if (!/bug-crunch/i.test(title)) {
+  // `bug.?crunch`, not `bug-crunch`: the page's <title> is "Bug Crunch" with a
+  // space and the repo is hyphenated, so the strict form refused this project's
+  // own dev server. See the same fix in `export-sheets.mjs`.
+  if (!/bug.?crunch/i.test(title)) {
     throw new Error(`not bug-crunch: the page at ${APP} is titled "${title}". `
       + 'Start this project\'s dev server (pnpm dev --port 2050) or pass its URL.')
   }

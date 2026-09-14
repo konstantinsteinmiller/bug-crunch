@@ -76,6 +76,21 @@ const scrim = computed(() => props.lesson?.scrim ?? 'soft')
 /** Ring geometry, as stroke-dashoffset over a 100-unit circumference. */
 const dash = computed(() => `${Math.max(0, Math.min(1, props.progress)) * 100} 100`)
 
+/**
+ * Is there anything for the progress ring to say?
+ *
+ * It used to be drawn under EVERY lesson, and for the slam that made two meters
+ * on screen at once — a charge ring that fills and, an inch below it, a second
+ * ring that never moves, because a `hold` lesson has neither a `holdMs` nor a
+ * `doing` signal and its `progress` is pinned at zero for its whole life. A
+ * dead meter beside a live one is not neutral: it reads as the live one being
+ * broken. So it appears only when it is about to mean something — a lesson with
+ * a `holdMs` counts itself down, and `move` fills it the moment the foot
+ * actually starts travelling.
+ */
+const showRing = computed(() =>
+  props.lesson !== null && (props.lesson.holdMs !== undefined || props.progress > 0))
+
 const stageStyle = computed(() => ({ left: `${props.x}px`, top: `${props.y}px` }))
 
 // ─── The flow arrow ─────────────────────────────────────────────────────────
@@ -126,11 +141,14 @@ const flowStyle = computed(() => ({
         //- Everything except a drag lands ON something, so it gets a target.
         div.tut__target(v-if="gesture !== 'drag' && gesture !== 'flow'")
 
-        //- hold — the charge ring, which is exactly what the real charge ring
-        //- on the real foot is about to do.
+        //- hold — the charge METER, drawn a good deal wider than the target it
+        //- rings so it reads as a thing that FILLS rather than as a second
+        //- target. The tick on it is `MIN_SLAM_CHARGE`: without somewhere to
+        //- get past, a meter is only a countdown.
         svg.tut__charge(v-if="gesture === 'hold'" viewBox="0 0 36 36")
           circle.tut__charge-track(cx="18" cy="18" r="15.9155")
           circle.tut__charge-fill(cx="18" cy="18" r="15.9155")
+          circle.tut__charge-mark(cx="18" cy="18" r="15.9155")
 
         //- The hand. One glyph, animated per gesture. `watch` and `flow` have
         //- none: there is nothing to do, only something to see.
@@ -144,18 +162,31 @@ const flowStyle = computed(() => ({
           svg(v-else viewBox="0 0 24 24" fill="currentColor")
             path(d="M5 3l14 7.5-6 1.6L10.6 19z")
 
-        //- The ripple, on the gestures that land: it fires on the same clock
+        //- The ripple, on the gesture that lands: it fires on the same clock
         //- the hand lands on, so cause and effect are one animation.
-        div.tut__ripple(v-if="gesture === 'tap' || gesture === 'hold'")
-        div.tut__ripple.is-late(v-if="gesture === 'hold'")
+        div.tut__ripple(v-if="gesture === 'tap'")
+
+        //- hold — the payoff, in three pieces on one clock. The ECHO is the
+        //- light stomp the press itself lands (the real `press()` does exactly
+        //- that before it ever starts charging), drawn at the size a tap really
+        //- is. The FLASH and the WAVE are the slam, and they go out three times
+        //- as far. The player already knows how to tap; the whole content of
+        //- this lesson is the difference between those two sizes, and a size
+        //- cannot be shown on its own — so both are in every cycle.
+        template(v-if="gesture === 'hold'")
+          div.tut__echo
+          div.tut__flash
+          div.tut__wave
+          div.tut__wave.is-trail
 
         //- avoid — the bar across the target. The only red mark in the whole
         //- tutorial, because it is the only lesson that means "not this".
         div.tut__no(v-if="gesture === 'avoid'")
 
       //- The progress ring, parked below the lesson rather than on it — on it,
-      //- it would be mistaken for part of the lesson.
-      svg.tut__ring(:style="{ left: x + 'px', top: y + 'px' }" viewBox="0 0 36 36")
+      //- it would be mistaken for part of the lesson. Absent entirely when it
+      //- has nothing to fill: see `showRing`.
+      svg.tut__ring(v-if="showRing" :style="{ left: x + 'px', top: y + 'px' }" viewBox="0 0 36 36")
         circle.tut__ring-track(cx="18" cy="18" r="15.9155")
         circle.tut__ring-fill(cx="18" cy="18" r="15.9155" :stroke-dasharray="dash")
 </template>
@@ -189,6 +220,9 @@ const flowStyle = computed(() => ({
   translate: -50% -50%
   width: 0
   height: 0
+  // Stated once, so the hold lesson can offset the hand by a FRACTION OF
+  // ITSELF and land its fingertip on the target instead of its palm.
+  --tut-hand: clamp(1.9rem, 8.5vmin, 2.8rem)
 
 // ─── drag — the track ───────────────────────────────────────────────────────
 
@@ -232,6 +266,45 @@ const flowStyle = computed(() => ({
   border-color: rgba(255, 255, 255, 0.9)
   animation: tut-watch 1.9s ease-in-out infinite
 
+// hold: the target is the blow's REACH, and the reach is what the charge buys.
+// So it does not pulse on a loop like every other target — it grows with the
+// meter, punches on release, and settles back. It is the "the foot swells" half
+// of the lesson, and it is drawn rather than described.
+.is-hold .tut__target
+  border-style: solid
+  border-color: rgba(255, 217, 60, 0.92)
+  filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.85))
+  animation: tut-hold-target 2600ms linear infinite
+
+@keyframes tut-hold-target
+  0%
+    scale: 1
+    opacity: 0.7
+  7%
+    scale: 1
+    opacity: 1
+  10%
+    scale: 0.88
+  16%
+    scale: 1.02
+  58%
+    scale: 1.62
+  62%
+    scale: 1.62
+  // The punch, and then straight back out of the way. Held out at the wave's
+  // own radius it merged with it into one fat gold disc — the impact has to be
+  // a ring LEAVING something, and something has to be left behind for it to
+  // leave.
+  64%
+    scale: 1.88
+    opacity: 1
+  73%
+    scale: 1.14
+    opacity: 0.5
+  88%, 100%
+    scale: 1
+    opacity: 0.7
+
 @keyframes tut-target
   0%, 100%
     scale: 1
@@ -248,35 +321,104 @@ const flowStyle = computed(() => ({
     scale: 1.18
     opacity: 1
 
+// ─── hold — the big stomp, in three beats ───────────────────────────────────
+//
+// The one lesson in this game that cannot be taught by showing the gesture,
+// because the player already OWNS the gesture. They have been tapping since
+// level 1-1; what they do not know is that the press has a second half. So the
+// animation is not a demonstration, it is a COMPARISON, and every element below
+// is on one 2600 ms clock so the comparison happens inside a single glance:
+//
+//     0 –  7 %   the hand comes down
+//     7 %        it lands — and the press's own light stomp goes out (`echo`),
+//                which is not licence, it is what `press()` really does: a
+//                quick stomp first, and only then a charge
+//     7 – 16 %   that tap and nothing else. The meter is still empty
+//    16 – 58 %   the hand STAYS DOWN, the meter fills, and the target swells
+//                with it — what is growing is the blow's reach. The mark at
+//                34 % of the meter is `MIN_SLAM_CHARGE`, crossed at 30 % of
+//                the cycle, and it lights when the fill reaches it
+//    58 – 62 %   full, held
+//    64 %        RELEASE. The hand snaps away; flash, then wave
+//    64 – 88 %   the wave goes out to 3.6×, against the echo's 1.35×
+//    88 – 100 %  rest, and again
+//
+// The ORDER and the PROPORTIONS are the simulation's, slowed about four times
+// so a six-year-old can follow them. In the real foot a press costs 70 ms of
+// drop, 70 ms of impact and 150 ms of cooldown before charging even begins,
+// then `shoe.chargeMs` (320 ms in the starter sneaker) to fill — passing
+// `MIN_SLAM_CHARGE` 109 ms in, at 34 % of the ring, which is where the mark is.
+
 .tut__charge
   position: absolute
   left: 50%
   top: 50%
   translate: -50% -50%
-  width: clamp(4rem, 18vmin, 6.4rem)
-  height: clamp(4rem, 18vmin, 6.4rem)
+  // WIDER than the target it rings. At the target's own 14vmin it was a third
+  // concentric yellow circle inside seventy pixels, and the hand, the target
+  // and the meter merged into one gold blob sitting on top of the beetle the
+  // lesson was about.
+  width: clamp(6.6rem, 31vmin, 10.5rem)
+  height: clamp(6.6rem, 31vmin, 10.5rem)
   rotate: -90deg
+  overflow: visible
+  filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.8))
 
 .tut__charge-track
   fill: none
-  stroke: rgba(255, 255, 255, 0.18)
-  stroke-width: 3
+  stroke: rgba(8, 8, 20, 0.5)
+  stroke-width: 2.8
 
 .tut__charge-fill
   fill: none
   stroke: #ffd93c
-  stroke-width: 4
+  stroke-width: 3.6
   stroke-linecap: round
   stroke-dasharray: 0 100
-  animation: tut-charge 2.4s ease-in-out infinite
+  animation: tut-charge 2600ms linear infinite
 
+// The threshold. The circle's circumference is 100 units by construction
+// (r = 15.9155), so a dash parked 34 units along it is 34 % of the charge —
+// the exact number `release()` compares against before it will call the blow a
+// slam. A meter with nothing to get PAST is only a countdown.
+.tut__charge-mark
+  fill: none
+  stroke: #ffffff
+  stroke-width: 6.2
+  stroke-dasharray: 2.2 97.8
+  stroke-dashoffset: -32.9
+  animation: tut-charge-mark 2600ms linear infinite
+
+// The opacity is not decoration. `stroke-linecap: round` on a zero-length dash
+// draws a round cap anyway — an empty meter rendered as a stray gold dot at
+// twelve o'clock, which on a board full of coins and pickups reads as a thing
+// to go and collect. So the fill is simply absent until it has length.
 @keyframes tut-charge
-  0%, 24%
+  0%, 16%
     stroke-dasharray: 0 100
-  56%
+    opacity: 0
+  19%
+    opacity: 1
+  58%, 63%
     stroke-dasharray: 100 100
-  62%, 100%
+    opacity: 1
+  64%, 100%
     stroke-dasharray: 0 100
+    opacity: 0
+
+@keyframes tut-charge-mark
+  0%, 29%
+    opacity: 0.5
+    scale: 1
+  31%
+    opacity: 1
+    scale: 1.14
+  35%, 63%
+    opacity: 1
+    scale: 1
+  64%, 100%
+    opacity: 0.5
+    scale: 1
 
 // ─── avoid — the bar ────────────────────────────────────────────────────────
 
@@ -299,8 +441,8 @@ const flowStyle = computed(() => ({
   position: absolute
   left: 50%
   top: 50%
-  width: clamp(1.9rem, 8.5vmin, 2.8rem)
-  height: clamp(1.9rem, 8.5vmin, 2.8rem)
+  width: var(--tut-hand)
+  height: var(--tut-hand)
   color: #ffd93c
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.85))
 
@@ -336,20 +478,51 @@ const flowStyle = computed(() => ({
     translate: -20% -120%
     scale: 1
 
-// hold: down, HELD, then away — the hold is the lesson, so it is most of the
-// cycle.
+// hold: down at 7 %, DOWN until 64 %, and gone in a snap. Well over half the
+// cycle is a hand doing nothing but staying put, because that IS the lesson —
+// and the snap off at the end is what makes the wave read as caused by the
+// release rather than by the press.
 .is-hold .tut__hand
-  animation: tut-hold 2.4s ease-in-out infinite
+  // Land the FINGERTIP on the target, not the palm. Centred, the hand and the
+  // full charge ring together covered the beetle completely at the peak of the
+  // animation — the drawing hid the thing it was drawn about. The touch glyph's
+  // tip sits at roughly (46 %, 25 %) of its own box; the cursor's at (21 %, 13 %).
+  margin-left: calc(var(--tut-hand) * -0.46)
+  margin-top: calc(var(--tut-hand) * -0.25)
+  animation: tut-hold-hand 2600ms linear infinite
 
-@keyframes tut-hold
+.is-hold .tut__hand.is-mouse
+  margin-left: calc(var(--tut-hand) * -0.21)
+  margin-top: calc(var(--tut-hand) * -0.13)
+
+@keyframes tut-hold-hand
   0%
-    translate: -20% -120%
+    translate: 0 -150%
     scale: 1
-  18%, 58%
-    translate: -20% -46%
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55)
+  7%
+    translate: 0 0
+    scale: 0.95
+  10%
+    translate: 0 7%
+    scale: 0.88
+  16%
+    translate: 0 5%
+    scale: 0.9
+  // A shallow breath while it is held down, so a hand that must stay put for
+  // most of a second still reads as pressing rather than as a frozen frame.
+  36%
+    translate: 0 8%
     scale: 0.86
-  70%, 100%
-    translate: -20% -120%
+  58%, 62%
+    translate: 0 5%
+    scale: 0.9
+    animation-timing-function: cubic-bezier(0.2, 0.85, 0.3, 1)
+  66%
+    translate: 0 -34%
+    scale: 1.04
+  80%, 100%
+    translate: 0 -150%
     scale: 1
 
 // avoid: reaches, thinks better of it, and pulls back fast. The retreat is
@@ -395,13 +568,6 @@ const flowStyle = computed(() => ({
   animation: tut-ripple 1.6s ease-out infinite
   animation-delay: 0.48s
 
-.is-hold .tut__ripple
-  animation: tut-ripple-big 2.4s ease-out infinite
-  animation-delay: 1.39s
-
-.is-hold .tut__ripple.is-late
-  animation-delay: 1.52s
-
 @keyframes tut-ripple
   0%
     scale: 0.3
@@ -410,15 +576,113 @@ const flowStyle = computed(() => ({
     scale: 1.6
     opacity: 0
 
-@keyframes tut-ripple-big
-  0%
-    scale: 0.3
-    opacity: 1
-    border-color: rgba(255, 217, 60, 0.95)
-  100%
-    scale: 3.4
+// ─── hold — the echo, the flash and the wave ────────────────────────────────
+//
+// Peak 1.35× against peak 3.6×, in the same cycle, on the same clock, from the
+// same centre. That ratio is the entire lesson: the old cut drew only the big
+// one, and a ring you have nothing to measure against is just a ring.
+
+.tut__echo, .tut__wave, .tut__flash
+  position: absolute
+  left: 50%
+  top: 50%
+  translate: -50% -50%
+  width: clamp(3rem, 14vmin, 5rem)
+  height: clamp(3rem, 14vmin, 5rem)
+  border-radius: 999px
+  opacity: 0
+
+// The light stomp the press itself lands, at the size a tap really is. It has
+// to LEAVE, visibly, past the target — an echo that expands inside the ring it
+// started in is not a stomp, it is a highlight.
+.tut__echo
+  border: 3px solid rgba(255, 255, 255, 0.9)
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8))
+  animation: tut-hold-echo 2600ms ease-out infinite
+
+@keyframes tut-hold-echo
+  0%, 6%
+    scale: 0.7
     opacity: 0
-    border-color: rgba(255, 217, 60, 0)
+  8%
+    scale: 0.98
+    opacity: 1
+  21%, 100%
+    scale: 1.7
+    opacity: 0
+
+// The weight. A ring says how FAR the blow reached; a hard bloom on the same
+// frame is what makes it read as HEAVY rather than as a wider version of the
+// same tap.
+//
+// An ANNULUS, not a disc. The first cut was a filled radial and it whited out
+// the bug at the exact instant the lesson was making its point — the payoff
+// frame has to show the armoured thing being hit, or it is a payoff for
+// nothing. The middle 26 % of it is transparent on purpose.
+.tut__flash
+  background: radial-gradient(circle, rgba(255, 255, 255, 0) 26%, rgba(255, 255, 255, 0.92) 44%, rgba(255, 205, 70, 0.55) 62%, rgba(255, 205, 70, 0) 78%)
+  animation: tut-hold-flash 2600ms ease-out infinite
+
+@keyframes tut-hold-flash
+  0%, 63%
+    scale: 0.6
+    opacity: 0
+  65%
+    scale: 1.45
+    opacity: 1
+  73%, 100%
+    scale: 2.4
+    opacity: 0
+
+// No inset glow: it fills the ring in, and a filled ring at the impact frame is
+// a gold coin sitting on the bug rather than a wave leaving it.
+// The dark hairline is doing real work: gold on a red-and-white gingham floor
+// at 40 % opacity is nearly invisible, and the wave spends most of its life
+// fading. A 2 px dark ring outside the gold one separates it from whatever it
+// happens to be crossing.
+.tut__wave
+  border: 5px solid rgba(255, 217, 60, 0.95)
+  box-shadow: 0 0 0 2px rgba(26, 12, 0, 0.45), 0 0 16px rgba(255, 180, 40, 0.5)
+  animation: tut-hold-wave 2600ms cubic-bezier(0.08, 0.7, 0.3, 1) infinite
+
+// A thin second front behind the first. One ring is an outline; two travelling
+// apart are a shockwave.
+.tut__wave.is-trail
+  border-width: 2px
+  border-color: rgba(255, 255, 255, 0.85)
+  box-shadow: 0 0 0 1px rgba(26, 12, 0, 0.4)
+  animation-name: tut-hold-wave-trail
+
+// The opacity holds high while it travels and drops at the end, rather than
+// fading linearly across the whole journey — a wave that is half transparent by
+// the time it is big enough to read is a wave nobody saw.
+@keyframes tut-hold-wave
+  0%, 63%
+    scale: 0.9
+    opacity: 0
+  65%
+    scale: 1.85
+    opacity: 1
+  78%
+    scale: 3.1
+    opacity: 0.8
+  90%, 100%
+    scale: 3.9
+    opacity: 0
+
+@keyframes tut-hold-wave-trail
+  0%, 65%
+    scale: 0.9
+    opacity: 0
+  68%
+    scale: 1.5
+    opacity: 0.95
+  80%
+    scale: 2.4
+    opacity: 0.6
+  92%, 100%
+    scale: 2.9
+    opacity: 0
 
 // ─── flow — this causes that ────────────────────────────────────────────────
 
@@ -504,7 +768,12 @@ const flowStyle = computed(() => ({
 .tut-enter-from, .tut-leave-to
   opacity: 0
 
+// Every element of a gesture has to be slowed to the SAME duration or it is not
+// slowed, it is desynchronised — the hold lesson is four elements telling one
+// story in lockstep, and a wave that goes out while the meter is still filling
+// teaches the opposite of the thing.
 @media (prefers-reduced-motion: reduce)
-  .tut__hand, .tut__target, .tut__ripple, .tut__charge-fill, .tut__no, .tut__flow-dot
+  .tut__hand, .tut__target, .tut__ripple, .tut__charge-fill, .tut__charge-mark,
+  .tut__no, .tut__flow-dot, .tut__echo, .tut__flash, .tut__wave
     animation-duration: 4.8s
 </style>

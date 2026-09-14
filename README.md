@@ -1,4 +1,4 @@
-# bug-crunch
+# Bug Crunch
 
 A mobile-first 2D **bug squisher**. You are a shoe. Drag it around a picnic
 blanket, an attic floor or an arcade carpet and flatten everything crawling on

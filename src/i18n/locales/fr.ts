@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Rate au plus {n} écrasements',
     'score': 'Marque {n} points'
   },
+  'quests': {
+    'onTrack': '{objective} — en bonne voie',
+    'progress': '{objective} — {n}% fait',
+    'missed': '{objective} — manqué'
+  },
   'hints': {
     'move': {
       'touch': 'Touche pour bouger',

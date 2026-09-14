@@ -146,6 +146,11 @@ export default {
     'noMiss': 'พลาดได้ไม่เกิน {n} ครั้ง',
     'score': 'ทำให้ได้ {n} คะแนน'
   },
+  'quests': {
+    'onTrack': '{objective} — กำลังไปได้ดี',
+    'progress': '{objective} — ไปแล้ว {n}%',
+    'missed': '{objective} — พลาดไปแล้ว'
+  },
   'hints': {
     'move': {
       'touch': 'แตะเพื่อเคลื่อนที่',

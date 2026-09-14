@@ -8,7 +8,7 @@ import { paintBug, paintBoss, BUG_R_FRAC } from '@/game/bugArt'
 import { paintShoe } from '@/game/footArt'
 import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
 import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
-import { paintBanner, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, type UiIconId } from '@/game/uiArt'
+import { paintBanner, paintChest, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, type UiIconId } from '@/game/uiArt'
 import { paintSmokeRef } from '@/use/useVfx'
 import { shoeSpec, type ShoeId } from '@/game/shoes'
 import { bugSpec, type BugId } from '@/game/bugs'
@@ -289,6 +289,13 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
         ctx.strokeText('BUG CRUNCH', 0, 0)
         ctx.fillStyle = '#ffd93c'
         ctx.fillText('BUG CRUNCH', 0, 0)
+      } else if (s.id === 'chest') {
+        // The idle chest, through its own painter rather than the glyph route
+        // below — it is the one UI mark with no entry in `UI_ICON_GLYPH`, so
+        // `paintUiIcon` finds nothing to fill and returns silently, and the
+        // reference goes out as a blank magenta square. See `paintChest`.
+        ctx.translate(cx, cy)
+        paintChest(ctx, half * 1.7)
       } else if (s.id === 'mascot') {
         // The splash's greeter is the game's own ant, through the game's own
         // painter — the reference has to be the creature the player meets on

@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Ең көбі {n} рет жаңыл',
     'score': '{n} ұпай жина'
   },
+  'quests': {
+    'onTrack': '{objective} — жоспар бойынша',
+    'progress': '{objective} — {n}% дайын',
+    'missed': '{objective} — жіберіп алдыңыз'
+  },
   'hints': {
     'move': {
       'touch': 'Жылжу үшін түртіңіз',

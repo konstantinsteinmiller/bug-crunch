@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Meleset maksimal {n} kali',
     'score': 'Kumpulkan {n} poin'
   },
+  'quests': {
+    'onTrack': '{objective} — sesuai jalur',
+    'progress': '{objective} — {n}% selesai',
+    'missed': '{objective} — terlewat'
+  },
   'hints': {
     'move': {
       'touch': 'Ketuk untuk bergerak',

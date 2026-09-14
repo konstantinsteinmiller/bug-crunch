@@ -30,7 +30,7 @@ import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames
  * to one and none of them is on screen before the first stomp.
  */
 export const UI_HUD_MARKS = [
-  'ribbon', 'locker', 'fever', 'star', 'timer', 'target', 'trophy'
+  'ribbon', 'locker', 'fever', 'star', 'timer', 'target', 'trophy', 'chest'
 ] as const
 
 /**
@@ -53,6 +53,68 @@ export const UI_MARK_FOR_GLYPH = {
   target: 'target',
   trophy: 'trophy'
 } as const satisfies Partial<Record<GameIconName, string>>
+
+/**
+ * ─── The glyphs the GAME colours, not the painter ───────────────────────────
+ *
+ * A mark in here is painted as a flat white silhouette — `greyscale: true` in
+ * `artSheet.ts`, whose prompt says so in as many words — because its colour is
+ * STATE, not art. A star is white when it is not yours and gold when it is; a
+ * trophy is slate on a chip and cream on a gift card; a boot is white on candy
+ * plastic. One painting has to be all of those, so the painting carries the
+ * SHAPE and the stylesheet carries the colour, exactly as the vector does.
+ *
+ * Which matters because the two rungs of `GameIcon` tint differently. The
+ * vector is `fill="currentColor"` and obeys `color:` for free. An `<img>` obeys
+ * nothing — and that is not a cosmetic difference, it is an INVERSION: with the
+ * art layer on, every star the player had just EARNED rendered silver-grey (the
+ * untinted greyscale painting) beside an unearned socket rendering warm gold
+ * (`icon-star-empty`, painted as a full-colour object). The screen said the one
+ * they had not won was the special one.
+ *
+ * So a painting named here is drawn as a MASK filled with `currentColor`
+ * instead of as a picture. Nothing is lost doing it: these are authored as one
+ * bold shape with no outline and no shading, so their alpha IS the mark, and
+ * masking it makes the painted and vector rungs genuinely interchangeable —
+ * which is the whole drop-in contract. Everything NOT in here is an object
+ * (the chest, the gem, the heart, the coin) whose colours are its own, and is
+ * blitted as painted.
+ *
+ * `artSheet.ts` reads this same set to decide which prompts ask for a
+ * silhouette, so the painting and the renderer cannot drift apart.
+ */
+export const TINTED_GLYPHS: ReadonlySet<GameIconName> = new Set<GameIconName>([
+  // The six that are also a HUD mark (`UI_MARK_FOR_GLYPH` above) — one painting
+  // serves the canvas and the DOM, and both tint it.
+  'boot', 'flame', 'star', 'clock', 'target', 'trophy',
+  // The affordances: pure controls, white on saturated plastic.
+  'play', 'pause', 'replay', 'skip-forward', 'skip-back', 'stop',
+  'menu', 'home', 'back', 'forward', 'close', 'check',
+  'settings', 'shop', 'info', 'help',
+  'music', 'music-off', 'sound', 'sound-off',
+  'chart', 'leaderboard', 'share', 'fullscreen',
+  'plus', 'minus', 'left', 'right', 'up', 'down',
+  // `shield` is a noun and still a MARK, because what decides the register is
+  // not what a glyph depicts but how small it is drawn. This one is the pierce
+  // stat on a shoe card, ten to fourteen pixels wide, under the band an object
+  // survives at all. Painted as one it came back a brown shield that reads as a
+  // smudge on the navy card, beside two crisp white marks.
+  'shield',
+  // The empty star socket. It is the same mark as `star` in a different state,
+  // and it has to dim to `rgba(255,255,255,0.22)` on the result screen — which
+  // an untinted painting cannot do. Masking it uses only its alpha, so the gold
+  // outline already on disk becomes the ghosted outline the row wants without
+  // being repainted at all.
+  //
+  // It is the ONE entry `artSheet`'s own copy of this list leaves out, and that
+  // divergence is deliberate and explained there: reclassifying it would re-pack
+  // the painter's contact sheets for a mark that needs no repainting. A hollow
+  // outline is the one shape whose colours cannot matter once it is masked.
+  'star-empty'
+])
+
+/** Is this glyph's painting a silhouette the stylesheet colours? */
+export const isTintedGlyph = (name: GameIconName): boolean => TINTED_GLYPHS.has(name)
 
 /**
  * The art id a glyph is painted under — its HUD mark where it has one, and

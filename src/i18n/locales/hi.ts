@@ -146,6 +146,11 @@ export default {
     'noMiss': 'ज़्यादा से ज़्यादा {n} बार चूको',
     'score': '{n} अंक बनाओ'
   },
+  'quests': {
+    'onTrack': '{objective} — सही राह पर',
+    'progress': '{objective} — {n}% पूरा',
+    'missed': '{objective} — छूट गया'
+  },
   'hints': {
     'move': {
       'touch': 'चलने के लिए टैप करें',

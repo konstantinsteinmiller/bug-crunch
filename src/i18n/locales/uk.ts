@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Промахнись не більше {n} разів',
     'score': 'Набери {n} очок'
   },
+  'quests': {
+    'onTrack': '{objective} — усе йде добре',
+    'progress': '{objective} — {n}% готово',
+    'missed': '{objective} — втрачено'
+  },
   'hints': {
     'move': {
       'touch': 'Торкнись, щоб рухатись',

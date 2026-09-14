@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { getState, setState } from '@/use/useBugCrunchState'
 import { saveDataVersion } from '@/use/useSaveStatus'
 import {
-  LESSON_IDS, TAUGHT_KEY, isLessonId, lessonSpec, outranks,
+  LESSON_IDS, SLAM_GRACE_MS, TAUGHT_KEY, isLessonId, lessonSpec, outranks,
   type Lesson, type LessonId
 } from '@/game/tutorial'
 
@@ -181,12 +181,51 @@ export const step = (dtMs: number, doing = false): void => {
   if (shownMs >= spec.bailoutMs) complete(spec.id)
 }
 
+// ─── The slam's own trigger ─────────────────────────────────────────────────
+//
+// Every other lesson is armed by a condition the scene can read in one frame —
+// a bug exists, a meter filled, a panel opened. The slam is armed by something
+// that happened TO the player, and it is the only lesson whose arming rule has
+// enough in it to be worth stating once and testing. See the long note beside
+// `SLAM_GRACE_MS` in `game/tutorial.ts` for why the sight of a shell is the
+// wrong moment and the bounce off one is the right moment.
+
+/** Has a blow of the player's ever rung off armour this session? */
+let sawRicochet = false
+/** Present time spent with an unpierceable body on the board. */
+let armouredMs = 0
+
+/**
+ * A blow bounced.
+ *
+ * Cheap and idempotent: the scene calls it from the `clang` event, which also
+ * fires for shells no slam can open — the answerability check lives in
+ * `armSlam` below, where the board is in scope, rather than here.
+ */
+export const noteRicochet = (): void => { sawRicochet = true }
+
+/**
+ * One frame of the slam lesson's arming rule.
+ *
+ * `answerable` is whether a body the equipped shoe cannot tap through, but CAN
+ * slam through, is alive right now — `slamTeaches` in `game/tutorial.ts`. It is
+ * both the gate and the clock: the grace window only runs while the shell the
+ * lesson would point at is actually there to point at.
+ */
+export const armSlam = (dtMs: number, answerable: boolean): void => {
+  if (!answerable) return
+  armouredMs += dtMs
+  if (sawRicochet || armouredMs >= SLAM_GRACE_MS) arm('slam')
+}
+
 /** Test seam — put a player back to knowing nothing. */
 export const __resetTutorial = (): void => {
   taught.value = {}
   clearLessons()
   shownMs = 0
   doneMs = 0
+  sawRicochet = false
+  armouredMs = 0
 }
 
 /** How far through the whole curriculum this player is, 0..1. For a future
@@ -196,7 +235,8 @@ export const curriculumProgress = computed(() =>
 
 const useTutorial = () => ({
   taught, activeLesson, activeSpec, lessonProgress,
-  arm, complete, shelve, clearLessons, step, isTaught, curriculumProgress
+  arm, complete, shelve, clearLessons, step, isTaught, curriculumProgress,
+  noteRicochet, armSlam
 })
 
 export default useTutorial

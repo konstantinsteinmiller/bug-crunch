@@ -146,6 +146,11 @@ export default {
     'noMiss': 'لا تُخطئ أكثر من {n} دعسات',
     'score': 'احصد {n} نقطة'
   },
+  'quests': {
+    'onTrack': '{objective} — على المسار الصحيح',
+    'progress': '{objective} — {n}% مُنجز',
+    'missed': '{objective} — ضائع'
+  },
   'hints': {
     'move': {
       'touch': 'المس للتحرك',

@@ -146,6 +146,11 @@ export default {
     'noMiss': 'En fazla {n} basış ıskala',
     'score': '{n} puan topla'
   },
+  'quests': {
+    'onTrack': '{objective} — yolunda',
+    'progress': '{objective} — {n}% tamam',
+    'missed': '{objective} — kaçırıldı'
+  },
   'hints': {
     'move': {
       'touch': 'Hareket için dokun',

@@ -5,7 +5,7 @@ import { HAZARDS } from '@/game/hazards'
 import { WORLDS } from '@/game/stages'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
-import { ART_BRAND, UI_MARK_FOR_GLYPH, artIdForGlyph } from '@/game/artCatalogue'
+import { ART_BRAND, TINTED_GLYPHS, UI_MARK_FOR_GLYPH, artIdForGlyph } from '@/game/artCatalogue'
 import { BANNER } from '@/game/uiArt'
 import { SHOE_BOX } from '@/game/artBoxes'
 
@@ -181,19 +181,49 @@ const CAST: Record<BugId, { blurb: string; colour: string; motion: string }> = {
       + ' back-left forward together while the other three go back — and the body bobs'
       + ' a hair up and down. The antennae sweep gently side to side. Nothing else moves.'
   },
+  // The sprinter says "from DIRECTLY ABOVE" five times over, and that is not
+  // belt-and-braces: this is the one design that came back SIDE-ON. Seven of its
+  // eight panels were a profile of an ant running to the right, which the game
+  // then spins by the body's heading — so a creature that should scuttle across
+  // the floor cartwheels around its own middle instead. The blanket `THE VIEW`
+  // clause in `promptForWalk` was already there and did not hold, because
+  // everything the creature's OWN description asked for — "swept back", "about
+  // to bolt", "shoves forward" — is the vocabulary of a running pose, and a
+  // running pose is drawn in profile unless something says otherwise in the same
+  // breath. So the camera is restated inside the blurb and the motion, every
+  // pose is described in terms that only exist from above (legs to the LEFT and
+  // to the RIGHT of the body, the gaster at the BOTTOM of the panel), and the
+  // side view is refused by name. `robobug` is the template that works.
   sprinter: {
-    blurb: 'A sprinter ant from DIRECTLY ABOVE: the SAME three-lobe body as the'
-      + ' worker ant — abdomen, waist, round head in a line — but LEANER, with one'
-      + ' pale gold chevron (an arrow head pointing to the TOP of the panel) on the'
-      + ' abdomen, two long rear legs swept BACK into a wide V that reaches past the'
-      + ' abdomen, and two antennae laid FLAT BACK along the body instead of curling'
-      + ' up. Big glossy eyes, blush, and a keen "about to bolt" look.',
+    blurb: 'A sprinter ant from DIRECTLY ABOVE — a pure top-down orthographic view,'
+      + ' the camera hanging straight over the creature and the FLOOR as the'
+      + ' background plane. You are looking at its BACK, with the whole length of the'
+      + ' body laid out down the panel: a round head at the TOP, a narrow waist under'
+      + ' it, and a long lean gaster pointing at the BOTTOM. The SAME three-lobe build'
+      + ' as the worker ant but LEANER, with one pale gold chevron — an arrow head'
+      + ' pointing to the TOP of the panel — on the gaster. All SIX legs are in view'
+      + ' and splayed symmetrically about the body: two to the LEFT and two to the'
+      + ' RIGHT at the front, and the two long rear legs swept back into a wide V that'
+      + ' opens LEFT AND RIGHT past the gaster, flat on the floor. Two antennae point'
+      + ' FORWARD off the head toward the top of the panel and then sweep back, one to'
+      + ' each side, mirrored across the body\'s centre line. Big glossy eyes on top of'
+      + ' the head, blush, and a keen "about to bolt" look. WHAT IT IS NOT: not a side'
+      + ' view, not a profile, not three-quarters on, not seen from the front, never'
+      + ' tilted. No horizon, no ground line, no wall, no floor edge and no shadow'
+      + ' thrown out sideways — there is no sideways from this camera. Its centre line'
+      + ' runs straight up and down the panel and both flanks are equally in view; if'
+      + ' one side of the body is hidden behind the other, the view is wrong.',
     colour: 'a bright teal body going deep petrol at the waist, a pale gold chevron'
       + ' and pale gold antenna beads, cream belly highlight.',
-    motion: 'A SURGE, not a bob: the whole body shoves forward along its own axis'
-      + ' inside the cycle and settles back. The four front legs run in a tripod gait'
-      + ' and the two long rear legs kick out and back behind it. The swept antennae'
-      + ' never lift.'
+    motion: 'A SURGE seen FROM ABOVE, never a gallop drawn from the side: inside the'
+      + ' cycle the whole body slides a little way UP THE PANEL along its own centre'
+      + ' line and settles back, the waist compressing as it goes. The four front legs'
+      + ' run a tripod gait, swinging forward and back ACROSS THE FLOOR with the left'
+      + ' legs staying left of the body and the right legs right of it; all six feet'
+      + ' stay on the floor plane. The two long rear legs kick out and back behind the'
+      + ' gaster, still splayed to either side. The swept antennae never lift. Nothing'
+      + ' rolls and nothing tips: the creature lies flat to the camera in every one of'
+      + ' the eight panels, exactly as it does in every panel of the reference.'
   },
   beetle: {
     blurb: 'A rhinoceros beetle from DIRECTLY ABOVE: one big glossy domed shell'
@@ -306,9 +336,30 @@ const walkOf = (spec: (typeof BUGS)[number]): WalkSpec => ({
   panelH: WALK_PANEL,
   w: WALK_COLS * WALK_PANEL,
   h: WALK_ROWS * WALK_PANEL,
-  // 160 px a frame is twice what the biggest body needs on a 4K screen, and
-  // past that the strip is the heaviest thing the game downloads.
-  maxEdge: 160
+  // 224 px a frame, measured rather than guessed.
+  //
+  // The renderer blits a frame at `size * 2 * pxPerU / BUG_R_FRAC` CSS px times
+  // the render DPR (capped at 2), and `pxPerU` is `min(viewport) / 100` — so the
+  // number that matters is the SHORT side of the window, and a desktop has a
+  // much bigger one than a phone. Measured in a real headless Chrome, biggest
+  // body in the cast (the beetle, 4.8 u):
+  //
+  //   390x844 @3   121 device px   ·  1440x900 @2   279 device px
+  //   430x932 @3   133 device px   ·  1920x1080 @2  334 device px
+  //
+  // So a phone DOWNSCALES the strip at any size worth shipping, and the whole
+  // sharpness argument is about desktop, where 160 was a 1.7–2.1x upsample of
+  // the largest creature on the board. 224 brings that to 1.2–1.5x and costs
+  // 353 kB → 492 kB across the ten strips after `pnpm compress-folder`, which is
+  // the budget this was allowed. Going further does not pay: the number that
+  // would actually hit 1.0x on a 1080p desktop is ~290 px a frame, i.e. a
+  // 2320 px strip per design and roughly 800 kB for the cast.
+  //
+  // Two things stay soft on a big desktop regardless, and neither is this file's
+  // to fix: the procedural bake buckets at 256 px and is baked in CSS px
+  // (`bugArt.bucket`), so the DRAWING is upscaled there too, and the reveal
+  // card's foe art calls `paintBug` directly rather than blitting a strip.
+  maxEdge: 224
 })
 
 export const WALKS: WalkSpec[] = BUGS.map(walkOf)
@@ -643,7 +694,42 @@ const FLOOR_STILLS: StillSpec[] = ([1, 2, 3, 4] as const).map((w) =>
       + ' the player could stomp.'
   }))
 
-/** The HUD's own art. */
+/**
+ * The HUD's own art.
+ *
+ * ── Why most of these are 128 and three of them are not ──
+ *
+ * A mark's `maxEdge` is not a quality dial, it is the answer to one question:
+ * how many DEVICE pixels does the biggest box this drawable is ever rendered
+ * into actually ask for? Measured in a real headless Chrome with the art layer
+ * on, at dpr 2 (the desktop/tablet target) and dpr 3 (a phone):
+ *
+ *   locker / fever / timer / target   ≤ 36 css px — a HUD button glyph, a vial
+ *                                     cap, an objective row. 0.3–0.6x at 128:
+ *                                     already a DOWNSCALE, and 256 would be
+ *                                     four times the bytes for nothing.
+ *   star / icon-star-empty            53 css px in `StarRow`'s middle socket
+ *                                     (158–174 device px) → 1.23–1.36x at 128,
+ *                                     and it is the headline of the result
+ *                                     screen. 256 makes it 0.62–0.68x.
+ *   star / trophy / icon-chest        `RewardRevealModal` draws the glyph at
+ *                                     72% of `clamp(6rem, 34vmin, 12rem)` —
+ *                                     96–138 css px, 276–316 device px →
+ *                                     2.2–2.5x at 128, which is the softness
+ *                                     the reveal screen was reported for.
+ *                                     256 brings it to 1.08–1.23x.
+ *   chest                             40–54 css px on the HUD, and its alpha is
+ *                                     ALSO the CSS mask the cooldown drain is
+ *                                     cut with (`TreasureChest.vue`
+ *                                     `.chest__shade`), so a 128 px alpha is a
+ *                                     128 px mask edge on a 142 device-px box.
+ *
+ * 256 is also the pipeline's own ceiling for a still: `slice-sheets.mjs`
+ * defaults to `--size 256` and takes the LOWER of that and `maxEdge`, so a
+ * number above 256 here is a wish, not a size, unless the sheet is `exact` or
+ * somebody remembers to pass `--size`. (That is why `ribbon` is 597x256 on disk
+ * and not 1344x576, and the bosses are 256 and not 512.)
+ */
 const UI_STILLS: StillSpec[] = [
   still('ui', 'ribbon', 'Result banner',
     'A wide cartoon ribbon banner seen flat-on, in picnic red and cream, with'
@@ -667,7 +753,7 @@ const UI_STILLS: StillSpec[] = [
   still('ui', 'star', 'Star mark',
     'A single white five-point star on a transparent background, points sharp, flat'
     + ' and solid, no outline and no shading.',
-    { maxEdge: 128, greyscale: true, fit: false }),
+    { maxEdge: 256, greyscale: true, fit: false }),
   still('ui', 'timer', 'Timer mark',
     'A single white clock silhouette on a transparent background: a ring with a gap'
     + ' at its top right and two hands. Flat and solid, no shading.',
@@ -679,7 +765,49 @@ const UI_STILLS: StillSpec[] = [
   still('ui', 'trophy', 'Leaderboard mark',
     'A single white trophy cup silhouette on a transparent background: a bowl, two'
     + ' handles, a stem and a base. Flat and solid, no shading.',
-    { maxEdge: 128, greyscale: true, fit: false })
+    { maxEdge: 256, greyscale: true, fit: false }),
+
+  /**
+   * The idle chest on the HUD (`TreasureChest.vue`).
+   *
+   * NOT `icon-chest`. That one is a 16–24 px button glyph in the icon set; this
+   * is the object itself, the thing a player taps every few minutes, drawn at
+   * 40–54 css px with a lid, a clasp and a keyhole in it. The component draws it
+   * as an inline SVG today and swaps to this painting the moment it exists, so
+   * the blurb below describes THAT DRAWING — the honey-wood chest in this game's
+   * palette — and not the dark-iron dungeon chest `images/ui/chest.webp` held in
+   * the project this was forked from.
+   *
+   * `fit: false`, and the alpha is load-bearing: the cooldown drain is a second
+   * element masked with `mask-image: url(<this file>)` at `mask-size: contain`,
+   * so the painting's own transparency IS the shutter's outline. A return with a
+   * painted-in card, plate or vignette behind the chest does not look slightly
+   * wrong — it makes the drain a rectangle over the whole box.
+   */
+  still('ui', 'chest', 'Treasure chest',
+    'A cartoon treasure chest seen FLAT-ON from the front, filling the frame with a'
+    + ' small even margin, cut out on a transparent background. A domed lid arching'
+    + ' across the top half, a lip band running the full width where the lid meets the'
+    + ' box, and a squat rounded body under it with ONE horizontal plank seam low'
+    + ' across its front. Dead centre on the lip, a butter-gold clasp plate with a'
+    + ' round keyhole and a short tapering slot under it, drawn in the same near-black'
+    + ' ink as the outline. The wood is warm honey — a pale cream-gold where the light'
+    + ' catches the lid\'s top-left shoulder, deepening to amber at the bottom — and'
+    + ' the cel shadow is a drawn shape down the RIGHT side of both the lid and the'
+    + ' body. NO grey, NO black, NO iron bands, NO rivets, NO studs, NO hinges and NO'
+    + ' padlock: this is a present, not a strongbox. The lid is CLOSED and nothing'
+    + ' spills out of it — no coins, no gems, no light shaft. Fat even ink and'
+    + ' generous corner radii throughout; anything finer than a fortieth of the frame'
+    + ' disappears at the size this is shown.',
+    {
+      maxEdge: 256,
+      fit: false,
+      live: 'The game masks a dark cooldown veil to this painting\'s OWN ALPHA and'
+        + ' slides it up from the bottom, so the transparency has to be the chest\'s'
+        + ' silhouette exactly: no card, no plate, no badge, no floor, no glow pad and'
+        + ' no soft halo behind it. The game adds the bob, the gold aura and the'
+        + ' sparkles itself.'
+    })
 ]
 
 /**
@@ -730,23 +858,34 @@ const LOGO_STILL: StillSpec = still('ui', 'logo', 'Bug Crunch logo',
 // (`artCatalogue.artIdForGlyph`). Painting them twice would be painting them
 // twice.
 
-/** Glyphs that stay a flat white silhouette. Everything else is an object. */
-const GLYPH_MARKS = new Set<GameIconName>([
-  'play', 'pause', 'replay', 'skip-forward', 'skip-back', 'stop',
-  'menu', 'home', 'back', 'forward', 'close', 'check',
-  'settings', 'shop', 'info', 'help',
-  'music', 'music-off', 'sound', 'sound-off',
-  'chart', 'leaderboard', 'share', 'fullscreen',
-  'plus', 'minus', 'left', 'right', 'up', 'down',
-  // `shield` is a noun, and it is still a MARK, because what decides the
-  // register is not what a glyph depicts but how small it is drawn. This one is
-  // the pierce stat on a shoe card (`ShoeCard.vue`), in a row beside `right` and
-  // `target` at `clamp(0.65rem, 2.6vmin, 0.9rem)` — ten to fourteen pixels, under
-  // the band an object survives at all. Painted as one it came back a brown
-  // shield that reads as a smudge on the navy card, next to two crisp white
-  // marks. A white shape at 12 px is a shield; an illustration at 12 px is mud.
-  'shield'
-])
+/**
+ * Glyphs that stay a flat white silhouette. Everything else is an object.
+ *
+ * `TINTED_GLYPHS`, not a second list beside it: the set that decides which
+ * prompts ask for a silhouette is the set the renderer masks and colours, or a
+ * mark gets painted flat white and then shown untinted (a grey star where a gold
+ * one was earned). The reasoning for each entry is in `artCatalogue.ts`.
+ *
+ * The six that are also HUD marks are in that set too and simply never reach
+ * here — `GLYPH_STILLS` filters them out above, because their painting is the
+ * HUD mark's own.
+ *
+ * ── The one exception, and why it is allowed to stand ──
+ *
+ * `star-empty` is masked by the renderer but stays an OBJECT here. It is the
+ * one mark where the two concerns `greyscale` bundles together — "the game
+ * colours it" and "which contact sheet it is painted on" — genuinely disagree,
+ * and where the second one has a price. It is already painted, as a warm gold
+ * outline star, and masking uses only alpha, so that painting is correct as it
+ * stands and nothing is waiting on a repaint. Moving it to the marks register
+ * would re-pack BOTH lattices: four painted contact sheets flagged for a
+ * repaint, and `objects-3` orphaned outright — real churn in the painter's
+ * workflow, to change the wording of a prompt for a mark that does not need
+ * repainting. A hollow outline is the one shape whose colour cannot matter once
+ * it is masked, which is why the exception is safe here and nowhere else.
+ */
+const GLYPH_MARKS: ReadonlySet<GameIconName> =
+  new Set([...TINTED_GLYPHS].filter((n) => n !== 'star-empty'))
 
 /**
  * What each glyph IS, in the words the painting needs.
@@ -854,6 +993,21 @@ const GLYPH_BLURB: Partial<Record<GameIconName, string>> = {
     + ' thick bar over a round dot — cut out of the middle.'
 }
 
+/**
+ * The two glyphs that are not only a button.
+ *
+ * A glyph slot is 128 because a glyph is drawn at 16–24 css px on a button and
+ * there are fifty of them. These two are also shown as PICTURES: the result
+ * screen's star sockets carry `star-empty` at 53 css px, and
+ * `RewardRevealModal` draws `star`, `trophy` and `chest` at 72% of a box that
+ * reaches 12rem — 276–316 device px, where 128 is a 2.2–2.5x upsample and looks
+ * exactly as soft as it is. Measured, not guessed; see the note on `UI_STILLS`.
+ */
+const BIG_GLYPHS: Partial<Record<GameIconName, number>> = {
+  'star-empty': 256,
+  chest: 256
+}
+
 /** The glyph slots, derived from the icon set so a new glyph is paintable the
  *  day it is added rather than the day somebody remembers this file. */
 const GLYPH_STILLS: StillSpec[] = GAME_ICON_NAMES
@@ -864,8 +1018,9 @@ const GLYPH_STILLS: StillSpec[] = GAME_ICON_NAMES
       GLYPH_BLURB[n] ?? `The ${n} glyph, repainted in the house style.`, {
         // A button glyph is never drawn above ~64 CSS px, so 256 in and 128 out
         // is already twice what a 2x phone asks for — and there are fifty of
-        // them, which is the other half of the reason.
-        w: 256, h: 256, maxEdge: 128,
+        // them, which is the other half of the reason. The two that are also
+        // shown as pictures are the exception above.
+        w: 256, h: 256, maxEdge: BIG_GLYPHS[n] ?? 128,
         // Blitted as painted, like the HUD marks it sits beside: a glyph is a
         // silhouette, and normalising one onto the vector reference's solid box
         // would stretch a painting whose margin is part of its balance.
@@ -981,7 +1136,19 @@ const gridsOf = (register: 'marks' | 'objects', members: StillSpec[], live: stri
       cols,
       rows: Math.ceil(cells.length / cols),
       cell: GRID_CELL_PX,
-      maxEdge: 128,
+      // The sheet is cut at whatever its BIGGEST member asks for, not at the
+      // glyph default.
+      //
+      // A contact sheet is a second ROUTE to the same targets, never a second
+      // contract about them: cut at a flat 128 it would quietly write a smaller
+      // file than the manifest asks for, so a grid re-roll would undo the star
+      // and the chest every time somebody re-rolled the sheet they happen to sit
+      // on — the kind of regression that shows up as "the art went soft again"
+      // months later with nothing in the diff to point at. `edgeCap` in the
+      // slicer is per SHEET and cannot be per cell, so one big member lifts its
+      // whole lattice; that is a few kB on eight glyphs that did not need it,
+      // against a silent downgrade of the two that did.
+      maxEdge: Math.max(128, ...cells.map((c) => c.maxEdge)),
       greyscale: register === 'marks',
       members: cells,
       live
@@ -989,9 +1156,28 @@ const gridsOf = (register: 'marks' | 'objects', members: StillSpec[], live: stri
   })
 }
 
-/** Every square ui slot. The ribbon is not one of them — it is a wide banner,
- *  and a 2.3:1 cell on a grid of squares would be painted as a square. */
-const SQUARE_UI = [...UI_STILLS.filter((s) => s.id !== 'ribbon'), ...GLYPH_STILLS]
+/**
+ * Every square ui slot that belongs on a contact sheet.
+ *
+ * Two are kept off it. The RIBBON because it is a 2.3:1 banner and a wide cell
+ * on a lattice of squares comes back a square. The CHEST because a contact sheet
+ * is nine things painted to one instruction — "each is ONE object, centred, at
+ * 16–24 px, nothing behind it" — and the chest is none of that: it is the only
+ * ui slot whose alpha is used as a CSS mask, it is shown at twice a glyph's size
+ * and it is cut at twice a glyph's resolution. Painted in a cell it would come
+ * back balanced against eight button icons, which is the wrong thing for it to
+ * be balanced against.
+ *
+ * Keeping it off also leaves the existing lattice alone: `chest` is the only
+ * full-colour entry in `UI_STILLS`, so putting it on the objects register would
+ * insert a cell at position one and shift every painted object glyph by one
+ * file.
+ */
+const OFF_THE_GRIDS = new Set(['ribbon', 'chest'])
+// Filtered AFTER the concat, not inside the first half: `icon-star-empty` is a
+// GLYPH still, and a filter that only ran over `UI_STILLS` silently did nothing
+// for it.
+const SQUARE_UI = [...UI_STILLS, ...GLYPH_STILLS].filter((s) => !OFF_THE_GRIDS.has(s.id))
 
 /**
  * The contact sheets, split by the register each slot already declares.

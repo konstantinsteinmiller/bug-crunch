@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ICON_PATHS } from './iconPaths'
 import type { GameIconName } from './iconNames'
-import { artIdForGlyph } from '@/game/artCatalogue'
+import { artIdForGlyph, isTintedGlyph } from '@/game/artCatalogue'
 import { useArtImage } from '@/use/useArtImage'
 
 /**
@@ -56,11 +56,32 @@ const props = defineProps<{ name: GameIconName }>()
 const d = computed(() => (ICON_PATHS[props.name] ?? ICON_PATHS.help).join(''))
 
 const painted = useArtImage('ui', () => artIdForGlyph(props.name))
+
+/**
+ * Is this mark's painting a silhouette the STYLESHEET colours?
+ *
+ * See `TINTED_GLYPHS` in `artCatalogue.ts`. The short of it: the vector rung is
+ * `fill="currentColor"` and obeys `color:` for free, and an `<img>` obeys
+ * nothing — so a mark whose colour is state (an earned star is gold, an unearned
+ * one is a ghost) has to reach the page as a MASK filled with `currentColor`
+ * rather than as a picture, or the two rungs stop being interchangeable.
+ */
+const tinted = computed(() => painted.value !== null && isTintedGlyph(props.name))
+
+/** The painting, as a mask source. */
+const maskStyle = computed(() => ({ '--glyph-src': `url("${painted.value}")` }))
 </script>
 
 <template lang="pug">
+  //- A mark whose colour is state: the painting as a MASK, filled with
+  //- `currentColor`, so `color:` reaches it exactly as it reaches the vector.
+  span.game-icon.is-painted.is-tinted(
+    v-if="tinted"
+    :style="maskStyle"
+    aria-hidden="true"
+  )
   img.game-icon.is-painted(
-    v-if="painted"
+    v-else-if="painted"
     :src="painted"
     alt=""
     draggable="false"
@@ -91,4 +112,20 @@ const painted = useArtImage('ui', () => artIdForGlyph(props.name))
 // `contain` is what keeps the two interchangeable in a row of buttons.
 .game-icon.is-painted
   object-fit: contain
+
+// The tinted rung. `contain` / `no-repeat` / `center` are the mask's spelling of
+// the `object-fit: contain` above, so a mark lands in exactly the same box
+// whichever rung draws it. `drop-shadow` and `opacity` still apply — the
+// element's painted content is the masked fill, which is the shape — so the
+// star row's glow and the empty socket's ghosting work unchanged.
+.game-icon.is-tinted
+  background-color: currentColor
+  -webkit-mask-image: var(--glyph-src)
+  mask-image: var(--glyph-src)
+  -webkit-mask-repeat: no-repeat
+  mask-repeat: no-repeat
+  -webkit-mask-position: center
+  mask-position: center
+  -webkit-mask-size: contain
+  mask-size: contain
 </style>

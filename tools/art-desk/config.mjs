@@ -58,11 +58,26 @@ const DEFAULTS = {
     // Extra Chrome switches for that window, e.g. ["--window-position=2000,0"].
     chromeArgs: [],
     // Between two generations: gapSeconds plus up to jitterSeconds at random.
-    gapSeconds: 90,
-    jitterSeconds: 60,
-    // Generations per calendar day across ALL projects (counted in
-    // ~/.art-desk/usage.json) — a ceiling under the account's own quota.
-    dailyCap: 40,
+    gapSeconds: 15,
+    jitterSeconds: 10,
+    // ─── Two different ceilings ───
+    //
+    // `dailyCap` is the hard stop: reach it and the queue ends the run.
+    // `Infinity` switches it off, which is the default now — the thing that
+    // actually runs out is not the day, it is the ACCOUNT.
+    //
+    // `accountCap` is how many generations one Google account is good for
+    // before Gemini starts refusing. Reaching it does NOT end the run: the
+    // queue PAUSES, asks for a different account to be signed in, and carries
+    // on from where it stopped once that is confirmed. Nothing is lost and no
+    // quota is spent discovering the wall — the count is what stops it, not a
+    // refusal.
+    //
+    // Both are counted in ~/.art-desk/usage.json across ALL projects.
+    // `accountCap` counts from the last confirmed account switch, not from
+    // midnight, because that is the span that shares a quota.
+    dailyCap: Infinity,
+    accountCap: 120,
     timeoutSeconds: 420,
     // Re-rolls when a return comes back unusable (no image, or the slicer
     // refuses its grid). Each one is another generation off the quota.

@@ -177,9 +177,45 @@ const USAGE = join(homedir(), '.art-desk', 'usage.json')
 const today = () => new Date().toISOString().slice(0, 10)
 const usage = () => { try { return JSON.parse(readFileSync(USAGE, 'utf-8')) } catch { return {} } }
 const usedToday = () => usage()[today()] ?? 0
+
+/**
+ * Generations since the last confirmed account switch.
+ *
+ * Kept under a reserved key rather than a date, so the file stays the
+ * day-keyed history it has always been and an older desk reading it just sees
+ * one extra entry it ignores. The key is not a date, so it can never collide.
+ */
+const ACCOUNT_KEY = '_sinceAccountSwitch'
+
+/**
+ * Falls back to TODAY'S count when the key is absent, which is what every
+ * install that predates this counter looks like.
+ *
+ * Starting such an install at 0 would be the wrong way round: it would hand a
+ * fresh allowance to an account that has already spent most of one today, and
+ * the queue would run straight into Gemini's real refusal — the case this
+ * whole mechanism exists to avoid. Today's count is the best evidence
+ * available, and it errs towards asking for a switch too early rather than too
+ * late. One "Switched account" press corrects it.
+ */
+const usedOnAccount = () => {
+  const u = usage()
+  return u[ACCOUNT_KEY] ?? u[today()] ?? 0
+}
+
 const countGeneration = () => {
   const u = usage()
   u[today()] = (u[today()] ?? 0) + 1
+  u[ACCOUNT_KEY] = (u[ACCOUNT_KEY] ?? 0) + 1
+  mkdirSync(dirname(USAGE), { recursive: true })
+  writeFileSync(USAGE, JSON.stringify(u, null, 2))
+}
+
+/** Called when a DIFFERENT Google account has been signed in. The day total is
+ *  deliberately untouched — it is a record of the day, not of the account. */
+const resetAccountCount = () => {
+  const u = usage()
+  u[ACCOUNT_KEY] = 0
   mkdirSync(dirname(USAGE), { recursive: true })
   writeFileSync(USAGE, JSON.stringify(u, null, 2))
 }
@@ -192,14 +228,24 @@ const auto = {
   nextAt: null,
   attempts: {},
   lastError: null,
+  /** Set when the account's own allowance is used up. The queue is still
+   *  `running`; it is parked until `/api/gemini/account-switched` says a
+   *  different account is signed in. */
+  needsAccount: false,
   settings: {
     gapSeconds: cfg.gemini.gapSeconds,
     jitterSeconds: cfg.gemini.jitterSeconds,
     dailyCap: cfg.gemini.dailyCap,
+    accountCap: cfg.gemini.accountCap,
     retries: cfg.gemini.retries
   }
 }
-const autoState = () => ({ ...auto, usedToday: usedToday(), attempts: undefined })
+const autoState = () => ({
+  ...auto,
+  usedToday: usedToday(),
+  usedOnAccount: usedOnAccount(),
+  attempts: undefined
+})
 const pushAuto = () => send('auto', autoState())
 /** Progress for the page; `quiet` ones (a ticking counter) stay out of the log. */
 const phase = (p, stem = auto.current, quiet = false) => {
@@ -224,6 +270,10 @@ const pause = (ms) => new Promise((r) => {
   wake = () => { clearTimeout(t); r() }
 })
 
+/** Resolved by `/api/gemini/account-switched`, or by a Stop. */
+let accountSwitched = null
+const waitForAccount = () => new Promise((r) => { accountSwitched = r })
+
 const runQueue = async () => {
   if (auto.running) return
   auto.running = true
@@ -232,9 +282,38 @@ const runQueue = async () => {
   let failuresInARow = 0
   try {
     while (auto.running && auto.queue.length) {
+      // A hard stop, and off by default (`dailyCap: Infinity`). Left in
+      // because a project that wants a real ceiling should be able to say so.
       if (usedToday() >= auto.settings.dailyCap) {
         auto.lastError = `daily cap reached (${usedToday()}/${auto.settings.dailyCap}) — raise it in the settings, or come back tomorrow`
         break
+      }
+
+      // The account's own allowance. NOT a stop: the queue parks here, keeps
+      // everything still to paint, and waits for a different account.
+      //
+      // Counted rather than discovered. Waiting for Gemini to refuse costs a
+      // generation, lands mid-job, and the refusal text is the one thing that
+      // also has to stop the queue for real — so the two would be
+      // indistinguishable at exactly the moment it matters.
+      if (usedOnAccount() >= auto.settings.accountCap) {
+        auto.needsAccount = true
+        auto.current = null
+        phase('waiting for a different Google account', null)
+        log(
+          `▲ this account has had ${usedOnAccount()} generations (cap ${auto.settings.accountCap}). `
+          + `${auto.queue.length} job(s) still queued — sign a DIFFERENT Google account into the desk's `
+          + 'Chrome profile (press Sign in, use the plain window, then close it), and the queue picks up '
+          + 'where it left off. Nothing is lost by waiting.',
+          'err'
+        )
+        pushAuto()
+        await waitForAccount()
+        accountSwitched = null
+        if (!auto.running) break
+        auto.needsAccount = false
+        pushAuto()
+        continue
       }
       const stem = auto.queue[0]
       const job = jobFor(stem)
@@ -444,6 +523,9 @@ const server = createServer(async (req, res) => {
       } else if (a.action === 'stop') {
         auto.running = false
         wake?.()
+        // A queue parked on the account wall is asleep in `waitForAccount`,
+        // not in `pause` — without this a Stop would leave it parked forever.
+        accountSwitched?.()
         log('stop requested — the generation in flight, if any, is allowed to finish')
       }
       pushAuto()
@@ -463,6 +545,20 @@ const server = createServer(async (req, res) => {
         ? 'sign-in window opened (no automation port — Google refuses a sign-in otherwise). Sign in, then CLOSE that window.'
         : 'the sign-in window is already open — sign in there, then close it')
       return json(res, 200, s)
+    }
+    if (p === '/api/gemini/account-switched') {
+      // Confirmation that a DIFFERENT Google account is now signed in. The
+      // desk cannot verify that itself — Gemini does not publish the account
+      // in the DOM in any form worth depending on — so this is the operator's
+      // word for it, and the count resets on their say-so.
+      resetAccountCount()
+      auto.needsAccount = false
+      auto.lastError = null
+      log(`✓ account switched — the allowance counter is back to 0/${auto.settings.accountCap}`)
+      // Wakes a queue parked on the wall. Harmless when nothing is parked.
+      accountSwitched?.()
+      pushAuto()
+      return json(res, 200, autoState())
     }
     if (p === '/api/gemini/status') {
       const g = await driver()

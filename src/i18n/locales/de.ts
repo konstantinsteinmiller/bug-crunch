@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Höchstens {n} Tritte daneben',
     'score': '{n} Punkte holen'
   },
+  'quests': {
+    'onTrack': '{objective} — auf Kurs',
+    'progress': '{objective} — {n}% geschafft',
+    'missed': '{objective} — verpasst'
+  },
   'hints': {
     'move': {
       'touch': 'Tippen zum Bewegen',

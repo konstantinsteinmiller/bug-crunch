@@ -1,16 +1,14 @@
 <template lang="pug">
   Transition(name="fade")
     //- Ensure classes with special characters are in parentheses
-    div.fixed.inset-0.flex.flex-col.items-center.justify-center.backdrop-blur-md.touch-none.cursor-pointer(
+    div.reward-overlay.fixed.inset-0.flex.flex-col.items-center.justify-center.backdrop-blur-md.touch-none.cursor-pointer(
       v-if="modelValue"
       class="bg-black/60"
-      :class="[isAdShowing ? 'z-0' : 'z-[100]', isCompact ? 'p-2' : 'p-4', reveal ? 'is-reveal' : '']"
-      :style="{\
-        paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))',\
-        paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',\
-        paddingLeft: 'calc(1rem + env(safe-area-inset-left, 0px))',\
-        paddingRight: 'calc(1rem + env(safe-area-inset-right, 0px))'\
-      }"
+      :class="[\
+        isAdShowing ? 'z-0' : 'z-[100]',\
+        reveal ? 'is-reveal' : '',\
+        showContinue && !isCompact ? 'has-floating-hint' : ''\
+      ]"
       @click="handleOverlayClick"
     )
       //- ── The reveal ──────────────────────────────────────────────────────
@@ -52,15 +50,15 @@
 
       //- Tap-to-continue hint. In landscape it sits INLINE in the flow (shrink-0)
       //- so it can never overlap the centred reward content; otherwise it floats
-      //- at the bottom of the viewport as before.
+      //- at the bottom of the viewport — and the overlay reserves its whole band
+      //- as padding (`has-floating-hint`), so that placement cannot overlap the
+      //- content either. See `--rw-hint-band`.
       Transition(name="fade")
-        div.flex.justify-center.animate-pulse.pointer-events-none(
+        div.reward-hint.flex.justify-center.animate-pulse.pointer-events-none(
           v-if="showContinue"
-          :class="isCompact ? 'shrink-0 pt-1 pb-1' : 'absolute bottom-8 left-0 right-0 sm:bottom-12'"
+          :class="isCompact ? 'is-inline shrink-0' : 'is-floating absolute left-0 right-0'"
         )
-          div.text-white.font-black.uppercase.italic.tracking-widest.brawl-text(
-            :class="isCompact ? 'text-xs' : 'text-sm md:text-2xl'"
-          )
+          div.reward-hint__text.text-white.font-black.uppercase.italic.tracking-widest.brawl-text
             | {{ isMobile ? t('tapToContinue') : t('clickToContinue') }}
 </template>
 
@@ -268,11 +266,81 @@ onUnmounted(() => {
   .is-reveal .reward-body, .is-reveal .banner
     animation: none
 
+// ─── The overlay ─────────────────────────────────────────────────────────────
+//
+// THE WHOLE SCREEN IS DRIVEN OFF THIS BOX, NOT OFF THE VIEWPORT.
+//
+// `container-type: size` makes the overlay a size query container, so every
+// `cqmin` / `cqh` / `cqw` in the banner, the body, the star row, the objective
+// list, the result block and the gift card resolves against THIS element's
+// content box. That box is the one the content actually has to fit inside: the
+// visible area (`position: fixed` tracks the small viewport), already minus the
+// safe-area insets and minus this padding.
+//
+// `vh` / `vmin` / `100dvh` do NOT describe that box. On a mobile browser with a
+// collapsing URL bar they report the LARGE viewport, so a ladder tuned in
+// devtools overflows the moment the bar is showing; inside a portal iframe they
+// report whatever the iframe was given rather than what is on screen. Every
+// `vmin` on this screen was a guess at the number below, and the fix for a
+// screen that must never scroll is to stop guessing it.
+//
+// Where there is no container — `StarRow` and `ObjectiveList` are also used on
+// the level banner — container units fall back to the small viewport, which is
+// exactly what `vmin` meant there before. So the banner is unchanged and only
+// the reward screens gain.
+//
+// The overlay's OWN padding stays in `vmin`: a container's padding cannot be
+// expressed in its own container units without arguing with itself.
+.reward-overlay
+  --rw-pad: clamp(0.35rem, 2vmin, 1rem)
+  // Was `text-sm md:text-2xl`; a clamp instead, so the one wayfinding line on a
+  // gift screen keeps its ~14px on a phone and its 24px on a desktop without the
+  // jump at the `md` breakpoint.
+  --rw-hint-size: clamp(0.8rem, 3.4vmin, 1.5rem)
+  --rw-hint-gap: clamp(0.4rem, 2.4vmin, 1.5rem)
+  // The floating hint's whole band: its line plus the clearance under the
+  // content. `has-floating-hint` reserves this as padding, which is what makes
+  // "the hint never overlaps the content" true by construction rather than by
+  // hoping the content stayed short.
+  --rw-hint-band: calc(var(--rw-hint-size) * 1.3 + var(--rw-hint-gap))
+  container-type: size
+  container-name: reward
+  padding-block: calc(var(--rw-pad) + env(safe-area-inset-top, 0px)) calc(var(--rw-pad) + env(safe-area-inset-bottom, 0px))
+  padding-inline: calc(var(--rw-pad) + env(safe-area-inset-left, 0px)) calc(var(--rw-pad) + env(safe-area-inset-right, 0px))
+
+  &.has-floating-hint
+    padding-bottom: calc(var(--rw-pad) + var(--rw-hint-band) + env(safe-area-inset-bottom, 0px))
+
+// ─── The tap/click-to-continue hint ──────────────────────────────────────────
+//
+// Two placements, neither of which can land on the content:
+//   is-inline   — a `shrink-0` flex child (landscape phone / short embed), so
+//                 the column simply has one more row.
+//   is-floating — pinned to the bottom of the VIEWPORT, with its band reserved
+//                 as overlay padding above (see `--rw-hint-band`).
+.reward-hint
+  &.is-floating
+    bottom: calc(var(--rw-pad) + env(safe-area-inset-bottom, 0px))
+
+  &.is-inline
+    padding-block: clamp(0.08rem, 0.7cqmin, 0.28rem)
+
+.reward-hint__text
+  font-size: var(--rw-hint-size)
+  line-height: 1.3
+
 // ─── The body ────────────────────────────────────────────────────────────────
 
 .reward-body
   position: relative
   width: 100%
+  // A bleed gutter, not decoration. `FButton` paints its 3D depth plate with
+  // `transform: translateY(3px)` on an absolutely positioned child, which is
+  // real SCROLLABLE overflow below the last row — so a result screen whose
+  // content fit perfectly still reported `scrollHeight` 3px over `clientHeight`
+  // and scrolled by three pixels, at every viewport, forever. Reserving the
+  // plate's travel here is the honest fix: it is space the button needs.
+  padding-bottom: 4px
   // `0 1 auto`, not `1 1 auto`: the body takes the height its content needs and
   // no more, so the overlay's own `justify-center` centres the BANNER AND THE
   // CONTENT AS ONE GROUP. Growing to fill instead pins the banner to the top of
@@ -330,10 +398,14 @@ onUnmounted(() => {
   display: inline-flex
   align-items: center
   justify-content: center
-  max-width: min(94vw, 36rem)
-  min-height: 2.5em
-  font-size: clamp(1.05rem, 4.4vw, 1.9rem)
-  margin-bottom: clamp(0.4rem, 2vh, 1.1rem)
+  max-width: min(94cqw, 36rem)
+  min-height: 2.3em
+  // `cqmin`, so the plate follows the SHORT side of the overlay. It used to
+  // follow `vw`, which on a landscape phone is the long one — 844x390 asked for
+  // a 30px caption and a 76px plate out of 390px of screen, a fifth of the
+  // height spent on the word "LEVEL CLEAR".
+  font-size: clamp(0.95rem, 4.6cqmin, 1.8rem)
+  margin-bottom: clamp(0.25rem, 1.4cqh, 0.9rem)
   border-style: solid
   border-color: transparent
   border-width: 0 calc(2.5em * var(--banner-cap, 0.4))
@@ -346,8 +418,8 @@ onUnmounted(() => {
   // Landscape phone / short embed: the caption is the banner, so shrinking the
   // type shrinks the whole thing, layout box included.
   &.is-compact
-    font-size: clamp(0.85rem, 3.4vw, 1.3rem)
-    margin-bottom: 0.3rem
+    font-size: clamp(0.8rem, 4.2cqmin, 1.2rem)
+    margin-bottom: clamp(0.2rem, 1cqh, 0.4rem)
 
 .banner__text
   padding: 0.15em 0.35em

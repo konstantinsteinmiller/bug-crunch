@@ -146,6 +146,11 @@ export default {
     'noMiss': '最多踩空 {n} 次',
     'score': '拿到 {n} 分'
   },
+  'quests': {
+    'onTrack': '{objective} — 保持中',
+    'progress': '{objective} — 已完成 {n}%',
+    'missed': '{objective} — 已错过'
+  },
   'hints': {
     'move': {
       'touch': '点击移动',

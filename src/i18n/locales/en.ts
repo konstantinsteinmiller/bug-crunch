@@ -206,6 +206,21 @@ export default {
     'score': 'Score {n} points'
   },
 
+  // ─── Quest badges ─────────────────────────────────────────────────────────
+  //
+  // Screen-reader only, and the WHOLE accessible name of the two little discs
+  // under the treasure chest during play: they are a glyph and a ring, with no
+  // words and no numbers drawn on them at all.
+  //
+  // `{objective}` is one of the `objectives.*` strings above, already
+  // translated and dropped in whole — translate only the tail, and move the
+  // placeholder to wherever your language needs it.
+  'quests': {
+    'onTrack': '{objective} — on track',
+    'progress': '{objective} — {n}% there',
+    'missed': '{objective} — missed'
+  },
+
   // ─── Control hints ────────────────────────────────────────────────────────
   //
   // Each has a touch and a pointer phrasing — a wrong verb reads as a bug.

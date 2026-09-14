@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Spudłuj najwyżej {n} razy',
     'score': 'Zdobądź {n} punktów'
   },
+  'quests': {
+    'onTrack': '{objective} — na dobrej drodze',
+    'progress': '{objective} — {n}% zrobione',
+    'missed': '{objective} — przepadło'
+  },
   'hints': {
     'move': {
       'touch': 'Dotknij, aby się ruszyć',

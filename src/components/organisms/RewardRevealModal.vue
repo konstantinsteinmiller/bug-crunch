@@ -6,8 +6,10 @@ import GameIcon from '@/components/icons/GameIcon.vue'
 import { playFx } from '@/use/useGameAudio'
 import { paintShoe, shoeSprite, SHOE_BOX } from '@/game/footArt'
 import { shoeSpec } from '@/game/shoes'
-import { paintBug, BUG_R_FRAC } from '@/game/bugArt'
+import { paintBug, BUG_FRAME_ASPECT, BUG_R_FRAC } from '@/game/bugArt'
+import { stripFrame } from '@/game/spriteStrip'
 import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
+import { onArtChanged, type ArtChange } from '@/game/art'
 import { WORLDS } from '@/game/stages'
 import type { CampaignReward } from '@/game/campaignRewards'
 
@@ -169,6 +171,12 @@ const usesCanvas = computed(() =>
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
+/** Where in the painted walk cycle the card's bug currently is, 0..1 (values
+ *  outside that wrap). Declared up here rather than beside the loop that drives
+ *  it because `draw()` reads it, and `draw()` is reachable from a watcher that
+ *  fires during setup. See "The walk" below. */
+const walk = ref(0.28)
+
 /**
  * Draw the current prize into the card's canvas.
  *
@@ -227,10 +235,23 @@ const draw = (): void => {
   if (r.kind === 'foe') {
     ctx.save()
     ctx.translate(w / 2, h / 2)
-    // `BUG_R_FRAC` is the share of a square frame a body fills — the same
-    // number the sprite baker uses — so a bug on this card is the size it is
-    // on the board, scaled up.
-    paintBug(ctx, r.bug, (Math.min(w, h) / 2) * BUG_R_FRAC, 0.25)
+    // PAINTED FIRST, exactly as the shoe branch above and as `bugFrame()` does
+    // for the board. This used to call `paintBug` unconditionally, so the one
+    // screen whose whole job is to show the player a creature was the only place
+    // in the game that never showed the painted one.
+    //
+    // ── The two sizes are the same size ──
+    //
+    // `BUG_R_FRAC` is the share of a square frame a BODY fills; a painted panel
+    // is the whole frame. The renderer works the frame's edge out as
+    // `2 * bodyRadius / BUG_R_FRAC`, and the drawn fallback below asks for a body
+    // radius of `half * BUG_R_FRAC` — so the frame that matches it is
+    // `2 * half`, i.e. the square side of the canvas. Anything else and a painted
+    // bug arrives a different size from the drawn one it replaced.
+    const edge = Math.min(w, h)
+    const painted = stripFrame('bug', r.bug, BUG_FRAME_ASPECT, walk.value)
+    if (painted) ctx.drawImage(painted, -edge / 2, -edge / 2, edge, edge)
+    else paintBug(ctx, r.bug, (edge / 2) * BUG_R_FRAC, 0.25)
     ctx.restore()
     return
   }
@@ -266,6 +287,78 @@ const draw = (): void => {
 // a rotation inside an open modal is the only way to catch it.
 watch(current, () => { void nextTick(() => draw()) })
 
+/**
+ * A PAINTING THAT DECODES AFTER THE CARD IS ALREADY UP.
+ *
+ * Every other surface in the game reacts through `onArtChanged` — `useArtImage`
+ * for the DOM, `spriteStrip` for the slices — but this component draws into a
+ * canvas once and then stops, so a bug or shoe whose file lands a moment late
+ * left the drawing on screen for the whole of the reveal. It is a first-session
+ * problem by construction: the art tiers are still loading exactly when a player
+ * meets their first new species.
+ *
+ * SCOPED, per the invalidation contract: a change names `{kind, id}`, and only a
+ * change that names THIS card's own drawable redraws it. `null` — a flag flip or
+ * a refresh — still means everything.
+ */
+const ownsChange = (change: ArtChange): boolean => {
+  if (!change) return true
+  const r = current.value
+  if (!r) return false
+  if (r.kind === 'foe') return change.kind === 'bug' && change.id === r.bug
+  if (r.kind === 'shoe') return change.kind === 'shoe' && change.id === r.shoe
+  if (r.kind === 'world') return change.kind === 'bg' && change.id === `floor-${r.world}`
+  return false
+}
+const offArt = onArtChanged((change) => {
+  if (!ownsChange(change)) return
+  // `startWalk` redraws on its first frame, and is a no-op for everything that
+  // is not an animatable painted bug — so a late strip becomes a walk and a late
+  // shoe or floor tile is simply repainted once.
+  void nextTick(() => { startWalk(); draw() })
+})
+
+// ─── The walk ───────────────────────────────────────────────────────────────
+//
+// A painted bug arrives as an eight-panel walk cycle that is ALREADY sliced for
+// the board, so playing it here costs one `drawImage` per frame and no new
+// asset, no new cache and no new code path — and a creature that takes a step
+// while it is being handed over is worth more than a still of the same creature.
+//
+// `walk` also picks the FRAME for the static case: 0.28 is mid-stride, where the
+// legs are spread and the silhouette reads as an insect. Frame 0 is the pose the
+// cycle starts from, which is the one frame in eight where the legs are tucked.
+//
+// The loop runs only while a foe card with a decoded strip is on screen, and
+// never under `prefers-reduced-motion`. Everything else — the shoe, the world,
+// the three glyph cards, and a foe whose painting has not arrived — draws once,
+// exactly as before.
+const CYCLE_MS = 1100
+let raf = 0
+const stopWalk = (): void => {
+  if (raf) cancelAnimationFrame(raf)
+  raf = 0
+}
+const startWalk = (): void => {
+  stopWalk()
+  if (typeof requestAnimationFrame === 'undefined') return
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true) return
+  const r = current.value
+  if (r?.kind !== 'foe') return
+  // Nothing to animate without a strip: the drawn fallback is a single pose.
+  if (!stripFrame('bug', r.bug, BUG_FRAME_ASPECT, walk.value)) return
+  const t0 = performance.now()
+  const tick = (t: number): void => {
+    walk.value = 0.28 + ((t - t0) / CYCLE_MS)
+    draw()
+    raf = requestAnimationFrame(tick)
+  }
+  raf = requestAnimationFrame(tick)
+}
+watch(current, () => { void nextTick(() => startWalk()) }, { immediate: true })
+// A strip that decodes late turns the still into a walk.
+watch(canvasRef, () => { void nextTick(() => startWalk()) })
+
 // The canvas is `v-if`'d in and out as the queue steps between kinds, so the
 // observer follows the element rather than being attached once on mount.
 let ro: ResizeObserver | null = null
@@ -276,7 +369,7 @@ watch(canvasRef, (el) => {
   ro = new ResizeObserver(() => draw())
   ro.observe(el)
 })
-onBeforeUnmount(() => { ro?.disconnect(); ro = null })
+onBeforeUnmount(() => { ro?.disconnect(); ro = null; stopWalk(); offArt() })
 
 // ─── The words ──────────────────────────────────────────────────────────────
 
@@ -365,27 +458,40 @@ const subCaption = computed(() => {
 </template>
 
 <style scoped lang="sass">
-// Everything is `clamp(rem, vmin, rem)`. The card has to survive a 320x658
-// portrait phone and a 500 px-tall landscape embed inside the same stylesheet,
-// and `vmin` is the only unit that shrinks for both.
+// Everything is `clamp(rem, cqmin, rem)`. The card has to survive a 320x480
+// portrait phone and a 390 px-tall landscape embed inside the same stylesheet,
+// and the short side of the box is the only thing that shrinks for both.
+//
+// `cqmin` rather than `vmin`: `FReward`'s overlay is a size container, so this
+// is the short side of THE OVERLAY — the visible box, minus its safe-area
+// padding and minus the band reserved for the continue hint — rather than of a
+// viewport that over-reports on a mobile browser with a collapsing URL bar and
+// means something else again inside a portal iframe. See `.reward-overlay`.
 .reveal-card
   display: flex
   flex-direction: column
   align-items: center
-  gap: clamp(0.3rem, 1.8vmin, 0.8rem)
+  gap: clamp(0.25rem, 1.6cqmin, 0.7rem)
   width: 100%
-  max-width: min(90vw, 24rem)
-  padding-inline: clamp(0.5rem, 3vmin, 1rem)
+  max-width: min(90cqw, 24rem)
+  padding-inline: clamp(0.4rem, 2.6cqmin, 1rem)
 
 .reveal-card__art
   position: relative
   display: flex
   align-items: center
   justify-content: center
-  width: clamp(6rem, 34vmin, 12rem)
+  width: clamp(5rem, 32cqmin, 11rem)
   // Square by ratio, never by a height — the box follows the width and can
   // never collapse to nothing on a short viewport.
   aspect-ratio: 1 / 1
+  // …and never taller than the room the card has left after the caption.
+  // `aspect-ratio` alone will happily hand back a 12rem square inside a 200px
+  // box, which is the one way this card can overflow without any text being
+  // long: `max-height` in the container's OWN height units is the cap that
+  // `vmin` could not express.
+  max-height: 46cqh
+  max-width: 100%
 
 .reveal-card__canvas
   display: block
@@ -405,7 +511,7 @@ const subCaption = computed(() => {
   // a picture of a place rather than as the modal's own background.
   &.is-framed
     border: 0.2em solid #2b1b2e
-    border-radius: clamp(0.4rem, 2vmin, 0.9rem)
+    border-radius: clamp(0.4rem, 2cqmin, 0.9rem)
     box-shadow: 0 0.15em 0.4em rgba(43, 27, 46, 0.6)
 
 .reveal-card__glyph
@@ -428,7 +534,7 @@ const subCaption = computed(() => {
   text-align: center
   text-wrap: balance
   line-height: 1.1
-  font-size: clamp(0.9rem, 4.6vmin, 1.5rem)
+  font-size: clamp(0.85rem, 4.2cqmin, 1.4rem)
   text-shadow: 0.09em 0.09em 0 #000, -0.03em -0.03em 0 #000, 0.03em -0.03em 0 #000, -0.03em 0.03em 0 #000, 0.03em 0.03em 0 #000
 
 .reveal-card__sub
@@ -437,20 +543,20 @@ const subCaption = computed(() => {
   font-weight: 700
   text-align: center
   line-height: 1.2
-  font-size: clamp(0.62rem, 3vmin, 0.95rem)
+  font-size: clamp(0.6rem, 2.8cqmin, 0.9rem)
   text-shadow: 0.08em 0.08em 0 rgba(0, 0, 0, 0.8)
 
 .reveal-card__pager
   display: flex
   align-items: center
   justify-content: center
-  gap: clamp(0.2rem, 1.2vmin, 0.4rem)
+  gap: clamp(0.2rem, 1.2cqmin, 0.4rem)
   margin: 0
 
 .reveal-card__pip
   display: block
-  width: clamp(0.32rem, 1.6vmin, 0.5rem)
-  height: clamp(0.32rem, 1.6vmin, 0.5rem)
+  width: clamp(0.32rem, 1.6cqmin, 0.5rem)
+  height: clamp(0.32rem, 1.6cqmin, 0.5rem)
   border-radius: 999px
   background-color: rgba(255, 255, 255, 0.24)
 

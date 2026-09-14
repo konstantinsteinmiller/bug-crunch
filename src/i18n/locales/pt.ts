@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Falha no máximo {n} pisadas',
     'score': 'Faz {n} pontos'
   },
+  'quests': {
+    'onTrack': '{objective} — no caminho certo',
+    'progress': '{objective} — {n}% feito',
+    'missed': '{objective} — perdido'
+  },
   'hints': {
     'move': {
       'touch': 'Toca para mover',

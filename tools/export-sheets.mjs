@@ -106,7 +106,11 @@ try {
   const title = await evaluate('document.title')
   const heading = await evaluate("document.querySelector('.art-sheets h1')?.textContent ?? ''")
   console.log(`page: ${title} / ${heading}`)
-  if (!/bug-crunch/i.test(title)) throw new Error(`not bug-crunch: title is "${title}"`)
+  // The page's own <title> is "Bug Crunch" with a space; the REPO is
+  // `bug-crunch` with a hyphen. Matching the hyphenated form against the title
+  // refused this project's own dev server on every port, which is the one
+  // failure mode a guard like this may not have.
+  if (!/bug.?crunch/i.test(title)) throw new Error(`not bug-crunch: title is "${title}"`)
   if (!heading.includes('Art sheets')) throw new Error('not the art bench')
 
   // ── Press export ──

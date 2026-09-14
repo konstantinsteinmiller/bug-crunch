@@ -352,7 +352,11 @@ const action = computed(() => {
   border-radius: 999px
   border: 2px solid rgba(0, 0, 0, 0.55)
 
-  :deep(svg)
+  // `.game-icon`, not `svg`: `GameIcon` renders an `<img>` once the painted art
+  // layer is on, and an `svg` selector misses it — the painting then took its
+  // intrinsic size and filled (and overflowed) the badge. The class is on the
+  // component's root either way, so this one rule sizes both.
+  :deep(.game-icon)
     width: 62%
     height: 62%
 

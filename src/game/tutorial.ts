@@ -149,7 +149,19 @@ export const LESSONS: readonly Lesson[] = [
   lesson({ id: 'chain', gesture: 'tap', scrim: 'soft', bailoutMs: 11_000, order: 40 }),
 
   // ── 5. The second verb, taught at the first thing that needs it. ──
-  lesson({ id: 'slam', gesture: 'hold', scrim: 'hole', bailoutMs: 15_000, order: 50 }),
+  //
+  // `soft`, not `hole`. This is the first lesson in the list that arrives with
+  // the level already underway — 1-4, a floor of ants and two beetles, a clock
+  // running — and `hole` is documented three screens up as the OPENING scrim,
+  // "for the beats where the player has nothing else to be doing". It shipped
+  // as `hole` and it black-screened two thirds of a live board for up to
+  // fifteen seconds while an armoured beetle walked into the foot.
+  //
+  // The bail-out is the longest on the board for a reason: it is the only
+  // lesson whose gesture takes most of a second to perform (see the beat table
+  // in `TutorialOverlay.vue`), and a player who has just been surprised by a
+  // blow that did not work needs a cycle or two of watching before they copy.
+  lesson({ id: 'slam', gesture: 'hold', scrim: 'soft', bailoutMs: 15_000, order: 50 }),
 
   // ── 6. The one lesson whose answer is "don't". ──
   lesson({ id: 'spike', gesture: 'avoid', scrim: 'soft', bailoutMs: 8_000, holdMs: 3_200, order: 60 }),
@@ -207,3 +219,66 @@ export const TAUGHT_KEY = 'bc_taught'
 /** Which of two armed lessons is shown. Lower `order` wins. */
 export const outranks = (a: LessonId, b: LessonId): boolean =>
   lessonSpec(a).order < lessonSpec(b).order
+
+/**
+ * ─── When the big stomp is worth explaining ─────────────────────────────────
+ *
+ * The slam lesson shipped armed by the SIGHT of an armoured body: the frame a
+ * beetle became alive on 1-4, the lesson went up. Measured in a browser, that
+ * is the wrong frame twice over.
+ *
+ * FIRST, it is too early to mean anything. A child who has never tried to
+ * squash a beetle has no question that a hand pressing and holding is the
+ * answer to. The level's own design note says what the moment is —
+ * "1-4  the beetle  a tap is not enough: the slam" — and "a tap is not enough"
+ * is something that happens TO the player, on the frame their tap bounces. The
+ * simulation already announces it: `clang`.
+ *
+ * SECOND, and this is what actually broke it: the lesson is one-shot and its
+ * bail-out counts as taught. Armed at the beetle's spawn, the fifteen seconds
+ * are spent while the player is across the board squishing ants, and it retires
+ * itself — permanently, into the save — before they ever touch the shell. A
+ * headless run of 1-4 that tapped only unarmoured bodies had `bc_taught.slam`
+ * written `true` at t≈14 s, after which the game has no way left to mention the
+ * charged stomp, ever, on any level. The whole mechanic was being taught to an
+ * empty room.
+ *
+ * So the trigger is the ricochet, with a grace window behind it for the player
+ * who simply walks around beetles until the board jams.
+ */
+
+/**
+ * How long an unpierceable body may share the board with a player who has not
+ * tried to hit it, before the game explains the shell anyway.
+ *
+ * Present time, like every other clock in this system, and deliberately LONG.
+ * The number has to be read against the bail-out it hands over to: at fifteen
+ * seconds of `slam`, a grace of six would put the lesson up at t ≈ 6 s of 1-4
+ * and retire it at t ≈ 21 s — which is the measured failure with an extra seven
+ * seconds bolted on, not a fix. Eighteen leaves the ricochet almost always
+ * getting there first, which is the entire point: the lesson should land on the
+ * player's question, not ahead of it.
+ *
+ * What it still catches is the player it is for — one who walks around beetles.
+ * 1-4 runs 54 seconds, so eighteen seconds of a shell standing on the floor
+ * untouched means the board is already jamming (an armoured body a weak player
+ * will not slam does not die; it sits in `maxAlive` and the spawner stops
+ * refilling), and that player needs telling more than anyone.
+ */
+export const SLAM_GRACE_MS = 18_000
+
+/**
+ * Is a charged slam the answer to this shell, in this shoe?
+ *
+ * Two halves, and shipping only the first half is a bug the browser run found:
+ * the old condition was `light < armor` alone, which is true for the bunny
+ * slipper (pierce 0) against a robobug (armour 3) — and a slam there carries
+ * pierce 2, still bounces, and the game would have spent its one teaching slot
+ * demonstrating a gesture that does not work. A lesson has to be ANSWERABLE.
+ *
+ * `light`/`heavy` are `blowPierce(shoe, false)` and `blowPierce(shoe, true)`;
+ * they are passed in rather than read here so this file stays pure curriculum
+ * and does not have to know what a shoe is.
+ */
+export const slamTeaches = (light: number, heavy: number, armor: number): boolean =>
+  light < armor && heavy >= armor

@@ -86,155 +86,190 @@ const onClick = (): void => {
 </script>
 
 <template lang="pug">
-  //- A real button: it is a control, it is reached by keyboard, and a screen
-  //- reader has to be told which of the three states it is in — the count is a
-  //- number on a chip, which is announced as nothing at all.
-  button.chest(
-    type="button"
-    ref="rootEl"
-    :class="{ 'is-ready': isReady, 'is-big': phase === 'big' && !isSpent, 'is-spent': isSpent }"
-    :disabled="!isReady"
-    :aria-label="isReady ? t('chest.ready', { n: reward }) : (isSpent ? t('chest.spent') : t('chest.filling'))"
-    @click="onClick"
-  )
-    //- ── The painting ────────────────────────────────────────────────────
-    //- The drain is a second element masked to the chest's own alpha, so the
-    //- shutter shrinks INSIDE the chest's outline exactly as the SVG's
-    //- clip-path does — a rectangle over a bitmap would darken the corners of
-    //- the box instead of the chest.
-    div.chest__art(v-if="painted")
-      img.chest__img(:src="painted" alt="" draggable="false")
-      div.chest__shade(
-        v-if="isSpent || phase === 'cooldown'"
-        :style="{ '--chest-mask': `url('${painted}')` }"
-      )
-        div.chest__shade-fill(:style="{ height: `${shutterPct * 100}%` }")
+  //- ── The chest's column ──────────────────────────────────────────────────
+  //-
+  //- A wrapper rather than the button itself, so the `under` slot can hang
+  //- something beneath the chest that TRAVELS WITH IT — mounted, hidden and
+  //- moved as one thing by whoever placed the chest, with no second wiring in
+  //- the scene. The slot is deliberately outside the `<button>`: anything in
+  //- there would otherwise join the chest's hit area and its accessible name.
+  //-
+  //- The wrapper states no width. `.chest` keeps the exact box it always had —
+  //- the `chest` tutorial lesson aims at its centre via `elCentre('.chest',
+  //- '.scene__wallet')` — and the slot's content is free to be a little wider
+  //- or narrower without moving it.
+  div.chest-col
+    //- A real button: it is a control, it is reached by keyboard, and a screen
+    //- reader has to be told which of the three states it is in — the count is a
+    //- number on a chip, which is announced as nothing at all.
+    button.chest(
+      type="button"
+      ref="rootEl"
+      :class="{ 'is-ready': isReady, 'is-big': phase === 'big' && !isSpent, 'is-spent': isSpent }"
+      :disabled="!isReady"
+      :aria-label="isReady ? t('chest.ready', { n: reward }) : (isSpent ? t('chest.spent') : t('chest.filling'))"
+      @click="onClick"
+    )
+      //- ── The painting ────────────────────────────────────────────────────
+      //- The drain is a second element masked to the chest's own alpha, so the
+      //- shutter shrinks INSIDE the chest's outline exactly as the SVG's
+      //- clip-path does — a rectangle over a bitmap would darken the corners of
+      //- the box instead of the chest.
+      div.chest__art(v-if="painted")
+        img.chest__img(:src="painted" alt="" draggable="false")
+        div.chest__shade(
+          v-if="isSpent || phase === 'cooldown'"
+          :style="{ '--chest-mask': `url('${painted}')` }"
+        )
+          div.chest__shade-fill(:style="{ height: `${shutterPct * 100}%` }")
 
-    //- ── The drawing ─────────────────────────────────────────────────────
-    //-
-    //- Bug Crunch's own art direction, not the dark-iron chest this was ported
-    //- from. Four rules, the same four every other drawable in this game
-    //- follows (`inkArt.ts`):
-    //-
-    //-   • ONE ink colour, `#2b1b2e` — a warm near-black. Pure #000 reads as
-    //-     clip-art, and a cast outlined in three different blacks reads as
-    //-     three casts.
-    //-   • ONE key light, upper LEFT (`SHADOW_DIR` 1.05 rad puts every shadow
-    //-     down-and-right). So: the soft highlight sits on the lid's top-left
-    //-     shoulder and the hard cel shadow is a drawn SHAPE down the right
-    //-     side — authored geometry, never a computed gradient.
-    //-   • Fat, even ink and generous corner radii, because the audience starts
-    //-     at six and the whole chest is about 38 px tall on a phone. Anything
-    //-     finer than ~2.4 units in this 64-unit box disappears at that size.
-    //-   • Warm honey wood and a butter-gold clasp. No grey, no black, no
-    //-     rivets: this is a present, not a strongbox.
-    //-
-    //- The cooldown overlay lives inside the same SVG so a clipPath built from
-    //- the lid + body can mask it to the chest's silhouette — the drain
-    //- shrinks within the outline rather than as a rectangle over the box.
-    svg.chest__svg(v-else viewBox="0 0 64 64")
-      defs
-        linearGradient(id="sxChestBody" x1="0" y1="0" x2="0" y2="1")
-          stop(offset="0" stop-color="#ffc76f")
-          stop(offset="1" stop-color="#e8862a")
-        linearGradient(id="sxChestLid" x1="0" y1="0" x2="0" y2="1")
-          stop(offset="0" stop-color="#ffe6ab")
-          stop(offset="1" stop-color="#f5a842")
-        linearGradient(id="sxChestClasp" x1="0" y1="0" x2="0" y2="1")
-          stop(offset="0" stop-color="#fff0b4")
-          stop(offset="1" stop-color="#efb02c")
-        //- The silhouette: lid + body + lip, as one clip region.
-        clipPath(id="sxChestClip")
-          path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z")
-          rect(x="7" y="30" width="50" height="6.5" rx="3.2")
-          rect(x="9.5" y="34" width="45" height="20" rx="4.5")
-        //- The body alone, for the cel shadow that must not spill onto the lid.
-        clipPath(id="sxChestBodyClip")
-          rect(x="9.5" y="34" width="45" height="20" rx="4.5")
-        clipPath(id="sxChestLidClip")
-          path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z")
+      //- ── The drawing ─────────────────────────────────────────────────────
+      //-
+      //- Bug Crunch's own art direction, not the dark-iron chest this was ported
+      //- from. Four rules, the same four every other drawable in this game
+      //- follows (`inkArt.ts`):
+      //-
+      //-   • ONE ink colour, `#2b1b2e` — a warm near-black. Pure #000 reads as
+      //-     clip-art, and a cast outlined in three different blacks reads as
+      //-     three casts.
+      //-   • ONE key light, upper LEFT (`SHADOW_DIR` 1.05 rad puts every shadow
+      //-     down-and-right). So: the soft highlight sits on the lid's top-left
+      //-     shoulder and the hard cel shadow is a drawn SHAPE down the right
+      //-     side — authored geometry, never a computed gradient.
+      //-   • Fat, even ink and generous corner radii, because the audience starts
+      //-     at six and the whole chest is about 38 px tall on a phone. Anything
+      //-     finer than ~2.4 units in this 64-unit box disappears at that size.
+      //-   • Warm honey wood and a butter-gold clasp. No grey, no black, no
+      //-     rivets: this is a present, not a strongbox.
+      //-
+      //- The cooldown overlay lives inside the same SVG so a clipPath built from
+      //- the lid + body can mask it to the chest's silhouette — the drain
+      //- shrinks within the outline rather than as a rectangle over the box.
+      svg.chest__svg(v-else viewBox="0 0 64 64")
+        defs
+          linearGradient(id="sxChestBody" x1="0" y1="0" x2="0" y2="1")
+            stop(offset="0" stop-color="#ffc76f")
+            stop(offset="1" stop-color="#e8862a")
+          linearGradient(id="sxChestLid" x1="0" y1="0" x2="0" y2="1")
+            stop(offset="0" stop-color="#ffe6ab")
+            stop(offset="1" stop-color="#f5a842")
+          linearGradient(id="sxChestClasp" x1="0" y1="0" x2="0" y2="1")
+            stop(offset="0" stop-color="#fff0b4")
+            stop(offset="1" stop-color="#efb02c")
+          //- The silhouette: lid + body + lip, as one clip region.
+          clipPath(id="sxChestClip")
+            path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z")
+            rect(x="7" y="30" width="50" height="6.5" rx="3.2")
+            rect(x="9.5" y="34" width="45" height="20" rx="4.5")
+          //- The body alone, for the cel shadow that must not spill onto the lid.
+          clipPath(id="sxChestBodyClip")
+            rect(x="9.5" y="34" width="45" height="20" rx="4.5")
+          clipPath(id="sxChestLidClip")
+            path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z")
 
-      //- Contact shadow. Soft and offset down-and-right, so the chest sits on
-      //- the HUD instead of floating over it.
-      ellipse(cx="33.5" cy="55.5" rx="21" ry="3.6" fill="#2b1b2e" opacity="0.16")
+        //- Contact shadow. Soft and offset down-and-right, so the chest sits on
+        //- the HUD instead of floating over it.
+        ellipse(cx="33.5" cy="55.5" rx="21" ry="3.6" fill="#2b1b2e" opacity="0.16")
 
-      //- ── The box ──
-      g(stroke="#2b1b2e" stroke-width="2.6" stroke-linejoin="round")
-        rect(x="9.5" y="34" width="45" height="20" rx="4.5" fill="url(#sxChestBody)")
-        path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z" fill="url(#sxChestLid)")
-        rect(x="7" y="30" width="50" height="6.5" rx="3.2" fill="url(#sxChestLid)")
+        //- ── The box ──
+        g(stroke="#2b1b2e" stroke-width="2.6" stroke-linejoin="round")
+          rect(x="9.5" y="34" width="45" height="20" rx="4.5" fill="url(#sxChestBody)")
+          path(d="M9 33 C9 18 18 12.5 32 12.5 C46 12.5 55 18 55 33 Z" fill="url(#sxChestLid)")
+          rect(x="7" y="30" width="50" height="6.5" rx="3.2" fill="url(#sxChestLid)")
 
-      //- ── Cel shading: drawn shapes, hard edges, clipped to their own part ──
-      g(clip-path="url(#sxChestBodyClip)")
-        path(d="M44 32 C47.5 40 47 48 43.5 56 L58 56 L58 32 Z" fill="#c96a16" opacity="0.42")
-      g(clip-path="url(#sxChestLidClip)")
-        path(d="M43 10 C49 16 50.5 25 49.5 35 L59 35 L59 10 Z" fill="#d98a22" opacity="0.36")
-        //- The key light: one soft smear on the top-left shoulder. An ellipse
-        //- rather than a gradient, because a cel painter puts a highlight where
-        //- it reads, not where the maths says.
-        ellipse(cx="22" cy="21.5" rx="8" ry="3.6" fill="#fff6df" opacity="0.55" transform="rotate(-22 22 21.5)")
+        //- ── Cel shading: drawn shapes, hard edges, clipped to their own part ──
+        g(clip-path="url(#sxChestBodyClip)")
+          path(d="M44 32 C47.5 40 47 48 43.5 56 L58 56 L58 32 Z" fill="#c96a16" opacity="0.42")
+        g(clip-path="url(#sxChestLidClip)")
+          path(d="M43 10 C49 16 50.5 25 49.5 35 L59 35 L59 10 Z" fill="#d98a22" opacity="0.36")
+          //- The key light: one soft smear on the top-left shoulder. An ellipse
+          //- rather than a gradient, because a cel painter puts a highlight where
+          //- it reads, not where the maths says.
+          ellipse(cx="22" cy="21.5" rx="8" ry="3.6" fill="#fff6df" opacity="0.55" transform="rotate(-22 22 21.5)")
 
-      //- One plank seam. A single line, low on the body where it will not
-      //- collide with the clasp — two lines turn to mush at HUD size.
-      path(
-        d="M12.5 48.5 H51.5"
-        stroke="#c96a16"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        opacity="0.5"
-      )
+        //- One plank seam. A single line, low on the body where it will not
+        //- collide with the clasp — two lines turn to mush at HUD size.
+        path(
+          d="M12.5 48.5 H51.5"
+          stroke="#c96a16"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          opacity="0.5"
+        )
 
-      //- ── The clasp ──
-      g(stroke="#2b1b2e" stroke-width="2.4" stroke-linejoin="round")
-        rect(x="26.5" y="28" width="11" height="14" rx="3.2" fill="url(#sxChestClasp)")
-      //- Keyhole: a disc and a tapering slot, ink on gold.
-      path(
-        d="M32 33.2 a2.1 2.1 0 1 1 0.01 0 M30.9 35.2 h2.2 l0.7 3.4 h-3.6 Z"
-        fill="#2b1b2e"
-      )
+        //- ── The clasp ──
+        g(stroke="#2b1b2e" stroke-width="2.4" stroke-linejoin="round")
+          rect(x="26.5" y="28" width="11" height="14" rx="3.2" fill="url(#sxChestClasp)")
+        //- Keyhole: a disc and a tapering slot, ink on gold.
+        path(
+          d="M32 33.2 a2.1 2.1 0 1 1 0.01 0 M30.9 35.2 h2.2 l0.7 3.4 h-3.6 Z"
+          fill="#2b1b2e"
+        )
 
-      //- ── Sparkles ──
-      //- Only on the gold chest, and only three of them. A permanent twinkle is
-      //- wallpaper; one that arrives when the prize turns gold is a signal.
-      g.chest__sparks(v-if="phase === 'big' && !isSpent" fill="#fff3c4")
-        path(d="M50 17 q0.7 2.6 3.3 3.3 q-2.6 0.7 -3.3 3.3 q-0.7 -2.6 -3.3 -3.3 q2.6 -0.7 3.3 -3.3 Z")
-        path(d="M14 25 q0.5 1.9 2.4 2.4 q-1.9 0.5 -2.4 2.4 q-0.5 -1.9 -2.4 -2.4 q1.9 -0.5 2.4 -2.4 Z")
-        path(d="M53 42 q0.45 1.7 2.2 2.2 q-1.7 0.45 -2.2 2.2 q-0.45 -1.7 -2.2 -2.2 q1.7 -0.45 2.2 -2.2 Z")
+        //- ── Sparkles ──
+        //- Only on the gold chest, and only three of them. A permanent twinkle is
+        //- wallpaper; one that arrives when the prize turns gold is a signal.
+        g.chest__sparks(v-if="phase === 'big' && !isSpent" fill="#fff3c4")
+          path(d="M50 17 q0.7 2.6 3.3 3.3 q-2.6 0.7 -3.3 3.3 q-0.7 -2.6 -3.3 -3.3 q2.6 -0.7 3.3 -3.3 Z")
+          path(d="M14 25 q0.5 1.9 2.4 2.4 q-1.9 0.5 -2.4 2.4 q-0.5 -1.9 -2.4 -2.4 q1.9 -0.5 2.4 -2.4 Z")
+          path(d="M53 42 q0.45 1.7 2.2 2.2 q-1.7 0.45 -2.2 2.2 q-0.45 -1.7 -2.2 -2.2 q1.7 -0.45 2.2 -2.2 Z")
 
-      //- Cooldown / spent overlay, clipped to the chest outline. A warm ink
-      //- veil rather than 50 % black: this palette has no black in it, and a
-      //- neutral grey wash turns the honey wood to mud.
-      rect(
-        v-if="isSpent || phase === 'cooldown'"
-        x="0"
-        :y="64 * (1 - shutterPct)"
-        width="64"
-        :height="64 * shutterPct"
-        fill="rgba(43, 27, 46, 0.55)"
-        clip-path="url(#sxChestClip)"
-        style="transition: y 0.3s linear, height 0.3s linear"
-      )
+        //- Cooldown / spent overlay, clipped to the chest outline. A warm ink
+        //- veil rather than 50 % black: this palette has no black in it, and a
+        //- neutral grey wash turns the honey wood to mud.
+        rect(
+          v-if="isSpent || phase === 'cooldown'"
+          x="0"
+          :y="64 * (1 - shutterPct)"
+          width="64"
+          :height="64 * shutterPct"
+          fill="rgba(43, 27, 46, 0.55)"
+          clip-path="url(#sxChestClip)"
+          style="transition: y 0.3s linear, height 0.3s linear"
+        )
 
-    //- Status label: a countdown while it fills, the payout once it is ready.
-    //-
-    //- The row is IN FLOW and reserves its own height, rather than floating
-    //- absolutely below the art as it did in the game this came from. There the
-    //- chest lived in a corner with nothing under it; here it has to sit inside
-    //- a HUD bar that lays elements out, and an absolutely-positioned label is
-    //- invisible to that layout — it would hang over whatever is beneath it at
-    //- some viewport size and nowhere in the stylesheet would say so.
-    //-
-    //- The CHIP inside the row is still absolutely centred, because the payout
-    //- chip is wider than the chest and must not be allowed to set the
-    //- component's width.
-    div.chest__label(aria-hidden="true")
-      span.chest__timer(v-if="!isReady") {{ timeDisplay }}
-      span.chest__payout(v-else :class="{ 'is-big': phase === 'big' }")
-        IconCoin.chest__payout-coin
-        span.chest__payout-value +{{ reward }}
+      //- Status label: a countdown while it fills, the payout once it is ready.
+      //-
+      //- The row is IN FLOW and reserves its own height, rather than floating
+      //- absolutely below the art as it did in the game this came from. There the
+      //- chest lived in a corner with nothing under it; here it has to sit inside
+      //- a HUD bar that lays elements out, and an absolutely-positioned label is
+      //- invisible to that layout — it would hang over whatever is beneath it at
+      //- some viewport size and nowhere in the stylesheet would say so.
+      //-
+      //- The CHIP inside the row is still absolutely centred, because the payout
+      //- chip is wider than the chest and must not be allowed to set the
+      //- component's width.
+      div.chest__label(aria-hidden="true")
+        span.chest__timer(v-if="!isReady") {{ timeDisplay }}
+        span.chest__payout(v-else :class="{ 'is-big': phase === 'big' }")
+          IconCoin.chest__payout-coin
+          span.chest__payout-value +{{ reward }}
+
+    //- ── Under the chest ─────────────────────────────────────────────────────
+    //- Whatever the scene wants to ride along below it — the play-time quest
+    //- badges, in this game. Empty by default and costs a mount when unused.
+    slot(name="under")
 </template>
 
 <style scoped lang="sass">
+// ─── The column ─────────────────────────────────────────────────────────────
+//
+// The chest, and whatever the `under` slot brought with it, stacked and
+// centred. It states NO WIDTH: the chest keeps the `clamp()` box it has always
+// had, so the `chest` tutorial lesson still lands on the same centre, and a
+// slot item a few pixels wider or narrower cannot shift it.
+//
+// `pointer-events: none` is the safe default, not a copy-paste: the HUD layer
+// above is already non-interactive and `.chest` opts ITSELF back in below, so
+// passengers in the slot stay pictures unless they ask not to be.
+.chest-col
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: clamp(0.1rem, 0.7vmin, 0.3rem)
+  pointer-events: none
+
 // ─── The control ────────────────────────────────────────────────────────────
 //
 // Every size here is `clamp(rem, vmin, rem)`. `vmin` rather than `vw` because

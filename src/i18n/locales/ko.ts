@@ -146,6 +146,11 @@ export default {
     'noMiss': '헛발질 {n}회 이하',
     'score': '{n}점 획득'
   },
+  'quests': {
+    'onTrack': '{objective} — 유지 중',
+    'progress': '{objective} — {n}% 진행',
+    'missed': '{objective} — 놓침'
+  },
   'hints': {
     'move': {
       'touch': '탭해서 이동',

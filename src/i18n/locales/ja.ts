@@ -146,6 +146,11 @@ export default {
     'noMiss': 'ミスは {n} 回まで',
     'score': '{n} 点をとる'
   },
+  'quests': {
+    'onTrack': '{objective} — じゅんちょう',
+    'progress': '{objective} — {n}% すすんだ',
+    'missed': '{objective} — のがした'
+  },
   'hints': {
     'move': {
       'touch': 'タップで移動',

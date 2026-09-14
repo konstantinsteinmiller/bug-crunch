@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Hụt tối đa {n} cú',
     'score': 'Ghi {n} điểm'
   },
+  'quests': {
+    'onTrack': '{objective} — đang đạt',
+    'progress': '{objective} — được {n}%',
+    'missed': '{objective} — đã lỡ'
+  },
   'hints': {
     'move': {
       'touch': 'Chạm để di chuyển',

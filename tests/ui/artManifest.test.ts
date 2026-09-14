@@ -3,7 +3,8 @@ import {
   ALL_SHEETS, GRIDS, STILLS, WALKS, promptDocs, sheetRows, type StillSpec
 } from '@/game/artSheet'
 import {
-  ART_BRAND, ART_CATALOGUE, UI_GLYPH_ART_IDS, UI_HUD_MARKS, UI_MARK_FOR_GLYPH, artIdForGlyph
+  ART_BRAND, ART_CATALOGUE, TINTED_GLYPHS, UI_GLYPH_ART_IDS, UI_HUD_MARKS, UI_MARK_FOR_GLYPH,
+  artIdForGlyph
 } from '@/game/artCatalogue'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { BUG_IDS } from '@/game/bugs'
@@ -290,5 +291,80 @@ describe('the prompts carry the rules a return is thrown away for', () => {
     // middle, and the stomp circle agrees with the toe or it agrees with
     // nothing — so its prompt has to say so in words.
     expect(stills).toContain('THE TOE IS THE ANCHOR')
+  })
+})
+
+/**
+ * ─── A mark is painted flat because the GAME colours it ─────────────────────
+ *
+ * `TINTED_GLYPHS` is read by two modules that never meet. `GameIcon` masks
+ * those paintings and fills them with `currentColor`, so `color:` reaches the
+ * painted rung exactly as it reaches the vector. `artSheet` sets `greyscale` on
+ * those same slots, so the prompt asks for one bold shape with no outline and
+ * no shading rather than an illustration.
+ *
+ * Drift either way is the same bug wearing the other shoe:
+ *
+ *   masked but painted in colour  — the painting's colours are thrown away and
+ *                                   only its alpha survives, so a careful gold
+ *                                   trophy renders as a flat slate blob;
+ *   blitted but painted flat      — nothing tints it, so it renders silver-grey
+ *                                   wherever the stylesheet meant it to be gold.
+ *                                   This is exactly what shipped: every EARNED
+ *                                   star on the result screen was grey beside an
+ *                                   unearned socket that was warm gold, and the
+ *                                   screen read inverted.
+ */
+describe('the marks the renderer tints and the marks the painter flattens are one set', () => {
+  const uiStillBy = new Map(STILLS.filter((s) => s.kind === 'ui').map((s) => [s.id, s]))
+
+  /**
+   * The one glyph the two lists are allowed to disagree about.
+   *
+   * `star-empty` is masked by the renderer but stays an OBJECT in the manifest.
+   * A hollow outline is the one shape whose colours cannot matter once it is
+   * masked, and reclassifying it would re-pack both contact-sheet lattices — four
+   * painted sheets flagged for a repaint and `objects-3` orphaned — to reword a
+   * prompt for a mark that is already correctly painted. Listed here so the
+   * exception has to be renewed deliberately rather than by a passing test.
+   */
+  const EXCEPTIONS = new Set<string>(['star-empty'])
+
+  it('agree, glyph by glyph', () => {
+    for (const name of GAME_ICON_NAMES) {
+      const still = uiStillBy.get(artIdForGlyph(name))
+      // Not every glyph has a slot of its own; only assert on the ones that do.
+      if (!still) continue
+      if (EXCEPTIONS.has(name)) continue
+      const tinted = TINTED_GLYPHS.has(name)
+      expect(
+        still.greyscale === true,
+        `${name} -> ${still.id}: the renderer ${tinted ? 'MASKS' : 'BLITS'} it, so the prompt `
+        + `must ask for ${tinted ? 'a flat silhouette (greyscale: true)' : 'an object in colour'}`
+      ).toBe(tinted)
+    }
+  })
+
+  it('name every exception, so none is acquired by accident', () => {
+    const drifted = GAME_ICON_NAMES.filter((name) => {
+      const still = uiStillBy.get(artIdForGlyph(name))
+      return still ? still.greyscale === true !== TINTED_GLYPHS.has(name) : false
+    })
+    expect(new Set(drifted)).toEqual(EXCEPTIONS)
+  })
+
+  it('cover the six glyphs that are also a HUD mark', () => {
+    // These never reach `GLYPH_STILLS` — their painting is the HUD mark's own —
+    // so only this list keeps them tinted. A star that falls out of it is the
+    // grey-star bug again.
+    for (const glyph of Object.keys(UI_MARK_FOR_GLYPH) as (keyof typeof UI_MARK_FOR_GLYPH)[]) {
+      expect(TINTED_GLYPHS.has(glyph), `${glyph} is a HUD mark; the game colours it`).toBe(true)
+    }
+  })
+
+  it('keep the empty star socket tintable, so the row can ghost it', () => {
+    // `star-empty` is the same mark as `star` in another state and has to dim to
+    // a near-transparent white on the result screen. An untinted painting cannot.
+    expect(TINTED_GLYPHS.has('star-empty')).toBe(true)
   })
 })

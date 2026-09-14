@@ -146,6 +146,11 @@ export default {
     'noMiss': 'Промахнись не больше {n} раз',
     'score': 'Набери {n} очков'
   },
+  'quests': {
+    'onTrack': '{objective} — идёт по плану',
+    'progress': '{objective} — {n}% готово',
+    'missed': '{objective} — упущено'
+  },
   'hints': {
     'move': {
       'touch': 'Нажми, чтобы двигаться',

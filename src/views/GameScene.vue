@@ -9,6 +9,7 @@ import BossBar from '@/components/game/BossBar.vue'
 import ControlHint, { type HintId } from '@/components/game/ControlHint.vue'
 import TutorialOverlay from '@/components/game/TutorialOverlay.vue'
 import ObjectiveList from '@/components/game/ObjectiveList.vue'
+import QuestBadges from '@/components/game/QuestBadges.vue'
 import StarRow from '@/components/game/StarRow.vue'
 import CoinBadge from '@/components/organisms/CoinBadge.vue'
 import LockerModal from '@/components/organisms/LockerModal.vue'
@@ -56,7 +57,7 @@ import { rewardsForResult, nextSeenBugs, type CampaignReward } from '@/game/camp
 import { warmNextLevelArt } from '@/game/artPreload'
 import { installPreviewSeam } from '@/game/previewFeed'
 import * as tutor from '@/use/useTutorial'
-import { type LessonId } from '@/game/tutorial'
+import { slamTeaches, type LessonId } from '@/game/tutorial'
 import { mobileCheck } from '@/utils/function'
 
 /**
@@ -202,10 +203,28 @@ const lessonTo = ref({ x: 0, y: 0 })
  * lesson armed at the last second of a level must not tick its bail-out away
  * behind the result screen. The META lessons are the exception: they are ABOUT
  * those screens, so they run through the pause (`whilePaused`).
+ *
+ * ── And it stops for the reward overlays, which are NOT a pause ──
+ *
+ * `showResult` / `showReveals` do not raise `isGamePaused`: the result screen is
+ * the end of the level rather than an app pause, which is why the render loop
+ * tests them separately. So the gate above was not enough on its own — a `goal`
+ * arrow armed on the last squish of a level went on drawing its dashed track and
+ * its hand straight ACROSS the result card and the gift card, over the objective
+ * rows, in every capture of the finished screen. `TutorialOverlay` is `position:
+ * fixed` above every panel by design (a lesson must never be clipped by the thing
+ * it is pointing at), so nothing below it could have caught this.
+ *
+ * Hiding it also stops its bail-out, which is the same rule the pause already
+ * keeps: a lesson must not spend its one teaching window behind a screen the
+ * player is reading instead.
  */
-const lessonShown = computed(() =>
-  lessonSpecOf.value !== null
-  && (!isGamePaused.value || lessonSpecOf.value.whilePaused === true))
+const lessonShown = computed(() => {
+  const spec = lessonSpecOf.value
+  if (spec === null) return false
+  if (spec.whilePaused === true) return true
+  return !isGamePaused.value && !showResult.value && !showReveals.value
+})
 
 /**
  * The centre of a HUD control, in viewport px.
@@ -393,7 +412,7 @@ const loop = (now: number): void => {
   if (!isGamePaused.value) {
     game.step(dt)
     drainToWorld()
-    if (sawInput) { armBodyLessons(); armChestLesson() }
+    if (sawInput) { armBodyLessons(dt); armChestLesson() }
   }
 
   // OUTSIDE the pause gate: the meta lessons are about the panels that cause
@@ -436,7 +455,15 @@ const drainToWorld = (): void => {
         break
       }
       case 'hurt': playFx('hurt', 0, pan(e.x)); break
-      case 'clang': playFx('clang', 0, pan(e.x)); break
+      case 'clang':
+        playFx('clang', 0, pan(e.x))
+        // A blow that rang off a shell — the ONE moment the charged stomp is an
+        // answer to a question the player is actually asking. The first cut armed
+        // on the SIGHT of a beetle instead, and spent the whole fifteen-second
+        // bail-out before the player had touched one. See the note beside
+        // `SLAM_GRACE_MS` in `game/tutorial.ts`.
+        tutor.noteRicochet()
+        break
       case 'spike':
         playFx('spike', 0, pan(e.x))
         haptic('impact')
@@ -543,10 +570,15 @@ const aimLesson = (id: LessonId): void => {
       return
     }
     case 'slam':
-      lessonAt.value = world(
-        nearestBody((b) => blowPierce(equippedSpec.value, false) < bugSpec(b as never).armor)
-        ?? nearestBody()
-      )
+      // A shell THIS SHOE CAN OPEN, and the foot if there is none on the floor
+      // right now. The old fallback was `?? nearestBody()`, which pointed the
+      // hold-and-release lesson at the nearest ant — teaching a child to charge
+      // up against a body a tap kills.
+      lessonAt.value = world(nearestBody((b) => slamTeaches(
+        blowPierce(equippedSpec.value, false),
+        blowPierce(equippedSpec.value, true),
+        bugSpec(b as never).armor
+      )))
       return
     case 'spike':
       lessonAt.value = world(nearestBody((b) => bugSpec(b as never).spiky))
@@ -813,8 +845,12 @@ const teachLevelHints = (): void => {
  * at where a spiky bug would be if there were one teaches nothing, so these are
  * armed from the frame loop the moment the thing actually exists — which is
  * also the first moment the player could be hurt by not knowing.
+ *
+ * The slam is the exception, and takes `dt` for it: a shell on the floor is not
+ * a reason to explain the charged stomp, only permission to start counting.
+ * `tutor.armSlam` owns the rest of that rule.
  */
-const armBodyLessons = (): void => {
+const armBodyLessons = (dt: number): void => {
   if (game.phase.value !== 'play' || showResult.value) return
   const bugs = game.getBugs()
   const n = game.getBugCount()
@@ -824,17 +860,26 @@ const armBodyLessons = (): void => {
   for (let i = 0; i < n; i++) {
     const b = bugs[i]!
     if (!b.alive) continue
-    // Armoured FOR THIS SHOE. A beetle is armour 2 and the steel boot pierces 4,
-    // so a player wearing it taps straight through — and teaching them to charge
-    // for it would be teaching a slower way to do what they were already doing.
-    if (blowPierce(equippedSpec.value, false) < b.spec.armor) sawArmour = true
+    // Armoured FOR THIS SHOE, and ANSWERABLE BY A SLAM. A beetle is armour 2 and
+    // the steel boot pierces 4, so a player wearing it taps straight through and
+    // teaching them to charge would be teaching a slower way to do what they
+    // already do — and at the other end the bunny slipper (pierce 0) still
+    // bounces off a robobug (armour 3) WITH the slam's +2, so demonstrating the
+    // gesture there would be demonstrating one that does not work.
+    if (slamTeaches(
+      blowPierce(equippedSpec.value, false),
+      blowPierce(equippedSpec.value, true),
+      b.spec.armor
+    )) sawArmour = true
     if (b.spec.spiky) sawSpike = true
     if (b.spec.dodges) sawDodge = true
   }
   // Spikes first: it is the only one of the three that costs the player
   // something to learn the hard way.
   if (sawSpike && !equippedSpec.value.spikeProof) tutor.arm('spike')
-  if (sawArmour) tutor.arm('slam')
+  // Not `arm`: see `armSlam` in `use/useTutorial.ts`. A shell only opens the
+  // window; the ricochet — or the grace running out — puts the lesson on screen.
+  tutor.armSlam(dt, sawArmour)
   if (sawDodge) tutor.arm('dodge')
 }
 
@@ -1096,6 +1141,23 @@ const onStarLand = (): void => playFx('star')
             :target-el="coinBadgeEl"
             @claimed="onChestClaimed"
           )
+            //- The stage's OTHER TWO STARS, live, riding in the chest's own
+            //- column: mounted, hidden and moved as one thing with the chest,
+            //- and gone with it the moment the result screen opens. Two quiet
+            //- marks, not a checklist — see the header of `QuestBadges.vue`.
+            //-
+            //- `score` and `timeLeft` are handed over separately because the
+            //- tally only banks them when the level ENDS: read off the tally
+            //- alone, a score badge would sit at zero all level and a clock
+            //- badge would read as already lost.
+            template(#under)
+              QuestBadges(
+                :objectives="spec.objectives"
+                :tally="game.tally.value"
+                :quota="spec.quota"
+                :score="game.score.value"
+                :time-left="game.timeLeft.value"
+              )
 
       //- The boss bar, under the strip and clear of the chain badge.
       div.scene__boss(v-if="bossShown")
@@ -1395,22 +1457,29 @@ const onStarLand = (): void => playFx('star')
   pointer-events: auto
 
 // ─── Result screen ──────────────────────────────────────────────────────────
-
+//
+// Every ladder here is `clamp(rem, cq, rem)` rather than `clamp(rem, vmin, rem)`.
+// `FReward`'s overlay declares itself a size container, so these resolve against
+// THE BOX THIS CONTENT HAS TO FIT INSIDE — the visible overlay, minus its
+// safe-area padding and minus the band reserved for the continue hint — instead
+// of against a viewport that lies inside a portal iframe and on any mobile
+// browser whose URL bar has not finished collapsing. See the long note on
+// `.reward-overlay`.
 .result
   display: flex
   flex-direction: column
   align-items: center
-  gap: clamp(0.28rem, 1.6vmin, 0.7rem)
+  gap: clamp(0.2rem, 1.3cqmin, 0.6rem)
   width: 100%
 
 .result__stars
-  margin-block: clamp(0.2rem, 1.4vmin, 0.6rem)
+  margin-block: clamp(0.1rem, 1cqmin, 0.45rem)
 
 .result__headline
   display: flex
   flex-direction: column
   align-items: center
-  gap: 0.15rem
+  gap: 0.1rem
 
 .result__level
   color: #fff
@@ -1418,7 +1487,7 @@ const onStarLand = (): void => playFx('star')
   text-transform: uppercase
   text-align: center
   line-height: 1.1
-  font-size: clamp(0.85rem, 4.6vmin, 1.6rem)
+  font-size: clamp(0.82rem, 4.2cqmin, 1.5rem)
   text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
 
 .result__record
@@ -1426,31 +1495,32 @@ const onStarLand = (): void => playFx('star')
   font-weight: 900
   text-transform: uppercase
   letter-spacing: 0.08em
-  font-size: clamp(0.6rem, 3vmin, 0.9rem)
+  line-height: 1.15
+  font-size: clamp(0.58rem, 2.8cqmin, 0.88rem)
   text-shadow: 2px 2px 0 #000
 
 .result__objectives
-  margin-block: clamp(0.1rem, 0.8vmin, 0.3rem)
+  margin-block: clamp(0.05rem, 0.6cqmin, 0.25rem)
 
 .result__chips
   display: flex
   align-items: center
   justify-content: center
   flex-wrap: wrap
-  gap: clamp(0.25rem, 1.6vmin, 0.6rem)
+  gap: clamp(0.22rem, 1.4cqmin, 0.55rem)
 
 .result__chip
   display: inline-flex
   align-items: center
   gap: 0.3em
-  padding: clamp(0.15rem, 1vmin, 0.32rem) clamp(0.45rem, 2.4vmin, 0.8rem)
+  padding: clamp(0.12rem, 0.9cqmin, 0.3rem) clamp(0.42rem, 2.2cqmin, 0.75rem)
   border: 2px solid rgba(255, 255, 255, 0.2)
   border-radius: 999px
   background-color: rgba(8, 14, 28, 0.6)
   color: #fff
   font-weight: 900
   line-height: 1
-  font-size: clamp(0.66rem, 3vmin, 1rem)
+  font-size: clamp(0.64rem, 2.8cqmin, 0.95rem)
   text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.85)
 
 .result__chip-icon
@@ -1473,7 +1543,7 @@ const onStarLand = (): void => playFx('star')
   display: inline-flex
   align-items: center
   gap: 0.4em
-  padding: clamp(0.18rem, 1.1vmin, 0.36rem) clamp(0.5rem, 2.6vmin, 0.9rem)
+  padding: clamp(0.14rem, 1cqmin, 0.32rem) clamp(0.45rem, 2.4cqmin, 0.85rem)
   border: 2px solid rgba(103, 224, 138, 0.7)
   border-radius: 999px
   background-color: rgba(10, 58, 30, 0.7)
@@ -1481,7 +1551,7 @@ const onStarLand = (): void => playFx('star')
   font-weight: 900
   text-align: center
   line-height: 1.15
-  font-size: clamp(0.6rem, 2.8vmin, 0.9rem)
+  font-size: clamp(0.58rem, 2.6cqmin, 0.85rem)
   text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.85)
 
 .result__unlock-icon
@@ -1495,24 +1565,26 @@ const onStarLand = (): void => playFx('star')
   align-items: center
   gap: 0.35em
 
+// Capped at 1.6rem: the coin is a painted 128px mark like the rest of them, and
+// 1.8rem at dpr 2 was already asking it to be upscaled.
 .result__coin-icon
-  width: clamp(1.1rem, 5vmin, 1.8rem)
-  height: clamp(1.1rem, 5vmin, 1.8rem)
+  width: clamp(1rem, 4.4cqmin, 1.6rem)
+  height: clamp(1rem, 4.4cqmin, 1.6rem)
   color: #ffd93c
 
 .result__coin-value
   color: #ffd93c
   font-weight: 900
   line-height: 1
-  font-size: clamp(1rem, 5.4vmin, 1.9rem)
+  font-size: clamp(0.95rem, 4.8cqmin, 1.7rem)
   text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
 
 .result__actions
   display: flex
   align-items: center
   justify-content: center
-  gap: clamp(0.5rem, 3vmin, 1.2rem)
-  margin-top: clamp(0.2rem, 1.4vmin, 0.6rem)
+  gap: clamp(0.5rem, 3cqmin, 1.2rem)
+  margin-top: clamp(0.15rem, 1.1cqmin, 0.5rem)
 
 .sr-only
   position: absolute

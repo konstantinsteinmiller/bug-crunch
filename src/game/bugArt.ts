@@ -881,13 +881,42 @@ let bakePx = 0
 /** Quantise the required pixel size so a window resize of a few px does not
  *  invalidate 72 canvases. */
 const bucket = (px: number): number => {
-  const steps = [64, 96, 128, 160, 200, 256]
+  const steps = [64, 96, 128, 160, 200, 256, 320]
   for (const s of steps) if (px <= s) return s
-  return 256
+  return 320
 }
 
 /**
+ * Device pixels per CSS pixel the bakes are sized for.
+ *
+ * The bake used to be sized in CSS pixels, which meant every body on the board
+ * was blitted into a backing store `devicePixelRatio` times bigger than the box
+ * it was baked for — a flat 2x upscale of the whole cast on any retina screen,
+ * while the foot beside it (drawn straight from paths, never baked) stayed
+ * razor sharp. That difference is visible side by side and is most of what
+ * "the art is a bit not sharp" was.
+ *
+ * Capped at 2 for the same reason the renderer caps its own DPR: past that the
+ * pixels stop paying for themselves. Deliberately NOT the renderer's
+ * quality-tier cap, though, and the distinction matters — that cap exists to
+ * cut the FILL cost per frame, which is set by the DESTINATION size and is
+ * unchanged by how large the source bitmap is. Downscaling a 256 px sprite into
+ * the same box costs the GPU what upscaling a 128 px one did; the only price
+ * here is memory and a one-off bake, so a device that has dropped to the `low`
+ * tier still gets sharp bodies.
+ */
+const BAKE_DPR_CAP = 2
+const bakeDpr = (): number =>
+  typeof window === 'undefined' ? 1 : Math.min(window.devicePixelRatio || 1, BAKE_DPR_CAP)
+
+/**
  * Ask for the cast of the current level to be baked at the current scale.
+ *
+ * `pxPerU` is in CSS pixels, as the renderer's own `pxPerU` is; the device
+ * pixels the frames are actually blitted into are worked out here (`bakeDpr`)
+ * rather than at the two call sites, so the boot bake in `useAssets` and the
+ * resize bake in `useBugCrunchArt` cannot disagree and throw each other's work
+ * away — they ask for the same size without either of them knowing the number.
  *
  * Idempotent, cheap to call every frame, and it does NOT do the work: it fills
  * the queue and `bakeSlice` drains it. That split is what keeps a level change
@@ -900,7 +929,7 @@ export const primeBugs = (ids: readonly BugId[], pxPerU: number): void => {
   let maxSize = 0
   for (const id of ids) maxSize = Math.max(maxSize, bugSpec(id).size)
   if (maxSize <= 0) return
-  const want = bucket(Math.ceil(maxSize * pxPerU * 2 / BUG_R_FRAC))
+  const want = bucket(Math.ceil(maxSize * pxPerU * bakeDpr() * 2 / BUG_R_FRAC))
   if (want !== bakePx) {
     bakes.clear()
     queue.length = 0
