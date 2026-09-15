@@ -147,6 +147,7 @@ export default {
     'score': 'Scoor {n} punten'
   },
   'quests': {
+    'title': 'Sterdoelen',
     'onTrack': '{objective} — op koers',
     'progress': '{objective} — {n}% gedaan',
     'missed': '{objective} — gemist'

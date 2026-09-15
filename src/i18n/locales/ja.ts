@@ -147,6 +147,7 @@ export default {
     'score': '{n} 点をとる'
   },
   'quests': {
+    'title': 'スターもくひょう',
     'onTrack': '{objective} — じゅんちょう',
     'progress': '{objective} — {n}% すすんだ',
     'missed': '{objective} — のがした'

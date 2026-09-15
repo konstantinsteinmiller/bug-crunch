@@ -3,7 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="color-scheme" content="dark only">
-  <link rel="icon" href="/favicon.ico">
+  <!-- Icons.
+       ------------------------------------------------------------------
+       Every href here is an ABSOLUTE public path on purpose: Vite rewrites
+       `href`/`src` attributes against the build's base, so `/favicon.ico`
+       becomes `./favicon.ico` in a `--base=./` portal zip and
+       `/bug-crunch/favicon.ico` on the GitHub path. A relative `./favicon.ico`
+       typed here would ALSO work, but it would stop being rewritten, and the
+       manifest link below has the same contract — keep them the same shape so
+       one of them cannot quietly become the odd one out.
+
+       `/favicon.ico` is first and stays forever: it is a real multi-size ICO
+       (16/32/48, see `scripts/make-brand.mjs`), and some portals and older
+       browsers request `/favicon.ico` off the site root without reading this
+       document at all. The PNG is the modern browsers' preference; the
+       apple-touch icon is the opaque tile iOS puts on a home screen, because
+       iOS composites a transparent icon onto black and a dark ink tile would
+       vanish into it.
+
+       All three are the MARK — the sole on its tile, no lettering. The
+       wordmark is `images/logo/logo_512x512.png`, and at 16 px it is mud;
+       see the header of `scripts/make-brand.mjs`. -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/logo/mark_32x32.png">
+  <link rel="apple-touch-icon" href="/images/logo/mark_180x180.png">
   <!-- CSP meta tag injected by vite.config.ts at build time -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -144,10 +167,23 @@
           height: 100%;
       }
 
-      /* The mark, at its own square. `pnpm brand` writes it edge to edge with a
-         small margin, so nothing is cropped here. */
+      /* The lockup, at its own square.
+         ------------------------------------------------------------------
+         Shown WHOLE — no crop, no offset. `scripts/make-brand.mjs` lays the
+         ink out to fill the square with a small even margin (a few per cent on
+         each side; `tests/ui/brandLockup.test.ts` pins it), so there is nothing
+         to crop away and, more to the point, no measured constant here that has
+         to be re-derived by hand the next time the logo changes.
+
+         The previous pair did have one — this box showed the file square and
+         `FLogoProgress` showed a `margin-top: -16.41%` crop of it measured off
+         the painting then on disk — so the two halves of the handover were
+         different sizes and the logo jumped the moment Vue mounted.
+
+         76%, and `.greet-logo` in FLogoProgress.vue is the same 76%. Change
+         one, change both. */
       .splash-logo {
-          width: 46%;
+          width: 76%;
           aspect-ratio: 1 / 1;
       }
 

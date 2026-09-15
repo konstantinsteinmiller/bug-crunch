@@ -554,40 +554,34 @@ $greet-w: clamp(200px, 58vmin, 340px)
 
 // --- The title -------------------------------------------------------------
 //
-// The logo file is the PWA's 512 icon, so the wordmark sits inside a square with
-// transparent margins, and this window crops to the ink so the card is not
-// mostly empty air. Shown square it would push the percentage off a landscape
-// phone.
+// The lockup, shown WHOLE — no crop, no offset, no measured constant.
 //
-// THE TWO NUMBERS ARE MEASURED, not chosen, and they have to be re-measured
-// whenever the logo is repainted. On the painted wordmark (`still-ui-logo`) the
-// ink runs y = 84..427 of 512:
+// What used to be here was a crop: `aspect-ratio: 512 / 344` with a
+// `margin-top: -16.41%`, both derived by hand from the alpha bbox of whatever
+// `logo_512x512.png` happened to be at the time, with a comment telling the
+// next person to re-measure them after every repaint. Two things were wrong
+// with that. The obvious one is that nobody re-measures: the numbers were
+// taken off a painted wordmark and the file underneath them could change
+// without the crop noticing. The quiet one is that `index.html` showed the
+// SAME file uncropped at a different width, so the two halves of the handover
+// were never the same size — the logo jumped the moment Vue mounted, inside
+// the 400 ms both layers are on screen together.
 //
-//   top     84 / 512 = 0.1641  →  margin-top: -16.41%
-//   height 344 / 512 = 0.6719  →  aspect-ratio: 512 / 344
-//
-// To re-measure after a repaint: alpha bbox of `public/images/logo/
-// logo_512x512.png` at a threshold of 40. The placeholder from
-// `scripts/make-brand.mjs` is a different shape entirely (its ink was a thin
-// band at 0.398..0.600), so a build that still has the placeholder shows the
-// wordmark small and centred rather than wrong — which is the right way round.
-//
-// The offset is a percentage MARGIN, which resolves against the containing
-// block's WIDTH — the same number the image is scaled to — so the crop holds at
-// every size without a media query.
+// `scripts/make-brand.mjs` now lays the ink out to fill its square with a small
+// even margin, so there is nothing to crop, and `tests/ui/brandLockup.test.ts`
+// fails if a future logo stops holding to that. 76%, the same 76% as
+// `.splash-logo` in index.html. Change one, change both.
 .greet-logo
-  width: 100%
-  aspect-ratio: 512 / 344
-  overflow: hidden
+  width: 76%
+  aspect-ratio: 1 / 1
 
   img
     display: block
+    // Both axes stated: the box is already square and the file is square, and
+    // `height: auto` would let the app stylesheet's image reset decide, which
+    // is how the two splashes drift apart again.
     width: 100%
-    // Stated, not `auto`: the tag carries width/height attributes (they keep
-    // the static splash from reflowing when the file lands) and those are
-    // presentational hints that would otherwise pin the height at 512 px.
-    height: auto
-    margin-top: -16.41%
+    height: 100%
 
 .percentage-text
   font-size: clamp(0.9rem, 4vw, 1.35rem)

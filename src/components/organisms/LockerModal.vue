@@ -184,6 +184,12 @@ const equippedName = computed(() => t(`shoes.${equippedShoe.value}.name`))
   display: grid
   grid-template-columns: 1fr
   gap: clamp(0.3rem, 1.6vmin, 0.6rem)
+  // Each card keeps its OWN height. A grid's default `stretch` made every card
+  // in a row as tall as the tallest, so opening one card grew its two or three
+  // neighbours by the same 180px of empty panel — the whole grid ballooned, not
+  // the card that was tapped, and on a 3-column layout that is most of the
+  // Locker. Measured before this: open 313px, closed 313px. After: 313 and 127.
+  align-items: start
 
 @media (min-width: 26rem)
   .locker__grid

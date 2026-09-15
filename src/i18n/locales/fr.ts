@@ -147,6 +147,7 @@ export default {
     'score': 'Marque {n} points'
   },
   'quests': {
+    'title': 'Objectifs étoile',
     'onTrack': '{objective} — en bonne voie',
     'progress': '{objective} — {n}% fait',
     'missed': '{objective} — manqué'

@@ -147,6 +147,7 @@ export default {
     'score': '{n} puan topla'
   },
   'quests': {
+    'title': 'Yıldız hedefleri',
     'onTrack': '{objective} — yolunda',
     'progress': '{objective} — {n}% tamam',
     'missed': '{objective} — kaçırıldı'

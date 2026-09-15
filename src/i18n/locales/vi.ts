@@ -147,6 +147,7 @@ export default {
     'score': 'Ghi {n} điểm'
   },
   'quests': {
+    'title': 'Mục tiêu sao',
     'onTrack': '{objective} — đang đạt',
     'progress': '{objective} — được {n}%',
     'missed': '{objective} — đã lỡ'

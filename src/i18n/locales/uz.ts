@@ -147,6 +147,7 @@ export default {
     'score': '{n} ochko toʻpla'
   },
   'quests': {
+    'title': 'Yulduz maqsadlari',
     'onTrack': '{objective} — yoʻlida',
     'progress': '{objective} — {n}% bajarildi',
     'missed': '{objective} — qoʻldan ketdi'

@@ -6,6 +6,7 @@ import { createI18n } from 'vue-i18n'
 import en from '@/i18n/locales/en'
 import { LANGUAGES } from '@/utils/enums'
 import { emptyTally, type Objective, type ObjectiveTriple, type RunTally } from '@/game/stars'
+import { ICON_PATHS } from '@/components/icons/iconPaths'
 
 /**
  * ─── The two quest badges, during play ──────────────────────────────────────
@@ -42,6 +43,21 @@ const styleOf = (rel: string): string => {
   return body.split('\n').filter((l) => !l.trimStart().startsWith('//')).join('\n')
 }
 
+/**
+ * One indented SASS block, by selector.
+ *
+ * One block at a time on purpose: a `[\\s\\S]` window walks straight out of the
+ * rule it is reading and finds a declaration several selectors further down the
+ * file, which is how a style test passes while asserting nothing.
+ */
+const blockOf = (css: string, selector: string): string => {
+  const at = css.indexOf(`\n${selector}\n`)
+  if (at < 0) return ''
+  const rest = css.slice(at + selector.length + 2).split('\n')
+  const end = rest.findIndex((l) => l.trim() !== '' && !/^[ \t]/.test(l))
+  return rest.slice(0, end < 0 ? rest.length : end).join('\n')
+}
+
 const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages: { en } })
 
 const tally = (o: Partial<RunTally> = {}): RunTally => ({ ...emptyTally(), ...o })
@@ -55,6 +71,7 @@ interface MountOpts {
   quota?: number
   score?: number
   timeLeft?: number
+  spotlight?: boolean
 }
 
 const render = (opts: MountOpts) => mount(QuestBadges, {
@@ -63,8 +80,15 @@ const render = (opts: MountOpts) => mount(QuestBadges, {
 })
 
 const badges = (w: ReturnType<typeof render>) => w.findAll('.quests__badge')
-const offsetOf = (w: ReturnType<typeof render>, i: number): number =>
-  Number(badges(w)[i].find('.quests__fill').attributes('stroke-dashoffset'))
+
+/** How full the star is, 0..100. Published on the badge as `data-fill` so a
+ *  test reads the same number the clip is built from. */
+const fillOf = (w: ReturnType<typeof render>, i: number): number =>
+  Number(badges(w)[i].attributes('data-fill'))
+
+/** The gold star's clip, as the browser gets it. */
+const clipOf = (w: ReturnType<typeof render>, i: number): string =>
+  (badges(w)[i].find('.quests__fill').attributes('style') ?? '').replace(/\s/g, '')
 
 beforeEach(() => {
   spriteFor.mockReset()
@@ -100,33 +124,110 @@ describe('which objectives get a badge', () => {
   })
 })
 
-describe('the ring tracks the live tally', () => {
-  it('shrinks the dash offset as the counter climbs', () => {
+describe('the star fills with the live tally', () => {
+  it('rises as the counter climbs', () => {
     const objectives = triple({ kind: 'combo', n: 8 }, { kind: 'score', n: 1000 })
-    const empty = offsetOf(render({ objectives, tally: tally() }), 0)
-    const part = offsetOf(render({ objectives, tally: tally({ bestCombo: 4 }) }), 0)
-    const full = offsetOf(render({ objectives, tally: tally({ bestCombo: 8 }) }), 0)
-    expect(empty).toBeGreaterThan(part)
-    expect(part).toBeGreaterThan(full)
-    expect(full).toBe(0)
+    const empty = fillOf(render({ objectives, tally: tally() }), 0)
+    const part = fillOf(render({ objectives, tally: tally({ bestCombo: 4 }) }), 0)
+    const full = fillOf(render({ objectives, tally: tally({ bestCombo: 8 }) }), 0)
+    expect(empty).toBe(0)
+    expect(part).toBeGreaterThan(empty)
+    expect(full).toBeGreaterThan(part)
+    expect(full).toBe(100)
+  })
+
+  it('clips the gold star from the TOP, so it fills from the bottom up', () => {
+    // `inset()` percentages resolve against the layer's own border box and the
+    // layer fills the badge, so one number is correct at every viewport. A
+    // half-met objective must hide the TOP half: clipped the other way round,
+    // the star drains away as the player succeeds.
+    const objectives = triple({ kind: 'combo', n: 8 }, { kind: 'combo', n: 4 })
+    const half = render({ objectives, tally: tally({ bestCombo: 4 }) })
+    expect(clipOf(half, 0)).toContain('inset(50.00%000)')
+    expect(clipOf(half, 1)).toContain('inset(0.00%000)')
+    expect(clipOf(render({ objectives, tally: tally() }), 0)).toContain('inset(100.00%000)')
   })
 
   it('reads the LIVE score, which the tally does not carry until the level ends', () => {
     // `finish()` is the only writer of `tally.score`. A badge reading the tally
     // mid-run would sit at zero all level and then jump on the result screen.
     const objectives = triple({ kind: 'combo', n: 8 }, { kind: 'score', n: 1000 })
-    const stale = offsetOf(render({ objectives, tally: tally() }), 1)
-    const live = offsetOf(render({ objectives, tally: tally(), score: 500 }), 1)
-    expect(stale).toBeGreaterThan(live)
-    expect(live).toBeGreaterThan(0)
+    const stale = fillOf(render({ objectives, tally: tally() }), 1)
+    const live = fillOf(render({ objectives, tally: tally(), score: 500 }), 1)
+    expect(live).toBeGreaterThan(stale)
+    expect(live).toBeLessThan(100)
   })
 
-  it('empties the ring on an objective that is gone', () => {
+  it('empties the star on an objective that is gone', () => {
     const w = render({
       objectives: triple({ kind: 'noMiss', n: 12 }, { kind: 'combo', n: 3 }),
       tally: tally({ misses: 13, bestCombo: 1 })
     })
-    expect(offsetOf(w, 0)).toBeCloseTo(2 * Math.PI * 15.5, 3)
+    expect(fillOf(w, 0)).toBe(0)
+  })
+})
+
+describe('the badge says GOAL before it says which goal', () => {
+  it('is drawn as the game own star, not a disc', () => {
+    // The whole point of the rewrite: two glyphs in two roundels read as two
+    // anonymous HUD widgets, and a first-time player has no reason to look at
+    // them twice. A star is this game's universal mark for "a thing you can
+    // earn" — the level card, the rail, the result screen and the world map all
+    // already use it, so the badge wears it too.
+    const w = render({
+      objectives: triple({ kind: 'combo', n: 3 }, { kind: 'noSpike' }),
+      tally: tally()
+    })
+    const star = ICON_PATHS.star.join('')
+    expect(badges(w)).toHaveLength(2)
+    for (const b of badges(w)) {
+      expect(b.find('.quests__plate path').attributes('d')).toBe(star)
+      expect(b.find('.quests__fill path').attributes('d')).toBe(star)
+    }
+  })
+
+  it('never paints a disc behind the star', () => {
+    // A `background-color` on a `border-radius: 999px` box is the roundel this
+    // component was rewritten to stop being, and it would hide the silhouette
+    // that does all the teaching.
+    const block = blockOf(styleOf('src/components/game/QuestBadges.vue'), '.quests__badge')
+    expect(block, 'no .quests__badge rule found — this test was asserting nothing').not.toBe('')
+    expect(block, 'the badge must not be a disc').not.toMatch(/background/)
+    expect(block).not.toMatch(/border-radius/)
+  })
+
+  it('keeps the glyph inside the star well, so two silhouettes never merge', () => {
+    // Measured, not guessed. `ICON_PATHS.star`'s concave vertices sit 4.73 units
+    // from the centre of the 17.9-unit box the badge crops it to, so the well is
+    // 52.8 % of the badge. A glyph wider than that crosses the arms — and half
+    // the glyph table is itself radial (`splat` is a starburst, `target` a set
+    // of rings), which at 22 px turns the badge into one illegible blob. That is
+    // a real screenshot of a real intermediate version, not a hypothetical.
+    const block = blockOf(styleOf('src/components/game/QuestBadges.vue'), '.quests__glyph')
+    const pct = Number(/width:\s*([\d.]+)%/.exec(block)?.[1])
+    expect(pct).toBeGreaterThan(0)
+    expect(pct).toBeLessThan((2 * 4.73 / 17.9) * 100)
+  })
+})
+
+describe('the far end of the lesson that explains these', () => {
+  it('marks every badge while the arrow is travelling, and never otherwise', () => {
+    const objectives = triple({ kind: 'combo', n: 3 }, { kind: 'noSpike' })
+    const quiet = render({ objectives, tally: tally() })
+    for (const b of badges(quiet)) expect(b.classes()).not.toContain('is-spotlit')
+    const lit = render({ objectives, tally: tally(), spotlight: true })
+    for (const b of badges(lit)) expect(b.classes()).toContain('is-spotlit')
+  })
+
+  it('brightens without moving for a player who asked for less motion', () => {
+    // Reduced motion is a request for less movement, not for less teaching: the
+    // pulse goes and the glow stays, so the pair is still the loudest thing in
+    // the corner when the arrow lands on it.
+    const css = styleOf('src/components/game/QuestBadges.vue')
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion'))
+    expect(reduced).toMatch(/\.is-spotlit/)
+    expect(reduced, 'the glow has to survive the pulse being switched off')
+      .toMatch(/\.is-spotlit[\s\S]{0,240}drop-shadow/)
   })
 })
 
@@ -333,6 +434,27 @@ describe('it is information, not a control', () => {
 
 describe('the badge copy ships in every language', () => {
   const KEYS = ['onTrack', 'progress', 'missed'] as const
+
+  it.each(LANGUAGES)('%s names the pair', async (code) => {
+    // The group name is the screen-reader half of the star each badge is drawn
+    // on: a sighted player is told these are goals by the shape, and this is the
+    // same sentence for somebody who cannot see it.
+    const mod = await import(`../../src/i18n/locales/${code}.ts`)
+    const title = (mod.default.quests as Record<string, string> | undefined)?.title
+    expect(typeof title, `${code}.quests.title`).toBe('string')
+    expect(title!.trim().length, `${code}.quests.title is empty`).toBeGreaterThan(0)
+    if (code !== 'en') {
+      expect(title, `${code}.quests.title was never translated`).not.toBe(en.quests.title)
+    }
+  })
+
+  it('hangs that name on the list itself, not on a badge', async () => {
+    const w = render({
+      objectives: triple({ kind: 'combo', n: 3 }, { kind: 'noSpike' }),
+      tally: tally()
+    })
+    expect(w.find('.quests').attributes('aria-label')).toBe(en.quests.title)
+  })
 
   it.each(LANGUAGES)('%s carries every quests key', async (code) => {
     const mod = await import(`../../src/i18n/locales/${code}.ts`)

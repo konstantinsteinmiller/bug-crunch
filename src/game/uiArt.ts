@@ -3,7 +3,8 @@ import {
 } from '@/game/inkArt'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
 import type { GameIconName } from '@/components/icons/iconNames'
-import { spriteFor } from '@/game/art'
+import { onArtChanged, spriteFor } from '@/game/art'
+import { stripFrames } from '@/game/spriteStrip'
 import { JUICE_STYLE, type JuiceStyleId } from '@/game/juiceStyle'
 import type { SplatWord } from '@/game/combo'
 
@@ -21,8 +22,19 @@ import type { SplatWord } from '@/game/combo'
  * and the result banner the DOM shows through a `border-image`.
  */
 
-/** Draw the procedural version even when a painting is available. */
-export interface UiPaintOpts { procedural?: boolean }
+export interface UiPaintOpts {
+  /** Draw the procedural version even when a painting is available. */
+  procedural?: boolean
+  /**
+   * Draw at FULL opacity, whatever the drawable's own alpha is.
+   *
+   * Only the splat reads it, and only the bench sets it. A decal is drawn at
+   * `JuiceStyleSpec.decalAlpha` in play — 0.42 for confetti, 0.12 for bubble —
+   * and a reference exported at that alpha is a reference asking to be painted
+   * as a ghost. The picture goes out solid; the game keeps fading it.
+   */
+  opaque?: boolean
+}
 
 // ─── Comic word pops ────────────────────────────────────────────────────────
 
@@ -134,32 +146,300 @@ const hash = (a: number, b: number): number => {
 }
 
 /**
+ * ─── The painted decal ──────────────────────────────────────────────────────
+ *
+ * The one drawable in this game whose painting cannot be shipped in a colour.
+ *
+ * `stampSplat` is handed the BUG'S OWN goo — an ant leaves magenta, a sprinter
+ * teal, a stinkbug violet, ten designs and ten colours off ONE file — so a
+ * painted splat has to be a GREYSCALE silhouette the game tints, which is the
+ * contract `greyscale: true` already names in the manifest and `TINTED_GLYPHS`
+ * names on the DOM side.
+ *
+ * ── Tinting a painting on a canvas ──
+ *
+ * The DOM's route (`mask-image` + `currentColor`) is not available here: this
+ * composites into an offscreen floor layer, not into a styled node. The lever
+ * is `globalCompositeOperation`, and the choice between its options is the
+ * whole design:
+ *
+ *   ✗ `destination-in` over a flat fill — the mask trick, translated. It keeps
+ *     the painting's ALPHA and throws away every pixel of its shading, which
+ *     would hand back exactly the flat silhouette that painting it was meant to
+ *     replace. Correct for a 20 px button glyph; pointless for a puddle whose
+ *     entire value is its dark centre and its wet rim.
+ *   ✗ `getImageData` + a per-channel colourise — exact, and a full-canvas
+ *     readback. Per stamp that is a GPU sync on the decal layer three hundred
+ *     times a level, against a layer that exists precisely so a stomp costs one
+ *     blit.
+ *   ✗ `ctx.filter` hue-rotate — a hue rotation of grey is grey, so it cannot
+ *     reach an arbitrary goo colour at all, and it is unevenly supported.
+ *   ✓ MULTIPLY, then restore the alpha. `grey × tint` keeps every value the
+ *     painter put down — the dark core stays dark, the mid body takes the goo
+ *     colour, the rim highlight lands at the tint's own brightest. The multiply
+ *     floods the transparent margin with solid tint, so the painting is drawn
+ *     back over it with `destination-in` to cut the silhouette out again. It is
+ *     the same three ops `useVfx.bakePuffSprite` already tints the painted dust
+ *     puff with, which is the precedent this follows rather than inventing.
+ *
+ * Plus one op the puff does not need: a small additive pass of the painting at
+ * `SPLAT_GLOSS`, which puts a wet shine back on top of the flat multiply.
+ * `destination-in` runs last, so nothing it adds escapes the outline.
+ *
+ * ── Why this is baked and cached ──
+ *
+ * Four ops per (variant, colour), once, into a canvas the stamp then blits.
+ * A level's roster is a handful of designs, so the live set is small; the cache
+ * is dropped wholesale past `SPLAT_TINT_BUDGET` rather than evicted one at a
+ * time, because the thing it protects against is a long session drifting
+ * through every world's palette, not a hot loop.
+ *
+ * The bake survives the layer fade for free: `stampSplat` thins the whole decal
+ * canvas with `destination-out`, which multiplies alpha, and a blitted bitmap
+ * is no different there from a path fill.
+ */
+
+/**
+ * Painted splat shapes per sheet.
+ *
+ * FOUR, and the number is the product of two things that were already true.
+ * The stamp ALREADY varies continuously — a free rotation, a foot-speed
+ * stretch, and a seed that moves every finger and droplet — so what a painting
+ * adds is the one axis procedure is worst at: a genuinely different SILHOUETTE.
+ * Four of those multiplied by a continuous rotation is past the point where an
+ * eye finds the repeat on a floor holding `DECAL_BUDGET` marks; nine would be a
+ * bigger sheet, a bigger file and the same floor.
+ *
+ * And four is what this pipeline returns cleanly. A 2x2 lattice is a SQUARE
+ * sheet, which is the shape an image model answers with when left alone, and it
+ * is half a walk sheet — a layout the desk has already brought back right.
+ */
+export const SPLAT_VARIANTS = 4
+export const SPLAT_COLS = 2
+export const SPLAT_ROWS = 2
+
+/**
+ * The seeds the bench draws the four reference panels from. Fixed, so a
+ * re-export is byte-identical and a diff means the art changed.
+ *
+ * The seed is the ONLY thing that varies between them, and deliberately so.
+ * The reference's four panels do come back looking alike, and the tempting fix
+ * is to spread them with the two knobs that actually change a splat's shape —
+ * `stretch` and `angle`. Both are wrong here: they are the FOOT'S motion, and
+ * `paintSplat` applies them to the painting too, so a smeared reference would be
+ * painted smeared and then smeared a second time at every stamp. The panels stay
+ * neutral and the variety is asked for in words instead (`variantBlurbs`).
+ */
+export const SPLAT_REF_SEEDS: readonly number[] = [3, 17, 46, 71]
+
+/**
+ * Which painted sheet each juice style stamps from.
+ *
+ * `JUICE_STYLE`'s rule is that a style changes the PICTURE and the SOUND, never
+ * a number — so the paintings have to split exactly where the pictures already
+ * do, and no further:
+ *
+ *   ooze      a puddle of goo. `splat`.
+ *   bubble    soap. It has no picture of its own TODAY — `paintSplat` draws it
+ *             through the same puddle and the spec's own `decalAlpha` (0.12)
+ *             and `decalScale` (1.2) are what make it "almost no decal at all".
+ *             So it takes the same painting, faded by the same number, and the
+ *             painted build looks like the drawn one did. Giving it a sheet of
+ *             its own would be inventing a difference the styles do not have.
+ *   confetti  piñata. This one DOES branch in the drawing — chips, not a
+ *             puddle — so it gets a sheet of its own. Serving it the goo
+ *             painting would put a puddle under an accessibility style whose
+ *             entire point is that nothing bursts wetly.
+ */
+export const SPLAT_SHEET = {
+  ooze: 'splat',
+  bubble: 'splat',
+  confetti: 'splat-confetti'
+} as const satisfies Record<JuiceStyleId, string>
+
+export type SplatSheetId = (typeof SPLAT_SHEET)[JuiceStyleId]
+
+/**
+ * How far each mark reaches, as a multiple of `r` — the half-width of the box
+ * the painting is blitted into, and of the panel it is painted in.
+ *
+ * `r` is the BODY radius the drawing is built from, and the two pictures do NOT
+ * reach the same distance out of it: a goo splat flings droplets to `r * 2.4`
+ * while a confetti scatter lays its chips inside `r` and stops. Blitting both
+ * into one box would hand the confetti style a decal twice the size of the one
+ * it is drawn at today — a "different picture" the styles never agreed to.
+ *
+ * Two, not 2.4, for the goo. The outermost droplets are specks, and buying room
+ * for them costs the BODY: at 2.4 the puddle is 42 % of its panel, which is a
+ * painter being told to leave most of the frame empty and reliably answering
+ * with a full frame anyway — at 2.4x the size. At 2 the drawing genuinely
+ * nearly fills its panel, so "fill the panel" is both the instruction a model
+ * obeys most reliably AND the truth, and a painting that obeys it lands with
+ * its body on the drawn body. A speck or two clipped at the corner is the
+ * price, and it is paid by the reference, not by the game.
+ *
+ * The bench draws at `half / SPLAT_REACH[sheet]` for the same reason. That one
+ * division is the whole registration between a painted splat and a drawn one.
+ */
+export const SPLAT_REACH: Record<SplatSheetId, number> = {
+  splat: 2,
+  'splat-confetti': 1.2
+}
+
+/** The tinted bake's edge, px. A decal lands at roughly 60–130 px on a phone
+ *  and is soft by design; 192 is already a small upsample at the top of that. */
+const SPLAT_BAKE_PX = 192
+/**
+ * How much of the greyscale painting is added back on top of the tint.
+ *
+ * SMALL, and the number was chosen by looking rather than by reasoning. It
+ * started at 0.3 on the theory that `lighter` adds `grey × k` and therefore
+ * lands mostly on the near-white specular. That theory is true of a painting
+ * with a dark body and false of this one: the splats came back at a mean
+ * luminance of 195, so 0.3 was adding a quarter of full white to EVERY pixel
+ * and the floor filled with pale pastel smears instead of goo.
+ *
+ * The obvious repair — run the additive pass through a curve (the painting
+ * multiplied onto itself two or four times, so only the near-white survives) —
+ * was simulated against this exact file at four settings and came out WORSE
+ * than simply turning the flat pass down: the curve still lifts a body that is
+ * already at 0.78, and it costs a second canvas and three more ops per bake to
+ * do it. So: flat, and 0.12. The painting's own highlight is what reads as the
+ * shine; this only wets it.
+ */
+const SPLAT_GLOSS = 0.12
+/** Tinted bakes kept. Four variants across a level's live goo colours is well
+ *  inside this; the cap is for a session that walks every world. */
+const SPLAT_TINT_BUDGET = 32
+
+const splatTints = new Map<string, HTMLCanvasElement | null>()
+
+/** Does this canvas implementation actually honour a separable blend mode? An
+ *  engine that does not silently leaves `source-over` in place, which would
+ *  paint every splat a flat slab of goo colour — so it is asked once, and a no
+ *  means the drawing keeps drawing. */
+let blendOk: boolean | null = null
+const canBlend = (): boolean => {
+  if (blendOk !== null) return blendOk
+  try {
+    const t = document.createElement('canvas').getContext('2d')
+    if (!t) return (blendOk = false)
+    t.globalCompositeOperation = 'multiply'
+    blendOk = t.globalCompositeOperation === 'multiply'
+  } catch { blendOk = false }
+  return blendOk
+}
+
+/** One greyscale panel, tinted to `colour` with its shading intact. */
+const bakeSplatTint = (
+  panel: HTMLCanvasElement, colour: string
+): HTMLCanvasElement | null => {
+  if (!canBlend()) return null
+  try {
+    const c = document.createElement('canvas')
+    c.width = SPLAT_BAKE_PX
+    c.height = SPLAT_BAKE_PX
+    const t = c.getContext('2d')
+    if (!t) return null
+    const P = SPLAT_BAKE_PX
+    t.drawImage(panel, 0, 0, P, P)
+    // 1. The colour, through the painting's own values.
+    t.globalCompositeOperation = 'multiply'
+    t.fillStyle = colour
+    t.fillRect(0, 0, P, P)
+    // 2. The gloss the multiply flattened.
+    t.globalCompositeOperation = 'lighter'
+    t.globalAlpha = SPLAT_GLOSS
+    t.drawImage(panel, 0, 0, P, P)
+    // 3. The silhouette back — steps 1 and 2 both paint outside it.
+    t.globalAlpha = 1
+    t.globalCompositeOperation = 'destination-in'
+    t.drawImage(panel, 0, 0, P, P)
+    return c
+  } catch { return null }
+}
+
+/**
+ * The painted splat for this style, seed and goo colour — or null, which means
+ * "keep drawing it" exactly as everywhere else in this pipeline.
+ *
+ * WHICH variant is a hash of the seed rather than `seed % n`: the seed is a
+ * counter, so the modulo would deal the four shapes out in a fixed rotation,
+ * and a player who stomps a neat row of bugs would be looking at one.
+ */
+const splatSprite = (
+  style: JuiceStyleId, seed: number, colour: string
+): HTMLCanvasElement | null => {
+  const sheet = SPLAT_SHEET[style]
+  const panels = stripFrames('fx', sheet, 1)
+  if (!panels || panels.length === 0) return null
+  const v = Math.floor(hash(seed, 101) * panels.length) % panels.length
+  const key = `${sheet}|${v}|${colour}`
+  const hit = splatTints.get(key)
+  if (hit !== undefined) return hit
+  if (splatTints.size >= SPLAT_TINT_BUDGET) splatTints.clear()
+  const baked = bakeSplatTint(panels[v]!, colour)
+  splatTints.set(key, baked)
+  return baked
+}
+
+// A tint is made FROM a painting, so it is only as good as the painting it was
+// made from. `stripFrames` drops its own slices when the art layer changes;
+// these are the bakes on top of those, and they have to go with them.
+onArtChanged((change) => {
+  if (!change) splatTints.clear()
+  else if (change.kind === 'fx' && change.id.startsWith('splat')) splatTints.clear()
+})
+
+/**
  * A splat: the mark a squish leaves on the floor, forever.
  *
  * The GDD asks for a decal "procedurally scaled by foot speed and insect mass",
  * stamped into a persistent floor canvas. This is the stamp.
  *
- * Three parts, and all three are needed for it to read as a splat rather than
- * as a blot:
+ * A PAINTING FIRST, when one has decoded — tinted to the goo it came out of,
+ * turned and smeared by the same transform the drawing gets. Otherwise the
+ * drawing, which is three parts and needs all three to read as a splat rather
+ * than as a blot:
  *   1. a central blob with an irregular rim,
  *   2. radiating fingers — the thing that says something BURST,
  *   3. satellite droplets, scattered further out than the fingers reach.
  *
  * `stretch` and `angle` are the foot's motion at the moment of impact: a splat
  * made by a sliding foot is smeared along its travel, which is the cheapest
- * possible way to make a slide feel different from a stomp.
+ * possible way to make a slide feel different from a stomp. BOTH branches apply
+ * them, identically, so a slide leaves the same smear whether the mark under it
+ * is painted or drawn — which is also why the painting itself must be neutral
+ * (see `SPLAT_REF_SEEDS`).
  */
 export const paintSplat = (
   ctx: CanvasRenderingContext2D,
   r: number, colour: string, seed: number,
-  style: JuiceStyleId = 'ooze', stretch = 1, angle = 0
+  style: JuiceStyleId = 'ooze', stretch = 1, angle = 0,
+  opts?: UiPaintOpts
 ): void => {
   const spec = JUICE_STYLE[style]
+  const alpha = opts?.opaque ? 1 : spec.decalAlpha
+
+  if (!opts?.procedural) {
+    const painted = splatSprite(style, seed, colour)
+    if (painted) {
+      const R = r * SPLAT_REACH[SPLAT_SHEET[style]]
+      ctx.save()
+      ctx.globalAlpha = alpha
+      ctx.rotate(angle)
+      ctx.scale(stretch, 1 / Math.max(0.6, Math.sqrt(stretch)))
+      ctx.drawImage(painted, -R, -R, R * 2, R * 2)
+      ctx.restore()
+      return
+    }
+  }
+
   ctx.save()
   ctx.rotate(angle)
   ctx.scale(stretch, 1 / Math.max(0.6, Math.sqrt(stretch)))
   ctx.fillStyle = colour
-  ctx.globalAlpha = spec.decalAlpha
+  ctx.globalAlpha = alpha
 
   if (style === 'confetti') {
     // Chips, not a puddle. Confetti leaves litter.
@@ -226,7 +506,7 @@ export const paintSplat = (
   }
 
   // A darker core, so the puddle has depth rather than being one flat colour.
-  ctx.globalAlpha = spec.decalAlpha * 0.45
+  ctx.globalAlpha = alpha * 0.45
   ctx.fillStyle = 'rgba(0,0,0,1)'
   ctx.beginPath()
   ctx.ellipse(0, 0, r * 0.42, r * 0.36, hash(seed, 3) * 3, 0, Math.PI * 2)

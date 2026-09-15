@@ -42,9 +42,21 @@ const bootShoe = (): ShoeId => {
   return isShoeId(raw) ? raw : STARTER_SHOE
 }
 
-/** The effects a single stomp can fire — wanted before the first stomp, which
- *  on this game is roughly two seconds after the splash clears. */
-const STOMP_FX: readonly string[] = ['ring-stomp', 'ring-slam', 'burst', 'spark', 'smoke']
+/**
+ * The effects a single stomp can fire — wanted before the first stomp, which
+ * on this game is roughly two seconds after the splash clears.
+ *
+ * The two splat sheets are in here for a reason the others are not: the decal is
+ * stamped ONCE into the persistent floor layer and then never redrawn. Every
+ * other effect on this list is re-emitted continuously, so a painting that
+ * arrives late simply starts being used on the next ring. A splat that arrives
+ * late leaves the drawn version burned into the floor for the rest of the level,
+ * next to painted ones — so this is the one tier-0 entry where a miss is
+ * permanent rather than momentary.
+ */
+const STOMP_FX: readonly string[] = [
+  'ring-stomp', 'ring-slam', 'burst', 'spark', 'smoke', 'splat', 'splat-confetti'
+]
 
 /**
  * TIER 0 — what the first screen needs.

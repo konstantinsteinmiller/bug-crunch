@@ -84,6 +84,10 @@ __screenshots__/
 /public/images/rounds/tinified.zip
 /public/images/ui/tinified.zip
 /public-backup/
+# …and the compressor's pristine copies of the promotion deliverables
+# (tools/art-promotion.mjs). The COMPRESSED files in src/assets/promotion/
+# are committed — they are what gets uploaded to a portal.
+/src/assets/promotion-backup/
 
 # The Art Desk archives a replaced painting here (tools/art-desk)
 /art-sheets/painted/replaced/

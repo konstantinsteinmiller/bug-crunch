@@ -213,6 +213,27 @@ const chips = computed<PriceChip[]>(() => {
 const showAdUnlock = computed(() =>
   props.adReady && !props.owned && !props.starLocked && !props.affordable)
 
+/**
+ * Does the tag row still earn its line once the card is open?
+ *
+ * The row exists for the CLOSED card — it is what tells a six-year-old the grid
+ * is a shop, and the header above explains why it is never behind a tap. On the
+ * OPEN card the full-width button sits right below it and says the same thing
+ * louder, so an equipped shoe printed "Worn" twice, an owned one "Wear" twice,
+ * and an affordable one its price twice: two lines of the tallest thing in the
+ * Locker spent on one fact.
+ *
+ * It is dropped only where the BUTTON genuinely carries what the chips carry.
+ * A shoe the player cannot afford keeps its chips, because there the button
+ * shows the SHORTFALL and the chips show the PRICE — the distinction the header
+ * calls out — and a card that showed only "310 more coins" would be telling a
+ * child what they are missing without ever telling them what the thing is
+ * worth. A star-locked shoe keeps both chips for the same reason, and that is
+ * also the only case with a film button in the row.
+ */
+const showTags = computed(() =>
+  !props.open || (!props.owned && !props.affordable))
+
 /** What the one button says, and whether it can be pressed. */
 const action = computed(() => {
   if (props.equipped) return { label: t('locker.worn'), disabled: true, type: 'success' as const }
@@ -243,7 +264,10 @@ const action = computed(() => {
 
     //- The price tag. Never behind a tap: this row is what tells a player the
     //- grid is a SHOP, and it is the whole reason the closed card is legible.
-    div.shoe-card__tags
+    //- It stands down only on an OPEN card whose button already says the same
+    //- thing — see `showTags`, which keeps it wherever the button would show a
+    //- shortfall instead of a price.
+    div.shoe-card__tags(v-if="showTags")
       span.shoe-card__tag(v-for="c in chips" :key="c.key" :class="c.tone")
         IconCoin.shoe-card__tag-icon(v-if="c.icon === 'coin'")
         GameIcon.shoe-card__tag-icon(v-else :name="c.icon")
@@ -481,10 +505,31 @@ const action = computed(() => {
 .shoe-card__trade
   color: #ffb9a8
 
+// Three stat rows, side by side WHERE THEY FIT and stacked where they do not.
+//
+// They were always stacked, which cost three lines — about a third of the open
+// body — on every card at every width, including a one-column phone card that
+// is 300px wide and had room for all three on one line four times over. `wrap`
+// spends the width when there is width and falls back to the old column when
+// there is not, so the narrow three-column card is unchanged and the wide card
+// gets ~30px back. Centred rather than spread: at two-per-line a `space-between`
+// leaves one stat stranded under a gap.
+// A GRID rather than a wrapping flex row, and the difference is legibility
+// rather than tidiness. Wrapped and centred, a row that breaks 2-and-1 puts the
+// second stat's icon hard against the first stat's last pip and centres the
+// orphan under the gap between them, so three groups of five dots read as one
+// run of eleven. On a grid each group sits in a cell of its own and the columns
+// line up whether there are three, two or one of them.
+//
+// `auto-fit` picks the count from the card's real width — three across a
+// one-column phone card, two on a narrow three-column desktop one — so this is
+// one rule instead of a breakpoint per layout.
 .shoe-card__stats
-  display: flex
-  flex-direction: column
-  gap: 0.18rem
+  display: grid
+  grid-template-columns: repeat(auto-fit, minmax(clamp(3.6rem, 10vmin, 4.6rem), 1fr))
+  justify-items: center
+  align-items: center
+  gap: 0.18rem clamp(0.35rem, 1.8vmin, 0.7rem)
   margin: 0
   padding: 0
   list-style: none

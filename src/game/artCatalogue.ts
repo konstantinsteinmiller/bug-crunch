@@ -176,7 +176,13 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, re
     'burst', 'haze', 'salt-cloud', 'spark',
     // The scorch a Fever stomp leaves, and the soft puff every particle bucket
     // tints per emitter (greyscale by contract — see `artSheet.ts`).
-    'scorch', 'smoke'
+    'scorch', 'smoke',
+    // The floor decals, one four-panel VARIATION strip each. Two and not three:
+    // `ooze` and `bubble` already share one picture in `paintSplat` and share
+    // this one, while `confetti` branches to chips and gets its own. Greyscale
+    // by contract — the game tints each stamp to the goo of whatever it came out
+    // of, which is why there cannot be one file per bug colour.
+    'splat', 'splat-confetti'
   ],
   // One seamless floor tile per world. The ids are keyed on the world NUMBER
   // rather than its theme name so `floorArt` can build the id from the level

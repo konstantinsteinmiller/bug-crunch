@@ -147,6 +147,7 @@ export default {
     'score': '{n} ұпай жина'
   },
   'quests': {
+    'title': 'Жұлдыз мақсаттары',
     'onTrack': '{objective} — жоспар бойынша',
     'progress': '{objective} — {n}% дайын',
     'missed': '{objective} — жіберіп алдыңыз'

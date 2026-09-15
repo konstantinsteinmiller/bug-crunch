@@ -75,10 +75,94 @@ describe('the lesson list', () => {
     // header of `game/tutorial.ts`.
     for (const id of [
       'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever',
-      'boss', 'stars', 'chest', 'locker', 'buy'
+      'boss', 'stars', 'quests', 'chest', 'locker', 'buy'
     ] as LessonId[]) {
       expect(LESSON_IDS).toContain(id)
     }
+  })
+})
+
+/**
+ * ─── The one lesson about the HUD rather than the game ──────────────────────
+ *
+ * The level card says, in the player's own language, what the other two stars
+ * want. Then it dissolves and two marks appear under the chest, and nothing
+ * connects the two: a reviewer read the pair as anonymous roundels, and a
+ * six-year-old has less to go on than a reviewer. `quests` is the connection —
+ * an arrow from the words to the marks, run once, while both are on screen.
+ */
+describe('the quest-badge lesson', () => {
+  const quests = lessonSpec('quests')
+
+  it('is a flow, because there is nothing to DO — only something to see', () => {
+    // The same shape as `goal`, which is the other lesson in this game that
+    // explains a relationship rather than a gesture. A hand would be a lie:
+    // there is nothing here to copy.
+    expect(quests.gesture).toBe('flow')
+    expect(quests.holdMs).toBeGreaterThan(0)
+  })
+
+  it('outlives the level card it starts on', () => {
+    // GameScene holds the banner up for exactly as long as this lesson runs. If
+    // the hold were shorter than the lesson the arrow would spend its last
+    // second pointing at empty space, which is the failure it exists to fix.
+    expect(quests.holdMs!).toBeGreaterThan(1700)
+  })
+
+  it('never blacks out a live board to explain a HUD widget', () => {
+    // It lands mid-level, with a clock running and bugs walking. `hole` is
+    // documented as the OPENING scrim, for the beats where the player has
+    // nothing else to be doing.
+    expect(quests.scrim).toBe('soft')
+  })
+
+  it('stops with the board, unlike the lessons that are about modals', () => {
+    // Not `whilePaused`: the level card is not a pause, and a lesson that ran
+    // through one would tick its bail-out away behind the result screen.
+    expect(quests.whilePaused).toBeUndefined()
+  })
+
+  it('yields to every lesson about the game itself', () => {
+    // A caterpillar walking into the foot always wins the screen. This is the
+    // least urgent thing the game ever explains.
+    for (const id of [
+      'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever', 'boss'
+    ] as LessonId[]) {
+      expect(outranks(id, 'quests'), `${id} must outrank quests`).toBe(true)
+    }
+  })
+
+  it('comes after the star row has been explained', () => {
+    // `stars`, on the result screen, is what tells a player a star is a thing
+    // at all. Explaining where the stars live during play before that would be
+    // an answer to a question nobody has yet.
+    expect(outranks('stars', 'quests')).toBe(true)
+  })
+
+  it('can be put back when its moment passes without it getting the screen', () => {
+    // The level card is only up for a moment. A `quests` still sitting in the
+    // queue when it goes has to be shelved rather than played to an empty card
+    // on the next level's clock.
+    tutor.arm('spike')
+    tutor.arm('quests')
+    expect(tutor.activeLesson.value).toBe('spike')
+    tutor.shelve('quests')
+    tutor.complete('spike')
+    expect(tutor.activeLesson.value).toBeNull()
+    expect(tutor.isTaught('quests')).toBe(false)
+    tutor.arm('quests')
+    expect(tutor.activeLesson.value).toBe('quests')
+  })
+
+  it('retires itself after one showing and never returns', () => {
+    tutor.arm('quests')
+    tutor.step(quests.holdMs! - 10)
+    expect(tutor.activeLesson.value).toBe('quests')
+    tutor.step(20)
+    expect(tutor.activeLesson.value).toBeNull()
+    expect(tutor.isTaught('quests')).toBe(true)
+    tutor.arm('quests')
+    expect(tutor.activeLesson.value).toBeNull()
   })
 })
 

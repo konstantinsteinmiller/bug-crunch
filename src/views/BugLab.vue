@@ -8,7 +8,9 @@ import { paintBug, paintBoss, paintSegment, paintDamage } from '@/game/bugArt'
 import { paintShoe, paintFootShadow, paintStompRing, SHOE_FRAC } from '@/game/footArt'
 import { paintHazard } from '@/game/propArt'
 import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
-import { paintComicWord, paintAlert, paintSplat, paintStar } from '@/game/uiArt'
+import {
+  paintComicWord, paintAlert, paintSplat, paintStar, SPLAT_REACH, SPLAT_SHEET
+} from '@/game/uiArt'
 import { JUICE_STYLES, type JuiceStyleId } from '@/game/juiceStyle'
 import type { WorldId } from '@/game/stages'
 
@@ -151,7 +153,13 @@ const drawOne = (ctx: CanvasRenderingContext2D, id: string, half: number): void 
 
 const drawFx = (ctx: CanvasRenderingContext2D, id: string, half: number): void => {
   if (id === 'splat') {
-    paintSplat(ctx, half, '#ff4a9e', 3, style.value, 1, 0)
+    // `half / SPLAT_REACH`, because `r` is the BODY radius and the mark reaches
+    // `r * SPLAT_REACH` — drawn at `half` its droplets were being clipped off by
+    // the cell. Full opacity so the three juice styles are compared as pictures
+    // rather than through their own three alphas, and no `procedural`, so this
+    // is the live check that the painted strip slices and tints.
+    const reach = SPLAT_REACH[SPLAT_SHEET[style.value]]
+    paintSplat(ctx, half / reach, '#ff4a9e', 3, style.value, 1, 0, { opaque: true })
     return
   }
   if (id.startsWith('word-')) {

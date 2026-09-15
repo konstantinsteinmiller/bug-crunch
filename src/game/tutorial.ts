@@ -53,6 +53,7 @@ export type LessonId =
   | 'boss'
   // ── The meta ──
   | 'stars'
+  | 'quests'
   | 'chest'
   | 'locker'
   | 'buy'
@@ -180,10 +181,32 @@ export const LESSONS: readonly Lesson[] = [
   // On the result screen, which is a modal: no scrim of our own.
   lesson({ whilePaused: true, id: 'stars', gesture: 'watch', scrim: 'none', bailoutMs: 6_000, holdMs: 2_600, order: 100 }),
 
-  // ── 11. The chest pays you for coming back. ──
+  // ── 11. Where those words WENT. ──
+  //
+  // The level card spends a second and a half telling the player, in their own
+  // language, what the other two stars want. Then it dissolves, and two glyph
+  // discs appear under the chest — which a first-time player has no way to
+  // connect to anything: a reviewer looking at the HUD read them as "two
+  // anonymous roundels", and a six-year-old has less to go on than a reviewer.
+  //
+  // The information is not missing. The REFERENT is. So this is not a caption
+  // (a caption is the checklist `ObjectiveList` refuses to put on a live board,
+  // and it is the one thing that cannot survive 320 px in twenty-one
+  // languages) — it is a `flow`, the gesture this game already owns for
+  // "THIS causes THAT", run once between the words and the marks while both
+  // are on screen. The card is held up for exactly as long as the arrow needs
+  // it, because an arrow whose tail is over empty space says nothing.
+  //
+  // It sits with the META lessons rather than the board ones on purpose. Every
+  // board lesson outranks it, so a caterpillar walking into the foot always
+  // wins the screen; this is the least urgent thing the game ever explains,
+  // and it is armed at the calmest moment a level has.
+  lesson({ id: 'quests', gesture: 'flow', scrim: 'soft', bailoutMs: 5_200, holdMs: 2_200, order: 105 }),
+
+  // ── 12. The chest pays you for coming back. ──
   lesson({ whilePaused: true, id: 'chest', gesture: 'point', scrim: 'soft', bailoutMs: 9_000, order: 110 }),
 
-  // ── 12-13. The shop, in two halves, because it is two decisions. ──
+  // ── 13-14. The shop, in two halves, because it is two decisions. ──
   //
   // A child who has never opened the Locker does not know a Locker exists, and
   // one looking at an open Locker does not know that the card has to be pressed

@@ -147,6 +147,7 @@ export default {
     'score': '{n} Punkte holen'
   },
   'quests': {
+    'title': 'Sternziele',
     'onTrack': '{objective} — auf Kurs',
     'progress': '{objective} — {n}% geschafft',
     'missed': '{objective} — verpasst'

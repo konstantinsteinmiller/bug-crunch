@@ -12,7 +12,10 @@ import { paintBug, paintBoss, bugFrame, bugFrameEdge, primeBugs, bakeSlice, BUG_
 import { paintShoe, shoeSprite } from '@/game/footArt'
 import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
 import { floorTile, paintFloorTile, FLOOR_TILE_PX, resetFloors } from '@/game/floorArt'
-import { blitBanner, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, BANNER, type UiIconId } from '@/game/uiArt'
+import {
+  blitBanner, paintShockRing, paintSplat, paintUiIcon,
+  UI_ICON_IDS, BANNER, SPLAT_REACH, type SplatSheetId, type UiIconId
+} from '@/game/uiArt'
 import { paintSmokeRef } from '@/use/useVfx'
 import type { WorldId } from '@/game/stages'
 import { SHOE_BOX } from '@/game/artBoxes'
@@ -160,8 +163,17 @@ const drawProcedural = (
           id === 'ring-slam' ? 1.8 : id === 'ring-fever' ? 2.6 : 0.7)
       } else if (id === 'haze') paintHaze(ctx, half, 0, 1)
       else if (id === 'salt-cloud') paintSaltBurst(ctx, half, 0.6)
-      else if (id === 'scorch') paintSplat(ctx, half * 0.6, '#3a2a1e', 7, 'ooze', 1, 0)
-      else if (id === 'smoke') paintSmokeRef(ctx, half)
+      else if (id === 'scorch') {
+        paintSplat(ctx, half * 0.6, '#3a2a1e', 7, 'ooze', 1, 0, { procedural: true })
+      } else if (id.startsWith('splat')) {
+        // The drawn splat this sheet has to beat, in a goo colour rather than
+        // white — the A/B is about whether the painting reads as the same mark
+        // once the game has tinted it, and a white one answers a different
+        // question.
+        paintSplat(ctx, half / SPLAT_REACH[id as SplatSheetId], SPLAT_AB_GOO, 5,
+          id === 'splat-confetti' ? 'confetti' : 'ooze', 1, 0,
+          { procedural: true, opaque: true })
+      } else if (id === 'smoke') paintSmokeRef(ctx, half)
       else {
         ctx.fillStyle = '#fff6c8'
         ctx.beginPath()
@@ -239,10 +251,27 @@ const drawPainted = (
     blitBanner(ctx, 4, CELL / 2 - CELL * 0.12, CELL - 8, CELL * 0.24)
     return
   }
+  if (kind === 'fx' && id.startsWith('splat')) {
+    // Through the game's own path, not a raw blit of the file: the file is a
+    // FOUR-PANEL greyscale strip, so blitting it whole would show a squashed
+    // contact sheet in grey and answer nothing. `paintSplat` slices it, tints it
+    // and places it exactly as the floor does.
+    ctx.save()
+    ctx.translate(CELL / 2, CELL / 2)
+    paintSplat(ctx, half / SPLAT_REACH[id as SplatSheetId], SPLAT_AB_GOO, 5,
+      id === 'splat-confetti' ? 'confetti' : 'ooze', 1, 0, { opaque: true })
+    ctx.restore()
+    return
+  }
   const img = spriteFor(kind as Parameters<typeof spriteFor>[0], id)
   if (!img || !img.naturalWidth) return
   ctx.drawImage(img, CELL / 2 - half, CELL / 2 - half, half * 2, half * 2)
 }
+
+/** The goo the splat A/B is tinted with: the SPRINTER's own, straight out of
+ *  `bugs.ts`. The sheet is greyscale by contract, so a grey A/B would be judging
+ *  the one thing the player never sees — it has to be looked at tinted. */
+const SPLAT_AB_GOO = 'rgb(46,232,196)'
 
 const draw = async (): Promise<void> => {
   primeBugs(BUGS.map((b) => b.id), 3)

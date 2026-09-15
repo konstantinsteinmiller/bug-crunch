@@ -147,6 +147,7 @@ export default {
     'score': 'Набери {n} очок'
   },
   'quests': {
+    'title': 'Цілі на зірки',
     'onTrack': '{objective} — усе йде добре',
     'progress': '{objective} — {n}% готово',
     'missed': '{objective} — втрачено'

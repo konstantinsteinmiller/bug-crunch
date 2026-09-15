@@ -147,6 +147,7 @@ export default {
     'score': 'احصد {n} نقطة'
   },
   'quests': {
+    'title': 'أهداف النجوم',
     'onTrack': '{objective} — على المسار الصحيح',
     'progress': '{objective} — {n}% مُنجز',
     'missed': '{objective} — ضائع'

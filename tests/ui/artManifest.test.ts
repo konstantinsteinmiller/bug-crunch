@@ -10,7 +10,8 @@ import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { BUG_IDS } from '@/game/bugs'
 import { BUG_FRAMES } from '@/game/bugArt'
 import { GAME_ICON_NAMES } from '@/components/icons/iconNames'
-import { UI_ICON_GLYPH } from '@/game/uiArt'
+import { SPLAT_REACH, SPLAT_SHEET, UI_ICON_GLYPH } from '@/game/uiArt'
+import { JUICE_STYLES } from '@/game/juiceStyle'
 
 /**
  * ─── The manifest and the catalogue are one list ────────────────────────────
@@ -222,6 +223,106 @@ describe('the contact sheets', () => {
         expect(Number(m[3]), `${g.id} column`).toBe((i % g.cols) + 1)
         expect(m[4], `${g.id} cell ${i + 1}`).toBe(g.members[i]!.name.replace(/^Icon — /, ''))
       })
+    }
+  })
+})
+
+/**
+ * ─── Variation sheets ───────────────────────────────────────────────────────
+ *
+ * A VARIATION sheet is a multi-panel still whose panels are different takes of
+ * one subject rather than one loop of it — the splat decals. It is cut by the
+ * same arithmetic as a walk cycle and read back by the same `stripFrames`, so
+ * the only thing that can silently go wrong is the ROSTER: `variantBlurbs`
+ * describes panel N, the lattice cuts panel N, and the game picks panel N at
+ * random. A roster one entry short does not fail anything — it just leaves the
+ * last panel unspecified, and what comes back is a duplicate of one of the
+ * others, which is the exact failure this whole sheet exists to avoid.
+ */
+describe('a variation sheet', () => {
+  const variants = STILLS.filter((s) => s.variants)
+
+  it('exists, and every one of them is a real multi-panel lattice', () => {
+    expect(variants.length).toBeGreaterThan(0)
+    for (const s of variants) {
+      const n = s.frames ?? 1
+      expect(n, s.id).toBeGreaterThan(1)
+      expect((s.cols ?? 1) * (s.rows ?? 1), `${s.id} lattice`).toBe(n)
+    }
+  })
+
+  it('describes every panel it asks for, and no panel it does not', () => {
+    for (const s of variants) {
+      if (!s.variantBlurbs) continue
+      expect(s.variantBlurbs.length, `${s.id} roster`).toBe(s.frames ?? 1)
+    }
+  })
+
+  it('numbers that roster in the prompt in the order the lattice is cut', () => {
+    // The same contract the contact sheets have, for the same reason: the game
+    // files panel N under position N, so a description one cell out ships the
+    // wrong picture under the right name.
+    const doc = promptDocs()['PROMPTS-STILLS.md']!
+    for (const s of variants) {
+      if (!s.variantBlurbs?.length) continue
+      const block = doc.slice(doc.indexOf(`## ${s.id} — `))
+      const listed = [...block.slice(0, block.indexOf('THE GRID —'))
+        .matchAll(/^ {2}PANEL (\d+) — row (\d+), column (\d+):/gm)]
+      expect(listed.length, s.id).toBe(s.variantBlurbs.length)
+      listed.forEach((m, i) => {
+        expect(Number(m[1]), `${s.id} panel order`).toBe(i + 1)
+        expect(Number(m[2]), `${s.id} row`).toBe(Math.floor(i / (s.cols ?? 1)) + 1)
+        expect(Number(m[3]), `${s.id} column`).toBe((i % (s.cols ?? 1)) + 1)
+      })
+    }
+  })
+
+  it('is told it is a variation sheet and never an animation', () => {
+    // The one sentence that decides what comes back. Told it is a loop, a
+    // painter hands over four near-identical panels with a wobble.
+    const doc = promptDocs()['PROMPTS-STILLS.md']!
+    for (const s of variants) {
+      const block = doc.slice(doc.indexOf(`## ${s.id} — `), doc.indexOf('```', doc.indexOf(`## ${s.id} — `) + 200))
+      expect(block, s.id).toContain('A VARIATION SHEET')
+      expect(block, s.id).not.toContain('ONE loop of its own movement')
+    }
+  })
+})
+
+/**
+ * ─── The splat decals ───────────────────────────────────────────────────────
+ *
+ * The decal is the one drawable whose painting is tinted PER STAMP to the goo
+ * of whatever it came out of, so its sheets are greyscale by contract and the
+ * renderer picks which sheet by juice style. Two lists have to agree about that
+ * — `SPLAT_SHEET` in the renderer and the manifest's own slots — and nothing at
+ * run time notices when they stop: `stripFrames` returns null for a sheet that
+ * was never painted, and the drawing simply keeps drawing, forever, silently.
+ */
+describe('the splat decals', () => {
+  it('give every juice style a sheet that is actually in the manifest', () => {
+    for (const style of JUICE_STYLES) {
+      const id = SPLAT_SHEET[style]
+      expect(stillBy.has(`fx/${id}`), `${style} -> fx/${id}`).toBe(true)
+      expect((ART_CATALOGUE.fx as readonly string[]), `${style} -> fx/${id}`).toContain(id)
+    }
+  })
+
+  it('paint them colourless, because the game supplies the colour', () => {
+    // `greyscale: false` here would ask for a splat in one fixed colour, and the
+    // multiply tint in `uiArt.bakeSplatTint` would then fight it on every stamp.
+    for (const id of new Set(Object.values(SPLAT_SHEET))) {
+      expect(stillBy.get(`fx/${id}`)!.greyscale, id).toBe(true)
+    }
+  })
+
+  it('give every sheet a reach, so a painting lands at the size the drawing had', () => {
+    // `SPLAT_REACH` is the half-width of the box the painting is blitted into,
+    // as a multiple of the body radius. A sheet with no entry would blit at
+    // `undefined` and vanish.
+    for (const id of new Set(Object.values(SPLAT_SHEET))) {
+      expect(typeof SPLAT_REACH[id], id).toBe('number')
+      expect(SPLAT_REACH[id], id).toBeGreaterThan(0)
     }
   })
 })

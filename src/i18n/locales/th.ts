@@ -147,6 +147,7 @@ export default {
     'score': 'ทำให้ได้ {n} คะแนน'
   },
   'quests': {
+    'title': 'เป้าหมายดาว',
     'onTrack': '{objective} — กำลังไปได้ดี',
     'progress': '{objective} — ไปแล้ว {n}%',
     'missed': '{objective} — พลาดไปแล้ว'

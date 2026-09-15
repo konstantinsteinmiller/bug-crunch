@@ -147,6 +147,7 @@ export default {
     'score': '{n} अंक बनाओ'
   },
   'quests': {
+    'title': 'सितारा लक्ष्य',
     'onTrack': '{objective} — सही राह पर',
     'progress': '{objective} — {n}% पूरा',
     'missed': '{objective} — छूट गया'

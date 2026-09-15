@@ -496,12 +496,36 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       noiseBurst(ctx, { duration: 0.05, gain: vol(0.05), filterFrom: 1800, filterTo: 300, pan })
       break
     case 'stompHeavy':
-      // The slam. A deep body, a wide noise sweep under it, and a short ring —
-      // three voices for the one action the game wants the player to learn.
-      tone(ctx, { freq: 78, toFreq: 34, duration: 0.26, gain: vol(0.26 + p * 0.1), type: 'sine', pan })
-      tone(ctx, { freq: 132, toFreq: 52, duration: 0.16, gain: vol(0.12), type: 'triangle', filter: 900, pan })
-      noiseBurst(ctx, { duration: 0.2, gain: vol(0.14), filterFrom: 3400, filterTo: 180, pan })
-      crackle(ctx, { count: 5, from: 0.02, to: 0.16, gain: vol(0.05), lo: 900, hi: 3200, pan })
+      // ── The slam ──
+      //
+      // The one action the game most wants the player to learn, so it is the
+      // one sound built like a kick drum rather than like a thud: a TRANSIENT
+      // to say it arrived, a BODY to say it was heavy, and a TAIL to say the
+      // floor is still moving.
+      //
+      // The version this replaces had the body and the tail but no transient,
+      // and it read as soft — a drop rather than a hit. The fix is not more
+      // gain: it is the 2 ms click, because the ear places an impact by its
+      // attack and judges its weight by what follows.
+      //
+      // 1. TRANSIENT. A very short, very high noise snap, gone in 25 ms. It is
+      //    what makes the foot land ON something instead of arriving near it.
+      noiseBurst(ctx, { duration: 0.025, gain: vol(0.2), filterFrom: 7000, filterTo: 2200, pan })
+      // 2. THE SUB. Lower and longer than before (62 -> 26 Hz over 340 ms), and
+      //    it carries the charge: a full slam is meaningfully bigger than a
+      //    just-past-the-threshold one, which is what makes holding longer feel
+      //    worth doing.
+      tone(ctx, { freq: 62, toFreq: 26, duration: 0.34, gain: vol(0.3 + p * 0.16), type: 'sine', pan })
+      // 3. THE BODY. A triangle a fifth above the sub, short, so the hit has a
+      //    pitch and not just a rumble — a rumble alone is felt but not heard on
+      //    a phone speaker, which is where most of this game is played.
+      tone(ctx, { freq: 150, toFreq: 58, duration: 0.14, gain: vol(0.16), type: 'triangle', filter: 1100, pan })
+      // 4. THE FLOOR. A wide sweep down into the sub's range: the dust and the
+      //    boards, and the reason the tail does not simply stop.
+      noiseBurst(ctx, { duration: 0.3, gain: vol(0.17), filterFrom: 3800, filterTo: 130, pan })
+      // 5. THE DEBRIS, thrown a little further out in time than before so it
+      //    reads as grit settling rather than as part of the impact.
+      crackle(ctx, { count: 7, from: 0.03, to: 0.24, gain: vol(0.06), lo: 800, hi: 3600, pan })
       break
     case 'charge': {
       // The wind-up: a rising tone the player can time the release against.

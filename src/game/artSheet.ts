@@ -6,7 +6,7 @@ import { WORLDS } from '@/game/stages'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
 import { ART_BRAND, TINTED_GLYPHS, UI_MARK_FOR_GLYPH, artIdForGlyph } from '@/game/artCatalogue'
-import { BANNER } from '@/game/uiArt'
+import { BANNER, SPLAT_COLS, SPLAT_ROWS, SPLAT_VARIANTS } from '@/game/uiArt'
 import { SHOE_BOX } from '@/game/artBoxes'
 
 /**
@@ -109,10 +109,19 @@ const LOOK = [
   '  burst into bright cartoon slime; that is as far as it ever goes.'
 ]
 
-/** The style paragraph pasted into every prompt. `wordmark` swaps the blanket
- *  no-text rule for the one the logo can actually keep. */
-export const houseStyle = (wordmark = false): string =>
-  [...LOOK, ...(wordmark ? WORDMARK_TEXT_RULE : NO_TEXT_RULE), ...GROUND_RULE].join('\n')
+/**
+ * The style paragraph pasted into every prompt.
+ *
+ * `wordmark` swaps the blanket no-text rule for the one the logo can actually
+ * keep. `ground` drops the no-own-ground rule, and exactly one kind of image is
+ * allowed to drop it: a PROMOTION COVER (`promotionSheet.ts`), which is not a
+ * sprite the renderer composites over a floor — it IS the floor, the light and
+ * the shadow, out to its four edges. Every drawable the game blits keeps the
+ * rule, because a painted shadow on one of those arrives as a grey smear that
+ * follows the sprite around and cannot be removed.
+ */
+export const houseStyle = (wordmark = false, ground = true): string =>
+  [...LOOK, ...(wordmark ? WORDMARK_TEXT_RULE : NO_TEXT_RULE), ...(ground ? GROUND_RULE : [])].join('\n')
 
 export const HOUSE_STYLE = houseStyle()
 
@@ -194,36 +203,53 @@ const CAST: Record<BugId, { blurb: string; colour: string; motion: string }> = {
   // pose is described in terms that only exist from above (legs to the LEFT and
   // to the RIGHT of the body, the gaster at the BOTTOM of the panel), and the
   // side view is refused by name. `robobug` is the template that works.
+  // ─── Why this one reads like the worker ant and not like a sprinter ───
+  //
+  // It came back SIDE-ON twice: panel 1 top-down and panels 2-8 a running
+  // profile facing right. The shared `faces: 'top-down'` clause was already in
+  // the prompt both times, so more of it was never the fix.
+  //
+  // Two things were wrong, and the second is the one that bites.
+  //
+  //   1. SPEED WORDS BUY A RUNNING POSE. "sprinter", "about to bolt", "a
+  //      SURGE", "kick out and back", "swept back" are all vocabulary for a
+  //      creature drawn from the side, and a walk-cycle sprite sheet is drawn
+  //      from the side almost everywhere an image model has ever seen one. The
+  //      speed now lives where it cannot be posed: in the LEANER build, the
+  //      chevron and the longer rear legs. Nothing here describes going fast.
+  //
+  //   2. NEGATION STEERS BADLY. The rewrite that failed spent four lines on
+  //      "not a side view, not a profile, not three-quarters on" — which is
+  //      four more mentions of side views than `ant` and `robobug` contain
+  //      between them, and both of those came back correct on the first try.
+  //      Every negation is deleted; what is left is anatomy, in the plain
+  //      register those two use.
+  //
+  // If a return is ever side-on again, shorten this further toward `ant` —
+  // do not lengthen it.
   sprinter: {
-    blurb: 'A sprinter ant from DIRECTLY ABOVE — a pure top-down orthographic view,'
-      + ' the camera hanging straight over the creature and the FLOOR as the'
-      + ' background plane. You are looking at its BACK, with the whole length of the'
-      + ' body laid out down the panel: a round head at the TOP, a narrow waist under'
-      + ' it, and a long lean gaster pointing at the BOTTOM. The SAME three-lobe build'
-      + ' as the worker ant but LEANER, with one pale gold chevron — an arrow head'
-      + ' pointing to the TOP of the panel — on the gaster. All SIX legs are in view'
-      + ' and splayed symmetrically about the body: two to the LEFT and two to the'
-      + ' RIGHT at the front, and the two long rear legs swept back into a wide V that'
-      + ' opens LEFT AND RIGHT past the gaster, flat on the floor. Two antennae point'
-      + ' FORWARD off the head toward the top of the panel and then sweep back, one to'
-      + ' each side, mirrored across the body\'s centre line. Big glossy eyes on top of'
-      + ' the head, blush, and a keen "about to bolt" look. WHAT IT IS NOT: not a side'
-      + ' view, not a profile, not three-quarters on, not seen from the front, never'
-      + ' tilted. No horizon, no ground line, no wall, no floor edge and no shadow'
-      + ' thrown out sideways — there is no sideways from this camera. Its centre line'
-      + ' runs straight up and down the panel and both flanks are equally in view; if'
-      + ' one side of the body is hidden behind the other, the view is wrong.',
+    blurb: 'A lean worker ant seen from DIRECTLY ABOVE: the same three round lobes in'
+      + ' a line as the common ant — a slim abdomen at the bottom, a narrow waist in'
+      + ' the middle, a round head at the top — but longer and slighter all through,'
+      + ' with one pale gold chevron lying flat on the abdomen and pointing up the'
+      + ' panel. Six thin bent legs splayed three a side, the back pair longer than'
+      + ' the rest, and two curling antennae with a little bead on each tip. Two big'
+      + ' glossy eyes on the head looking up the panel, and pink blush. It is alert'
+      + ' and cheerful, never fierce.',
     colour: 'a bright teal body going deep petrol at the waist, a pale gold chevron'
       + ' and pale gold antenna beads, cream belly highlight.',
-    motion: 'A SURGE seen FROM ABOVE, never a gallop drawn from the side: inside the'
-      + ' cycle the whole body slides a little way UP THE PANEL along its own centre'
-      + ' line and settles back, the waist compressing as it goes. The four front legs'
-      + ' run a tripod gait, swinging forward and back ACROSS THE FLOOR with the left'
-      + ' legs staying left of the body and the right legs right of it; all six feet'
-      + ' stay on the floor plane. The two long rear legs kick out and back behind the'
-      + ' gaster, still splayed to either side. The swept antennae never lift. Nothing'
-      + ' rolls and nothing tips: the creature lies flat to the camera in every one of'
-      + ' the eight panels, exactly as it does in every panel of the reference.'
+    // Word for word the common ant's gait, and that is the point: the first
+    // return with the anatomy fixed still swung its centroid 14.5% of the panel
+    // across the cycle (the three sheets that ship sit at 0.2-0.7%), which walks
+    // as a creature sliding sideways. "Reaching a little further than the common
+    // ant's" and "up and down the PANEL" were the two phrases inviting it — one
+    // asks for a bigger leg throw, the other names the panel as something to
+    // move along. The leanness carries the character; the gait does not have to.
+    motion: 'The six legs swing in a TRIPOD gait — front-left, middle-right and'
+      + ' back-left forward together while the other three go back — and the body bobs'
+      + ' a hair up and down. The antennae sweep gently side to side. Nothing else'
+      + ' moves. The body stays dead centre in its panel in all eight: it never slides'
+      + ' left or right, never leans and never tips.'
   },
   beetle: {
     blurb: 'A rhinoceros beetle from DIRECTLY ABOVE: one big glossy domed shell'
@@ -422,6 +448,29 @@ export interface StillSpec {
   rows?: number
   /** What changes between those panels. */
   cycle?: string
+  /**
+   * The panels are DIFFERENT TAKES of the same subject, not one loop of it.
+   *
+   * Four splats, not four frames of one splat. Everything else about a
+   * multi-panel sheet holds — the lattice is the same, the cut is the same
+   * arithmetic, the panels compose into the same strip, and the runtime reads
+   * them back through `stripFrames` — but the SENTENCE that tells the painter
+   * what it is looking at has to be the opposite one, or nine tenths of the
+   * prompt is asking for an animation.
+   */
+  variants?: true
+  /**
+   * One line per panel, saying what THAT panel is.
+   *
+   * Asking for variety in the abstract does not produce it. The first splat
+   * sheet carried "a different outline, a different number of fingers thrown at
+   * different angles" and came back as four round domes with five fingers each,
+   * scoring 0.95–0.97 on a coverage similarity check — four chances spent
+   * painting one picture. A contact sheet gets variety because every cell is
+   * SPELLED OUT (`promptForGrid`'s roster); a variation sheet needs the same
+   * thing for the same reason, and this is it.
+   */
+  variantBlurbs?: readonly string[]
 }
 
 export const framesOf = (s: StillSpec): number => s.frames ?? 1
@@ -453,6 +502,8 @@ interface StillOpts {
   cols?: number
   rows?: number
   cycle?: string
+  variants?: true
+  variantBlurbs?: readonly string[]
   target?: string
   extra?: { target: string; size: number }[]
 }
@@ -485,7 +536,9 @@ const still = (
   frames: o.frames,
   cols: o.cols,
   rows: o.rows,
-  cycle: o.cycle
+  cycle: o.cycle,
+  variants: o.variants,
+  variantBlurbs: o.variantBlurbs
 })
 
 /** The shoes. Portrait panels — the leg needs headroom the shoe body does not. */
@@ -618,6 +671,89 @@ const PROP_STILLS: StillSpec[] = [
     + ' token.', { maxEdge: 128, extra: [{ target: 'images/props/coin_128x128.webp', size: 128 }] })
 ]
 
+/**
+ * ─── The splat decals ───────────────────────────────────────────────────────
+ *
+ * The mark a squish leaves on the floor, and the one drawable whose painting
+ * can never be shipped in a colour: `stampSplat` is handed the BUG'S OWN goo, so
+ * the ant's magenta, the sprinter's teal and the stinkbug's violet all have to
+ * come off the same file. `greyscale: true` is that contract — the painter sends
+ * shape and shading, the game sends the colour (`uiArt.splatSprite`).
+ *
+ * TWO sheets and not one, and not three. `JUICE_STYLE`'s rule is that a style
+ * changes the picture and the sound, never a number, so the paintings split
+ * exactly where the pictures already split and nowhere else: `ooze` and
+ * `bubble` share the goo sheet because they already share `paintSplat`'s puddle
+ * (soap is that same mark at the spec's own 0.12 alpha), and `confetti` gets its
+ * own because it already branches to chips. One sheet would put a wet puddle
+ * under the accessibility style whose whole point is that nothing bursts wetly.
+ *
+ * FOUR panels each, and they are VARIATIONS rather than a loop — see
+ * `SPLAT_VARIANTS` for why four. They are cut and composed exactly as a walk
+ * cycle is and read back with the same `stripFrames`; only the prompt's own
+ * sentence about what it is looking at differs.
+ *
+ * `fit: false` for a reason worth stating, because these are solid paint and
+ * every other `fit: false` here is a glow. The bench measures the fit on PANEL
+ * ZERO and the slicer compares it against the union of every returned panel's
+ * box — which on a variation sheet is systematically larger than any one
+ * panel, by however much the variants differ. Normalising onto it would shrink
+ * every set of splats in proportion to how well the painter varied them. The
+ * size goes in the words instead.
+ */
+const SPLAT_STILLS: StillSpec[] = [
+  still('fx', 'splat', 'Splat decal — goo',
+    'A splash of thick cartoon slime lying flat on the floor, seen from DIRECTLY'
+    + ' ABOVE: a rounded puddle with a glossy domed middle, five or six fat tapering'
+    + ' fingers flung out of it, and two or three loose round droplets settled beyond'
+    + ' their tips. The middle is the darkest tone, a bright wet highlight runs along'
+    + ' the upper-left rim, and every edge is smooth, rounded and fluid — the shape a'
+    + ' dropped scoop of jelly makes. It NEARLY FILLS its panel: the puddle spans about'
+    + ' the middle half of it and the fingertips reach close to the edges.', {
+      greyscale: true, fit: false,
+      frames: SPLAT_VARIANTS, cols: SPLAT_COLS, rows: SPLAT_ROWS, variants: true,
+      cycle: 'Every panel is a DIFFERENT splash — a different outline, a different'
+        + ' body, a different number of fingers and a different scatter of droplets.'
+        + ' Four separate marks of the same goo, listed one by one below, and each'
+        + ' one has to be recognisable as the one described.',
+      variantBlurbs: [
+        'A ROUND one. A single fat circular puddle with SIX short stubby fingers'
+          + ' spaced evenly all the way round it, like a splash seen straight down,'
+          + ' and three small droplets close in.',
+        'A LONG one. The puddle is stretched into an oval running from the lower'
+          + ' left to the upper right, with TWO long thin fingers trailing off the'
+          + ' lower-left end and a line of four droplets continuing past them — a'
+          + ' splash thrown by something moving.',
+        'A LOPSIDED one. A big rounded puddle with all THREE of its fingers thrown'
+          + ' out to one side in a fan, the opposite side smooth and bare, and five'
+          + ' droplets scattered wide on the finger side only.',
+        'A BURST one. TWO puddles of different sizes joined by a narrow neck of'
+          + ' goo, with EIGHT thin spiky fingers of different lengths radiating from'
+          + ' both of them and six small droplets flung far out all round.'
+      ],
+      live: 'The game tints each one to the colour of the creature it came out of and'
+        + ' stamps it flat on the floor, under the bugs, the shoe, the burst and the'
+        + ' shockwave ring — so a panel is only the mark that is left behind.'
+    }),
+  still('fx', 'splat-confetti', 'Splat decal — confetti',
+    'A scatter of paper party confetti lying flat on the floor, seen from DIRECTLY'
+    + ' ABOVE: about twenty small paper chips — rectangles and rounded discs, some'
+    + ' flat, some bent or curled along a fold — thrown out from a common middle and'
+    + ' come to rest. Each chip has a crisp ink edge, a flat face and one soft fold'
+    + ' shadow. The scatter NEARLY FILLS its panel — densest across the middle,'
+    + ' thinning towards the edges — and it is loose litter rather than a heap, with'
+    + ' floor showing between the chips everywhere.', {
+      greyscale: true, fit: false,
+      frames: SPLAT_VARIANTS, cols: SPLAT_COLS, rows: SPLAT_ROWS, variants: true,
+      cycle: 'Every panel is a DIFFERENT scatter: the chips come to rest in different'
+        + ' places, at different angles and in different sizes. Four separate'
+        + ' handfuls, each one its own arrangement.',
+      live: 'The game tints each one to the colour of the creature it came out of and'
+        + ' stamps it flat on the floor, under the bugs, the shoe and the burst — so a'
+        + ' panel is only the litter that is left behind.'
+    })
+]
+
 /** The effects. Every one of these is placed by its own words rather than
  *  fitted, because a glow has no solid box to measure. */
 const FX_STILLS: StillSpec[] = [
@@ -662,11 +798,23 @@ const FX_STILLS: StillSpec[] = [
     + ' and ragged at its edges, as if something very heavy landed there. Flat, matte,'
     + ' no glow.',
     { greyscale: true, fit: false }),
+  // The ONLY consumer of this painting is the dust a stomp throws up
+  // (`useBugCrunchArt`'s `stomp` case, the one `shape: 3` emitter in the game),
+  // so it is written as that and not as generic smoke. A charged stomp now
+  // throws twenty-two of these out fast on a high drag and drops four fat slow
+  // ones on the impact, which is a different job from a drifting cloud: the
+  // edge has to stay legible when the sprite is small and moving, and the
+  // middle has to stack without turning into a grey disc.
   still('fx', 'smoke', 'Dust puff',
-    'One soft round dust puff seen from DIRECTLY ABOVE: a billowy cauliflower cloud'
-    + ' with rounded lobes, lit from the upper left, fading at the edges. Grey and'
-    + ' WHITE only.',
-    { greyscale: true, fit: false })
+    'One puff of floor dust seen from DIRECTLY ABOVE, the kind a heavy boot'
+    + ' throws up as it lands: a rounded billowy cloud of three or four soft'
+    + ' lobes, THICKEST and brightest just off its middle and thinning to nothing'
+    + ' at its edges, with a few specks of grit flung clear of the main body. Lit'
+    + ' from the upper left, so the lobes on that side are pale and the ones away'
+    + ' from it are a soft mid grey. Grey and WHITE only, no colour anywhere. It'
+    + ' is dry dust — loose, airy and soft-edged, with no hard outline around it.',
+    { greyscale: true, fit: false }),
+  ...SPLAT_STILLS
 ]
 
 /** The floors. One tile per world, and every one of them must tile. */
@@ -817,13 +965,39 @@ const UI_STILLS: StillSpec[] = [
  * sizes from `images/logo/`, so its targets are explicit and its `maxEdge` is
  * `exact`.
  */
+/**
+ * ─── A measured limit of this slot ──────────────────────────────────────────
+ *
+ * The splat comes back DARK. Two rolls, the second with the pink stated as
+ * emphatically as the prompt language allows ("BRIGHT HOT PINK — the pink of
+ * bubblegum or a highlighter pen, fully saturated and LIGHTER than the gold
+ * letters in front of it"), and both returned a deep maroon-wine burst rather
+ * than the reference's #ff3f86. The second was darker than the first, and
+ * tighter in the frame as well, so the FIRST roll is the one that ships.
+ *
+ * It costs something real: on the splash the logo sits on a dark plum ground,
+ * where a maroon splat has far less separation than the drawn version's pink
+ * had. The gold lettering carries it, and the lime rim is what keeps the burst
+ * legible at all.
+ *
+ * Do not spend another generation on the wording — that has been tried twice.
+ * If the brighter splat matters more than the painting does, the drawn lockup
+ * is one command away and is not worse, only flatter:
+ *   node scripts/make-brand.mjs --force --only images/logo/logo_,images/icons
+ */
 const LOGO_STILL: StillSpec = still('ui', 'logo', 'Bug Crunch logo',
-  'The word BUG CRUNCH as a chunky hand-drawn cartoon wordmark, painted as if the'
-  + ' letters themselves were squeezed out of bright slime: fat rounded letterforms'
-  + ' with a heavy warm near-black outline, a glossy highlight along the top of every'
-  + ' letter, and a magenta-and-lime splat bursting out from behind the word. Above'
-  + ' or beside the word, one cartoon sneaker sole coming down. On a transparent'
-  + ' background, centred, with a small even margin.', {
+  'The wordmark BUG CRUNCH on TWO LINES, BUG above CRUNCH, both lines the same'
+  + ' width so the pair reads as one square slab. Fat rounded cartoon letterforms'
+  + ' in warm gold, lit from the upper left, each letter carrying a heavy warm'
+  + ' near-black contour and a cream gloss along its top edge, standing on a solid'
+  + ' near-black extrusion a little below and right. Behind the words, a splat'
+  + ' bursting outward in BRIGHT HOT PINK — the pink of bubblegum or a highlighter pen, fully saturated and LIGHTER than the gold letters in front of it — with'
+  + ' vivid lime green under-spatter showing at its points, and a few flung pink'
+  + ' and lime droplets around it. Coming down from the TOP,'
+  + ' overlapping the splat and the top of the word, one chunky cartoon sneaker'
+  + ' sole seen from below — gold, with three rounded lime tread bars across it'
+  + ' and the same near-black contour. Centred, filling the frame with a small'
+  + ' even margin.', {
     w: 1024, h: 1024, maxEdge: 512, exact: true, fit: false, wordmark: true,
     target: ART_BRAND.logo,
     extra: [
@@ -832,6 +1006,39 @@ const LOGO_STILL: StillSpec = still('ui', 'logo', 'Bug Crunch logo',
       { target: 'images/icons/logo_512x512.png', size: 512 },
       { target: 'images/icons/logo_256x256.webp', size: 256 },
       { target: 'images/icons/logo_192x192.png', size: 192 }
+    ]
+  })
+
+/**
+ * The MARK — the lockup with the words taken out.
+ *
+ * A separate slot rather than a resize of the logo, and the reason is measured:
+ * the lockup is a two-line wordmark, and at 16 px on a tab strip two lines of
+ * type average into a smudge. So the small slots get an object instead — the
+ * same sole on the same splat, alone on its own ink tile, which still reads as
+ * a gold thing on pink when it is sixteen pixels across. See the contact sheet
+ * in `tests/ui/brandLockup.test.ts` and the header of `scripts/make-brand.mjs`.
+ *
+ * `bg: 'opaque'` because this one is NOT a cut-out: the tile is the mark. It is
+ * what lets the favicon sit on a light tab strip and a dark one without a halo,
+ * and what iOS composites its home-screen icon from.
+ */
+const MARK_STILL: StillSpec = still('ui', 'mark', 'Bug Crunch mark',
+  'A square app icon, filled edge to edge, with generously rounded corners.'
+  + ' The ground is a deep near-black plum tile. Standing on it, filling most of'
+  + ' the square: one chunky cartoon sneaker sole seen from below — warm gold, lit'
+  + ' from the upper left, with three rounded lime green tread bars across it, a'
+  + ' heavy warm near-black contour and a cream gloss along its top edge. Behind'
+  + ' the sole, a hot pink splat bursting outward with lime green under-spatter'
+  + ' showing at its points. No letters, no words, nothing written anywhere. One'
+  + ' bold object on a tile, readable at the size of a thumbnail.', {
+    w: 1024, h: 1024, maxEdge: 512, exact: true, fit: false, fill: true,
+    bg: 'opaque',
+    target: 'images/logo/mark_512x512.png',
+    extra: [
+      { target: 'images/logo/mark_192x192.png', size: 192 },
+      { target: 'images/logo/mark_180x180.png', size: 180 },
+      { target: 'images/logo/mark_32x32.png', size: 32 }
     ]
   })
 
@@ -1245,6 +1452,7 @@ export const STILLS: StillSpec[] = [
   ...UI_STILLS,
   ...GLYPH_STILLS,
   LOGO_STILL,
+  MARK_STILL,
   MASCOT_STILL
 ]
 
@@ -1394,8 +1602,17 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
     '  the same subject at the same size in the same frame.',
     '',
     ...shapeLines(s.w * colsOf(s), s.h * rowsOf(s)),
+    // A variation sheet and an animation sheet share every rule below and
+    // disagree about only this line — and it is the line that decides what comes
+    // back. Told it is a loop, a painter hands over four near-identical panels
+    // with a wobble; told it is four different marks, it varies them.
     n > 1
-      ? `A SPRITE SHEET: ${n} panels of ONE object through ONE loop of its own movement.`
+      ? (s.variants
+        ? `A VARIATION SHEET: ${n} DIFFERENT versions of the same kind of mark, one`
+          + ' per panel. This is NOT an animation and NOT one object seen four times:'
+          + ' the game picks ONE panel per use, so four panels that resemble each other'
+          + ' are four chances to paint the same picture.'
+        : `A SPRITE SHEET: ${n} panels of ONE object through ONE loop of its own movement.`)
       : 'A SINGLE OBJECT, alone in the frame.',
     'One image comes with this prompt:',
     `  \`art-sheets/${s.file}.png\` — THE LAYOUT: the game's own rough placeholder`,
@@ -1434,7 +1651,18 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
     lines.push('THE GLOW STAYS INSIDE THE FRAME: it may fade to nothing at the edges,'
       + ' but nothing may be clipped off by them.', '')
   }
-  if (n > 1 && s.cycle) lines.push(`THE MOVEMENT: ${s.cycle}`, '')
+  if (n > 1 && s.cycle) {
+    lines.push(`${s.variants ? 'WHAT DIFFERS BETWEEN THE PANELS' : 'THE MOVEMENT'}: ${s.cycle}`, '')
+  }
+  if (n > 1 && s.variants && s.variantBlurbs?.length) {
+    lines.push(
+      `WHAT IS IN EACH PANEL, in reading order — left to right along the top row${rowsOf(s) > 1 ? ', then the next' : ''}:`,
+      '',
+      ...s.variantBlurbs.map((b, i) =>
+        `  PANEL ${i + 1} — row ${Math.floor(i / colsOf(s)) + 1}, column ${(i % colsOf(s)) + 1}: ${b}`),
+      ''
+    )
+  }
   if (n > 1) lines.push(...layoutRules(colsOf(s), rowsOf(s), n), '')
   else if (s.bg === 'magenta') {
     lines.push('THE BACKGROUND is FLAT MAGENTA #FF00FF, edge to edge, with nothing else'
@@ -1669,6 +1897,20 @@ export const promptDocs = (fits?: SheetFits): Record<string, string> => ({
     'pnpm art:status      # what is painted, what is stale, what is still drawn',
     'pnpm compress-folder public/images   # shrink what came back',
     '```',
+    '',
+    'One side step does not go through any of that, because none of it is a',
+    'drawable:',
+    '',
+    '```',
+    'pnpm art:promotion   # the store-page art — cover images at nine sizes in',
+    '                     # jpg + webp, the logo at three, and a favicon.ico,',
+    '                     # painted from the game\'s own cast and compressed into',
+    '                     # src/assets/promotion/',
+    '```',
+    '',
+    'Its plates, prompts and masters live in `promotion/` one folder down, where',
+    'the Art Desk and the slicer cannot see them — a cover is not a sprite and',
+    '`pnpm slice-sheets` would refuse every one. See `src/game/promotionSheet.ts`.',
     '',
     'Turn the painted layer on for one device with `?art=on` in the URL; `?art=off`',
     'puts it back. The build default is `VITE_ENABLE_ART_OVERRIDES` and it ships OFF',

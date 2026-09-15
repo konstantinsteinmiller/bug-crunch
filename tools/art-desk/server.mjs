@@ -28,13 +28,13 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { homedir } from 'node:os'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { loadConfig } from './config.mjs'
 import { IMAGE_EXT, imageSize, scanJobs } from './jobs.mjs'
 import { processReturn, sliceAndCompress } from './pipeline.mjs'
+import { countGeneration, resetAccountCount, usedOnAccount, usedToday } from './usage.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '..', '..')
@@ -172,53 +172,6 @@ const latestDownload = () => {
 }
 
 // ─── By queue: Gemini, throttled ────────────────────────────────────────────
-
-const USAGE = join(homedir(), '.art-desk', 'usage.json')
-const today = () => new Date().toISOString().slice(0, 10)
-const usage = () => { try { return JSON.parse(readFileSync(USAGE, 'utf-8')) } catch { return {} } }
-const usedToday = () => usage()[today()] ?? 0
-
-/**
- * Generations since the last confirmed account switch.
- *
- * Kept under a reserved key rather than a date, so the file stays the
- * day-keyed history it has always been and an older desk reading it just sees
- * one extra entry it ignores. The key is not a date, so it can never collide.
- */
-const ACCOUNT_KEY = '_sinceAccountSwitch'
-
-/**
- * Falls back to TODAY'S count when the key is absent, which is what every
- * install that predates this counter looks like.
- *
- * Starting such an install at 0 would be the wrong way round: it would hand a
- * fresh allowance to an account that has already spent most of one today, and
- * the queue would run straight into Gemini's real refusal — the case this
- * whole mechanism exists to avoid. Today's count is the best evidence
- * available, and it errs towards asking for a switch too early rather than too
- * late. One "Switched account" press corrects it.
- */
-const usedOnAccount = () => {
-  const u = usage()
-  return u[ACCOUNT_KEY] ?? u[today()] ?? 0
-}
-
-const countGeneration = () => {
-  const u = usage()
-  u[today()] = (u[today()] ?? 0) + 1
-  u[ACCOUNT_KEY] = (u[ACCOUNT_KEY] ?? 0) + 1
-  mkdirSync(dirname(USAGE), { recursive: true })
-  writeFileSync(USAGE, JSON.stringify(u, null, 2))
-}
-
-/** Called when a DIFFERENT Google account has been signed in. The day total is
- *  deliberately untouched — it is a record of the day, not of the account. */
-const resetAccountCount = () => {
-  const u = usage()
-  u[ACCOUNT_KEY] = 0
-  mkdirSync(dirname(USAGE), { recursive: true })
-  writeFileSync(USAGE, JSON.stringify(u, null, 2))
-}
 
 const auto = {
   running: false,

@@ -147,6 +147,7 @@ export default {
     'score': 'Zdobądź {n} punktów'
   },
   'quests': {
+    'title': 'Cele gwiazdek',
     'onTrack': '{objective} — na dobrej drodze',
     'progress': '{objective} — {n}% zrobione',
     'missed': '{objective} — przepadło'

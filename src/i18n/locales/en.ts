@@ -215,7 +215,13 @@ export default {
   // `{objective}` is one of the `objectives.*` strings above, already
   // translated and dropped in whole — translate only the tail, and move the
   // placeholder to wherever your language needs it.
+  //
+  // `title` names the PAIR. A sighted player is told what the two discs are by
+  // the star each one is drawn on; this is the same sentence for somebody who
+  // cannot see the star. Two or three words — it is read out before every one
+  // of the badges below it.
   'quests': {
+    'title': 'Star goals',
     'onTrack': '{objective} — on track',
     'progress': '{objective} — {n}% there',
     'missed': '{objective} — missed'

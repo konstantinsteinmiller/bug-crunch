@@ -147,6 +147,7 @@ export default {
     'score': '拿到 {n} 分'
   },
   'quests': {
+    'title': '星星目标',
     'onTrack': '{objective} — 保持中',
     'progress': '{objective} — 已完成 {n}%',
     'missed': '{objective} — 已错过'

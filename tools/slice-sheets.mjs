@@ -787,16 +787,34 @@ try {
           const isMagenta = top[1] < 70 && top[0] > 190 && top[2] > 190;
 
           // ── Painted panel edges ──
-          // How much of each NOMINAL cut line has dark ink on it. The fit above
-          // forgives a drawn divider on purpose (it reads the count through
-          // it), but a return drawn as a comic strip — ruled borders round every
-          // panel, a caption at the top of each — comes back with both inside
-          // the frames. A creature never runs the length of a cut; a rule does.
-          const dark = (k) => {
+          // How much of each NOMINAL cut line is covered by something that is
+          // not the background. The fit above forgives a drawn divider on
+          // purpose (it reads the count through it), but a return drawn as a
+          // comic strip — ruled borders round every panel, a caption at the top
+          // of each — comes back with both inside the frames. A creature never
+          // runs the length of a cut; a rule does, and that is the test: the
+          // GEOMETRY, judged by the 70 % threshold below.
+          //
+          // It used to also require the mark to be DARK, and that made the guard
+          // blind to exactly the sheets that need it most. A sheet that is
+          // colourless by contract is painted in white and grey because the game
+          // tints it -- so it is ruled in WHITE, and a white rule on magenta
+          // scored zero. The splat variation sheets came back with a white cross
+          // down the middle, passed this check reading "grid reads 2x2, as
+          // asked", and shipped four panels each carrying two fully opaque
+          // edges. On the floor that is a bright rectangle drawn round every
+          // decal in the game.
+          //
+          // (No backticks in here: this whole block is a template literal sent
+          // to the page, and one would end it.)
+          const nonGround = (k) => {
             const i = k * 4;
             if (d[i + 3] < 8) return false;
+            // The magenta key, and the ground the painter actually used.
             if (d[i + 1] < 70 && d[i] > 190 && d[i + 2] > 190) return false;
-            return d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 80;
+            if (Math.abs(d[i] - top[0]) < 24 && Math.abs(d[i + 1] - top[1]) < 24
+              && Math.abs(d[i + 2] - top[2]) < 24) return false;
+            return true;
           };
           const ink = (n, m, at, parts) => {
             const out = [];
@@ -807,7 +825,7 @@ try {
               for (let b = 0; b < m; b++) {
                 for (let o = -win; o <= win; o++) {
                   const a = a0 + o;
-                  if (a >= 0 && a < n && dark(at(a, b))) { hit++; break; }
+                  if (a >= 0 && a < n && nonGround(at(a, b))) { hit++; break; }
                 }
               }
               out.push(+(hit / m).toFixed(3));
@@ -828,10 +846,15 @@ try {
       // written between them (the painted deaths came back captioned "THE BLOW
       // LANDS", "IT STAGGERS"…) would be cut into every frame.
       const ruled = [...(got?.inkV ?? []), ...(got?.inkH ?? [])]
-      let dropBorders = false
+      // Asked for by hand, the paint-out runs whether or not the detector saw
+      // the rules. It is the flag's own documented job — "paint the rules out of
+      // the cut lines first" — and a detector that has to agree before an
+      // explicit flag takes effect is a flag that silently does nothing on the
+      // one return whose rules it could not see.
+      let dropBorders = DROP_BORDERS
       if (ruled.some((f) => f > 0.7)) {
-        const shown = `dark ink along ${ruled.filter((f) => f > 0.7).length} of the ${ruled.length}`
-          + ` cut lines (${ruled.map((f) => `${Math.round(f * 100)}%`).join(', ')})`
+        const shown = `a mark running ${ruled.filter((f) => f > 0.7).length} of the ${ruled.length}`
+          + ` cut lines end to end (${ruled.map((f) => `${Math.round(f * 100)}%`).join(', ')})`
         if (!DROP_BORDERS) {
           console.error(`  ✗ panel borders are painted on it — ${shown}.`)
           console.error('    A return ruled like a comic strip carries the rules, and usually')
@@ -877,9 +900,28 @@ try {
             }
             if (${dropBorders}) {
               c2.fillStyle = '#ff00ff';
-              const win = Math.max(3, Math.round(W * 0.008));
+              // The band is a fraction of the PANEL, not of the sheet.
+              //
+              // It used to be W * 0.008, and that is wrong in both directions
+              // because a sheet's width says nothing about how wide a rule drawn
+              // around one panel is. On the 1024-wide, 2-column splat sheet it
+              // came to 8 px against a rule about ten wide, so a one-pixel
+              // residue survived 8 px in — which after the cut sits 4 px inside
+              // every panel, and is then scaled up ~5x when the decal is stamped.
+              // The sheet passed every edge check the pipeline had, because they
+              // all measured the OUTERMOST row, and the rule was no longer on it:
+              // it had been moved inward, not removed. On the floor it is a faint
+              // coloured rectangle drawn around every splat in the game.
+              // Doubling the old constant would have fixed this sheet and eaten
+              // the subject on a 4-column walk strip, where the same 0.8% of a
+              // 1280-wide sheet is already most of a 320-px panel's margin.
+              //
+              // 3% of a panel: 15 px on this sheet (clears it with room), 10 px
+              // on a walk panel (what it was, and safely inside the ~17 px margin
+              // those are authored with).
+              const win = Math.max(3, Math.round((W / ${sheet.cols}) * 0.03));
               for (let i = 1; i < ${sheet.cols}; i++) c2.fillRect(Math.round(W * i / ${sheet.cols}) - win, 0, win * 2, H);
-              const winY = Math.max(3, Math.round(H * 0.008));
+              const winY = Math.max(3, Math.round((H / ${sheet.rows}) * 0.03));
               for (let i = 1; i < ${sheet.rows}; i++) c2.fillRect(0, Math.round(H * i / ${sheet.rows}) - winY, W, winY * 2);
               // The box drawn round the whole sheet goes too, or its sides end
               // up inside the first and last frame of each row.
@@ -1196,8 +1238,23 @@ try {
                   for (let x = 0; x < W2; x++) {
                     const k = y * W2 + x, i = k * 4;
                     if (d[i + 3] < 8) continue;
-                    const touches = (x > 0 && Aa(k - 1) < 8) || (x < W2 - 1 && Aa(k + 1) < 8)
-                      || (y > 0 && Aa(k - W2) < 8) || (y < H2 - 1 && Aa(k + W2) < 8);
+                    // OUTSIDE THE FRAME COUNTS AS EMPTY. The bounds tests used
+                    // to be 'x > 0 &&' / 'y > 0 &&', so a pixel sitting ON the
+                    // frame edge had no neighbour on that side and was therefore
+                    // never eligible for the erode at all — the one place a
+                    // JPEG return's key fringe is most likely to survive, since
+                    // it is also the one place the difference key has the least
+                    // context. A cut-out is authored with a margin by contract,
+                    // so the frame's own rim is background by definition.
+                    //
+                    // Worth what it is and no more: on the painted logo it took
+                    // the border from 556 pixels carrying alpha to 519, and left
+                    // the chest and the splat sheets at a clean 0. The 50 fully
+                    // OPAQUE pixels on that logo's top edge are not fringe and
+                    // are not removed by this — they are the sneaker's shaft,
+                    // which the painting runs off the top of the frame.
+                    const touches = (x === 0 || Aa(k - 1) < 8) || (x === W2 - 1 || Aa(k + 1) < 8)
+                      || (y === 0 || Aa(k - W2) < 8) || (y === H2 - 1 || Aa(k + W2) < 8);
                     if (!touches) continue;
                     const dist = Math.abs(d[i] - 255) + d[i + 1] + Math.abs(d[i + 2] - 255);
                     if (dist >= 300) continue;
@@ -1207,6 +1264,47 @@ try {
                 if (!edits.length) break;
                 for (const [i, a2] of edits) d[i + 3] = a2;
               }
+            }
+
+            // ── Despeckle ──
+            //
+            // A keyed JPEG leaves dust: single pixels, and pairs, that survived
+            // every test above because nothing about them is magenta — they are
+            // grey. On the painted logo there were exactly three, one on the
+            // right rim and two on the left, at alpha 54-68 and rgb ~(71,71,71).
+            //
+            // Three pixels are invisible. What they are NOT is harmless: the
+            // alpha bounding box is how this pipeline measures where art sits —
+            // the bench's fits, the slicer's own normalisation, the brand
+            // tests — and one speck on the rim reports a subject with a 3.5 %
+            // margin as a subject with none, which then reads as "the painting
+            // is clipped" to everything downstream.
+            //
+            // A pixel whose whole 8-neighbourhood is essentially empty is not
+            // part of any shape. Two passes, so a PAIR of touching specks goes
+            // as well; a real edge pixel always has solid neighbours inland and
+            // is never touched.
+            for (let pass = 0; pass < 2; pass++) {
+              const W2 = p.sw, H2 = p.sh;
+              const gone = [];
+              for (let y = 0; y < H2; y++) {
+                for (let x = 0; x < W2; x++) {
+                  const i = (y * W2 + x) * 4;
+                  if (d[i + 3] < 8) continue;
+                  let around = 0;
+                  for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                      if (!dx && !dy) continue;
+                      const nx = x + dx, ny = y + dy;
+                      if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue;
+                      around += d[(ny * W2 + nx) * 4 + 3];
+                    }
+                  }
+                  if (around < 160) gone.push(i);
+                }
+              }
+              if (!gone.length) break;
+              for (const i of gone) d[i + 3] = 0;
             }
 
             // ── Spill suppression ──

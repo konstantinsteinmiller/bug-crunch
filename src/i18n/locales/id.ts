@@ -147,6 +147,7 @@ export default {
     'score': 'Kumpulkan {n} poin'
   },
   'quests': {
+    'title': 'Target bintang',
     'onTrack': '{objective} — sesuai jalur',
     'progress': '{objective} — {n}% selesai',
     'missed': '{objective} — terlewat'

@@ -165,6 +165,34 @@ export const shake = (amp: number): void => {
   shakeAmp = Math.min(1, Math.max(shakeAmp, amp))
 }
 
+// ─── The kick ───────────────────────────────────────────────────────────────
+//
+// A shake is a WOBBLE: two sines with no direction, which reads as the camera
+// being rattled. An impact is not a rattle — it happens once, along a line, and
+// it is over. The slam had only the wobble, and that is most of why a charged
+// stomp landed soft: at the moment of contact the screen started vibrating
+// instead of taking a hit.
+//
+// So this is a single decaying OFFSET along a direction, layered over the
+// wobble. It decays in ~140 ms against the wobble's ~400: the jolt is gone
+// while the rattle is still settling, which is the order those things happen in
+// when something heavy hits a floor.
+let kickX = 0
+let kickY = 0
+let kickAmp = 0
+
+/** One directional jolt. `dx`/`dy` need not be normalised; `amp` is 0..1 and
+ *  scales against the screen's short edge exactly as `shake` does. */
+export const kick = (dx: number, dy: number, amp: number): void => {
+  const len = Math.hypot(dx, dy) || 1
+  // The strongest kick in flight wins, rather than summing: two impacts in one
+  // frame are one event to the eye, and adding them throws the camera.
+  if (amp <= kickAmp) return
+  kickX = dx / len
+  kickY = dy / len
+  kickAmp = Math.min(1, amp)
+}
+
 export const punchZoom = (amount: number): void => {
   zoom = Math.max(zoom, amount)
 }
@@ -177,6 +205,9 @@ export const screenFlash = (amount: number, rgb = '255,255,255'): void => {
 const stepCamera = (dt: number): void => {
   shakeT += dt
   shakeAmp = Math.max(0, shakeAmp - dt / 420)
+  // Three times the wobble's rate: the jolt is spent while the rattle is still
+  // settling. See `kick`.
+  kickAmp = Math.max(0, kickAmp - dt / 140)
   zoom = Math.max(0, zoom - dt / 300)
   flash = Math.max(0, flash - dt / 240)
 }
@@ -358,21 +389,61 @@ export const applyEvents = (list: readonly GameEvent[]): void => {
         break
       case 'stomp': {
         const r = e.r
+        // ── The charged stomp is the game's best verb, so it gets the loudest
+        // ── landing. Everything below is doubled up for `heavy` and left alone
+        // ── for a tap: the CONTRAST is the reward for holding the press, and a
+        // ── light stomp that lands as hard as a slam teaches nothing.
         pushRing(e.x, e.y, r * 1.1, e.heavy ? 420 : 260,
           e.heavy ? 'rgba(255,232,150,0.95)' : 'rgba(255,255,255,0.8)', e.heavy ? 1.6 : 1)
+        // A second, faster ring on a slam only — one ring is an event, two
+        // chasing each other outward is a shockwave.
+        if (e.heavy) pushRing(e.x, e.y, r * 1.9, 260, 'rgba(255,255,255,0.7)', 0.9)
+
         const tier = qualityTier()
-        const n = tier === 'min' ? 0 : e.heavy ? 16 : 7
+        const n = tier === 'min' ? 0 : e.heavy ? 22 : 7
         for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2
+          // Jittered off the ring rather than evenly spaced: identical spokes
+          // at one radius read as a NECKLACE of puffs, which is what the first
+          // cut of this looked like on the board — the eye finds the ring
+          // before it reads the dust. Angle, radius, speed and size are all
+          // jittered, so it comes out as a cloud with a hole in the middle.
+          const a = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.7
+          const rad = r * (e.heavy ? 0.45 + Math.random() * 0.55 : 0.7)
+          const speed = e.heavy ? 34 + Math.random() * 22 : 22
           emitParticle({
-            x: e.x + Math.cos(a) * r * 0.7, y: e.y + Math.sin(a) * r * 0.7,
-            vx: Math.cos(a) * 22, vy: Math.sin(a) * 22,
-            life: 420, size: r * 0.16,
-            color: [230, 226, 216], alpha: 0.5, drag: 4.5, shape: 3
+            x: e.x + Math.cos(a) * rad, y: e.y + Math.sin(a) * rad,
+            vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+            // High drag with a high launch speed is what makes dust read as
+            // DISPLACED AIR: it shoots out, stalls, and hangs. Same particle at
+            // a low speed just drifts.
+            life: e.heavy ? 520 : 420,
+            size: r * (e.heavy ? 0.15 + Math.random() * 0.12 : 0.16),
+            color: [230, 226, 216], alpha: e.heavy ? 0.6 : 0.5,
+            drag: e.heavy ? 6.5 : 4.5, shape: 3
           })
         }
-        shake(e.heavy ? 0.45 : 0.12)
-        if (e.heavy) punchZoom(0.012)
+        // A few fat, slow puffs sitting ON the impact — the cloud the ring runs
+        // out of, rather than more of the same spokes.
+        if (e.heavy && tier !== 'min') {
+          for (let i = 0; i < 4; i++) {
+            const a = Math.random() * Math.PI * 2
+            emitParticle({
+              x: e.x + Math.cos(a) * r * 0.3, y: e.y + Math.sin(a) * r * 0.3,
+              vx: Math.cos(a) * 9, vy: Math.sin(a) * 9,
+              life: 720, size: r * 0.42,
+              color: [226, 220, 208], alpha: 0.4, drag: 7, shape: 3
+            })
+          }
+        }
+
+        shake(e.heavy ? 0.5 : 0.12)
+        if (e.heavy) {
+          // Straight DOWN: the floor takes the blow. An outward kick along the
+          // foot's travel was tried and reads as the camera being shoved, which
+          // is a different event from something landing on the ground.
+          kick(0, 1, 0.45 + 0.25 * Math.min(1, r / 12))
+          punchZoom(0.022)
+        }
         break
       }
       case 'pivot':
@@ -470,10 +541,23 @@ export const drawScene = (
   ctx.clearRect(0, 0, cssW, cssH)
 
   // ── Camera transform ──
-  if (shakeAmp > 0.001 || zoom > 0.001) {
-    const amp = shakeAmp * shakeAmp * Math.min(cssW, cssH) * 0.026
-    const sx = Math.sin(shakeT / 23) * amp
-    const sy = Math.cos(shakeT / 17) * amp
+  if (shakeAmp > 0.001 || zoom > 0.001 || kickAmp > 0.001) {
+    const edge = Math.min(cssW, cssH)
+    // The wobble. Squared on purpose — it keeps a light stomp's rattle under
+    // the threshold of "the screen is moving" while leaving room at the top for
+    // a boss death.
+    const amp = shakeAmp * shakeAmp * edge * 0.026
+    // The jolt. NOT squared, and that is the point: a kick is meant to be felt
+    // at small amplitudes, which is exactly what squaring takes away. Eased so
+    // it leaves fast and returns slowly, the way a struck thing settles.
+    // 0.015 of the short edge at full amplitude — about 10 px on a 900 px
+    // screen. Measured against the alternatives on a real board: 0.022 came
+    // out at 14 px, which is a cinematic jolt and too much for an action the
+    // player performs every couple of seconds, and the old wobble-only slam
+    // peaked at 4.7 px, which is under the threshold of being felt at all.
+    const k = kickAmp * kickAmp * (3 - 2 * kickAmp) * edge * 0.015
+    const sx = Math.sin(shakeT / 23) * amp + kickX * k
+    const sy = Math.cos(shakeT / 17) * amp + kickY * k
     ctx.translate(cssW / 2, cssH / 2)
     ctx.scale(1 + zoom, 1 + zoom)
     ctx.translate(-cssW / 2 + sx, -cssH / 2 + sy)
@@ -900,6 +984,7 @@ export const resetArt = (): void => {
   arcs.length = 0
   coins.length = 0
   shakeAmp = 0
+  kickAmp = 0
   zoom = 0
   flash = 0
   resetDecals()

@@ -1,0 +1,349 @@
+{
+  "version": "Bug Crunch 0.2.1",
+  "versionId": "7b0855a6-5a57-4271-aa80-1dca7b82418b",
+  "when": "2026-09-15T12:15:17.556Z",
+  "inspector": "https://inspector.poki.dev/?game=poki-7b0855a6-5a57-4271-aa80-1dca7b82418b",
+  "evidence": {
+    "sdkInit": {
+      "verdict": "pass",
+      "evidence": "Event log: \"SDK initialized\""
+    },
+    "loadingFinished": {
+      "verdict": "pass",
+      "evidence": "Event log: gameLoadingFinished"
+    },
+    "gameplayStart": {
+      "verdict": "pass",
+      "evidence": "fired after a trusted pointer gesture"
+    },
+    "pauseBracket": {
+      "verdict": "pass",
+      "evidence": "a gameplayStop followed another tab taking the foreground"
+    },
+    "commercialBreak": {
+      "verdict": "unproven",
+      "evidence": "no commercial break within 120 s of play, even with \"Force show ads\" on"
+    },
+    "adAudioMuted": {
+      "verdict": "unproven",
+      "evidence": "no break occurred to sample audio during"
+    },
+    "adNotInterrupted": {
+      "verdict": "unproven",
+      "evidence": "no break occurred to interrupt"
+    },
+    "gameplayStop": {
+      "verdict": "pass",
+      "evidence": "Event log: Gameplay stop"
+    },
+    "noDuplicates": {
+      "verdict": "pass",
+      "evidence": "sequence: start → stop → start → stop → start"
+    },
+    "rewardedBreak": {
+      "verdict": "unproven",
+      "evidence": "no `hooks.triggerRewarded` configured — only the player can open a rewarded ad"
+    },
+    "noCrashes": {
+      "verdict": "pass",
+      "evidence": "no uncaught errors, canvas still alive after the pass"
+    },
+    "noBreakingBugs": {
+      "verdict": "unproven",
+      "evidence": "not a machine-decidable step — play the build"
+    },
+    "savesProgress": {
+      "verdict": "unproven",
+      "evidence": "the game frame did not come back after a reload"
+    },
+    "incognito": {
+      "verdict": "unproven",
+      "evidence": "needs a separate incognito context — run the build once in an incognito window"
+    },
+    "noExternal": {
+      "verdict": "pass",
+      "evidence": "8 host(s) requested, all Poki or its ad stack"
+    },
+    "cookieLabels": {
+      "verdict": "pass",
+      "evidence": "the game sets no cookies"
+    },
+    "usernameFilter": {
+      "verdict": "na",
+      "evidence": "no in-game usernames (config: declares.usernames)"
+    },
+    "chatModeration": {
+      "verdict": "na",
+      "evidence": "no in-game chat (config: declares.chat)"
+    },
+    "resizeDynamic": {
+      "verdict": "pass",
+      "evidence": "640x360 → canvas 640x360 in 640x360 (100%x100%) | 836x470 → canvas 836x470 in 836x470 (100%x100%) | 1031x580 → canvas 1031x580 in 1031x580 (100%x100%)"
+    },
+    "mobileScaling": {
+      "verdict": "pass",
+      "evidence": "portrait 414x736 → canvas 414x736 in 414x736"
+    },
+    "mobilePlayable": {
+      "verdict": "unproven",
+      "evidence": "renders at phone size; whether it PLAYS there needs a real device or the Inspector QR code"
+    },
+    "mobileControls": {
+      "verdict": "unproven",
+      "evidence": "confirm the on-screen controls by hand on a phone"
+    },
+    "focusScroll": {
+      "verdict": "pass",
+      "evidence": "space and arrow keys did not scroll the host page"
+    },
+    "pointerLock": {
+      "verdict": "na",
+      "evidence": "the game never requests pointer lock"
+    },
+    "adblock": {
+      "verdict": "unproven",
+      "evidence": "could not read the game frame with ad hosts blocked"
+    }
+  },
+  "applied": [
+    {
+      "id": "sdk-init",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "sdkInit",
+      "verdict": "pass",
+      "action": "already ticked"
+    },
+    {
+      "id": "loading-finished",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "loadingFinished",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "gameplay-start",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "gameplayStart",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "gameplay-stop",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "gameplayStop",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "pause-bracket",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "pauseBracket",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "no-duplicates",
+      "module": "SDK Basics",
+      "match": {},
+      "probe": "noDuplicates",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "no-crashes",
+      "module": "Technical Stability",
+      "match": {},
+      "probe": "noCrashes",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "no-breaking-bugs",
+      "module": "Technical Stability",
+      "match": {},
+      "probe": "noBreakingBugs",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "saves-progress",
+      "module": "Technical Stability",
+      "match": {},
+      "probe": "savesProgress",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "incognito",
+      "module": "Technical Stability",
+      "match": {},
+      "probe": "incognito",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "mobile-playable",
+      "module": "Mobile Optimization",
+      "match": {},
+      "probe": "mobilePlayable",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "mobile-scaling",
+      "module": "Mobile Optimization",
+      "match": {},
+      "probe": "mobileScaling",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "mobile-controls",
+      "module": "Mobile Optimization",
+      "match": {},
+      "probe": "mobileControls",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "no-external",
+      "module": "Privacy & Security",
+      "match": {},
+      "probe": "noExternal",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "cookie-labels",
+      "module": "Privacy & Security",
+      "match": {},
+      "probe": "cookieLabels",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "username-filter",
+      "module": "Privacy & Security",
+      "match": {},
+      "probe": "usernameFilter",
+      "verdict": "na",
+      "action": "ticked (not applicable to this game)"
+    },
+    {
+      "id": "chat-moderation",
+      "module": "Privacy & Security",
+      "match": {},
+      "probe": "chatModeration",
+      "verdict": "na",
+      "action": "ticked (not applicable to this game)"
+    },
+    {
+      "id": "resize-dynamic",
+      "module": "Playground Integration",
+      "match": {},
+      "probe": "resizeDynamic",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "adblock",
+      "module": "Playground Integration",
+      "match": {},
+      "probe": "adblock",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "focus-scroll",
+      "module": "Playground Integration",
+      "match": {},
+      "probe": "focusScroll",
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
+    },
+    {
+      "id": "commercial-breaks",
+      "module": "Ad Implementation",
+      "match": {},
+      "probe": "commercialBreak",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "rewarded-breaks",
+      "module": "Ad Implementation",
+      "match": {},
+      "probe": "rewardedBreak",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "ad-audio-muted",
+      "module": "Ad Implementation",
+      "match": {},
+      "probe": "adAudioMuted",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "ad-not-interrupted",
+      "module": "Ad Implementation",
+      "match": {},
+      "probe": "adNotInterrupted",
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
+    },
+    {
+      "id": "pointer-lock",
+      "module": "Ad Implementation",
+      "match": {},
+      "probe": "pointerLock",
+      "verdict": "na",
+      "action": "ticked (not applicable to this game)"
+    }
+  ],
+  "warnings": [],
+  "hosts": [
+    [
+      "65a6c74e-f283-4b8b-b72e-78206eaeb581.gdn.poki.com",
+      305
+    ],
+    [
+      "game-cdn.poki.com",
+      4
+    ],
+    [
+      "a.poki-cdn.com",
+      7
+    ],
+    [
+      "geo.poki.io",
+      2
+    ],
+    [
+      "ads.poki.com",
+      2
+    ],
+    [
+      "api.poki.com",
+      1
+    ],
+    [
+      "v.poki-cdn.com",
+      1
+    ],
+    [
+      "t.poki.io",
+      2
+    ]
+  ],
+  "consoleErrors": [
+    "%cPOKI:%c game error font-weight: bold  NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41",
+    "NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41952cd3d19a0720e382263d418ba1425bf9/poki-sdk-core-968b41952cd3d19a0720e382263d418ba1425bf9.js:1:155850)\n    at https://game-cdn.poki.com/scripts/968b41952cd3d19a0720e382263d418ba1425bf9/poki-sdk-core-968b41952cd3d19a0720e382263d418ba1425bf9.js:1:156356"
+  ]
+}

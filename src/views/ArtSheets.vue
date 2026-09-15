@@ -8,7 +8,10 @@ import { paintBug, paintBoss, BUG_R_FRAC } from '@/game/bugArt'
 import { paintShoe } from '@/game/footArt'
 import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
 import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
-import { paintBanner, paintChest, paintShockRing, paintSplat, paintUiIcon, UI_ICON_IDS, type UiIconId } from '@/game/uiArt'
+import {
+  paintBanner, paintChest, paintShockRing, paintSplat, paintUiIcon,
+  SPLAT_REACH, SPLAT_REF_SEEDS, UI_ICON_IDS, type SplatSheetId, type UiIconId
+} from '@/game/uiArt'
 import { paintSmokeRef } from '@/use/useVfx'
 import { shoeSpec, type ShoeId } from '@/game/shoes'
 import { bugSpec, type BugId } from '@/game/bugs'
@@ -265,8 +268,34 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
           }
           break
         case 'scorch':
-          paintSplat(ctx, half * 0.62, '#3a2a1e', 7, 'ooze', 1, 0)
+          // `procedural` on every splat below, and here: `paintSplat` now
+          // prefers the painting, and a reference drawn FROM the painting is a
+          // reference that agrees with itself and proves nothing. Rule 1 of this
+          // bench.
+          paintSplat(ctx, half * 0.62, '#3a2a1e', 7, 'ooze', 1, 0, { procedural: true })
           break
+        case 'splat':
+        case 'splat-confetti': {
+          // One of the four variants, chosen by which panel of the strip this
+          // is. `cycle` is `i / frames`, so this is the panel index back.
+          const v = Math.round(cycle * framesOf(s)) % SPLAT_REF_SEEDS.length
+          // WHITE, because the sheet is greyscale by contract — the game tints
+          // every stamp to the goo it came out of — and at FULL opacity, because
+          // the alpha it is stamped at is the game's to apply and a reference
+          // faded to 0.42 is a reference asking to be painted as a ghost.
+          //
+          // `half / SPLAT_REACH[id]` is the whole registration: the drawing
+          // reaches `r * SPLAT_REACH` and the runtime blits the painting into a
+          // box of exactly that half-width, so a drawn splat and a painted one
+          // are the same size on the floor. Per sheet, because goo throws
+          // droplets twice as far as confetti lays chips.
+          paintSplat(
+            ctx, half / SPLAT_REACH[s.id as SplatSheetId], '#ffffff', SPLAT_REF_SEEDS[v]!,
+            s.id === 'splat-confetti' ? 'confetti' : 'ooze', 1, 0,
+            { procedural: true, opaque: true }
+          )
+          break
+        }
         case 'smoke':
           paintSmokeRef(ctx, half * 0.94)
           break
@@ -551,6 +580,10 @@ const buildIndex = () => ({
   ]
 })
 
+/** Stills whose reference `scripts/make-brand.mjs --references` owns. See the
+ *  skip in the export loop for why they are not drawn here. */
+const BRAND_REFERENCES = new Set(['logo', 'mark'])
+
 // ─── Export ─────────────────────────────────────────────────────────────────
 
 const save = async (name: string, payload: { dataUrl?: string; text?: string }): Promise<void> => {
@@ -617,6 +650,21 @@ const exportSheets = async (): Promise<void> => {
 
     const stillKeys: { title: string; sub: string; cv: HTMLCanvasElement }[] = []
     for (const s of STILLS) {
+      // The brand's two references are written by `scripts/make-brand.mjs`
+      // (`--references`), not here, and must survive an export rather than be
+      // overwritten by it.
+      //
+      // Every other reference is drawn by whatever draws the thing at run time.
+      // The brand's run-time drawing IS that script: the splash and the manifest
+      // read the bitmaps it rasterises, so a second rendering here would be a
+      // drawing of a drawing. This branch was exactly that, and it was wrong —
+      // it set BUG CRUNCH as ONE line at `s.h * 0.26`, about 1050 px of advances
+      // on a 1024 panel before a 61 px stroke, so the reference a painter worked
+      // from ran off both edges and was not the lockup the game shows anyway.
+      if (BRAND_REFERENCES.has(s.id)) {
+        status.value = `skipping ${s.file} (owned by make-brand)`
+        continue
+      }
       status.value = `rendering ${s.file}`
       await tick()
       const cv = renderStill(s)

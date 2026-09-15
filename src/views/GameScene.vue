@@ -227,6 +227,32 @@ const lessonShown = computed(() => {
 })
 
 /**
+ * The level card, held up for the one lesson that is ABOUT the level card.
+ *
+ * The card spends a second and a half saying, in the player's own language,
+ * what the other two stars want. Then it dissolves, and two marks appear under
+ * the chest that a first-time player has no way to connect to anything: a
+ * reviewer read the pair as two anonymous roundels, and a six-year-old has less
+ * to go on than a reviewer. The `quests` lesson IS that connection — a wordless
+ * arrow from the words to the marks — and an arrow whose tail is over empty
+ * space says nothing. So while it runs, the card stays.
+ *
+ * Bounded three ways, because a card that can be pinned open is a card that one
+ * day will be. It only holds for a lesson ACTUALLY ON SCREEN — a `quests` still
+ * sitting in the queue when the timer fires is shelved instead, see
+ * `startLevel`. `lessonShown` drops it the moment the game pauses or the result
+ * screen opens. And the lesson is one-shot with its own bail-out, so the most
+ * this can ever add is `bailoutMs`, once, in the lifetime of a save.
+ */
+const bannerShown = computed(() =>
+  showBanner.value || (activeLesson.value === 'quests' && lessonShown.value))
+
+/** Is the lesson pointing at the quest badges right now? They light up in
+ *  answer — an arrow that lands on something inert teaches nothing. */
+const questsSpotlit = computed(() =>
+  activeLesson.value === 'quests' && lessonShown.value)
+
+/**
  * The centre of a HUD control, in viewport px.
  *
  * A LIST of selectors rather than one, because several of the things a lesson
@@ -609,6 +635,17 @@ const aimLesson = (id: LessonId): void => {
         '.shoe-card'
       ) ?? atFoot
       return
+    case 'quests': {
+      // The only lesson whose two ends are both HUD: the level card's objective
+      // rows, and the pair of badges under the chest. `bannerShown` guarantees
+      // the card is still there for as long as this runs; the fallbacks are the
+      // usual belt and braces, because a lesson that silently points at (0, 0)
+      // when a class is renamed is worse than one that does not run.
+      lessonAt.value = elCentre('.level-banner__objectives', '.level-banner__card')
+        ?? { x: windowWidth.value / 2, y: windowHeight.value / 2 }
+      lessonTo.value = elCentre('.quests', '.scene__wallet') ?? atFoot
+      return
+    }
     case 'stars':
       lessonAt.value = elCentre('.result__stars', '.result') ?? atFoot
   }
@@ -782,7 +819,13 @@ const startLevel = (n: number): void => {
   showResult.value = false
   showBanner.value = true
   if (bannerTimer) clearTimeout(bannerTimer)
-  bannerTimer = setTimeout(() => { showBanner.value = false }, 1700)
+  bannerTimer = setTimeout(() => {
+    showBanner.value = false
+    // Armed but never promoted — a board lesson got the screen first. Put it
+    // back rather than let it play out against a card that has gone; its moment
+    // comes round again on the next level's banner.
+    if (activeLesson.value !== 'quests') tutor.shelve('quests')
+  }, 1700)
   startBattleMusic()
   teachLevelHints()
   warmNextLevelArt(level.value + 1)
@@ -816,6 +859,13 @@ const teachLevelHints = (): void => {
   if (!tutor.isTaught('move')) tutor.arm('move')
   if (tutor.isTaught('move') && !tutor.isTaught('stomp')) tutor.arm('stomp')
 
+  // And the card's own lesson, on a short delay so the banner has finished its
+  // pop-in and both ends of the arrow are measurable. The condition is checked
+  // INSIDE the timer rather than around it, because `sawInput` can become true
+  // during those 900 ms — and that is the difference between the lesson running
+  // on this level and waiting for the next one.
+  hintTimers.push(setTimeout(() => { if (wantsQuestLesson()) tutor.arm('quests') }, 900))
+
   const ids = new Set(s.roster.map((r) => r.id))
   hintTimers.push(setTimeout(() => {
     if (s.boss) { teach('boss', 5000); tutor.arm('boss'); return }
@@ -836,6 +886,38 @@ const teachLevelHints = (): void => {
       if (h === 'sweeper') { teach('sweeper'); return }
     }
   }, 9000))
+}
+
+/**
+ * Is this banner the right one to explain the quest badges on?
+ *
+ * Four conditions, and each is a way the beat fails if it is dropped:
+ *
+ *   THE CARD HAS ROWS. A boss card shows the boss's name instead of the
+ *   objective strip, so there would be nothing for the arrow's tail to start on.
+ *
+ *   THE HUD HAS BADGES. `QuestBadges` drops the `clear` objective — the rail
+ *   across the top has been counting that out the whole time — so a stage whose
+ *   other two were somehow also `clear` renders no pair to point at.
+ *
+ *   THE OPENING THREE ARE BEHIND THEM. Two instructions on one screen is no
+ *   instruction, and a new player's first level is already teaching the control
+ *   and the verb. In practice this puts the lesson on the SECOND level, which is
+ *   also the first banner they reach having already met the star row on a result
+ *   screen — so "those are stars" is an idea they arrive with.
+ *
+ *   THEY ARE ACTUALLY HERE. `quests` is not a `whilePaused` lesson, so its clock
+ *   only runs on frames the player is present for. Armed on the banner of a
+ *   level a returning player has just loaded straight into and not yet touched,
+ *   it would hold the card up until they touched it. Every other condition is
+ *   true for that player, so this is the one that saves them.
+ */
+const wantsQuestLesson = (): boolean => {
+  if (tutor.isTaught('quests')) return false
+  if (!sawInput) return false
+  const s = spec.value
+  if (s.boss) return false
+  return s.objectives.some((o) => o.kind !== 'clear')
 }
 
 /**
@@ -1157,6 +1239,7 @@ const onStarLand = (): void => playFx('star')
                 :quota="spec.quota"
                 :score="game.score.value"
                 :time-left="game.timeLeft.value"
+                :spotlight="questsSpotlit"
               )
 
       //- The boss bar, under the strip and clear of the chain badge.
@@ -1220,7 +1303,7 @@ const onStarLand = (): void => playFx('star')
       //- The level card. Inside the HUD layer, which is already
       //- `pointer-events: none`, so the level under it is already playable.
       LevelBanner(
-        :show="showBanner"
+        :show="bannerShown"
         :label="label"
         :theme="theme"
         :objectives="spec.objectives"

@@ -171,6 +171,57 @@ describe('the closed card is legible on its own', () => {
   })
 })
 
+describe('the OPEN card does not say the same thing twice', () => {
+  // The tag row exists for the CLOSED card. Once a card is open the full-width
+  // button sits directly under it, and for three of the five states it repeats
+  // the row word for word — an equipped shoe printed "Worn" twice, an owned one
+  // "Wear" twice, an affordable one its price twice. Two lines of the tallest
+  // thing in the Locker spent on one fact, on the card that is already the
+  // tallest in the grid.
+  //
+  // It is dropped ONLY where the button genuinely carries it. The two shortfall
+  // states keep their chips, because there the button shows what is MISSING and
+  // the chips show what the shoe is WORTH — see the header of `ShoeCard.vue`.
+
+  const tagCount = (p: CardProps): number => mountCard(p).findAll('.shoe-card__tag').length
+
+  it('drops the duplicated row on an equipped, owned or affordable card', () => {
+    for (const props of [
+      { equipped: true, owned: true },
+      { owned: true },
+      { affordable: true }
+    ] as CardProps[]) {
+      expect(tagCount({ ...props, open: false }), `closed ${JSON.stringify(props)}`).toBeGreaterThan(0)
+      expect(tagCount({ ...props, open: true }), `open ${JSON.stringify(props)}`).toBe(0)
+    }
+  })
+
+  it('KEEPS the price where the button only shows the shortfall', () => {
+    // The distinction the card's header calls out: a child told "310 more
+    // coins" and never told the price has been told what they lack and not what
+    // the thing is worth.
+    for (const props of [
+      { affordable: false, coinsShort: 310 },
+      { starLocked: true, affordable: false, starsShort: 9 }
+    ] as CardProps[]) {
+      expect(tagCount({ ...props, open: true }), JSON.stringify(props)).toBeGreaterThan(0)
+    }
+  })
+
+  it('still shows the price on the open star-locked card, not just the gate', () => {
+    const w = mountCard({ starLocked: true, affordable: false, starsShort: 9, open: true })
+    expect(w.text()).toContain(String(SPEC.cost))
+    expect(w.text()).toContain(String(SPEC.starGate))
+  })
+
+  it('keeps the film button reachable, since it lives in that row', () => {
+    // `showAdUnlock` is true exactly where the row is kept, so the two rules
+    // must not be able to drift into hiding the second way to pay.
+    const w = mountCard({ affordable: false, coinsShort: 310, adReady: true, open: true })
+    expect(filmButton(w)).toBeTruthy()
+  })
+})
+
 describe('MovieIcon unlock', () => {
   it('is not rendered when no rewarded ad can be filled', () => {
     const wrapper = mountCard({ adReady: false, affordable: false, coinsShort: 120 })

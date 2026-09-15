@@ -147,6 +147,7 @@ export default {
     'score': '{n}점 획득'
   },
   'quests': {
+    'title': '별 목표',
     'onTrack': '{objective} — 유지 중',
     'progress': '{objective} — {n}% 진행',
     'missed': '{objective} — 놓침'
