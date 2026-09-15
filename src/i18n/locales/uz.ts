@@ -9,6 +9,11 @@ export default {
   'continue': 'Davom etish',
   'tapToContinue': 'Davom etish uchun bosing',
   'clickToContinue': 'Davom etish uchun cherting',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'O‘tkazib yuborish'
+  },
   'rewards': 'MUKOFOTLAR',
   'tip': 'Maslahat',
   'crazyGamesOnly': 'Bu oʻyin faqat quyidagida mavjud:',

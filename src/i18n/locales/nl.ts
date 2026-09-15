@@ -9,6 +9,11 @@ export default {
   'continue': 'Verder',
   'tapToContinue': 'Tik om verder te gaan',
   'clickToContinue': 'Klik om verder te gaan',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Overslaan'
+  },
   'rewards': 'BELONINGEN',
   'tip': 'Tip',
   'crazyGamesOnly': 'Dit spel is alleen beschikbaar op',

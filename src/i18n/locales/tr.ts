@@ -9,6 +9,11 @@ export default {
   'continue': 'Devam',
   'tapToContinue': 'Devam için dokun',
   'clickToContinue': 'Devam için tıkla',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Atla'
+  },
   'rewards': 'ÖDÜLLER',
   'tip': 'İpucu',
   'crazyGamesOnly': 'Bu oyun yalnızca şurada mevcut:',

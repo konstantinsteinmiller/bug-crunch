@@ -9,6 +9,11 @@ export default {
   'continue': '계속',
   'tapToContinue': '탭해서 계속',
   'clickToContinue': '클릭해서 계속',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': '건너뛰기'
+  },
   'rewards': '보상',
   'tip': '팁',
   'crazyGamesOnly': '이 게임은 다음에서만 즐길 수 있어요:',

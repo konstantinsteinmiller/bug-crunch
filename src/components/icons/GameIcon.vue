@@ -51,7 +51,19 @@ import { useArtImage } from '@/use/useArtImage'
  * fallback lands here, where the same probe is a cache hit rather than a second
  * request.
  */
-const props = defineProps<{ name: GameIconName }>()
+const props = defineProps<{
+  name: GameIconName
+  /**
+   * This glyph is the HERO of its surface, not a mark on a button.
+   *
+   * Set it where the glyph is drawn at OBJECT size — the gift card's ~95 px
+   * picture of the prize — and leave it off everywhere else. It changes nothing
+   * for a glyph with no painting and nothing for an untinted one; see
+   * `.is-tinted.is-hero` in the stylesheet for what it buys and why the small
+   * end must not have it.
+   */
+  hero?: boolean
+}>()
 
 const d = computed(() => (ICON_PATHS[props.name] ?? ICON_PATHS.help).join(''))
 
@@ -77,6 +89,7 @@ const maskStyle = computed(() => ({ '--glyph-src': `url("${painted.value}")` }))
   //- `currentColor`, so `color:` reaches it exactly as it reaches the vector.
   span.game-icon.is-painted.is-tinted(
     v-if="tinted"
+    :class="{ 'is-hero': hero }"
     :style="maskStyle"
     aria-hidden="true"
   )
@@ -128,4 +141,45 @@ const maskStyle = computed(() => ({ '--glyph-src': `url("${painted.value}")` }))
   mask-position: center
   -webkit-mask-size: contain
   mask-size: contain
+
+// ─── The hero rung ───────────────────────────────────────────────────────────
+//
+// THE MASK IS RIGHT AT 16 px AND WRONG AT 95 px, AND IT IS THE SAME FILE.
+//
+// A tinted mark's painting is one flat near-white shape WITH THE HOUSE INK
+// around and inside it — `trophy.webp`'s interior sits at luminance 254 in the
+// median, and the quarter of it that is darker is the ink line that separates
+// the bowl from its handles and its stem. `greyscale: true` never meant "no
+// ink"; it meant "no colour of its own, the game supplies that".
+//
+// Masking keeps ALPHA only, so the ink is filled with the same `currentColor` as
+// the body and the shape loses every line inside its own outline. At 16–24 px on
+// a candy-plastic button that is the point: measured at 16 px, keeping the ink
+// eats a third of the glyph and a bold white boot turns to noise, which is why
+// the marks register is flat by contract. At 95 px, as the whole picture on a
+// gift card, it is why a carefully painted trophy arrives as a cream sticker.
+//
+// So the hero rung colours the painting THROUGH ITS OWN VALUES instead of
+// replacing them: `currentColor` as the ground, the painting multiplied over it,
+// the result still cut by the mask. A flat near-white body multiplies to pure
+// tint — the card's colour is not muddied — while the ink and the little shading
+// the bowl has survive as ink and shading. It is the same operation
+// `bakeSplatTint` (`uiArt.ts`) and `bakePuffSprite` do on canvas, in CSS.
+//
+// The mask stays, so `color:` still reaches this rung and the vector and painted
+// rungs are still interchangeable. A browser without `background-blend-mode`
+// falls back to exactly the flat fill above rather than to anything new.
+//
+// NOT default, and that is the measurement rather than caution: this is only
+// ever right where the glyph is drawn near its source resolution. It is also why
+// a TRANSLUCENT `color` must not reach it — multiply against a 22%-alpha ground
+// returns the painting at full strength, which would light every empty star
+// socket on the result screen. Nothing hero-sized is ghosted, so the two never
+// meet; see `StarRow`'s socket, which is a mark and stays on the rung above.
+.game-icon.is-tinted.is-hero
+  background-image: var(--glyph-src)
+  background-repeat: no-repeat
+  background-position: center
+  background-size: contain
+  background-blend-mode: multiply
 </style>

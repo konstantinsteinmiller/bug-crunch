@@ -9,6 +9,11 @@ export default {
   'continue': 'متابعة',
   'tapToContinue': 'المس للمتابعة',
   'clickToContinue': 'انقر للمتابعة',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'تخطٍ'
+  },
   'rewards': 'المكافآت',
   'tip': 'نصيحة',
   'crazyGamesOnly': 'هذه اللعبة متاحة فقط على',

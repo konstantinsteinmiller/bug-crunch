@@ -57,6 +57,10 @@ import { rewardsForResult, nextSeenBugs, type CampaignReward } from '@/game/camp
 import { warmNextLevelArt } from '@/game/artPreload'
 import { installPreviewSeam } from '@/game/previewFeed'
 import * as tutor from '@/use/useTutorial'
+import * as cut from '@/use/useCutscene'
+import { drawCutscene } from '@/game/cutsceneArt'
+import { FINALE, bossStinger, cutsceneForLevel, type CutsceneSpec } from '@/game/cutscene'
+import CutsceneOverlay from '@/components/game/CutsceneOverlay.vue'
 import { slamTeaches, type LessonId } from '@/game/tutorial'
 import { mobileCheck } from '@/utils/function'
 
@@ -435,6 +439,27 @@ const loop = (now: number): void => {
   const ctx = canvasRef.value?.getContext('2d')
   if (!ctx) return
 
+  // ── A cutscene owns the frame ──
+  //
+  // The simulation is NOT stepped while one runs. The level has already been
+  // started underneath (the board, the roster and the foot are all live), so
+  // stepping it here would run the clock down and let ants walk about behind a
+  // scene the player is watching — and the hand-off is built on the board being
+  // exactly as the cutscene left it.
+  if (cut.cutsceneActive.value) {
+    // Captured BEFORE the step: the last step of a scene clears the active spec,
+    // and the final frame still has to be drawn from the scene it belongs to.
+    const spec = cut.cutsceneSpec.value
+    const done = cut.stepCutscene(dt)
+    if (spec) {
+      const f = cut.cutsceneFrameNow() ?? cut.cutsceneEndFrame(spec)
+      drawCutscene(ctx, window.innerWidth, window.innerHeight, f, equippedShoe.value)
+      fireCutsceneCue(spec, f.beat)
+    }
+    if (done) endCutscene()
+    return
+  }
+
   if (!isGamePaused.value) {
     game.step(dt)
     drainToWorld()
@@ -800,6 +825,83 @@ watch(ownedShoes, (now, before) => {
 
 // ─── Flow ───────────────────────────────────────────────────────────────────
 
+/**
+ * ─── The intro cutscene ─────────────────────────────────────────────────────
+ *
+ * It plays once, ever, before level 1-1 — and "once" is enforced in
+ * `useCutscene` by writing the seen-flag when the scene STARTS. Losing 1-1 and
+ * retrying does not replay it; neither does a reload, nor a tab closed halfway
+ * through. See the header there.
+ *
+ * The level is started FIRST and then covered, rather than the scene running
+ * before `startLevel`. That is what makes the hand-off seamless: the board, the
+ * roster and the foot are already live behind the scene, so when the last beat
+ * snaps to gameplay framing there is nothing left to load, build or fade — the
+ * banner simply comes up over a board that was there the whole time.
+ */
+
+/** Beats whose cue has already fired, so a held beat does not retrigger it. */
+let cuedBeat = -1
+
+const fireCutsceneCue = (spec: CutsceneSpec, beat: number): void => {
+  if (beat === cuedBeat) return
+  cuedBeat = beat
+  const sfx = spec.beats[beat]?.sfx
+  if (sfx) playFx(sfx as Parameters<typeof playFx>[0])
+}
+
+/**
+ * What to do when the scene lets go of the screen.
+ *
+ * Four of the five scenes open a level and hand over to it; the finale opens the
+ * end of the campaign instead. Rather than branch inside `endCutscene` on the id
+ * of a scene that has already been cleared by then, whoever STARTED the scene
+ * leaves the follow-on here.
+ */
+let afterCutscene: (() => void) | null = null
+
+/**
+ * Hand the screen back to the game.
+ *
+ * Shared by "the scene ended" and "the player skipped", because they must land
+ * identically: the same banner, the same music, the same first frame. A skip
+ * that took a different path would be a second code path through the one moment
+ * the player is most likely to be judging the game on.
+ */
+const endCutscene = (): void => {
+  cuedBeat = -1
+  const then = afterCutscene
+  afterCutscene = null
+  if (then) { then(); return }
+
+  showBanner.value = true
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => {
+    showBanner.value = false
+    if (activeLesson.value !== 'quests') tutor.shelve('quests')
+  }, 1700)
+  startBattleMusic()
+  teachLevelHints()
+}
+
+const onSkipCutscene = (): void => {
+  cut.skipCutscene()
+  endCutscene()
+}
+
+/**
+ * Start a scene and resolve when it has let go of the screen — however it let
+ * go. Used by the finale, which is awaited in the middle of the result flow.
+ *
+ * Resolves immediately when the scene has already been watched, so "once, ever"
+ * is not something the caller has to think about.
+ */
+const runCutscene = (spec: CutsceneSpec): Promise<void> => new Promise((resolve) => {
+  afterCutscene = null
+  if (!cut.startCutscene(spec)) { resolve(); return }
+  afterCutscene = resolve
+})
+
 const startLevel = (n: number): void => {
   level.value = Math.max(1, Math.min(TOTAL_LEVELS, n))
   progress.setLevel(level.value)
@@ -817,6 +919,24 @@ const startLevel = (n: number): void => {
     relief: progress.reliefFor(level.value)
   })
   showResult.value = false
+
+  // ── A scene, on the way in ──
+  //
+  // 01 opens the game; 02, 03 and 04 open their world on its first level; a boss
+  // stinger fronts each of the four boss levels. Whichever it is, it takes the
+  // banner, the music and the lesson timers with it — all three are things that
+  // belong to the START of a level, and the level has not started for the player
+  // yet. `endCutscene` does them when the scene lets go.
+  const opening = cutsceneForLevel(level.value)
+    ?? (spec.value.boss ? bossStinger(spec.value.boss) : null)
+  if (opening && cut.startCutscene(opening)) {
+    afterCutscene = null
+    showBanner.value = false
+    if (bannerTimer) clearTimeout(bannerTimer)
+    warmNextLevelArt(level.value + 1)
+    return
+  }
+
   showBanner.value = true
   if (bannerTimer) clearTimeout(bannerTimer)
   bannerTimer = setTimeout(() => {
@@ -1026,6 +1146,25 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
     try { await showMidgameAd() } catch { /* no fill — carry on */ }
   }
 
+  // ── The finale, and why it is HERE ──
+  //
+  // This is the only place in the game that knows the last boss was actually
+  // BEATEN. `onNext` clamps at `TOTAL_LEVELS` and so never fires past it, and the
+  // result screen's `campaignDone` branch is a readout rather than an event.
+  //
+  // It sits after the ad and before the two screens, which is the one slot that
+  // keeps every rule the flow already has. The ad must come BEFORE the result
+  // screen (a portal grades that, and so does anyone whose stars just got
+  // covered), so the scene cannot go first without putting an ad break inside
+  // the story beat. And the scene must come before the screens, because
+  // `cutscenes.md` ends it with "roll the campaign-complete screen" — the payoff
+  // lands, then the numbers.
+  //
+  // The board is already quiet by now: `stopBattleMusic` ran above, which is
+  // exactly what "the arcade goes quiet" asks for. Nothing here touches the
+  // platform's gameplay bracket, in either direction.
+  if (won && level.value === TOTAL_LEVELS) await runCutscene(FINALE)
+
   // ── What this run WON, before what it scored ──
   //
   // The gift screen goes first and the result screen follows it, because the
@@ -1162,6 +1301,14 @@ onUnmounted(() => {
   if (hintTimer) clearTimeout(hintTimer)
   if (bannerTimer) clearTimeout(bannerTimer)
   for (const id of hintTimers) clearTimeout(id)
+  // A scene that owns the screen when the view goes away never reaches
+  // `endCutscene`, and the finale is AWAITED — an unresolved promise there would
+  // leave `onLevelEnd` half-finished forever. Cheap insurance; the work it
+  // unblocks is a no-op on a component nobody is looking at.
+  cut.skipCutscene()
+  const then = afterCutscene
+  afterCutscene = null
+  then?.()
   game.stopLevel()
   stopBattleMusic()
   syncGameplayLifecycle(false)
@@ -1325,6 +1472,12 @@ const onStarLand = (): void => playFx('star')
         :to-x="lessonTo.x"
         :to-y="lessonTo.y"
       )
+
+    //- ── The intro cutscene's skip control ─────────────────────────────────
+    //- Only the SKIP lives in the DOM. The scene itself is drawn into the game
+    //- canvas by `drawCutscene`, because it is the game's own camera over the
+    //- game's own painted art — see `cutscenes.md`.
+    CutsceneOverlay(v-if="cut.cutsceneActive.value" @skip="onSkipCutscene")
 
     //- ── Result screen ─────────────────────────────────────────────────────
     FReward(v-model="showResult" :show-continue="false" :reveal="summary.stars >= 3")

@@ -323,6 +323,33 @@ describe('the reveal modal', () => {
     expect(wrapper.findAll('.reveal-card__pip.is-on')).toHaveLength(2)
   })
 
+  /**
+   * ─── The prize is drawn at OBJECT size, and says so ───────────────────────
+   *
+   * The three number-shaped kinds show a glyph instead of a drawing, and this
+   * card draws it at ~70–130 CSS px depending on the viewport — five to eight
+   * times the 16 px a mark on a button gets. `GameIcon` cannot see its own box,
+   * so the CALL SITE has to declare that, and this is the only call site in the
+   * game that does.
+   *
+   * Without it the card is on the flat rung: the painting is masked to its own
+   * alpha and filled with one cream, which welds the trophy's handles to its
+   * bowl and hands the player a sticker of a prize instead of a picture of one.
+   */
+  it('asks for the hero rung on the glyph cards, because they are drawn at object size', async () => {
+    for (const reward of [
+      { kind: 'record', score: 900, previous: 400 },
+      { kind: 'stars', stars: 9 },
+      { kind: 'chest', coins: 50, gold: false }
+    ] as const) {
+      const w = mountModal(reward)
+      await nextTick()
+      const glyph = w.findComponent({ name: 'GameIcon' })
+      expect(glyph.exists(), `${reward.kind} has no glyph`).toBe(true)
+      expect(glyph.props('hero'), `${reward.kind} did not declare its size`).toBe(true)
+    }
+  })
+
   it('shows no pager for a single prize', async () => {
     const wrapper = mountModal({ kind: 'stars', stars: 15 })
     await nextTick()

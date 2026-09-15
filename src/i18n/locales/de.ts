@@ -9,6 +9,11 @@ export default {
   'continue': 'Weiter',
   'tapToContinue': 'Zum Fortfahren tippen',
   'clickToContinue': 'Zum Fortfahren klicken',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Überspringen'
+  },
   'rewards': 'BELOHNUNGEN',
   'tip': 'Tipp',
   'crazyGamesOnly': 'Dieses Spiel ist nur verfügbar auf',

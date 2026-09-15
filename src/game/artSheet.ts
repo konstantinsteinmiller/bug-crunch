@@ -880,10 +880,11 @@ const FLOOR_STILLS: StillSpec[] = ([1, 2, 3, 4] as const).map((w) =>
  */
 const UI_STILLS: StillSpec[] = [
   still('ui', 'ribbon', 'Result banner',
-    'A wide cartoon ribbon banner seen flat-on, in picnic red and cream, with'
-    + ' swallow-tailed notches cut into both ends, a gold bind running along the top'
-    + ' and bottom edges, one round gold button at each notch and a small cream stitch'
-    + ' at each corner. The MIDDLE of the banner is a plain unbroken red band.', {
+    'A wide award plaque seen flat-on: a deep plum-black iron plate with softly'
+    + ' rounded corners, a polished gold rail running the full length of the top edge'
+    + ' and another along the bottom edge, and a heavy gold end-cap wrapping each short'
+    + ' end with one round gold rivet set in its middle. The MIDDLE of the plate is a'
+    + ' plain unbroken dark band.', {
       w: BANNER.w, h: BANNER.h, maxEdge: 576, fit: false, anchor: 'centre',
       live: 'The game writes the result title across the middle and STRETCHES the'
         + ' middle band to fit it, so the middle must stay plain and every piece of'

@@ -415,6 +415,33 @@ describe('the prompts carry the rules a return is thrown away for', () => {
  *                                   star on the result screen was grey beside an
  *                                   unearned socket that was warm gold, and the
  *                                   screen read inverted.
+ *
+ * ── WHAT `greyscale: true` BUYS, EXACTLY ──
+ *
+ * It asks for no COLOUR of its own. It has never asked for no INK: the house
+ * look block puts a warm near-black contour on every shape in the game, and on
+ * these marks that contour is the whole of the structure — it is what separates
+ * a trophy's bowl from its handles and a boot's cuff from its shaft. Measured on
+ * `trophy.webp`, the interior of the silhouette sits at luminance 254 in the
+ * median and the quarter of it that is darker is that line.
+ *
+ * The renderer reads the same file two ways, and which one is right is decided
+ * by SIZE rather than by the slot:
+ *
+ *   mark  (16–24 px, the default) — masked, filled flat with `currentColor`. The
+ *                                   ink goes, and at that size it must: keeping
+ *                                   it eats a third of the glyph and a bold
+ *                                   white boot on candy plastic turns to noise.
+ *   hero  (~70–130 px, opt-in)    — `currentColor` under the painting, multiplied
+ *                                   through it, still cut by the mask. A flat
+ *                                   near-white body multiplies to pure tint, so
+ *                                   the card's colour survives and so does the
+ *                                   ink. See `GameIcon`'s `.is-tinted.is-hero`.
+ *
+ * So a repaint of these marks that dropped the contour — "flat and solid" read
+ * as "no line either" — would cost nothing at 16 px and silently return the gift
+ * card to the flat cream sticker it was. That is what the last assertion here
+ * guards.
  */
 describe('the marks the renderer tints and the marks the painter flattens are one set', () => {
   const uiStillBy = new Map(STILLS.filter((s) => s.kind === 'ui').map((s) => [s.id, s]))
@@ -467,5 +494,18 @@ describe('the marks the renderer tints and the marks the painter flattens are on
     // `star-empty` is the same mark as `star` in another state and has to dim to
     // a near-transparent white on the result screen. An untinted painting cannot.
     expect(TINTED_GLYPHS.has('star-empty')).toBe(true)
+  })
+
+  it('still ask a flat mark for the house ink, which is what the hero rung reads back', () => {
+    // The contour is not in the per-slot brief — it is in the look block every
+    // panel gets — so this is the one place the two halves can be checked
+    // against each other. A greyscale prompt that stops asking for a line is a
+    // gift card that goes back to being a sticker, with nothing on screen at
+    // HUD size to say so.
+    const stills = promptDocs()['PROMPTS-STILLS.md']!
+    const trophy = stills.slice(stills.indexOf('## trophy'))
+    const block = trophy.slice(0, trophy.indexOf('```', trophy.indexOf('```text') + 7))
+    expect(block).toContain('Flat and solid, no shading')
+    expect(block).toContain('warm near-black ink contour')
   })
 })

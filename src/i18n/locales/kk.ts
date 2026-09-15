@@ -9,6 +9,11 @@ export default {
   'continue': 'Жалғастыру',
   'tapToContinue': 'Жалғастыру үшін түртіңіз',
   'clickToContinue': 'Жалғастыру үшін басыңыз',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Өткізу'
+  },
   'rewards': 'СЫЙЛЫҚТАР',
   'tip': 'Кеңес',
   'crazyGamesOnly': 'Бұл ойын тек мына жерде қолжетімді:',

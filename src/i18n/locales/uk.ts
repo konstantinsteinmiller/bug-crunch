@@ -9,6 +9,11 @@ export default {
   'continue': 'Далі',
   'tapToContinue': 'Торкнись, щоб продовжити',
   'clickToContinue': 'Клікни, щоб продовжити',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Пропустити'
+  },
   'rewards': 'НАГОРОДИ',
   'tip': 'Підказка',
   'crazyGamesOnly': 'Ця гра доступна лише на',

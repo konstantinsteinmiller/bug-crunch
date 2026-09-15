@@ -9,6 +9,11 @@ export default {
   'continue': 'Tiếp tục',
   'tapToContinue': 'Chạm để tiếp tục',
   'clickToContinue': 'Nhấp để tiếp tục',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'Bỏ qua'
+  },
   'rewards': 'PHẦN THƯỞNG',
   'tip': 'Mẹo',
   'crazyGamesOnly': 'Trò chơi này chỉ có trên',

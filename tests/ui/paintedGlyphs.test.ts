@@ -154,3 +154,63 @@ describe('painted marks are tinted by the stylesheet', () => {
   // set — is pinned in `artManifest.test.ts`, which is the file that already
   // imports the bench manifest without mocking the renderer out from under it.
 })
+
+/**
+ * ─── The same painting, read two ways ───────────────────────────────────────
+ *
+ * A tinted mark's painting is one flat near-white shape WITH THE HOUSE INK on
+ * it — `greyscale: true` asks for no COLOUR of its own, never for no ink.
+ * Masking keeps alpha only, so the ink is filled with the same `currentColor`
+ * as the body and every line inside the outline is lost.
+ *
+ * Measured, that trade is right at one end and wrong at the other: at 16 px on
+ * a candy-plastic button, keeping the ink eats a third of the glyph and a bold
+ * white boot turns to noise; at the ~70–130 px the gift card draws its prize
+ * at, losing it is why a painted trophy arrived as a flat cream sticker with no
+ * bowl, no stem and its handles welded to its side.
+ *
+ * So the size is the call site's to declare, and `hero` is how it declares it.
+ * The rung it selects is in `GameIcon`'s stylesheet (`currentColor` under the
+ * painting, multiplied, still cut by the mask); what is pinned here is that it
+ * is OPT-IN — every mark on every button must stay on the flat rung, because
+ * that is the one the 16 px measurement chose.
+ */
+describe('a hero-sized glyph keeps the painting’s ink', () => {
+  beforeEach(() => {
+    spriteFor.mockReset()
+    spriteFor.mockReturnValue(null)
+  })
+
+  const tinted = (props: Record<string, unknown>) => {
+    spriteFor.mockImplementation((_k, id) =>
+      id === 'trophy' ? fakePainting('/images/ui/trophy.webp') : null)
+    return mount(GameIcon, { props: { name: 'trophy', ...props } })
+  }
+
+  it('is flat by default — that is the 16 px contract, and most call sites are 16 px', () => {
+    const span = tinted({}).find('span.game-icon.is-tinted')
+    expect(span.exists()).toBe(true)
+    expect(span.classes()).not.toContain('is-hero')
+  })
+
+  it('asks for the ink only where the call site says it is a hero', () => {
+    expect(tinted({ hero: true }).find('span.game-icon.is-tinted').classes()).toContain('is-hero')
+  })
+
+  it('changes nothing for an OBJECT — its colours were never thrown away', () => {
+    // `gem` is not in `TINTED_GLYPHS`, so it blits. `hero` must not smuggle it
+    // onto the masked rung: multiplying a full-colour painting by a tint would
+    // be the "careful gold trophy renders as a flat slate blob" bug inverted.
+    spriteFor.mockImplementation((_k, id) =>
+      id === 'icon-gem' ? fakePainting('/images/ui/icon-gem.webp') : null)
+    const w = mount(GameIcon, { props: { name: 'gem', hero: true } })
+    expect(w.find('img.game-icon').exists()).toBe(true)
+    expect(w.find('span.game-icon.is-tinted').exists()).toBe(false)
+  })
+
+  it('changes nothing for a glyph with no painting — the vector is already inked', () => {
+    const w = mount(GameIcon, { props: { name: 'trophy', hero: true } })
+    expect(w.find('svg.game-icon').exists()).toBe(true)
+    expect(w.find('span.is-hero').exists()).toBe(false)
+  })
+})

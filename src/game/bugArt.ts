@@ -1022,6 +1022,26 @@ export const __resetBugBakes = (): void => {
 export const paintBoss = (
   ctx: CanvasRenderingContext2D, id: BossId, r: number, cycle01: number, phase: number
 ): void => {
+  // ── The painting first, exactly as every other drawable here does it ──
+  //
+  // This read was missing entirely. `images/bosses/*.webp` — four stills, 47 kB —
+  // have been painted, catalogued and PRELOADED by `artPreload` since the art
+  // pipeline ran, and nothing in the game ever blitted one: `paintBoss` went
+  // straight to the procedural body, so with the art layer on (which, per
+  // `.env`, is every build) the four biggest creatures in the game were the only
+  // cast members still drawn rather than painted.
+  //
+  // The panel is square with the head to the top — the same authoring convention
+  // the walk strips use — so it drops into the same box the drawing occupies at
+  // `r`. 2.4 is that box: `paintBoss` scales by `r` and draws the dressed body
+  // out to roughly 1.2 in unit space.
+  const painted = spriteFor('boss', id)
+  if (painted && painted.naturalWidth > 0) {
+    const e = r * 2.4
+    ctx.drawImage(painted, -e / 2, -e / 2, e, e)
+    return
+  }
+
   const spec = BOSSES[id]
   const base = bugSpec(spec.base)
   // Swap the palette onto the base creature by drawing it through a clone of

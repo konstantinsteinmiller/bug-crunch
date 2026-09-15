@@ -226,3 +226,19 @@ export const CHEST_DAY_KEY = 'bc_chest_day'
  * player has already seen, never hides one they have not.
  */
 export const SEEN_BUGS_KEY = 'bc_bugs_seen'
+
+/**
+ * Which cutscenes the player has already watched.
+ *
+ * A record rather than a counter, and in the SAVE BLOB rather than a plain
+ * localStorage flag, so it rides the cloud push with the rest of the progress —
+ * a player who finishes the intro on a phone does not sit through it again on a
+ * desktop.
+ *
+ * "Once, ever" is meant literally: the flag is written when the scene STARTS,
+ * not when it ends, so a player who loses stage 1-1 and retries — or who reloads
+ * mid-scene, or closes the tab during it — never sees it a second time. A
+ * cutscene is a thing that happened to the player, not a reward for finishing
+ * the level behind it.
+ */
+export const CUTSCENES_SEEN_KEY = 'bc_cutscenes_seen'

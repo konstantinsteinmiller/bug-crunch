@@ -9,6 +9,11 @@ export default {
   'continue': '继续',
   'tapToContinue': '点击继续',
   'clickToContinue': '点击继续',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': '跳过'
+  },
   'rewards': '奖励',
   'tip': '提示',
   'crazyGamesOnly': '本游戏仅在以下平台提供：',

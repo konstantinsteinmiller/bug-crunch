@@ -9,6 +9,11 @@ export default {
   'continue': 'つづける',
   'tapToContinue': 'タップでつづける',
   'clickToContinue': 'クリックでつづける',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'スキップ'
+  },
   'rewards': 'ごほうび',
   'tip': 'ヒント',
   'crazyGamesOnly': 'このゲームは次でのみ遊べます:',

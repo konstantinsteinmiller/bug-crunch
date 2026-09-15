@@ -438,9 +438,16 @@ const subCaption = computed(() => {
         //- it is the glyph on the thing the player just tapped, so the present
         //- and the button that produced it are recognisably one object. The
         //- coins are the caption.
-        GameIcon.reveal-card__glyph(v-else-if="current.kind === 'stars'" name="star")
-        GameIcon.reveal-card__glyph.is-trophy(v-else-if="current.kind === 'record'" name="trophy")
-        GameIcon.reveal-card__glyph.is-chest(v-else name="chest")
+        //- `hero` on all three: it describes THIS CALL SITE — a glyph drawn at
+        //- ~95 px as the whole picture on a card, rather than as a 16 px mark on
+        //- a button — and `GameIcon` decides what that is worth for the rung it
+        //- is on. For `star` and `trophy`, which are tinted, it is the
+        //- difference between the painting's ink surviving and the card showing
+        //- a flat sticker; for the chest, which is an object blitted in its own
+        //- colours, it is already true and changes nothing.
+        GameIcon.reveal-card__glyph(v-else-if="current.kind === 'stars'" name="star" hero)
+        GameIcon.reveal-card__glyph.is-trophy(v-else-if="current.kind === 'record'" name="trophy" hero)
+        GameIcon.reveal-card__glyph.is-chest(v-else name="chest" hero)
 
       //- ── The name ────────────────────────────────────────────────────
       p.reveal-card__caption {{ caption }}

@@ -9,6 +9,11 @@ export default {
   'continue': 'आगे बढ़ें',
   'tapToContinue': 'जारी रखने के लिए टैप करें',
   'clickToContinue': 'जारी रखने के लिए क्लिक करें',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'छोड़ें'
+  },
   'rewards': 'इनाम',
   'tip': 'सुझाव',
   'crazyGamesOnly': 'यह गेम केवल यहाँ उपलब्ध है:',

@@ -9,6 +9,11 @@ export default {
   'continue': 'ไปต่อ',
   'tapToContinue': 'แตะเพื่อไปต่อ',
   'clickToContinue': 'คลิกเพื่อไปต่อ',
+  'cutscene': {
+    // The skip control on a cutscene. A cutscene never replays, so the
+    // control is irreversible and gets a word rather than a bare glyph.
+    'skip': 'ข้าม'
+  },
   'rewards': 'รางวัล',
   'tip': 'เคล็ดลับ',
   'crazyGamesOnly': 'เกมนี้เล่นได้เฉพาะบน',
