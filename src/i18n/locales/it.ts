@@ -268,6 +268,7 @@ export default {
       'hard': 'Insetti più veloci e campi più affollati.'
     },
     'musicTracks': {
+      'parade': 'Parata croccante',
       'trance': 'Groove degli insetti',
       'cozy': 'Picnic tranquillo'
     },

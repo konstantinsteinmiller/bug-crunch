@@ -1,4 +1,6 @@
-import type { ArtKind } from '@/game/art'
+import type { ArtKind, ArtWant } from '@/game/art'
+import type { EggLook } from '@/game/bosses'
+import type { BugId } from '@/game/bugs'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
 
 /**
@@ -158,12 +160,49 @@ export const ART_BRAND = {
   mascot: 'images/logo/mascot.webp'
 } as const
 
+/**
+ * The brood's paintings — see "The brood" in `bosses.ts`.
+ *
+ * Each egg look is a STAGE sheet (whole → hairline → cracked → splitting, read
+ * back as one strip) plus the empty shell a hatch leaves on the floor. Named here
+ * rather than beside the painter because the preloader needs them for a boss
+ * level and this module is the one on the boot path.
+ */
+export const EGG_ART_ID: Record<EggLook, string> = { egg: 'egg', capsule: 'egg-capsule' }
+export const EGG_SHELL_ART_ID: Record<EggLook, string> = { egg: 'egg-shell', capsule: 'egg-capsule-shell' }
+export const EGG_PROP_IDS = ['egg', 'egg-shell', 'egg-capsule', 'egg-capsule-shell'] as const
+export type EggPropId = (typeof EGG_PROP_IDS)[number]
+
+/**
+ * The bug PARTS — paintings a creature is composed from that are not a design
+ * of their own, keyed by the design they belong to.
+ *
+ * The one there is: a centipede is a painted head (its walk strip, `bug/centipede`)
+ * towing a chain of segments that `bugArt.paintSegment` draws one at a time, each
+ * on its own lag behind the head. Those segments were the last thing on a
+ * painted board still inked, so they get a strip of their own under the same
+ * `images/bugs/` folder, and they are wanted wherever their design is.
+ */
+export const CENTIPEDE_SEGMENT_ART = 'centipede-segment'
+export const BUG_PART_ART: Readonly<Partial<Record<BugId, readonly string[]>>> = {
+  centipede: [CENTIPEDE_SEGMENT_ART]
+}
+export const BUG_PART_ART_IDS: readonly string[] = Object.values(BUG_PART_ART).flat()
+
+/** The paintings a design is drawn with besides its own walk strip. */
+export const bugPartWants = (id: BugId): ArtWant[] =>
+  (BUG_PART_ART[id] ?? []).map((part) => ['bug', part] as const)
+
 export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, readonly string[]> = {
   prop: [
     // The seven floor objects, in the order a campaign meets them.
     'crumbs', 'honey', 'salt', 'sweeper', 'magnet', 'cobweb', 'conveyor',
     // The boss egg pod, and the coin the piñata fly drops.
-    'pod', 'coin'
+    'pod', 'coin',
+    // The brood: the ant egg and Roach Prime's capsule, each a four-panel crack
+    // STAGE sheet, and each one's empty shell. `pod` stays — it is the whole-egg
+    // still painted before the stages existed, and the fallback under them.
+    ...EGG_PROP_IDS
   ],
   fx: [
     // The three rings: a quick stomp's ripple, a slam's shockwave, and Fever's
@@ -191,5 +230,15 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, re
   // The DOM's own art — the result banner and the six HUD marks, shown through
   // `ArtIcon` and `FReward` (see `uiArt.ts`) — and then one slot for every other
   // glyph in the icon set, shown through `GameIcon`.
-  ui: [...UI_HUD_MARKS, ...UI_GLYPH_ART_IDS]
+  ui: [...UI_HUD_MARKS, ...UI_GLYPH_ART_IDS],
+  // The cutscenes' set dressing, in the order the scenes meet it: the picnic
+  // (01, 02, 05), the attic and its door (03), the arcade (04), and 1-10's
+  // nursery. The creatures, the bosses, the hazards and the floors in those
+  // scenes are the game's own paintings and are not repeated here.
+  scene: [
+    'plate', 'sandwich', 'glass', 'book', 'crumb',
+    'attic-box', 'door',
+    'cabinet', 'hopper',
+    'nest', 'puff'
+  ]
 }

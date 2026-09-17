@@ -268,6 +268,7 @@ export default {
       'hard': 'Daha hızlı böcekler ve daha kalabalık alan.'
     },
     'musicTracks': {
+      'parade': 'Çıtır geçit töreni',
       'trance': 'Böcek grooveu',
       'cozy': 'Sakin piknik'
     },

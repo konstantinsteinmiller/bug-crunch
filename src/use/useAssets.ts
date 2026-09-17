@@ -62,16 +62,45 @@ export const getAudioContext = (): AudioContext | null => {
  *  starting a new one-shot during an ad — so nothing leaks past the mute. */
 export const isAudioSuspended = (): boolean => suspendDepth > 0
 
+/**
+ * The events that may carry the browser's user activation.
+ *
+ * `pointerdown` alone — which is what this used to arm, `once` — is NOT one for a
+ * finger. The HTML spec grants activation on `pointerdown` only when its
+ * `pointerType` is "mouse"; a touch earns it on `pointerup` / `touchend`. So on
+ * a phone the first tap's `resume()` was refused, the one-shot listener was
+ * spent, and every Web Audio cue (every squish, every sample) stayed silent
+ * until something paused and resumed the game. `click` and `keydown` cover the
+ * remaining input paths.
+ */
+const GESTURE_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const
+
 const armResumeOnGesture = (): void => {
   if (resumeListenerArmed) return
   resumeListenerArmed = true
-  const resume = () => {
-    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended' && suspendDepth === 0) {
-      void sharedAudioCtx.resume()
-    }
+  const disarm = (): void => {
+    for (const type of GESTURE_EVENTS) window.removeEventListener(type, resume, true)
   }
-  window.addEventListener('pointerdown', resume, { once: true })
-  window.addEventListener('keydown', resume, { once: true })
+  // Stays armed until the context is ACTUALLY running, rather than until the
+  // first event fired: a refused resume must leave the next gesture a chance.
+  // Once running, pauses and ads go through `resumeAllAudio`, not through here.
+  const resume = (): void => {
+    const ctx = sharedAudioCtx
+    if (!ctx) return
+    if (ctx.state === 'running' || ctx.state === 'closed') { disarm(); return }
+    if (suspendDepth > 0) return
+    try {
+      // Old `webkitAudioContext`s return nothing; the `running` check on the
+      // next gesture disarms those instead.
+      void ctx.resume()?.then(
+        () => { if (ctx.state === 'running') disarm() },
+        () => { /* refused without activation — the next gesture tries again */ }
+      )
+    } catch { /* same: the next gesture tries again */ }
+  }
+  for (const type of GESTURE_EVENTS) {
+    window.addEventListener(type, resume, { capture: true, passive: true })
+  }
 }
 
 /** Bookkeeping for HTMLAudio elements (music, fallback SFX path) so

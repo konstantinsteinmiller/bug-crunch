@@ -14,6 +14,9 @@
 
 import { spriteFor } from '@/game/art'
 import { hazardSpec, type HazardId } from '@/game/hazards'
+import { stripFrames } from '@/game/spriteStrip'
+import { EGG_STAGES, type EggLook } from '@/game/bosses'
+import { EGG_ART_ID, EGG_PROP_IDS, EGG_SHELL_ART_ID, type EggPropId } from '@/game/artCatalogue'
 
 const INK = '#2b1b2e'
 
@@ -347,55 +350,583 @@ export const paintHazard = (
 // ─── Boss furniture ─────────────────────────────────────────────────────────
 
 /**
- * A boss egg pod: the target of a `pods` phase.
+ * ─── The brood: boss eggs ───────────────────────────────────────────────────
  *
- * `hatch01` is how close it is to opening, and the drawing has to carry that
- * without a progress bar — so the pod swells, its cracks widen, and the light
- * inside it brightens. A player who is losing the phase can see it in the pods.
+ * Every boss fight has eggs (see "The brood" in `bosses.ts`), and an egg has
+ * one job the drawing must carry with no progress bar and no words: say HOW
+ * LONG IS LEFT. So it reads in four stages — whole, a hairline crack, cracked
+ * with a chip out of it, splitting open with antennae in the gap — and on top of
+ * the stages it ROCKS, lazily at half-time and frantically on the last crack. A
+ * six-year-old who has seen one hatch knows what the rattle means the second
+ * time.
+ *
+ * Two looks: the ant egg every boss but one brings, and Roach Prime's capsule —
+ * the pod its cutscene's production line is already pressing out.
+ *
+ * ── Painted, in this order ──
+ *
+ *   1. `prop/egg` / `prop/egg-capsule` — a STAGE sheet, one panel per crack
+ *      stage, read back through `stripFrames`. The drop-in the new art pass
+ *      paints.
+ *   2. `prop/pod` — the one still painted before the stages existed. It is a
+ *      whole egg, so the drawn cracks go OVER it; it used to be blitted bare,
+ *      and with the art layer on no egg ever cracked at all.
+ *   3. The drawing below.
+ */
+
+/** A painted egg panel's box, as a multiple of the egg's radius. Room for the
+ *  last stage's lifted cap and the swell; the bench draws its reference at
+ *  `1 / EGG_ART_BOX` of a half-panel, so the two cannot disagree. */
+export const EGG_ART_BOX = 1.3
+/** The hatched shell decal's box, as a multiple of the egg's radius — the two
+ *  halves lie apart, wider than the egg was. */
+export const EGG_SHELL_BOX = 1.6
+
+/** Is this prop id one of the brood's drawables? The ids themselves live in
+ *  `artCatalogue` (`EGG_PROP_IDS`), where the preloader can read them. */
+export const isEggPropId = (id: string): id is EggPropId =>
+  (EGG_PROP_IDS as readonly string[]).includes(id)
+
+/** Which crack stage an egg `hatch01` of the way through its clock shows. */
+export const eggStage = (hatch01: number): number =>
+  Math.max(0, Math.min(EGG_STAGES - 1, Math.floor(hatch01 * EGG_STAGES)))
+
+/** The rock starts here — the second half of the clock. */
+const WOBBLE_FROM = 0.5
+
+/**
+ * How far an egg is rocked, radians.
+ *
+ * A CHIRP on the egg's own clock, `sin(2π·N·h²)`, rather than a sine of wall
+ * time: the rate rises smoothly with `h` (about 2 Hz at half-time, 4 on the last
+ * crack of a full-strength egg) and never jumps, where a wall-clock sine whose
+ * rate changes every frame stutters. `clock` only drives the rattle of an egg
+ * that is WAITING on its last crack for room to hatch (`h` pinned at 1), and
+ * `seed` keeps two eggs laid together from rocking in step.
+ */
+export const eggWobble = (hatch01: number, clockMs: number, seed = 0): number => {
+  const k = (hatch01 - WOBBLE_FROM) / (1 - WOBBLE_FROM)
+  if (k <= 0) return 0
+  const kk = Math.min(1, k)
+  const amp = 0.035 + 0.17 * kk * kk
+  const phase = hatch01 >= 1
+    ? clockMs * 0.026
+    : Math.PI * 2 * 10 * hatch01 * hatch01
+  return Math.sin(phase + seed * Math.PI * 2) * amp
+}
+
+export interface PodPaint {
+  look?: EggLook
+  /** Wall clock, ms. Given, the egg rocks; omitted (a still, the bench, a
+   *  cutscene prop), it holds still. */
+  clock?: number
+  /** 0..1, per egg — see `eggWobble`. */
+  seed?: number
+  /** Draw this crack stage instead of the one `hatch01` implies (the bench). */
+  stage?: number
+  /** Never the painting: the bench's reference is the drawing, always. */
+  procedural?: boolean
+}
+
+/**
+ * A boss egg at (0, 0), radius `r` px, `hatch01` of the way to hatching.
+ *
+ * The first four parameters are the signature the first egg shipped with, and
+ * a cutscene draws a production line of these with exactly those four; the fifth
+ * is optional and only adds.
  */
 export const paintPod = (
-  ctx: CanvasRenderingContext2D, r: number, hatch01: number, tint: string
+  ctx: CanvasRenderingContext2D, r: number, hatch01: number, tint: string, o: PodPaint = {}
 ): void => {
-  const painted = spriteFor('prop', 'pod')
-  if (painted && painted.naturalWidth > 0) {
-    ctx.drawImage(painted, -r, -r, r * 2, r * 2)
+  const look = o.look ?? 'egg'
+  const h = Math.max(0, Math.min(1, hatch01))
+  const stage = o.stage ?? eggStage(h)
+  const rock = o.clock === undefined ? 0 : eggWobble(h, o.clock, o.seed ?? 0)
+  ctx.save()
+  if (rock !== 0) {
+    // Rocking on its base: a turn, and a little squash in time with it, so the
+    // last crack reads as something pushing from inside.
+    const push = Math.abs(rock) * 0.3
+    ctx.rotate(rock)
+    ctx.scale(1 + push, 1 - push)
+  }
+  if (!o.procedural) {
+    const frames = stripFrames('prop', EGG_ART_ID[look], 1)
+    if (frames && frames.length > 0) {
+      const f = frames[Math.min(stage, frames.length - 1)]!
+      const b = r * EGG_ART_BOX
+      ctx.drawImage(f, -b, -b, b * 2, b * 2)
+      ctx.restore()
+      return
+    }
+    const still = look === 'egg' ? spriteFor('prop', 'pod') : null
+    if (still && still.naturalWidth > 0) {
+      ctx.drawImage(still, -r, -r, r * 2, r * 2)
+      ctx.scale(r, r)
+      eggCracks(ctx, stage)
+      ctx.restore()
+      return
+    }
+  }
+  ctx.scale(r, r)
+  if (look === 'capsule') drawCapsule(ctx, stage, h, tint)
+  else drawEgg(ctx, stage, h, tint)
+  ctx.restore()
+}
+
+/** The egg's outline — one path, used for the fill, the clip and the ink. */
+const eggPath = (ctx: CanvasRenderingContext2D): void => {
+  ctx.beginPath()
+  ctx.ellipse(0, 0.06, 0.74, 0.92, 0, 0, Math.PI * 2)
+}
+
+/** A zigzag seam across the egg at `y`, left to right, `teeth` points. */
+const SEAM_X = [-0.9, -0.62, -0.36, -0.1, 0.14, 0.4, 0.64, 0.9] as const
+const seamY = (i: number, y: number): number => y + (i % 2 === 0 ? -0.07 : 0.07)
+
+const seamPath = (ctx: CanvasRenderingContext2D, y: number, below: boolean): void => {
+  ctx.beginPath()
+  ctx.moveTo(SEAM_X[0], seamY(0, y))
+  for (let i = 1; i < SEAM_X.length; i++) ctx.lineTo(SEAM_X[i]!, seamY(i, y))
+  const far = below ? 1.3 : -1.3
+  ctx.lineTo(1, far)
+  ctx.lineTo(-1, far)
+  ctx.closePath()
+}
+
+const seamStroke = (ctx: CanvasRenderingContext2D, y: number, w: number): void => {
+  ctx.beginPath()
+  ctx.moveTo(SEAM_X[0], seamY(0, y))
+  for (let i = 1; i < SEAM_X.length; i++) ctx.lineTo(SEAM_X[i]!, seamY(i, y))
+  inked(ctx, w)
+  ctx.stroke()
+}
+
+/** Two little antennae poking out of a split — the whole reason to watch. */
+const antennae = (ctx: CanvasRenderingContext2D, y: number): void => {
+  for (const sgn of [-1, 1] as const) {
+    ctx.beginPath()
+    ctx.moveTo(sgn * 0.1, y + 0.04)
+    ctx.quadraticCurveTo(sgn * 0.16, y - 0.26, sgn * 0.34, y - 0.3)
+    inked(ctx, 0.06)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(sgn * 0.36, y - 0.31, 0.06, 0, Math.PI * 2)
+    paint(ctx, '#ffd9a8', 0.04)
+  }
+}
+
+/**
+ * A tint's own fully transparent end.
+ *
+ * A gradient from a colour to `rgba(0,0,0,0)` is interpolated unpremultiplied,
+ * so every midtone passes through grey on its way out: the capsule's cyan glow
+ * came out as a grey smudge across its seam. Fading to the SAME colour at zero
+ * alpha keeps the light the colour it is. Cached, because the renderer asks for
+ * the same boss accent for every egg, every frame.
+ */
+const clearCache = new Map<string, string>()
+const clearOf = (hex: string): string => {
+  let out = clearCache.get(hex)
+  if (out === undefined) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+    out = m
+      ? `rgba(${parseInt(m[1]!, 16)},${parseInt(m[2]!, 16)},${parseInt(m[3]!, 16)},0)`
+      : 'rgba(255,255,255,0)'
+    clearCache.set(hex, out)
+  }
+  return out
+}
+
+/** The glow in a split: what is inside, lit. */
+const splitGlow = (ctx: CanvasRenderingContext2D, y: number, tint: string, reach: number): void => {
+  const g = ctx.createRadialGradient(0, y, 0.02, 0, y, reach)
+  g.addColorStop(0, tint)
+  g.addColorStop(1, clearOf(tint))
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.ellipse(0, y, reach, reach * 0.55, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/** The drawn cracks for stages 1-2, over any whole egg — the drawing's own, or
+ *  the old painted pod's. Stage 3 is a split, not a crack, and is its own shape. */
+const eggCracks = (ctx: CanvasRenderingContext2D, stage: number): void => {
+  if (stage <= 0) return
+  ctx.strokeStyle = 'rgba(70,40,20,0.9)'
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  // The hairline, from the top down towards the middle.
+  ctx.lineWidth = stage >= 2 ? 0.07 : 0.045
+  ctx.beginPath()
+  ctx.moveTo(0.2, -0.84)
+  ctx.lineTo(0.08, -0.62)
+  ctx.lineTo(0.22, -0.46)
+  ctx.lineTo(0.05, -0.26)
+  if (stage >= 2) {
+    ctx.lineTo(0.16, -0.08)
+    // A branch, and a second crack coming in from the left.
+    ctx.moveTo(0.22, -0.46)
+    ctx.lineTo(0.44, -0.4)
+    ctx.moveTo(-0.62, -0.3)
+    ctx.lineTo(-0.4, -0.22)
+    ctx.lineTo(-0.44, -0.04)
+    ctx.lineTo(-0.24, 0.06)
+  }
+  ctx.stroke()
+  if (stage >= 2) {
+    // A chip out of the shell, dark inside.
+    ctx.beginPath()
+    ctx.moveTo(0.08, -0.62)
+    ctx.lineTo(-0.1, -0.7)
+    ctx.lineTo(-0.02, -0.5)
+    ctx.closePath()
+    ctx.fillStyle = '#3b2616'
+    ctx.fill()
+  }
+}
+
+const drawEgg = (ctx: CanvasRenderingContext2D, stage: number, h: number, tint: string): void => {
+  const swell = 1 + h * 0.12
+  ctx.scale(swell, swell)
+  const shellFill = (): CanvasGradient => {
+    const g = ctx.createRadialGradient(-0.25, -0.34, 0.05, 0, 0, 1)
+    g.addColorStop(0, '#fffaf0')
+    g.addColorStop(0.55, '#f2e1b6')
+    g.addColorStop(1, '#c4a46a')
+    return g
+  }
+  const speckles = (): void => {
+    ctx.fillStyle = 'rgba(160,112,60,0.35)'
+    for (const [x, y, rr] of EGG_SPECKLES) {
+      ctx.beginPath()
+      ctx.arc(x, y, rr, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  const glow = (): void => {
+    ctx.save()
+    eggPath(ctx)
+    ctx.clip()
+    const gg = ctx.createRadialGradient(0, 0.12, 0.02, 0, 0.12, 0.9)
+    gg.addColorStop(0, tint)
+    gg.addColorStop(1, clearOf(tint))
+    ctx.globalAlpha = 0.16 + stage * 0.12
+    ctx.fillStyle = gg
+    ctx.fill()
+    ctx.restore()
+  }
+  const sheen = (): void => {
+    ctx.beginPath()
+    ctx.ellipse(-0.26, -0.44, 0.16, 0.26, -0.5, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.fill()
+  }
+
+  if (stage < 3) {
+    eggPath(ctx)
+    paint(ctx, shellFill(), 0.09)
+    speckles()
+    glow()
+    sheen()
+    eggCracks(ctx, stage)
     return
   }
-  const swell = 1 + hatch01 * 0.16 + Math.sin(hatch01 * Math.PI * 12) * hatch01 * 0.03
+
+  // ── Splitting: the cap lifts along a zigzag seam and the inside shows. ──
+  //
+  // The lift has to read at thirty device pixels, which is most of an ink line:
+  // at a sixth of the egg the gap was all outline and no light.
+  const seam = -0.06
+  const lift = 0.26
+  // What is inside, filling both halves' outline and the gap between them.
   ctx.save()
-  ctx.scale(r * swell, r * swell)
-  ctx.beginPath()
-  ctx.ellipse(0, 0.06, 0.78, 0.94, 0, 0, Math.PI * 2)
-  const g = ctx.createRadialGradient(-0.25, -0.3, 0.05, 0, 0, 1)
-  g.addColorStop(0, '#fff8e6')
-  g.addColorStop(0.5, '#f0dcae')
-  g.addColorStop(1, '#b99a63')
-  paint(ctx, g, 0.1)
-  // The glow inside, brightening as it hatches.
-  ctx.save()
-  ctx.beginPath()
-  ctx.ellipse(0, 0.06, 0.78, 0.94, 0, 0, Math.PI * 2)
-  ctx.clip()
-  const gg = ctx.createRadialGradient(0, 0.1, 0.02, 0, 0.1, 0.9)
-  gg.addColorStop(0, tint)
-  gg.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.globalAlpha = 0.25 + hatch01 * 0.6
-  ctx.fillStyle = gg
+  eggPath(ctx)
+  ctx.fillStyle = '#3b2616'
+  ctx.fill()
+  ctx.translate(0, -lift)
+  eggPath(ctx)
   ctx.fill()
   ctx.restore()
-  // Cracks. They appear in stages so the pod tells you how long you have.
-  const cracks = Math.floor(hatch01 * 4)
-  ctx.strokeStyle = 'rgba(60,36,12,0.75)'
-  ctx.lineWidth = 0.05 + hatch01 * 0.05
-  for (let i = 0; i < cracks; i++) {
-    const a = -1.2 + i * 1.1
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(0, seam - lift * 0.5, 0.74, lift * 0.9, 0, 0, Math.PI * 2)
+  ctx.clip()
+  splitGlow(ctx, seam - lift * 0.5, tint, 0.8)
+  ctx.restore()
+  // The bottom cup. Its broken rim is inked INSIDE its own outline — stroked
+  // across the whole seam, the zigzag stuck out past the egg like whiskers.
+  ctx.save()
+  seamPath(ctx, seam, true)
+  ctx.clip()
+  eggPath(ctx)
+  paint(ctx, shellFill(), 0.09)
+  speckles()
+  ctx.restore()
+  ctx.save()
+  eggPath(ctx)
+  ctx.clip()
+  seamStroke(ctx, seam, 0.08)
+  ctx.restore()
+  // The cap, lifted and tipped.
+  ctx.save()
+  ctx.translate(0.03, -lift)
+  ctx.rotate(-0.16)
+  ctx.save()
+  seamPath(ctx, seam, false)
+  ctx.clip()
+  eggPath(ctx)
+  paint(ctx, shellFill(), 0.09)
+  sheen()
+  ctx.restore()
+  ctx.save()
+  eggPath(ctx)
+  ctx.clip()
+  seamStroke(ctx, seam, 0.08)
+  ctx.restore()
+  ctx.restore()
+  // …and poking out of the gap, on top of both, the reason to have watched.
+  antennae(ctx, seam - lift * 0.35)
+}
+
+/** Where the speckles sit on an egg — fixed, so an egg never shimmers. */
+const EGG_SPECKLES: ReadonlyArray<readonly [number, number, number]> = [
+  [0.3, -0.2, 0.05], [-0.36, 0.3, 0.06], [0.12, 0.52, 0.045], [0.46, 0.22, 0.04], [-0.18, -0.02, 0.035]
+]
+
+/** The capsule's pill. */
+const capsulePath = (ctx: CanvasRenderingContext2D): void => {
+  ctx.beginPath()
+  ctx.roundRect(-0.6, -0.9, 1.2, 1.8, 0.6)
+}
+
+const drawCapsule = (ctx: CanvasRenderingContext2D, stage: number, h: number, tint: string): void => {
+  const swell = 1 + h * 0.06
+  ctx.scale(swell, swell)
+  const steel = (): CanvasGradient => {
+    const g = ctx.createLinearGradient(-0.6, 0, 0.6, 0)
+    g.addColorStop(0, '#e6ecf6')
+    g.addColorStop(0.45, '#9aa6bc')
+    g.addColorStop(1, '#465068')
+    return g
+  }
+  const rivets = (y: number): void => {
+    ctx.fillStyle = '#2c3446'
+    for (const x of [-0.36, 0.36]) {
+      ctx.beginPath()
+      ctx.arc(x, y, 0.055, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  const band = (): void => {
+    // The seam band: dark, with a light running round it that brightens stage
+    // by stage — the capsule's version of a crack.
+    ctx.save()
+    capsulePath(ctx)
+    ctx.clip()
+    ctx.fillStyle = '#232a3a'
+    ctx.fillRect(-0.7, -0.13, 1.4, 0.26)
+    ctx.globalAlpha = 0.35 + stage * 0.2
+    ctx.fillStyle = tint
+    ctx.fillRect(-0.7, -0.04, 1.4, 0.08)
+    ctx.restore()
+  }
+  const porthole = (): void => {
     ctx.beginPath()
-    ctx.moveTo(Math.cos(a) * 0.1, Math.sin(a) * 0.1)
-    ctx.lineTo(Math.cos(a) * 0.45 + 0.08, Math.sin(a) * 0.45)
-    ctx.lineTo(Math.cos(a) * 0.76, Math.sin(a) * 0.8 + 0.06)
-    ctx.stroke()
+    ctx.arc(0, -0.48, 0.2, 0, Math.PI * 2)
+    paint(ctx, '#1a2130', 0.06)
+    ctx.save()
+    ctx.globalAlpha = 0.3 + stage * 0.18
+    ctx.beginPath()
+    ctx.arc(0, -0.48, 0.14, 0, Math.PI * 2)
+    ctx.fillStyle = tint
+    ctx.fill()
+    ctx.restore()
+    ctx.beginPath()
+    ctx.arc(-0.06, -0.54, 0.05, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.8)'
+    ctx.fill()
+  }
+
+  if (stage < 3) {
+    capsulePath(ctx)
+    paint(ctx, steel(), 0.09)
+    band()
+    rivets(-0.26)
+    rivets(0.3)
+    porthole()
+    if (stage >= 1) {
+      // A panel line, then the panels starting to give.
+      ctx.beginPath()
+      ctx.moveTo(-0.6, 0.5)
+      ctx.lineTo(0.6, 0.5)
+      inked(ctx, 0.04)
+      ctx.stroke()
+    }
+    if (stage >= 2) {
+      // Two bolts popped out of their holes, and a spark at the seam.
+      ctx.fillStyle = '#c9d2e2'
+      for (const [x, y] of [[0.48, -0.2], [-0.5, 0.24]] as const) {
+        ctx.beginPath()
+        ctx.roundRect(x - 0.06, y - 0.06, 0.12, 0.12, 0.03)
+        ctx.fill()
+      }
+      ctx.strokeStyle = '#fff6c8'
+      ctx.lineWidth = 0.04
+      ctx.beginPath()
+      ctx.moveTo(0.62, -0.02)
+      ctx.lineTo(0.8, -0.12)
+      ctx.moveTo(0.64, 0.04)
+      ctx.lineTo(0.84, 0.06)
+      ctx.stroke()
+    }
+    return
+  }
+
+  // ── Splitting: the top half lifts off the band and the light pours out. ──
+  const lift = 0.3
+  const inside = (): void => {
+    capsulePath(ctx)
+    ctx.fillStyle = '#1a2130'
+    ctx.fill()
+  }
+  /** A half's broken edge: the band's light, still lit, along the break. */
+  const rim = (y: number): void => {
+    ctx.save()
+    capsulePath(ctx)
+    ctx.clip()
+    ctx.fillStyle = tint
+    ctx.fillRect(-0.7, y - 0.035, 1.4, 0.07)
+    ctx.restore()
+  }
+  ctx.save()
+  inside()
+  ctx.translate(0, -lift)
+  inside()
+  ctx.restore()
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(0, -lift * 0.5, 0.6, lift * 0.9, 0, 0, Math.PI * 2)
+  ctx.clip()
+  splitGlow(ctx, -lift * 0.5, tint, 0.9)
+  ctx.restore()
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(-1, 0, 2, 1.2)
+  ctx.clip()
+  capsulePath(ctx)
+  paint(ctx, steel(), 0.09)
+  rivets(0.3)
+  ctx.restore()
+  rim(0.02)
+  ctx.save()
+  ctx.translate(0, -lift)
+  ctx.rotate(0.12)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(-1, -1.2, 2, 1.2)
+  ctx.clip()
+  capsulePath(ctx)
+  paint(ctx, steel(), 0.09)
+  rivets(-0.26)
+  porthole()
+  ctx.restore()
+  rim(-0.02)
+  ctx.restore()
+  antennae(ctx, -lift * 0.35)
+}
+
+/**
+ * The empty shell a hatch leaves on the floor: two halves lying apart.
+ *
+ * Stamped ONCE into the decal layer, where it stays for the rest of the fight —
+ * the floor keeps a record of every egg the player let hatch, which is its own
+ * quiet lesson. `seed` turns the pair, so a floor of them is not a pattern.
+ */
+export const paintEggShell = (
+  ctx: CanvasRenderingContext2D, r: number, look: EggLook, seed: number,
+  o: { procedural?: boolean } = {}
+): void => {
+  ctx.save()
+  ctx.rotate(seed * Math.PI * 2)
+  if (!o.procedural) {
+    const painted = spriteFor('prop', EGG_SHELL_ART_ID[look])
+    if (painted && painted.naturalWidth > 0) {
+      const b = r * EGG_SHELL_BOX
+      ctx.drawImage(painted, -b, -b, b * 2, b * 2)
+      ctx.restore()
+      return
+    }
+  }
+  ctx.scale(r, r)
+  const metal = look === 'capsule'
+  const outer = metal ? '#9aa6bc' : '#f2e1b6'
+  const inner = metal ? '#232a3a' : '#d8bf8a'
+  // The cup: the bottom half of the shell, rim up, with its inside showing.
+  const half = (x: number, y: number, a: number, s: number): void => {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(a)
+    ctx.scale(s, s)
+    ctx.beginPath()
+    ctx.moveTo(SEAM_X[0] * 0.8, seamY(0, 0))
+    for (let i = 1; i < SEAM_X.length; i++) ctx.lineTo(SEAM_X[i]! * 0.8, seamY(i, 0))
+    ctx.ellipse(0, 0, 0.72, 0.62, 0, 0, Math.PI, false)
+    ctx.closePath()
+    paint(ctx, outer, 0.09)
+    ctx.beginPath()
+    ctx.ellipse(0, 0.02, 0.56, 0.2, 0, 0, Math.PI * 2)
+    ctx.fillStyle = inner
+    ctx.fill()
+    if (metal) {
+      ctx.fillStyle = 'rgba(110,240,255,0.55)'
+      ctx.fillRect(-0.5, -0.03, 1, 0.06)
+    }
+    ctx.restore()
+  }
+  half(-0.34, 0.26, -0.35, 1)
+  half(0.46, -0.36, Math.PI + 0.7, 0.8)
+  // A few chips of shell thrown clear.
+  ctx.fillStyle = outer
+  for (const [x, y, s] of [[0.62, 0.42, 0.09], [-0.7, -0.4, 0.07], [0.1, 0.8, 0.06]] as const) {
+    ctx.beginPath()
+    ctx.moveTo(x - s, y)
+    ctx.lineTo(x, y - s)
+    ctx.lineTo(x + s, y + s * 0.4)
+    ctx.closePath()
+    paint(ctx, outer, 0.03)
   }
   ctx.restore()
+}
+
+/**
+ * One of the brood's drawables in a square cell of half-size `half`, at `panel`
+ * (the crack stage, for a stage sheet), centred on (0, 0).
+ *
+ * The cell IS the painting's box — the egg is drawn at `half / EGG_ART_BOX` and
+ * the shell at `half / EGG_SHELL_BOX` — so the bench's reference and the
+ * runtime's blit share one piece of arithmetic. `painted` draws the painting
+ * through the game's own path and returns false when there is none (the
+ * playground's A/B); otherwise it is always the drawing, which is what the bench
+ * exports.
+ */
+export const paintEggProp = (
+  ctx: CanvasRenderingContext2D, id: EggPropId, half: number, panel = 0, painted = false
+): boolean => {
+  const look: EggLook = id.startsWith('egg-capsule') ? 'capsule' : 'egg'
+  const tint = look === 'capsule' ? '#6ef0ff' : '#ffd07a'
+  if (id === 'egg-shell' || id === 'egg-capsule-shell') {
+    if (painted) {
+      const img = spriteFor('prop', id)
+      if (!img || !img.naturalWidth) return false
+    }
+    paintEggShell(ctx, half / EGG_SHELL_BOX, look, 0, { procedural: !painted })
+    return true
+  }
+  const stage = Math.max(0, Math.min(EGG_STAGES - 1, panel))
+  if (painted && !stripFrames('prop', id, 1)) return false
+  paintPod(ctx, half / EGG_ART_BOX, (stage + 0.5) / EGG_STAGES, tint, { look, stage, procedural: !painted })
+  return true
 }
 
 /** The coin the piñata fly drops. Spins on `t`, which is a plain 0..1. */

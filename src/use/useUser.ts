@@ -66,11 +66,27 @@ export {
 }
 
 // Background-music track id → audio filename (under public/audio/music/).
-export type MusicTrack = 'trance' | 'cozy'
+// `parade` is the game's own theme, rendered from `tools/music/` (`pnpm
+// music:render`); the other two predate it.
+export type MusicTrack = 'parade' | 'trance' | 'cozy'
 export const MUSIC_TRACK_FILES: Record<MusicTrack, string> = {
+  parade: 'crunch-parade.ogg',
   trance: 'trance.ogg',
   cozy: 'bg-cozy.ogg'
 }
+
+/**
+ * The track for a player who has never picked one: "Crunch Parade", the only
+ * one written for this game — a stomp on the beat, loop-seamless, and mixed to
+ * leave the squish its band.
+ *
+ * A save that already holds a track keeps it. That includes the `cozy` the
+ * settings-stranding write below (`if (!hasState(MUSIC_TRACK_KEY))`) seeded for
+ * everybody who booted an earlier build without opening Options: a seeded value
+ * and a chosen one look identical in the blob, so both are respected rather
+ * than guessing which is which.
+ */
+export const DEFAULT_MUSIC_TRACK: MusicTrack = 'parade'
 
 const readNumber = (key: string, fallback: number): number => {
   const v = getState<unknown>(key)
@@ -96,9 +112,9 @@ const userLanguage: Ref<string> = ref(readString(LANGUAGE_KEY, 'en'))
 // Difficulty defaults to MEDIUM. It scales enemy HP + wave budget (Easy −20%,
 // Hard +25%) via `difficultyFactor()` below, read by the wave director.
 const userDifficulty: Ref<Difficulties> = ref(readString<Difficulties>(DIFFICULTY_KEY, DIFFICULTY.MEDIUM))
-// Background-music track — defaults to 'cozy', which is the one that matches
-// this game. `trance` stays available for anybody who prefers it.
-const userMusicTrack: Ref<MusicTrack> = ref(readString<MusicTrack>(MUSIC_TRACK_KEY, 'cozy'))
+// Background-music track — defaults to `DEFAULT_MUSIC_TRACK` (see above).
+// `cozy` and `trance` stay available for anybody who prefers them.
+const userMusicTrack: Ref<MusicTrack> = ref(readString<MusicTrack>(MUSIC_TRACK_KEY, DEFAULT_MUSIC_TRACK))
 
 // ─── Tone and accessibility (GDD §2.2, §10.2) ───────────────────────────────
 //

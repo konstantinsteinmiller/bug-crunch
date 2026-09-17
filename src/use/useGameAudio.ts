@@ -1,40 +1,59 @@
-import { getAudioContext, isAudioSuspended } from '@/use/useAssets'
+import { getAudioContext, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isMobileAudioMuted } from '@/use/useMobileAudioMute'
 import useUser from '@/use/useUser'
 import useSounds from '@/use/useSound'
 import type { JuiceStyleId } from '@/game/juiceStyle'
+import { BUG_IDS } from '@/game/bugs'
+import type { BossId } from '@/game/bosses'
+import {
+  CRUSH_BUDGET_BYTES, CRUSH_JITTER, CRUSH_MIX, CRUSH_RENDER_RATE,
+  canonicalHeavy, crushPlan, crushSlotKey, estimateSlotBytes, hasCrushVoice, isBossSubject, startCrush,
+  type CrushJob, type CrushKind, type CrushSlot, type CrushSubject
+} from '@/game/audio/crushSynth'
 
 /**
  * ─── Bug Crunch audio ──────────────────────────────────────────────────────────
  *
- * Two sources, one entry point (`playFx`):
+ * Three sources, one entry point (`playFx`):
  *
  *   SAMPLES   — where a recorded sound is unmistakably better: the coin, the
  *               level-clear fanfare, the time-up sting. These route through the
  *               shared `useSound` fast path (decoded AudioBuffers).
- *   SYNTHESIS — everything a stomp makes. A good run squishes four bugs a
- *               second; sample playback of one squelch at that rate sounds like
- *               a machine jam, and shipping forty variants would bloat the
- *               download. Every squish is synthesised per event with randomised
- *               pitch and envelope, so no two are identical and the whole
- *               combat mix costs zero bytes.
+ *   THE CRUSH BANK — every body's death, wound and ricochet. Pre-rendered from
+ *               the pure synthesiser in `game/audio/crushSynth.ts` into
+ *               AudioBuffers on the shared context during idle time, then played
+ *               as ONE buffer source per kill. See below.
+ *   LIVE SYNTHESIS — everything else a stomp makes (the foot, the chain, the
+ *               props, the boss's tells), built per event from oscillators and
+ *               noise, and the fallback for any crush whose buffer is not ready
+ *               yet. The whole combat mix still costs zero download bytes.
  *
- * ── The three-layer squish (GDD §8.2) ──
+ * ── The crush bank ──
  *
- * Every kill fires three voices in one call, and they are three different
- * SOUNDS rather than one sound at three volumes:
+ * The squish is the busiest sound in the game and the one a player hears most
+ * without looking, so every body has its OWN crush built from its material
+ * (`crushSynth.ts` has the whole design, per bug): an ant is a juicy plop and a
+ * drip, a beetle is a chitin crack and a crackle and THEN the goo, a robobug is
+ * bent tin, a spring, sparks and a coolant splutter, a stinkbug gets the last
+ * word. `hurt` is the material without the release — a beetle whose shell
+ * cracked but held — so progress on a multi-hit body is audible. `clang` is the
+ * ricochet off armour. The Juice Style swaps the MATERIAL wholesale (`confetti`
+ * paper and party per bug, `bubble` gentle soap per bug), because a player who
+ * picked Bubble Pop to avoid the squelch should not still hear the squelch.
  *
- *   1. IMPACT  a short low thud — the shoe arriving. Its weight is the shoe's:
- *              a steel boot is a 60 Hz slam, a bunny slipper is a soft pat.
- *   2. JUICE   a wet downward glide through a band-pass, pitched by the bug's
- *              MASS: a tiny ant pops high and fast, a beetle bursts low and
- *              slow. This is the layer players actually hear as "the squish".
- *   3. DEBRIS  a short crackle of shell or a rustle of wing, only for the
- *              bodies that have one.
+ * Why pre-rendered rather than synthesised per event like the rest: a crush
+ * worth the name is fifteen to forty voices (grains, bubbles, modes), and at
+ * four kills a second that is a node graph the main thread cannot afford. A
+ * buffer source is three nodes. The DSP runs in plain loops instead, once, in
+ * 3–8 ms slices between frames (every crush is a resumable job, so even a boss
+ * never becomes a long task) — the current level's cast first, the heavy
+ * variants next, the rest of the bestiary after, and nothing past
+ * `CRUSH_BUDGET_BYTES` (6 MB) of decoded audio. A Juice Style change rebuilds the bank. Until a body's buffer
+ * exists it plays the old three-layer live squish, so nothing is ever silent.
  *
- * The Juice Style setting swaps layer 2 wholesale — `paper` for confetti,
- * `pop` for bubbles — because a player who picked Bubble Pop to avoid the
- * squelch should not still hear the squelch.
+ * Variation comes from three to four rendered variants per slot (never the same
+ * one twice in a row) plus a small playback-rate and gain jitter, so a Fever
+ * that clears twelve ants is twelve different ants, not a machine gun.
  *
  * ── The chain is a melody ──
  *
@@ -91,7 +110,10 @@ const THROTTLES: Partial<Record<FxSound, Throttle>> = {
   // into the sound of the rest of the level.
   chainStep: { minGapMs: 70, maxPerWindow: 6, windowMs: 500 },
   sweep: { minGapMs: 60, maxPerWindow: 5, windowMs: 400 },
-  podPop: { minGapMs: 70, maxPerWindow: 4, windowMs: 400 }
+  podPop: { minGapMs: 70, maxPerWindow: 4, windowMs: 400 },
+  // Eggs laid together hatch together. Two cracks a beat apart say "two eggs";
+  // four on one frame say nothing a single one does not.
+  podHatch: { minGapMs: 120, maxPerWindow: 2, windowMs: 500 }
 }
 
 const lastAt: Partial<Record<FxSound, number>> = {}
@@ -379,10 +401,269 @@ export const chainFreq = (step: number): number => {
   return 392 * Math.pow(2, semis / 12)
 }
 
-// ─── The squish, in three layers ────────────────────────────────────────────
+// ─── The crush bank ─────────────────────────────────────────────────────────
 
-/** Everything one squish needs to know about itself. */
+/** What the current level can put on the board, and how it should sound. */
+export interface CrushPrime {
+  style: JuiceStyleId
+  /** The level's roster — rendered first. */
+  cast: readonly string[]
+  /** The level's boss, whose crush, wound, ricochet and pods join the cast. */
+  boss: BossId | null
+}
+
+interface CrushBank {
+  ctx: AudioContext
+  style: JuiceStyleId
+  /** Render rate actually used — `CRUSH_RENDER_RATE` unless the browser
+   *  refused a buffer at a rate other than its own. */
+  rate: number
+  /** Slot key → rendered variants, sparse while the bank is still filling. */
+  voices: Map<string, Array<AudioBuffer | undefined>>
+  /** Bytes per subject, for eviction. */
+  bytesBy: Map<CrushSubject, number>
+  bytes: number
+  queue: CrushSlot[]
+  /** The crush being rendered right now, a slice at a time. */
+  active: { slot: CrushSlot; job: CrushJob } | null
+  /** The current level's subjects: rendered first, never evicted. */
+  keep: Set<CrushSubject>
+  lastVariant: Map<string, number>
+}
+
+let bank: CrushBank | null = null
+/** A prime waiting for the next pump — applied there, not in the caller, so a
+ *  level start never pays for a single buffer. */
+let pendingPrime: { style: JuiceStyleId; subjects: CrushSubject[] } | null = null
+let lastPrime: { style: JuiceStyleId; subjects: CrushSubject[] } | null = null
+let pumpScheduled = false
+/** Bench numbers for the seam below: how the slicing actually behaves. */
+const pumpStats = { slices: 0, workMs: 0, maxSliceMs: 0 }
+
+/**
+ * Tell the bank what the level can put on the board. Cheap and synchronous:
+ * the rendering happens later, on idle slots. Call it on every level start and
+ * every Juice Style change; repeated calls with the same cast cost nothing.
+ */
+export const primeCrushBank = (p: CrushPrime): void => {
+  const subjects: CrushSubject[] = []
+  for (const id of p.cast) if (hasCrushVoice(id) && !subjects.includes(id)) subjects.push(id)
+  if (p.boss) subjects.push(p.boss, 'pod', 'hatch')
+  pendingPrime = { style: p.style, subjects }
+  lastPrime = pendingPrime
+  schedulePump()
+}
+
+const slotReady = (b: CrushBank, s: CrushSlot): boolean =>
+  b.voices.get(crushSlotKey(s.subject, s.kind, s.heavy))?.[s.variant] !== undefined
+
+const applyPrime = (ctx: AudioContext, p: { style: JuiceStyleId; subjects: CrushSubject[] }): CrushBank => {
+  let b = bank
+  if (!b || b.ctx !== ctx || b.style !== p.style) {
+    // A new style is a new material for every body: drop the lot. The old
+    // buffers go to the GC; a kill in the meantime plays the live squish.
+    b = {
+      ctx, style: p.style, rate: b?.ctx === ctx ? b.rate : CRUSH_RENDER_RATE,
+      voices: new Map(), bytesBy: new Map(), bytes: 0, queue: [], active: null, keep: new Set(), lastVariant: new Map()
+    }
+    bank = b
+  }
+  b.keep = new Set(p.subjects)
+
+  // Over budget with a new cast: give back the bodies this level cannot show.
+  if (b.bytes > CRUSH_BUDGET_BYTES * 0.8) {
+    for (const [subject, bytes] of [...b.bytesBy]) {
+      if (b.keep.has(subject)) continue
+      for (const key of [...b.voices.keys()]) if (key.startsWith(`${subject}|`)) b.voices.delete(key)
+      b.bytesBy.delete(subject)
+      b.bytes -= bytes
+      if (b.bytes <= CRUSH_BUDGET_BYTES * 0.5) break
+    }
+  }
+
+  // The cast in plan order, then — as a courtesy for the next level — the rest
+  // of the bestiary (never other bosses: a boss is one level in ten).
+  const rest = BUG_IDS.filter((id) => hasCrushVoice(id) && !b.keep.has(id))
+  b.queue = [...crushPlan([...b.keep]), ...crushPlan(rest)].filter((s) => !slotReady(b, s))
+  return b
+}
+
+/**
+ * Slice length when the browser offers no idle time — a device whose game loop
+ * fills every frame. Small, because it is taken from a frame that is already
+ * late; the bank fills slower there, and a body without its buffer yet simply
+ * plays the live squish.
+ */
+const BUSY_SLICE_MS = 3
+/** The longest a slice ever runs, however idle the page is. */
+const IDLE_SLICE_MS = 8
+
+const schedulePump = (): void => {
+  if (pumpScheduled || typeof window === 'undefined') return
+  pumpScheduled = true
+  const w = window as Window & { requestIdleCallback?: Window['requestIdleCallback'] }
+  // A short timeout: with no idle time at all the pump still gets a 3 ms slice
+  // about every 60 ms (~5 % of the main thread) instead of waiting forever.
+  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(pumpCrushBank, { timeout: 60 })
+  else setTimeout(() => pumpCrushBank(), 32)
+}
+
+/** Next slot worth rendering, dropping the ones that are done or unaffordable. */
+const nextSlot = (b: CrushBank): CrushSlot | null => {
+  while (b.queue.length > 0) {
+    const slot = b.queue.shift()!
+    if (slotReady(b, slot)) continue
+    // Past the budget, only the level's own cast is still worth memory.
+    if (!b.keep.has(slot.subject) && b.bytes + estimateSlotBytes(slot, b.rate) > CRUSH_BUDGET_BYTES * 0.8) continue
+    return slot
+  }
+  return null
+}
+
+/**
+ * Work on the bank for one slice. Each crush renders as a resumable job
+ * (`startCrush`), so a slice is a few milliseconds however big the crush — the
+ * bank never costs the game a long task, only a sliver of the frames it fills
+ * in, and only for the first seconds of a level.
+ */
+const pumpCrushBank = (deadline?: IdleDeadline): void => {
+  pumpScheduled = false
+  const ctx = getAudioContext()
+  if (!ctx) return
+  if (pendingPrime) {
+    bank = applyPrime(ctx, pendingPrime)
+    pendingPrime = null
+  }
+  const b = bank
+  if (!b || b.ctx !== ctx) return
+
+  const budget = deadline && !deadline.didTimeout
+    ? Math.max(1, Math.min(IDLE_SLICE_MS, deadline.timeRemaining() - 1))
+    : BUSY_SLICE_MS
+  const began = performance.now()
+  while (!pendingPrime) {
+    if (!b.active) {
+      const slot = nextSlot(b)
+      if (!slot) break
+      b.active = { slot, job: startCrush({ ...slot, style: b.style, sampleRate: b.rate }) }
+    }
+    const left = budget - (performance.now() - began)
+    if (left <= 0) break
+    const data = b.active.job.step(left)
+    if (!data) break
+
+    const { slot } = b.active
+    b.active = null
+    let buffer: AudioBuffer
+    try {
+      buffer = ctx.createBuffer(1, data.length, b.rate)
+      buffer.getChannelData(0).set(data)
+    } catch {
+      if (b.rate !== ctx.sampleRate) {
+        // A browser that will not hold a 24 kHz buffer gets its own rate —
+        // twice the memory, and still inside the budget for a level's cast.
+        b.rate = ctx.sampleRate
+        b.queue.unshift(slot)
+      }
+      continue
+    }
+    const key = crushSlotKey(slot.subject, slot.kind, slot.heavy)
+    const set = b.voices.get(key) ?? []
+    set[slot.variant] = buffer
+    b.voices.set(key, set)
+    const bytes = buffer.length * 4
+    b.bytes += bytes
+    b.bytesBy.set(slot.subject, (b.bytesBy.get(slot.subject) ?? 0) + bytes)
+  }
+  const spent = performance.now() - began
+  pumpStats.slices++
+  pumpStats.workMs += spent
+  pumpStats.maxSliceMs = Math.max(pumpStats.maxSliceMs, spent)
+  if (b.active || b.queue.length > 0 || pendingPrime) schedulePump()
+}
+
+/**
+ * Play one crush from the bank. Returns false when there is nothing to play
+ * yet — the caller then falls back to the live synth, so a body is never silent.
+ */
+const playCrush = (
+  ctx: AudioContext,
+  subject: CrushSubject | null,
+  kind: CrushKind,
+  heavy: boolean,
+  style: JuiceStyleId,
+  pan: number,
+  boost = 1
+): boolean => {
+  if (!subject || !hasCrushVoice(subject)) return false
+  const b = bank
+  if (!b || b.ctx !== ctx) return false
+  if (b.style !== style) {
+    // The setting changed under a live level: rebuild for the new material.
+    if (!pendingPrime && lastPrime) primeCrushBank({ style, cast: lastPrime.subjects, boss: null })
+    return false
+  }
+
+  let key = crushSlotKey(subject, kind, heavy)
+  let set = b.voices.get(key)
+  let rate = 1
+  let gain = CRUSH_MIX[kind] * boost
+  if (!set?.some(Boolean) && kind === 'crush' && canonicalHeavy(subject, kind, heavy)) {
+    // The slam variants are still rendering. This body's own light crush, a
+    // touch lower and louder, is a far better stand-in than a generic squelch.
+    key = crushSlotKey(subject, kind, false)
+    set = b.voices.get(key)
+    rate = 0.92
+    gain *= 1.2
+  }
+  if (!set) return false
+  const ready: number[] = []
+  for (let i = 0; i < set.length; i++) if (set[i]) ready.push(i)
+  if (ready.length === 0) return false
+
+  // Never the same variant twice in a row.
+  let pick = ready[Math.floor(Math.random() * ready.length)]!
+  const last = b.lastVariant.get(key)
+  if (ready.length > 1 && pick === last) pick = ready[(ready.indexOf(pick) + 1) % ready.length]!
+  b.lastVariant.set(key, pick)
+
+  const src = ctx.createBufferSource()
+  src.buffer = set[pick]!
+  src.playbackRate.value = rate * (1 + CRUSH_JITTER[kind] * (Math.random() * 2 - 1))
+  const g = ctx.createGain()
+  g.gain.value = vol(gain * (0.9 + Math.random() * 0.2))
+  src.connect(g)
+  route(ctx, g, { pan })
+  src.start()
+  // Tracked, so an interstitial can hard-stop a crush mid-tail.
+  registerOneShotSource(src)
+  return true
+}
+
+/** Test/bench seam: how full the bank is, and what filling it has cost. */
+export const __crushBankState = (): {
+  style: JuiceStyleId | null; bytes: number; slots: number; buffers: number; queued: number
+  slices: number; workMs: number; maxSliceMs: number
+} => ({
+  ...pumpStats,
+  style: bank?.style ?? null,
+  bytes: bank?.bytes ?? 0,
+  slots: bank?.voices.size ?? 0,
+  buffers: bank ? [...bank.voices.values()].reduce((n, s) => n + s.filter(Boolean).length, 0) : 0,
+  queued: (bank?.queue.length ?? 0) + (bank?.active ? 1 : 0)
+})
+
+// ─── The body voice, and the live squish it falls back to ───────────────────
+
+/**
+ * Everything one body cue needs to know about itself — the squish, and also
+ * the `hurt`, `clang`, pod and boss cues, which read `bug`, `style` and `heavy`
+ * from the same voice.
+ */
 export interface SquishVoice {
+  /** Which body, bug or boss. Picks its crush from the bank; null plays the
+   *  generic live squish. */
+  bug: CrushSubject | null
   /** The body's mass, 0 (an ant) .. 1 (a boss-sized beetle). Drives the pitch
    *  of the juice layer, which is the layer the player hears as "the squish". */
   mass: number
@@ -399,15 +680,19 @@ export interface SquishVoice {
 }
 
 let squishCfg: SquishVoice = {
-  mass: 0.2, weight: 0.3, style: 'ooze', debris: false, heavy: false, pan: 0
+  bug: null, mass: 0.2, weight: 0.3, style: 'ooze', debris: false, heavy: false, pan: 0
 }
 
-/** Set the parameters the NEXT `playFx('squish')` will use. Two calls rather
- *  than one wide signature, because `playFx` is the one entry point every cue
- *  goes through and widening it for one cue would bend the whole module. */
+/** Set the parameters the NEXT body cue (`squish`, `hurt`, `clang`, `podPop`,
+ *  the boss cues) will use. Two calls rather than one wide signature, because
+ *  `playFx` is the one entry point every cue goes through and widening it for
+ *  the body cues would bend the whole module. */
 export const setSquishVoice = (v: Partial<SquishVoice>): void => {
   squishCfg = { ...squishCfg, ...v }
 }
+
+/** The same setter under the name the non-squish callers read better with. */
+export const setBodyVoice = setSquishVoice
 
 const squish = (ctx: AudioContext, v: SquishVoice): void => {
   const pan = v.pan
@@ -547,15 +832,21 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       break
 
     // ── The bodies ──
+    //
+    // Each tries the crush bank first — the body's own pre-rendered sound — and
+    // falls back to the live voice below while its buffer is still rendering.
     case 'squish':
+      if (playCrush(ctx, squishCfg.bug, 'crush', squishCfg.heavy, squishCfg.style, pan)) break
       squish(ctx, squishCfg)
       break
     case 'hurt':
+      if (playCrush(ctx, squishCfg.bug, 'hurt', squishCfg.heavy, squishCfg.style, pan)) break
       // A body that survived: the impact WITHOUT the burst, plus a dry knock.
       tone(ctx, { freq: 190, toFreq: 120, duration: 0.07, gain: vol(0.1), type: 'triangle', filter: 1800, pan })
       crackle(ctx, { count: 3, from: 0, to: 0.08, gain: vol(0.05), lo: 1800, hi: 4200, pan })
       break
     case 'clang':
+      if (playCrush(ctx, squishCfg.bug, 'clang', false, squishCfg.style, pan)) break
       // Metal on shell. Two inharmonic partials with a fast decay, plus a
       // bright tick — it has to be unmistakably NOT a squish, because it is the
       // sound of the player using the wrong tool.
@@ -615,13 +906,16 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       tone(ctx, { freq: 150, toFreq: 90, duration: 0.2, gain: vol(0.1), type: 'square', filter: 700, pan })
       break
     case 'podPop':
+      if (playCrush(ctx, 'pod', 'crush', false, squishCfg.style, pan)) break
       noiseBurst(ctx, { duration: 0.16, gain: vol(0.11), filterFrom: 3600, filterTo: 900, pan })
       tone(ctx, { freq: 420, toFreq: 180, duration: 0.14, gain: vol(0.08), type: 'triangle', pan })
       crackle(ctx, { count: 4, from: 0.01, to: 0.14, gain: vol(0.05), lo: 1800, hi: 5200, pan })
       break
     case 'podHatch':
-      // A warning, not a punishment: the player LOST a pod, and the cue has to
-      // be legible over whatever else is happening.
+      // A warning, not a punishment: some ants got out, and the cue has to be
+      // legible over whatever else is happening. The bank's crack-and-scurry
+      // (`crushSynth` `hatch`) when it has rendered; the old rising buzz until then.
+      if (playCrush(ctx, 'hatch', 'crush', false, squishCfg.style, pan)) break
       tone(ctx, { freq: 220, toFreq: 330, duration: 0.24, gain: vol(0.09), type: 'sawtooth', filter: 1600, pan })
       break
     case 'arc':
@@ -630,19 +924,29 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       break
 
     // ── The boss ──
-    case 'bossHit':
+    case 'bossHit': {
+      // The boss's own wound — the queen's jelly smack, the king's shell, the
+      // matriarch's segments, the roach's dented plate.
+      const boss = squishCfg.bug && isBossSubject(squishCfg.bug) ? squishCfg.bug : null
+      if (playCrush(ctx, boss, 'hurt', false, squishCfg.style, pan)) break
       tone(ctx, { freq: 96, toFreq: 54, duration: 0.2, gain: vol(0.18), type: 'sine', pan })
       noiseBurst(ctx, { duration: 0.16, gain: vol(0.1), filterFrom: 2600, filterTo: 300, pan })
       break
-    case 'bossCounter':
+    }
+    case 'bossCounter': {
       // The perfect counter. The single most satisfying moment in the game, so
-      // it gets the biggest voice that is not the boss dying.
-      tone(ctx, { freq: 130, toFreq: 46, duration: 0.42, gain: vol(0.26), type: 'sine' })
-      noiseBurst(ctx, { duration: 0.34, gain: vol(0.16), filterFrom: 7000, filterTo: 200 })
+      // it gets the biggest voice that is not the boss dying: the boss's full
+      // crush from the bank, with the chord over it.
+      const boss = squishCfg.bug && isBossSubject(squishCfg.bug) ? squishCfg.bug : null
+      if (!playCrush(ctx, boss, 'crush', true, squishCfg.style, 0)) {
+        tone(ctx, { freq: 130, toFreq: 46, duration: 0.42, gain: vol(0.26), type: 'sine' })
+        noiseBurst(ctx, { duration: 0.34, gain: vol(0.16), filterFrom: 7000, filterTo: 200 })
+      }
       for (const semis of [0, 7, 12]) {
         bell(ctx, { freq: 523 * Math.pow(2, semis / 12), duration: 0.7, gain: vol(0.07), delay: 0.03 })
       }
       break
+    }
     case 'bossPhase':
       tone(ctx, { freq: 220, toFreq: 110, duration: 0.6, gain: vol(0.14), type: 'sawtooth', filter: 900 })
       noiseBurst(ctx, { duration: 0.5, gain: vol(0.1), filterFrom: 5200, filterTo: 260 })
@@ -688,7 +992,13 @@ export const playFx = (id: FxSound, power = 0, pan = 0): void => {
     if (id === 'bossDie') {
       const ctx = getAudioContext()
       if (ctx && ctx.state === 'running') {
-        try { synth(ctx, 'stompHeavy', 1) } catch { /* node budget — the visual carries it */ }
+        try {
+          synth(ctx, 'stompHeavy', 1)
+          // And the boss's own crush on top — the queen bursting, the king's
+          // shell going in three stages, the roach winding down.
+          const boss = squishCfg.bug && isBossSubject(squishCfg.bug) ? squishCfg.bug : null
+          playCrush(ctx, boss, 'crush', true, squishCfg.style, 0)
+        } catch { /* node budget — the visual carries it */ }
       }
     }
     return
@@ -710,10 +1020,13 @@ export const playFx = (id: FxSound, power = 0, pan = 0): void => {
 }
 
 /** Warm the synthesis path (build the noise buffer) so the first burst of a
- *  session doesn't pay for a 1.2 s buffer fill mid-frame. */
+ *  session doesn't pay for a 1.2 s buffer fill mid-frame, and nudge the crush
+ *  bank's idle rendering along. */
 export const warmAudio = (): void => {
   const ctx = getAudioContext()
   if (ctx) getNoise(ctx)
+  // And make sure the crush bank is filling, if a level has primed it.
+  if (pendingPrime || (bank && (bank.active || bank.queue.length > 0))) schedulePump()
 }
 
 /** Test seam: what the throttle has let through. */

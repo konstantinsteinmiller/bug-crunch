@@ -3,6 +3,7 @@ import * as sim from '@/use/useBugCrunchGame'
 import type { Bug, GameEvent } from '@/use/useBugCrunchGame'
 import { COMBO_WINDOW_MS } from '@/game/combo'
 import { levelSpec } from '@/game/stages'
+import { EGG_LAY_MS, EGG_SCORE } from '@/game/bosses'
 
 /**
  * ─── The simulation, driven headlessly ──────────────────────────────────────
@@ -166,6 +167,24 @@ describe('starting a level', () => {
     run(4_000)
     expect(sim.getBugs().filter((b) => b.alive).length).toBeGreaterThan(0)
   })
+
+  // Relief is a number ABOVE one (see `reliefFor`), and it used to multiply bug
+  // speed as well as the clock — so a level that had beaten a child got FASTER
+  // bugs on the retry, which is the exact opposite of what it is for.
+  it('relief after a failure lengthens the clock AND slows the bugs down', () => {
+    const spec = levelSpec(1)
+    const antSpeed = (relief: number): number => {
+      start(1, { relief })
+      clearFloor()
+      const b = sim.spawnBug('ant', 50, 90)!
+      return Math.hypot(b.vx, b.vy)
+    }
+    const plain = antSpeed(1)
+    const relieved = antSpeed(1.18)
+    expect(sim.timeLeft.value).toBeGreaterThan(spec.time)
+    expect(relieved).toBeLessThan(plain)
+    start(1)
+  })
 })
 
 describe('aiming', () => {
@@ -296,8 +315,8 @@ describe('armour and spikes', () => {
  * touch half cannot be seen by looking at the pointer half, and neither half is
  * visible from a pure-function test of `bugs.ts`.
  *
- * Every case here runs on LEVEL 2 — the sprinter's own level. It has no
- * hazards to ground anything, a quota of 12 so a handful of test taps cannot
+ * Every case here runs on LEVEL 5 — the sprinter's own level (1-5). It has no
+ * hazards to ground anything, a quota of 21 so a handful of test taps cannot
  * accidentally finish the level out from under a case, and it is the board a
  * real player meets this creature on.
  */
@@ -331,7 +350,7 @@ describe('the sprinter ant', () => {
 
   describe('on a pointer', () => {
     it('bolts when the shoe comes for it', () => {
-      start(2)
+      start(5)
       const b = oneSprinter()
       const y0 = b.y
       rushAt(b)
@@ -344,7 +363,7 @@ describe('the sprinter ant', () => {
     // from the flea: a flea leaps at whatever is over it, a sprinter runs from
     // whatever is COMING. Stop moving and it never goes.
     it('ignores a shoe that is merely sitting next to it', () => {
-      start(2)
+      start(5)
       const b = oneSprinter()
       footAt(b.x, b.y + 14)
       expect(watchBolt(b, 1500)).toBe(false)
@@ -352,7 +371,7 @@ describe('the sprinter ant', () => {
     })
 
     it('stops DEAD when the run ends, which is the whole kill window', () => {
-      start(2)
+      start(5)
       const b = oneSprinter()
       rushAt(b)
       expect(watchBolt(b, 1100)).toBe(true)
@@ -369,7 +388,7 @@ describe('the sprinter ant', () => {
     })
 
     it('will not bolt twice in a row — after one it is just an ant', () => {
-      start(2)
+      start(5)
       const b = oneSprinter()
       rushAt(b)
       expect(watchBolt(b, 1100)).toBe(true)
@@ -382,7 +401,7 @@ describe('the sprinter ant', () => {
     })
 
     it('…but it IS a lockout and not a one-shot: it bolts again later', () => {
-      start(2)
+      start(5)
       const b = oneSprinter()
       rushAt(b)
       expect(watchBolt(b, 1100)).toBe(true)
@@ -398,7 +417,7 @@ describe('the sprinter ant', () => {
     // Same perk, same reason as the flea: the Bunny Slipper is quiet. It does
     // NOT hide a stomp, because a stomp is loud in any shoe — see below.
     it('never hears a silent shoe coming', () => {
-      start(2, { shoe: 'bunnySlipper' })
+      start(5, { shoe: 'bunnySlipper' })
       const b = oneSprinter()
       rushAt(b)
       expect(watchBolt(b, 1500)).toBe(false)
@@ -410,7 +429,7 @@ describe('the sprinter ant', () => {
     // to be sensed by — and a sprinter that fled from a finger on its way down
     // would be a bug nobody on a phone could ever catch.
     it('does not flee from an approaching finger, because there is none', () => {
-      start(2)
+      start(5)
       sim.setTouch(true)
       const b = oneSprinter()
       rushAt(b)
@@ -419,7 +438,7 @@ describe('the sprinter ant', () => {
     })
 
     it('bolts once when a stomp lands NEAR it instead of on it', () => {
-      start(2)
+      start(5)
       sim.setTouch(true)
       const b = oneSprinter()
       const r = sim.stompRadius()
@@ -433,7 +452,7 @@ describe('the sprinter ant', () => {
     })
 
     it('is not scared by a stomp on the far side of the board', () => {
-      start(2)
+      start(5)
       sim.setTouch(true)
       const b = oneSprinter()
       tapAt(b.x, b.y + sim.stompRadius() * 4)
@@ -441,7 +460,7 @@ describe('the sprinter ant', () => {
     })
 
     it('is still scared by a near miss in a silent shoe — a stomp is a stomp', () => {
-      start(2, { shoe: 'bunnySlipper' })
+      start(5, { shoe: 'bunnySlipper' })
       sim.setTouch(true)
       const b = oneSprinter()
       const gap = sim.stompRadius() + b.spec.size + 3
@@ -451,7 +470,7 @@ describe('the sprinter ant', () => {
     })
   })
 
-  // 1-7's lesson, pinned. Honey grounds a sprinter exactly as it grounds a
+  // 1-9's lesson, pinned. Honey grounds a sprinter exactly as it grounds a
   // flea — without it the answer world 1 hands over would quietly not work.
   //
   // Each case carries its own CONTROL on the same board: the identical rush
@@ -459,14 +478,14 @@ describe('the sprinter ant', () => {
   // "did not bolt" assertion passes just as happily when the sprinter is broken
   // as when the honey is working.
   describe('in honey', () => {
-    /** Level 7 is the honey level. Its first puddle is the one used here. */
+    /** Level 9 is the honey level. Its first puddle is the one used here. */
     const puddle = (): { x: number; y: number } => {
       const h = sim.getHazards().find((p) => p.id === 'honey')
       expect(h).toBeDefined()
       return { x: h!.x, y: h!.y }
     }
 
-    /** A patch of level 7's floor with nothing on it. */
+    /** A patch of level 9's floor with nothing on it. */
     const BARE = { x: 80, y: 60 }
 
     const at = (x: number, y: number): Bug => {
@@ -478,7 +497,7 @@ describe('the sprinter ant', () => {
     }
 
     it('cannot bolt away from an approaching shoe, where bare floor could', () => {
-      start(7)
+      start(9)
       const control = at(BARE.x, BARE.y)
       rushAt(control)
       expect(watchBolt(control, 1100)).toBe(true)
@@ -490,7 +509,7 @@ describe('the sprinter ant', () => {
     })
 
     it('cannot bolt away from a near miss either', () => {
-      start(7)
+      start(9)
       sim.setTouch(true)
       // Outside the kill circle, inside the scare band.
       const gap = sim.stompRadius() + 3.0 + 4
@@ -503,6 +522,62 @@ describe('the sprinter ant', () => {
       tapAt(stuck.x, stuck.y + gap)
       expect(watchBolt(stuck, 900)).toBe(false)
     })
+  })
+})
+
+/**
+ * ─── What the HUD is allowed to be told ─────────────────────────────────────
+ *
+ * Every write to one of these refs re-renders the whole HUD — `SplatHud`, the
+ * quest badges, the vial, the chest — and a 20-second profile of a 6×-throttled
+ * phone spent more main-thread time in Vue re-renders than in the renderer that
+ * draws the game. Both of these used to take a fresh float sixty times a second.
+ *
+ * Pinned as COUNTS rather than as timings, so the rule holds on any machine:
+ * the frame-time win is a phone measurement (`PERF-LEDGER.md`), but "the HUD is
+ * not told sixty times a second" is arithmetic, and this is where it stays true.
+ */
+describe('the HUD is only told when what it prints changes', () => {
+  /** How many times `ref` takes a new value over `ms` of stepped frames. */
+  const writesOver = (ref: { value: number }, ms: number): number => {
+    let writes = 0
+    let last = ref.value
+    for (let t = 0; t < ms; t += FRAME) {
+      vi.advanceTimersByTime(FRAME)
+      sim.step(FRAME)
+      if (ref.value !== last) { writes++; last = ref.value }
+    }
+    return writes
+  }
+
+  it('moves the clock chip about once a second, not once a frame', () => {
+    start(1)
+    clearFloor()
+    const writes = writesOver(sim.timeLeft, 5_000)
+    // Five seconds of frames is ~300 of them; the chip prints whole seconds.
+    expect(writes).toBeLessThanOrEqual(6)
+    expect(writes).toBeGreaterThanOrEqual(4)
+  })
+
+  it('still counts the clock down in real time underneath it', () => {
+    start(1)
+    const before = sim.timeLeft.value
+    run(3_000)
+    expect(before - sim.timeLeft.value).toBe(3)
+  })
+
+  it('draws the chain ring in steps, and lands exactly on zero when it lapses', () => {
+    start(1)
+    clearFloor()
+    sim.spawnBug('ant', 50, 90)
+    tapAt(50, 90)
+    expect(sim.chainLeft.value).toBeGreaterThan(0)
+    // The whole window, plus enough to lapse it.
+    const writes = writesOver(sim.chainLeft, COMBO_WINDOW_MS + 200)
+    // 24 steps down the ring, plus the write that zeroes it.
+    expect(writes).toBeLessThanOrEqual(26)
+    expect(sim.chainLeft.value).toBe(0)
+    expect(sim.chainCount.value).toBe(0)
   })
 })
 
@@ -703,6 +778,352 @@ describe('the boss levels', () => {
       slamAt(boss.x, boss.y)
     }
     expect(sim.bossHp.value).toBeLessThan(1)
+  })
+})
+
+/**
+ * ─── The half-strength Queen, 1-4 ───────────────────────────────────────────
+ *
+ * The same boss as 1-10, fought off `bossSpec('queenAnt', 0.5)`. What these pin
+ * is that the SIM reads the scaled spec everywhere a number comes from — a
+ * half-strength bar over a full-strength fight is the failure, and it would
+ * pass every pure-function test in `bosses.test.ts`.
+ */
+describe('the half-strength boss on 1-4', () => {
+  /** Stomp the body until the phase changes, a tap at a time. */
+  const tapUntilPhase = (phase: number): number => {
+    let taps = 0
+    for (; taps < 40 && sim.bossPhaseIndex.value < phase; taps++) {
+      run(320)
+      const b = sim.getBoss()!
+      tapAt(b.x, b.y)
+    }
+    return taps
+  }
+
+  it('puts the scaled Queen on the floor, not the table entry', () => {
+    start(4)
+    const boss = sim.getBoss()!
+    expect(boss.spec.id).toBe('queenAnt')
+    expect(boss.spec.strength).toBe(0.5)
+    expect(boss.spec.phases.map((p) => p.hits)).toEqual([3, 3, 2])
+    expect(boss.spec.podQuota).toBe(3)
+    // …and the full one is still the full one on 1-10.
+    start(10)
+    expect(sim.getBoss()!.spec.phases.map((p) => p.hits)).toEqual([5, 6, 4])
+  })
+
+  it('drains the bar by the SCALED total — an eighth per hit, not a fifteenth', () => {
+    start(4)
+    clearFloor()
+    const before = sim.bossHp.value
+    for (let i = 0; i < 20 && sim.bossHp.value === before; i++) {
+      run(320)
+      const b = sim.getBoss()!
+      tapAt(b.x, b.y)
+    }
+    expect(before - sim.bossHp.value).toBeCloseTo(1 / 8, 6)
+  })
+
+  it('ends phase 1 on its third hit', () => {
+    start(4)
+    expect(tapUntilPhase(1)).toBeLessThanOrEqual(12)
+    expect(sim.bossPhaseIndex.value).toBe(1)
+    expect(sim.bossHp.value).toBeCloseTo(1 - 3 / 8, 6)
+  })
+
+  it('ends the egg phase at the scaled quota, and counts every egg for the lesson', () => {
+    start(4)
+    tapUntilPhase(1)
+    expect(sim.bossTell.value).toBe('pods')
+    const popped0 = sim.podsPopped.value
+    for (let i = 0; i < 60 && sim.bossPhaseIndex.value === 1; i++) {
+      run(320)
+      const pod = sim.getPods().find((p) => p.alive)
+      if (pod) tapAt(pod.x, pod.y)
+    }
+    expect(sim.bossPhaseIndex.value).toBe(2)
+    const popped = sim.podsPopped.value - popped0
+    expect(popped).toBeGreaterThanOrEqual(3)
+    // One tap can take two eggs that landed together, but never the six a
+    // full-strength phase asks for.
+    expect(popped).toBeLessThan(6)
+  })
+
+  // The egg phase's own version of "a blow on the boss is a hit": the phase
+  // ASKS for eggs to be stomped, so a stomp that takes one and nothing else must
+  // not be a miss on the tally or break the chain.
+  it('counts a stomp that only takes an egg as a hit, not a miss', () => {
+    start(4)
+    tapUntilPhase(1)
+    let pod: ReturnType<typeof sim.getPods>[number] | undefined
+    for (let i = 0; i < 30 && !pod; i++) {
+      run(320)
+      // Landed: an egg still in its hop from the Queen is not on the floor yet.
+      pod = sim.getPods().find((p) => p.alive && p.fly <= 0)
+    }
+    expect(pod).toBeDefined()
+    clearFloor()
+    // Nothing else under the sole: the boss is parked in the far corner, or a
+    // clang off her body is the hit and this case passes with the bug in.
+    const boss = sim.getBoss()!
+    boss.x = pod!.x < 50 ? BOARD.x1 - boss.size : BOARD.x0 + boss.size
+    boss.y = BOARD.y0 + boss.size
+    expect(Math.hypot(boss.x - pod!.x, boss.y - pod!.y)).toBeGreaterThan(sim.stompRadius() + boss.size + 10)
+    const misses = sim.tally.value.misses
+    const popped = sim.podsPopped.value
+    const events = tapAt(pod!.x, pod!.y)
+    expect(sim.podsPopped.value).toBeGreaterThan(popped)
+    expect(kinds(events)).not.toContain('miss')
+    expect(sim.tally.value.misses).toBe(misses)
+    const stomp = events.find((e) => e.k === 'stomp')
+    if (stomp && stomp.k === 'stomp') expect(stomp.hit).toBe(true)
+  })
+
+  it('hatches its eggs on the slower clock', () => {
+    start(4)
+    tapUntilPhase(1)
+    const boss = sim.getBoss()!
+    run(boss.spec.phases[1].beatMs + 100)
+    const pod = sim.getPods().find((p) => p.alive)
+    expect(pod).toBeDefined()
+    expect(pod!.t).toBeGreaterThan(5200)
+    expect(pod!.t).toBeLessThanOrEqual(boss.spec.podHatchMs)
+  })
+
+  it('resets the egg count for the next level', () => {
+    start(4)
+    tapUntilPhase(1)
+    for (let i = 0; i < 30 && sim.podsPopped.value === 0; i++) {
+      run(320)
+      const pod = sim.getPods().find((p) => p.alive)
+      if (pod) tapAt(pod.x, pod.y)
+    }
+    expect(sim.podsPopped.value).toBeGreaterThan(0)
+    start(4)
+    expect(sim.podsPopped.value).toBe(0)
+  })
+})
+
+/**
+ * ─── The brood ──────────────────────────────────────────────────────────────
+ *
+ * Every boss fight's eggs (see "The brood" in `bosses.ts`). What these pin is
+ * the whole loop a six-year-old meets: an egg lands, it is either stomped — and
+ * paid like a kill, never a miss — or it hatches on its clock into a scurry of
+ * ants; and however long nobody touches the fight, the board never floods.
+ *
+ * `start()` is the fresh board every case uses on purpose: `clearFloor` above
+ * flags bodies dead without taking them out of the pool's live count, and the
+ * brood's caps count that pool.
+ */
+describe('the brood — eggs in every boss fight', () => {
+  const live = (): Bug[] => sim.getBugs().slice(0, sim.getBugCount()).filter((b) => b.alive)
+  const landed = () => sim.getPods().find((p) => p.alive && p.fly <= 0)
+  const carrier = (): Bug | undefined => live().find((b) => b.carry)
+  const hatchlings = (): number => live().filter((b) => b.hatched).length
+  const eggsInPlay = (): number => sim.getPods().filter((p) => p.alive).length + live().filter((b) => b.carry).length
+
+  /** Skip the fight straight to phase `n`, with its clocks at zero. */
+  const toPhase = (n: number): void => {
+    const bs = sim.getBoss()!
+    bs.phase = n
+    bs.hits = 0
+    bs.beat = 0
+    bs.sub = 'idle'
+    bs.subT = 0
+    bs.eggClock = 0
+  }
+
+  /** Step until `test` holds, for at most `ms`. */
+  const until = (test: () => boolean, ms: number): boolean => {
+    for (let t = 0; t < ms; t += FRAME) {
+      if (test()) return true
+      vi.advanceTimersByTime(FRAME)
+      sim.step(FRAME)
+    }
+    return test()
+  }
+
+  /** Put the boss in the corner furthest from (x, y), so a stomp there cannot
+   *  land on its body and pass for a hit on the egg. */
+  const parkBossAwayFrom = (x: number, y: number): void => {
+    const bs = sim.getBoss()!
+    bs.x = x < 50 ? BOARD.x1 - bs.size : BOARD.x0 + bs.size
+    bs.y = y < 90 ? BOARD.y1 - bs.size : BOARD.y0 + bs.size
+  }
+
+  it('puts eggs on the floor in every boss fight, in every phase that has a brood, the way its boss would', () => {
+    for (const level of [4, 10, 20, 30, 40]) {
+      start(level)
+      const spec = sim.getBoss()!.spec
+      let phases = 0
+      spec.phases.forEach((p, i) => {
+        if (p.eggMs === 0 && p.script !== 'pods') return
+        start(level)
+        toPhase(i)
+        let sawCarrier = false
+        const ok = until(() => {
+          if (carrier()) sawCarrier = true
+          return landed() !== undefined
+        }, 12_000)
+        expect(ok, `${level}: phase ${i + 1} (${p.script}) never put an egg down`).toBe(true)
+        // A hauling boss's eggs arrive in a carrier's arms; a laying boss's hop
+        // out of its own body.
+        if (spec.delivery === 'haul') expect(sawCarrier, `${level}: no carrier`).toBe(true)
+        else expect(sawCarrier, `${level}: a layer sent a carrier`).toBe(false)
+        phases++
+      })
+      expect(phases, `level ${level} has no brood at all`).toBeGreaterThan(0)
+    }
+  })
+
+  it('hatches an unstomped egg into its ants on its clock, and they scurry out of it', () => {
+    for (const [level, ants] of [[10, 3], [4, 2]] as const) {
+      start(level)
+      toPhase(1)
+      expect(until(() => landed() !== undefined, 8000)).toBe(true)
+      const egg = landed()!
+      const { x, y, t: due } = egg
+      expect(due).toBeLessThanOrEqual(sim.getBoss()!.spec.podHatchMs)
+      run(due - 120)
+      expect(egg.alive && egg.x === x && egg.y === y, `${level}: hatched early`).toBe(true)
+      sim.drainEvents()
+      const before = hatchlings()
+      run(240)
+      const hatch = sim.drainEvents().find((e) => e.k === 'podHatch' && e.x === x && e.y === y)
+      expect(hatch, `${level}: no hatch at its clock`).toBeDefined()
+      if (hatch?.k === 'podHatch') expect(hatch.n).toBe(ants)
+      expect(egg.alive && egg.x === x && egg.y === y).toBe(false)
+      expect(hatchlings()).toBeGreaterThanOrEqual(before + ants)
+      const fresh = live().filter((b) => b.hatched && Math.hypot(b.x - x, b.y - y) < 12)
+      expect(fresh.length).toBeGreaterThanOrEqual(ants)
+      for (const b of fresh) {
+        expect(b.id).toBe('ant')
+        expect(b.panic, 'a hatchling runs out of its shell').toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('pays a stomped egg like a kill — a rung on the chain, points, juice, a hit — and never a miss', () => {
+    start(10)
+    toPhase(1)
+    expect(until(() => landed() !== undefined, 8000)).toBe(true)
+    const egg = landed()!
+    parkBossAwayFrom(egg.x, egg.y)
+    // A chain already running, off an ant squished well clear of the egg.
+    const ax = egg.x < 50 ? egg.x + 25 : egg.x - 25
+    sim.spawnBug('ant', ax, egg.y)
+    tapAt(ax, egg.y)
+    expect(sim.chainCount.value).toBe(1)
+    const score = sim.score.value
+    const juice = sim.juice.value
+    const { hits, misses } = sim.tally.value
+    const popped = sim.podsPopped.value
+    parkBossAwayFrom(egg.x, egg.y)
+    const events = tapAt(egg.x, egg.y)
+    expect(kinds(events)).toContain('podPop')
+    expect(kinds(events)).not.toContain('miss')
+    // A clutch lands close together, so one sole can take both — each is paid.
+    const n = sim.podsPopped.value - popped
+    expect(n).toBeGreaterThanOrEqual(1)
+    expect(events.filter((e) => e.k === 'podPop')).toHaveLength(n)
+    expect(sim.chainCount.value, 'each egg is a rung, and the chain survived').toBe(1 + n)
+    expect(sim.score.value - score).toBeGreaterThanOrEqual(EGG_SCORE * n)
+    expect(sim.juice.value).toBeGreaterThan(juice)
+    expect(sim.tally.value.hits).toBe(hits + n)
+    expect(sim.tally.value.misses).toBe(misses)
+  })
+
+  it('cannot stomp an egg still in the air — it lands first', () => {
+    start(10)
+    toPhase(1)
+    const flying = () => sim.getPods().find((p) => p.alive && p.fly > EGG_LAY_MS * 0.6)
+    expect(until(() => flying() !== undefined, 8000)).toBe(true)
+    const egg = flying()!
+    parkBossAwayFrom(egg.x, egg.y)
+    const popped = sim.podsPopped.value
+    tapAt(egg.x, egg.y)
+    expect(sim.podsPopped.value).toBe(popped)
+    expect(egg.alive).toBe(true)
+  })
+
+  it('lets a carrier be stomped before it sets its egg down: ant and egg, two rungs', () => {
+    start(20)
+    const inside = (b: Bug | undefined): boolean => !!b
+      && b.x > BOARD.x0 + 4 && b.x < BOARD.x1 - 4 && b.y > BOARD.y0 + 4 && b.y < BOARD.y1 - 4
+    expect(until(() => inside(carrier()), 6000)).toBe(true)
+    const ant = carrier()!
+    const chain = sim.chainCount.value
+    const popped = sim.podsPopped.value
+    const events = tapAt(ant.x, ant.y)
+    expect(kinds(events)).toContain('squish')
+    expect(kinds(events)).toContain('podPop')
+    expect(sim.podsPopped.value).toBe(popped + 1)
+    expect(sim.chainCount.value).toBe(chain + 2)
+  })
+
+  it('makes the laying Queen hold still, wide open, after a spent charge', () => {
+    start(10)
+    toPhase(2)
+    const bs = sim.getBoss()!
+    expect(until(() => bs.sub === 'spent' && bs.subT < 0, 15_000)).toBe(true)
+    expect(sim.getPods().some((p) => p.alive), 'she laid as she stopped').toBe(true)
+    let spent = 0
+    while (bs.sub === 'spent' && spent < 6000) { run(FRAME); spent += FRAME }
+    expect(spent).toBeGreaterThanOrEqual(bs.spec.spentMs + bs.spec.layHoldMs - 100)
+  })
+
+  it('bursts the rest of the clutch, paid, when the egg phase is cleared', () => {
+    start(10)
+    toPhase(1)
+    const bs = sim.getBoss()!
+    expect(until(() => sim.getPods().filter((p) => p.alive && p.fly <= 0).length >= 2, 12_000)).toBe(true)
+    bs.podsDown = bs.spec.podQuota - 1
+    const egg = landed()!
+    parkBossAwayFrom(egg.x, egg.y)
+    const eggs = sim.getPods().filter((p) => p.alive).length
+    const events = tapAt(egg.x, egg.y)
+    expect(bs.phase, 'the quota opened the boss').toBe(2)
+    expect(sim.getPods().filter((p) => p.alive)).toHaveLength(0)
+    expect(events.filter((e) => e.k === 'podPop')).toHaveLength(eggs)
+  })
+
+  it('never floods: eggs, hatchlings and bodies stay under their caps in a fight nobody touches', () => {
+    for (const [level, phaseIndex] of [[10, 0], [10, 1], [4, 1], [30, 1], [20, 2], [40, 0]] as const) {
+      start(level)
+      toPhase(phaseIndex)
+      const spec = sim.getBoss()!.spec
+      const maxAlive = sim.getLevel().maxAlive
+      let mostEggs = 0
+      let mostHatchlings = 0
+      for (let t = 0; t < 45_000; t += 250) {
+        run(250)
+        const at = `${level} phase ${phaseIndex + 1} @${t}ms`
+        expect(eggsInPlay(), `${at}: eggs`).toBeLessThanOrEqual(spec.eggCap)
+        expect(hatchlings(), `${at}: hatchlings`).toBeLessThanOrEqual(spec.hatchlingCap)
+        expect(live().length, `${at}: bodies`).toBeLessThanOrEqual(maxAlive)
+        mostEggs = Math.max(mostEggs, eggsInPlay())
+        mostHatchlings = Math.max(mostHatchlings, hatchlings())
+      }
+      // Not vacuous: an egg phase left alone for 45 s really does press on both.
+      if (spec.phases[phaseIndex]!.script === 'pods') {
+        expect(mostEggs, `${level}: egg cap never reached`).toBe(spec.eggCap)
+        expect(mostHatchlings, `${level}: hatchling cap never reached`).toBe(spec.hatchlingCap)
+      }
+    }
+  })
+
+  it('keeps an egg with no room on its last crack instead of hatching it into nothing', () => {
+    start(4)
+    toPhase(1)
+    const spec = sim.getBoss()!.spec
+    // Nobody stomps: two eggs a beat, two ants an egg, five hatchlings at most.
+    expect(until(() => sim.getPods().some((p) => p.alive && p.fly <= 0 && p.t === 0), 60_000)).toBe(true)
+    expect(hatchlings()).toBeGreaterThan(spec.hatchlingCap - spec.broodAnts)
+    const waiting = sim.getPods().find((p) => p.alive && p.fly <= 0 && p.t === 0)!
+    run(1000)
+    expect(waiting.alive, 'it waits for room').toBe(true)
   })
 })
 

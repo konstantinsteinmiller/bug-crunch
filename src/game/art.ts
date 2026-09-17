@@ -67,7 +67,19 @@ export const ART_FOLDERS = {
   bg: 'images/bg',
   /** The HUD's own art — the vial, the star, the fever boot, the result
    *  banner — and the logo. */
-  ui: 'images/ui'
+  ui: 'images/ui',
+  /**
+   * Cutscene SET DRESSING: the plate, the sandwich, the paperback, the attic's
+   * boxes, the door, the arcade cabinet and its machines, 1-10's nest. One still
+   * each, blitted into the box `cutscene.SCENE_ART_BOX` gives it.
+   *
+   * Its own kind rather than more `prop`s, because nothing about it is a prop:
+   * no level ever lays one out, none has a hazard behind it, and a player who has
+   * watched every scene never needs one — so the preloader asks for these per
+   * SCENE (`cutsceneArtWants`) rather than per level, and `art:status` can say
+   * how much of the cinematics is still drawn in one line.
+   */
+  scene: 'images/scenes'
 } as const
 
 export type ArtKind = keyof typeof ART_FOLDERS

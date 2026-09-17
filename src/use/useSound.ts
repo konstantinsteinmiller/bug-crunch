@@ -1,5 +1,5 @@
 import { prependBaseUrl } from '@/utils/function'
-import useUser, { MUSIC_TRACK_FILES } from '@/use/useUser'
+import useUser, { MUSIC_TRACK_FILES, DEFAULT_MUSIC_TRACK } from '@/use/useUser'
 import { getAudioContext, loadAudioBuffer, resourceCache, registerHtmlAudio, unregisterHtmlAudio, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isGamePaused } from '@/use/useGamePause'
 import { isPlatformAudioMuted } from '@/use/useGamePauseAudio'
@@ -138,12 +138,24 @@ export const setMusicIntensity = (intensity: number): void => {
   setMusicRate(1 + clamped * 0.15)
 }
 
+/**
+ * Slider value → music element volume. ONE scale for the fade-in and for a
+ * slider move: they used to disagree (the fade aimed at ×0.125, the slider
+ * watcher wrote ×0.025), so touching the music slider mid-run dropped the track
+ * by 14 dB below the level every untouched player hears — and the level the
+ * shipped tracks are mastered for (see `tools/music/render.mjs`).
+ */
+const MUSIC_VOLUME_SCALE = 0.125
+
 export const useMusic = () => {
   const { userMusicVolume, userMusicTrack } = useUser()
 
+  const musicElementVolume = (): number =>
+    Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * MUSIC_VOLUME_SCALE))
+
   watch(userMusicVolume, () => {
     if (!bgMusic.value) return
-    bgMusic.value.volume = Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * 0.025))
+    bgMusic.value.volume = musicElementVolume()
   })
 
   // Live-swap the background track when the player picks a different one in
@@ -155,9 +167,10 @@ export const useMusic = () => {
     loadAndPlayTrack()
   })
 
-  // Resolve the active track's filename, falling back to the default.
+  // Resolve the active track's filename, falling back to the default — a save
+  // can carry a track id this build no longer ships.
   const currentTrackFile = (): string =>
-    MUSIC_TRACK_FILES[userMusicTrack.value] ?? MUSIC_TRACK_FILES.trance
+    MUSIC_TRACK_FILES[userMusicTrack.value] ?? MUSIC_TRACK_FILES[DEFAULT_MUSIC_TRACK]
 
   // Point the music element at the active track and fade it in — using the
   // preloaded/decoded copy when available, otherwise fetching on demand.
@@ -331,7 +344,7 @@ export const useMusic = () => {
   const fadeIn = () => {
     if (!bgMusic.value) return
     let vol = 0
-    const target = Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * 0.125))
+    const target = musicElementVolume()
     const interval = setInterval(() => {
       if (!bgMusic.value || !shouldPlay.value) {
         clearInterval(interval)

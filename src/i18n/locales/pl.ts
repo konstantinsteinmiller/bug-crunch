@@ -268,6 +268,7 @@ export default {
       'hard': 'Szybsze owady i pełniejsze plansze.'
     },
     'musicTracks': {
+      'parade': 'Chrupiąca parada',
       'trance': 'Owadzi groove',
       'cozy': 'Spokojny piknik'
     },

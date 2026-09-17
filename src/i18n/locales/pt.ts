@@ -268,6 +268,7 @@ export default {
       'hard': 'Insetos mais rápidos e campos mais cheios.'
     },
     'musicTracks': {
+      'parade': 'Desfile crocante',
       'trance': 'Groove dos insetos',
       'cozy': 'Piquenique calmo'
     },

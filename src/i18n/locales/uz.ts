@@ -268,6 +268,7 @@ export default {
       'hard': 'Hasharotlar tezroq, maydon gavjumroq.'
     },
     'musicTracks': {
+      'parade': 'Qarsildoq parad',
       'trance': 'Hasharot ritmi',
       'cozy': 'Osoyishta piknik'
     },

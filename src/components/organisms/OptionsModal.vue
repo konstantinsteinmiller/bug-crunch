@@ -77,8 +77,11 @@ const difficultyList = computed(() => [
 
 const difficultyHint = computed(() => t('options.difficultyHints.' + userDifficulty.value))
 
-// Background-music track picker — Cozy Harmony (default) against Trance Tunnel.
+// Background-music track picker. Crunch Parade — the game's own theme and the
+// default for a player who never picks — is listed first; the two older beds
+// follow.
 const musicTrackList = computed(() => [
+  { value: 'parade', label: t('options.musicTracks.parade') },
   { value: 'trance', label: t('options.musicTracks.trance') },
   { value: 'cozy', label: t('options.musicTracks.cozy') }
 ])

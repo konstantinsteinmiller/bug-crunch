@@ -268,6 +268,7 @@ export default {
       'hard': 'Snellere beestjes en vollere velden.'
     },
     'musicTracks': {
+      'parade': 'Knapperige parade',
       'trance': 'Beestjes-groove',
       'cozy': 'Rustige picknick'
     },

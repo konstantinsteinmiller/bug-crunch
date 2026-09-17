@@ -24,17 +24,38 @@
 
 import { BUG_IDS, type BugId } from '@/game/bugs'
 import { SHOE_IDS, STARTER_SHOE, isShoeId, type ShoeId } from '@/game/shoes'
-import { BOSS_IDS } from '@/game/bosses'
-import { levelSpec, clampLevel, worldOf, WORLD_COUNT } from '@/game/stages'
-import { ART_CATALOGUE, UI_GLYPH_ART_IDS, UI_HUD_MARKS } from '@/game/artCatalogue'
+import { BOSSES, BOSS_IDS, type BossId } from '@/game/bosses'
+import { levelSpec, clampLevel, worldOf, WORLD_COUNT, TOTAL_LEVELS } from '@/game/stages'
+import {
+  ART_CATALOGUE, EGG_ART_ID, EGG_SHELL_ART_ID, UI_GLYPH_ART_IDS, UI_HUD_MARKS, bugPartWants
+} from '@/game/artCatalogue'
 import { artSettled, artOverridesEnabled, type ArtWant } from '@/game/art'
+import { ALL_CUTSCENES, FINALE, cutsceneArtWants, openingCutscene, type CutsceneSpec } from '@/game/cutscene'
 import { getState } from '@/use/useBugCrunchState'
-import { LEVEL_KEY, SHOE_KEY } from '@/keys'
+import { CUTSCENES_SEEN_KEY, LEVEL_KEY, SHOE_KEY } from '@/keys'
 
 /** The level this boot will open on, read straight from the persisted blob.
  *  The loader runs before the game module graph is imported, so reaching for the
  *  simulation here would invert that order. */
 const bootLevel = (): number => clampLevel(Number(getState(LEVEL_KEY, 1)))
+
+/**
+ * The paintings a scene needs, or none once it has been watched.
+ *
+ * A scene is the first thing a level shows, so its dressing is wanted exactly
+ * when the level's own first screen is — and never again after it has played
+ * once (`useCutscene`'s once-ever record, read from the same blob). The same
+ * treatment a boss level gives its boss: asked for before the level, not
+ * discovered by the renderer in the middle of it.
+ */
+const unseenSceneWants = (scene: CutsceneSpec | null): ArtWant[] => {
+  if (!scene) return []
+  const seen = getState<Record<string, boolean>>(CUTSCENES_SEEN_KEY, {}) ?? {}
+  return seen[scene.id] === true ? [] : cutsceneArtWants(scene)
+}
+
+/** The scene level `n` opens on — its own, or its boss's stinger. */
+const sceneFor = (n: number): CutsceneSpec | null => openingCutscene(n, levelSpec(n).boss)
 
 /** The shoe the player has on, on the same terms. */
 const bootShoe = (): ShoeId => {
@@ -70,7 +91,9 @@ export const criticalArtWants = (): ArtWant[] => {
   const level = bootLevel()
   const spec = levelSpec(level)
   const wants: ArtWant[] = []
-  for (const r of spec.roster) wants.push(['bug', r.id])
+  // A design's parts ride with it: a centipede whose head lands with the splash
+  // and whose tail segments arrive later is the pop-in this tier exists to stop.
+  for (const r of spec.roster) wants.push(['bug', r.id], ...bugPartWants(r.id))
   wants.push(['shoe', bootShoe()])
   wants.push(['bg', `floor-${worldOf(level)}`])
   for (const id of STOMP_FX) wants.push(['fx', id])
@@ -80,7 +103,27 @@ export const criticalArtWants = (): ArtWant[] => {
   // for fifty button icons would spend the whole tier-0 budget on the part of the
   // screen a player is least likely to be looking at. They ride tier 2.
   for (const id of UI_HUD_MARKS) wants.push(['ui', id])
+  // …and the scene this level opens on, when there is one the player has not
+  // seen: for a new player on 1-1 the intro IS the first screen, and a plate
+  // that turns from ink to paint two seconds into it is the pop-in this tier
+  // exists to prevent.
+  wants.push(...unseenSceneWants(sceneFor(level)))
   return wants
+}
+
+/**
+ * A boss fight's eggs: its look's crack-stage sheet, the empty shell a hatch
+ * stamps on the floor, and the whole-egg `pod` still the stages fall back to.
+ * Every boss lays or hauls them from the first phase that has any, so they ride
+ * with the boss rather than waiting for tier 2.
+ */
+const broodWants = (boss: BossId): ArtWant[] => {
+  const look = BOSSES[boss].eggLook
+  return [
+    ['prop', EGG_ART_ID[look]],
+    ['prop', EGG_SHELL_ART_ID[look]],
+    ['prop', 'pod']
+  ]
 }
 
 /** TIER 1 — the rest of what THIS level can put on screen. */
@@ -90,7 +133,7 @@ const levelArtWants = (): ArtWant[] => {
   for (const id of spec.hazards) wants.push(['prop', id])
   if (spec.boss) {
     wants.push(['boss', spec.boss])
-    wants.push(['prop', 'pod'])
+    wants.push(...broodWants(spec.boss))
   }
   wants.push(['prop', 'coin'])
   for (const id of ART_CATALOGUE.fx) wants.push(['fx', id])
@@ -100,7 +143,7 @@ const levelArtWants = (): ArtWant[] => {
 /** TIER 2 — everything else, eventually. */
 const remainingArtWants = (): ArtWant[] => {
   const wants: ArtWant[] = []
-  for (const id of BUG_IDS) wants.push(['bug', id as BugId])
+  for (const id of BUG_IDS) wants.push(['bug', id as BugId], ...bugPartWants(id as BugId))
   for (const id of SHOE_IDS) wants.push(['shoe', id])
   for (const id of BOSS_IDS) wants.push(['boss', id])
   for (const id of ART_CATALOGUE.prop) wants.push(['prop', id])
@@ -109,6 +152,9 @@ const remainingArtWants = (): ArtWant[] => {
   // the vector one has been on screen for a second is a button that got nicer,
   // not a glitch — which is the opposite of a bug design popping in mid-walk.
   for (const id of UI_GLYPH_ART_IDS) wants.push(['ui', id])
+  // The set dressing of every scene still to come. Not the ones already watched:
+  // a scene plays once, ever, and its plate is never drawn again.
+  for (const scene of ALL_CUTSCENES) wants.push(...unseenSceneWants(scene))
   return wants
 }
 
@@ -178,16 +224,29 @@ const pageLoaded = (): Promise<void> => {
  *
  * Called from the result screen, while the player is reading their stars: by the
  * time they press the forward button, the next level's new designs have landed.
- * A level that introduces a tier — the beetle on 1-4, the centipede on 3-1 — is
+ * A level that introduces a tier — the beetle on 1-3, the centipede on 3-1 — is
  * exactly where a pop-in is most visible, and this is the whole fix.
  */
 export const warmNextLevelArt = (nextLevel: number): void => {
   if (!artOverridesEnabled()) return
   const spec = levelSpec(nextLevel)
-  for (const r of spec.roster) artSettled('bug', r.id, 'high')
+  for (const r of spec.roster) {
+    for (const [k, id] of [['bug', r.id] as const, ...bugPartWants(r.id)]) artSettled(k, id, 'high')
+  }
   artSettled('bg', `floor-${worldOf(nextLevel)}`, 'high')
   for (const id of spec.hazards) artSettled('prop', id, 'low')
   if (spec.boss) artSettled('boss', spec.boss, 'high')
+  // Its eggs at the same priority: the first one lands within seconds of the
+  // fight opening, and its crack stages are a four-panel strip that swaps whole.
+  if (spec.boss) for (const [k, id] of broodWants(spec.boss)) artSettled(k, id, 'high')
+  // The scene the next level opens on, at the same priority as its boss — it is
+  // the first thing on screen when the player presses forward. Before the last
+  // level, the finale too: it plays straight out of that level's result flow,
+  // with no result screen of its own to warm it from.
+  const scenes = [sceneFor(nextLevel), nextLevel >= TOTAL_LEVELS ? FINALE : null]
+  for (const scene of scenes) {
+    for (const [kind, id] of unseenSceneWants(scene)) artSettled(kind, id, 'high')
+  }
 }
 
 /**
@@ -206,12 +265,13 @@ export const warmNextLevelArt = (nextLevel: number): void => {
  */
 export const allArtWants = (): ArtWant[] => {
   const wants: ArtWant[] = []
-  for (const id of BUG_IDS) wants.push(['bug', id as BugId])
+  for (const id of BUG_IDS) wants.push(['bug', id as BugId], ...bugPartWants(id as BugId))
   for (const id of SHOE_IDS) wants.push(['shoe', id])
   for (const id of BOSS_IDS) wants.push(['boss', id])
   for (const id of ART_CATALOGUE.prop) wants.push(['prop', id])
   for (const id of ART_CATALOGUE.fx) wants.push(['fx', id])
   for (const id of ART_CATALOGUE.ui) wants.push(['ui', id])
+  for (const id of ART_CATALOGUE.scene) wants.push(['scene', id])
   for (let w = 1; w <= WORLD_COUNT; w++) wants.push(['bg', `floor-${w}`])
   return wants
 }

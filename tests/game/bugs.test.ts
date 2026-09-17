@@ -69,19 +69,52 @@ describe('the bestiary', () => {
     expect(new Set(debuts).size).toBe(debuts.length)
   })
 
+  // The order the owner asked for after players drifted off 30-50 s in: the
+  // two ideas that change what a tap MEANS come first, and the Queen's shell
+  // is taught (the beetle) before the level she asks for it on (1-4).
+  it('opens world 1 caterpillar, beetle, sprinter, piñata, flea — in that order', () => {
+    expect(bugSpec('caterpillar').debut).toBe(2)
+    expect(bugSpec('beetle').debut).toBe(3)
+    expect(bugSpec('sprinter').debut).toBe(5)
+    expect(bugSpec('pinatafly').debut).toBe(7)
+    expect(bugSpec('flea').debut).toBe(8)
+  })
 })
 
-// The hook the opening is built on. Everything asserted here is the reason it
+describe('the caterpillar', () => {
+  const caterpillar = bugSpec('caterpillar')
+
+  it('arrives on level 2 — the first thing the game adds after the ant', () => {
+    expect(rosterForLevel([{ id: 'caterpillar', weight: 1 }], 1)).toHaveLength(0)
+    expect(rosterForLevel([{ id: 'caterpillar', weight: 1 }], 2)).toHaveLength(1)
+    const second = BUGS.filter((b) => b.id !== 'ant').sort((a, b) => a.debut - b.debut)[0]
+    expect(second?.id).toBe('caterpillar')
+  })
+
+  // The lesson a six-year-old can learn on their second level is only fair if
+  // the caterpillar asks ONE question: it must not also be fast, armoured or
+  // evasive, or 1-2 is three lessons wearing one body.
+  it('breaks exactly one assumption: stomping it hurts', () => {
+    expect(caterpillar.spiky).toBe(true)
+    expect(caterpillar.armor).toBe(0)
+    expect(caterpillar.dodges).toBe(false)
+    expect(caterpillar.sprints).toBe(false)
+    expect(caterpillar.airborne).toBe(false)
+    expect(caterpillar.speed).toBeLessThan(bugSpec('ant').speed)
+  })
+})
+
+// The first target that reacts to the player. Everything asserted here is why it
 // is a DIFFERENT creature from the flea rather than a second one.
 describe('the sprinter ant', () => {
   const sprinter = bugSpec('sprinter')
   const ant = bugSpec('ant')
   const flea = bugSpec('flea')
 
-  it('arrives on level 2 — the first thing the game adds after the ant', () => {
-    expect(sprinter.debut).toBe(2)
-    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 1)).toHaveLength(0)
-    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 2)).toHaveLength(1)
+  it('arrives on level 5 — the first level after the half-strength Queen', () => {
+    expect(sprinter.debut).toBe(5)
+    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 4)).toHaveLength(0)
+    expect(rosterForLevel([{ id: 'sprinter', weight: 1 }], 5)).toHaveLength(1)
   })
 
   it('is the ant plus exactly one rule, so only the rule has to be learned', () => {

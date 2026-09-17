@@ -7,11 +7,18 @@ import {
   artIdForGlyph
 } from '@/game/artCatalogue'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
-import { BUG_IDS } from '@/game/bugs'
+import { BUGS, BUG_IDS, type BugId } from '@/game/bugs'
 import { BUG_FRAMES } from '@/game/bugArt'
 import { GAME_ICON_NAMES } from '@/components/icons/iconNames'
 import { SPLAT_REACH, SPLAT_SHEET, UI_ICON_GLYPH } from '@/game/uiArt'
 import { JUICE_STYLES } from '@/game/juiceStyle'
+import { BOSSES, BOSS_IDS, EGG_STAGES } from '@/game/bosses'
+import { EGG_ART_ID, EGG_PROP_IDS, EGG_SHELL_ART_ID } from '@/game/artCatalogue'
+import {
+  BUG_PART_ART, BUG_PART_ART_IDS, CENTIPEDE_SEGMENT_ART, bugPartWants
+} from '@/game/artCatalogue'
+import { allArtWants } from '@/game/artPreload'
+import { ALL_CUTSCENES, SCENE_ART_BOX, cutsceneArtWants } from '@/game/cutscene'
 
 /**
  * ─── The manifest and the catalogue are one list ────────────────────────────
@@ -290,6 +297,120 @@ describe('a variation sheet', () => {
 })
 
 /**
+ * ─── Stage sheets: the boss eggs ────────────────────────────────────────────
+ *
+ * A STAGE sheet is the third kind of multi-panel still: one object at successive
+ * moments of one change — an egg's crack stages — which the game picks between
+ * by how far the egg's clock has run (`propArt.eggStage`). Cut and read back like
+ * a variation sheet, so the same silent failures apply, plus one of its own: a
+ * sheet with a panel count that is not `EGG_STAGES` is a sheet whose last crack
+ * is never shown, or whose first is shown twice.
+ */
+describe('a stage sheet', () => {
+  const stages = STILLS.filter((s) => s.stages)
+  const doc = promptDocs()['PROMPTS-STILLS.md']!
+  const blockOf = (id: string): string => {
+    const at = doc.indexOf(`## ${id} — `)
+    return doc.slice(at, doc.indexOf('```', doc.indexOf('```text', at) + 7))
+  }
+
+  it('exists for every egg look a boss can lay or haul, with its empty shell beside it', () => {
+    const looks = new Set(BOSS_IDS.map((id) => BOSSES[id].eggLook))
+    for (const look of looks) {
+      const sheet = stillBy.get(`prop/${EGG_ART_ID[look]}`)
+      expect(sheet?.stages, `${look} has no stage sheet`).toBe(true)
+      const shell = stillBy.get(`prop/${EGG_SHELL_ART_ID[look]}`)
+      expect(shell, `${look} has no shell`).toBeDefined()
+      expect(shell!.frames ?? 1, `${look} shell is one still`).toBe(1)
+    }
+    expect(stages.map((s) => s.id).sort()).toEqual(['egg', 'egg-capsule'])
+  })
+
+  it('has exactly one panel per crack stage, on a lattice with no hole in it', () => {
+    for (const s of stages) {
+      expect(s.frames, s.id).toBe(EGG_STAGES)
+      expect((s.cols ?? 1) * (s.rows ?? 1), `${s.id} lattice`).toBe(EGG_STAGES)
+      expect(s.variantBlurbs?.length, `${s.id} roster`).toBe(EGG_STAGES)
+      // Sized in words, for the splat's reason: panel 0 is the smallest egg on
+      // the sheet, and a fit measured off it would shrink the last stage.
+      expect(s.fit, s.id).toBe(false)
+    }
+  })
+
+  it('is told its panels are a sequence — never a loop, never four different objects', () => {
+    for (const s of stages) {
+      const block = blockOf(s.id)
+      expect(block, s.id).toContain('A STAGE SHEET')
+      expect(block, s.id).not.toContain('A VARIATION SHEET')
+      expect(block, s.id).not.toContain('ONE loop of its own movement')
+      const listed = [...block.matchAll(/^ {2}PANEL (\d+) — row (\d+), column (\d+):/gm)]
+      expect(listed.length, s.id).toBe(EGG_STAGES)
+      listed.forEach((m, i) => {
+        expect(Number(m[1]), `${s.id} panel order`).toBe(i + 1)
+        expect(Number(m[2]), `${s.id} row`).toBe(Math.floor(i / (s.cols ?? 1)) + 1)
+        expect(Number(m[3]), `${s.id} column`).toBe((i % (s.cols ?? 1)) + 1)
+      })
+    }
+  })
+
+  it('catalogues every brood drawable, so a boss level preloads what it lays', () => {
+    for (const id of EGG_PROP_IDS) {
+      expect(ART_CATALOGUE.prop as readonly string[], id).toContain(id)
+      expect(stillBy.has(`prop/${id}`), id).toBe(true)
+    }
+  })
+})
+
+/**
+ * ─── The bug parts ──────────────────────────────────────────────────────────
+ *
+ * A painting a creature is composed from that is not a design of its own — the
+ * centipede's tail segment. The designs are pinned by `BUG_IDS` from the game's
+ * data; a part is not in that list, so nothing else here would notice a segmented
+ * design with no tail painting (a painted head towing inked blobs), a part with
+ * no sheet (a probe for a file nothing can paint), or a part the preloader never
+ * asks for (a tail that pops in behind a head that arrived with the splash).
+ */
+describe('the bug parts', () => {
+  it('give every segmented design a tail painting, and nothing else one', () => {
+    const segmented = BUGS.filter((b) => b.segments > 0).map((b) => b.id).sort()
+    expect(Object.keys(BUG_PART_ART).sort()).toEqual(segmented)
+    expect([...BUG_PART_ART_IDS]).toContain(CENTIPEDE_SEGMENT_ART)
+  })
+
+  it('have a strip to be painted from, at the path the renderer probes', () => {
+    for (const id of BUG_PART_ART_IDS) {
+      const s = stillBy.get(`bug/${id}`)
+      expect(s, `bug/${id} has no sheet`).toBeDefined()
+      expect(s!.target).toBe(probePath('bug', id))
+      // One stride of the legs, at the walk strips' own frame count and square
+      // panel — `paintSegment` reads it back through `stripFrame` at aspect 1.
+      expect(s!.frames, id).toBe(BUG_FRAMES)
+      expect(s!.w, id).toBe(s!.h)
+      expect(s!.variants ?? s!.stages, `${id} is a loop`).toBeUndefined()
+    }
+  })
+
+  it('are wanted wherever their design is', () => {
+    const keys = (ws: readonly (readonly [string, string])[]): string[] => ws.map(([k, id]) => `${k}/${id}`)
+    for (const [design, parts] of Object.entries(BUG_PART_ART)) {
+      expect(keys(bugPartWants(design as BugId))).toEqual(parts!.map((p) => `bug/${p}`))
+      for (const p of parts!) expect(keys(allArtWants()), p).toContain(`bug/${p}`)
+    }
+  })
+
+  it('tell the painter it is one segment, not a centipede', () => {
+    const doc = promptDocs()['PROMPTS-STILLS.md']!
+    const at = doc.indexOf(`## ${CENTIPEDE_SEGMENT_ART} — `)
+    expect(at).toBeGreaterThan(-1)
+    const block = doc.slice(at, doc.indexOf('```', doc.indexOf('```text', at) + 7))
+    expect(block).toContain('ONE BODY SEGMENT')
+    expect(block).toContain('no head')
+    expect(block).toContain('A SPRITE SHEET')
+  })
+})
+
+/**
  * ─── The splat decals ───────────────────────────────────────────────────────
  *
  * The decal is the one drawable whose painting is tinted PER STAMP to the goo
@@ -507,5 +628,57 @@ describe('the marks the renderer tints and the marks the painter flattens are on
     const block = trophy.slice(0, trophy.indexOf('```', trophy.indexOf('```text') + 7))
     expect(block).toContain('Flat and solid, no shading')
     expect(block).toContain('warm near-black ink contour')
+  })
+})
+
+/**
+ * ─── The cutscenes' set dressing ────────────────────────────────────────────
+ *
+ * The `scene` kind is the one whose painting is blitted into a box that is not
+ * the panel's own square: the plate is a circle, the sandwich is wide, the door
+ * is a tile, the cabinet is a whole object at board scale. `SCENE_ART_BOX` is
+ * the contract between the bench that draws the reference into a panel and the
+ * renderer that blits the painting back into the world, and three lists have to
+ * agree about it — the catalogue, the boxes and the manifest's panels — plus a
+ * fourth that decides whether a painting is ever FETCHED before its scene plays.
+ */
+describe('the cutscene set dressing', () => {
+  const sceneStills = STILLS.filter((s) => s.kind === 'scene')
+
+  it('gives every catalogued piece a box, and boxes nothing that is not catalogued', () => {
+    expect(Object.keys(SCENE_ART_BOX).sort()).toEqual([...ART_CATALOGUE.scene].sort())
+  })
+
+  it('authors every panel in its box\'s own proportions', () => {
+    // A panel of the wrong shape is a painting stretched on the way back in —
+    // the slicer fits the return to the panel, and the renderer fits the panel
+    // to the box.
+    for (const s of sceneStills) {
+      const b = SCENE_ART_BOX[s.id]!
+      expect(s.w / s.h, s.id).toBeCloseTo(b.hw / b.hh, 2)
+    }
+  })
+
+  it('asks for every one of them from some scene, so none is painted and never fetched', () => {
+    // The preloader reaches a `scene` painting ONLY through a scene's wants
+    // (`cutsceneArtWants`) — no level lays one out. A piece no scene asks for is
+    // a piece the splash never waits for and the renderer finds mid-shot.
+    const wanted = new Set(ALL_CUTSCENES.flatMap((s) => cutsceneArtWants(s))
+      .filter(([k]) => k === 'scene').map(([, id]) => id))
+    expect([...ART_CATALOGUE.scene].filter((id) => !wanted.has(id))).toEqual([])
+    // …and nothing a scene asks for is missing from the catalogue.
+    expect([...wanted].filter((id) => !(ART_CATALOGUE.scene as readonly string[]).includes(id))).toEqual([])
+  })
+
+  it('paints the door as an opaque tile that repeats along its width', () => {
+    const door = sceneStills.find((s) => s.id === 'door')!
+    expect(door.tile).toBe('x')
+    expect(door.bg).toBe('opaque')
+  })
+
+  it('tells the painter what the game draws over each piece', () => {
+    // Every one of these has a live layer — a shadow at the very least — and a
+    // blurb that does not say so gets a painted shadow under a drawn one.
+    for (const s of sceneStills) expect(s.live, s.id).toBeTruthy()
   })
 })

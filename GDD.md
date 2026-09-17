@@ -198,7 +198,7 @@ Each level is designed for 1-minute to 3-minute play sessions and rewards 1 to 3
 ```
 
 ### 7.3 Boss Encounters
-Every world ends with an epic multi-stage Boss Fight featuring massive mutated boss insects:
+Every world ends with an epic multi-stage Boss Fight featuring massive mutated boss insects. World 1 also meets its Queen early: at **half strength on level 1-4** (half the hits, eggs and adds; same three phases), then at full strength as the 1-10 finale.
 
 #### World 1 Boss: "Goliath Queen Ant"
 * **Phase 1**: Queen moves across screen spawning swarms of worker ants. Stomp her body 5 times while avoiding spawned guards.

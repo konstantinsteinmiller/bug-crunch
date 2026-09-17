@@ -72,6 +72,9 @@ export default {
         roster: spec.roster.map((r) => `${r.id}:${r.weight}`),
         hazards: [...spec.hazards],
         boss: spec.boss,
+        // A boss level is data now (`BOSS_FIGHTS` in `stages.ts`), and the same
+        // boss can be fought at two strengths — the Queen is 0.5 on 1-4, 1 on 1-10.
+        bossScale: spec.bossScale,
         marks,
         rungs: {},
         firstSquish: null,
@@ -142,7 +145,7 @@ export default {
 
     ctx.log.info(`── level ${line.level} (${line.label}), ${policy}${loadout.bc_shoe ? ` in the ${loadout.bc_shoe}` : ''}`)
     ctx.log.info(`   quota ${line.quota} in ${line.time}s · roster ${line.roster.join(', ')}`)
-    ctx.log.info(`   hazards ${line.hazards.length ? line.hazards.join(', ') : 'none'}${line.boss ? ` · boss ${line.boss}` : ''}`)
+    ctx.log.info(`   hazards ${line.hazards.length ? line.hazards.join(', ') : 'none'}${line.boss ? ` · boss ${line.boss} at ${line.bossScale}× strength` : ''}`)
     ctx.log.info(`   first squish ${s(line.firstSquish)} · half quota ${s(line.halfQuota)}`)
     ctx.log.info(`   chain rungs ${[3, 5, 8, 12, 20, 30, 50].map((r) => `×${r} ${s(line.rungs[r])}`).join(' · ')}`)
     ctx.log.info(`   vial full ${s(line.vialFull)} · fever ${s(line.feverAt)} → ${s(line.feverEnd)}`)

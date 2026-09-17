@@ -27,7 +27,7 @@ import IconCoin from '@/components/icons/IconCoin.vue'
 
 import * as game from '@/use/useBugCrunchGame'
 import * as art from '@/use/useBugCrunchArt'
-import { playFx, setSquishVoice, warmAudio } from '@/use/useGameAudio'
+import { playFx, primeCrushBank, setSquishVoice, warmAudio } from '@/use/useGameAudio'
 import { resetVfx, sampleFrame } from '@/use/useVfx'
 import { useMusic, setMusicRate } from '@/use/useSound'
 import useSounds from '@/use/useSound'
@@ -47,7 +47,7 @@ import useSplatProgress from '@/use/useSplatProgress'
 import useLocker from '@/use/useLocker'
 import { getState, setState } from '@/use/useBugCrunchState'
 import { HINTS_SEEN_KEY, ONBOARDED_KEY, SEEN_BUGS_KEY, TUTORIAL_KEY } from '@/keys'
-import { levelLabel, levelSpec, worldOf, WORLDS, TOTAL_LEVELS } from '@/game/stages'
+import { levelCast, levelLabel, levelSpec, worldOf, WORLDS, TOTAL_LEVELS } from '@/game/stages'
 import { bossPhaseTicks, bossSpec } from '@/game/bosses'
 import { starsEarned, evaluate, emptyTally, type RunTally } from '@/game/stars'
 import { FEVER_MS, comboMusicRate } from '@/game/combo'
@@ -59,9 +59,9 @@ import { installPreviewSeam } from '@/game/previewFeed'
 import * as tutor from '@/use/useTutorial'
 import * as cut from '@/use/useCutscene'
 import { drawCutscene } from '@/game/cutsceneArt'
-import { FINALE, bossStinger, cutsceneForLevel, type CutsceneSpec } from '@/game/cutscene'
+import { FINALE, cutsceneStageFrom, openingCutscene, type CutsceneSpec } from '@/game/cutscene'
 import CutsceneOverlay from '@/components/game/CutsceneOverlay.vue'
-import { slamTeaches, type LessonId } from '@/game/tutorial'
+import { outranks, slamTeaches, type LessonId } from '@/game/tutorial'
 import { mobileCheck } from '@/utils/function'
 
 /**
@@ -452,7 +452,15 @@ const loop = (now: number): void => {
     const spec = cut.cutsceneSpec.value
     const done = cut.stepCutscene(dt)
     if (spec) {
-      const f = cut.cutsceneFrameNow() ?? cut.cutsceneEndFrame(spec)
+      // Where the level underneath has put its boss, its props and the foot, so
+      // a scene that hands over onto them lands ON them — the shoe comes down on
+      // the foot the board is about to draw, and 1-10's Queen skids to the spot
+      // the fight draws her on. Per frame: a turned phone moves the lot.
+      const foot = game.getFoot()
+      const stage = cutsceneStageFrom(window.innerWidth, window.innerHeight, pxPerU,
+        game.getBoss(), game.getHazards(),
+        { x: foot.x, y: foot.y, z: foot.z, r: game.stompRadius(), highVis: userHighVis.value })
+      const f = cut.cutsceneFrameNow(stage) ?? cut.cutsceneEndFrame(spec, stage)
       drawCutscene(ctx, window.innerWidth, window.innerHeight, f, equippedShoe.value)
       fireCutsceneCue(spec, f.beat)
     }
@@ -494,6 +502,7 @@ const drainToWorld = (): void => {
       case 'squish': {
         const b = bugSpec(e.bug)
         setSquishVoice({
+          bug: e.bug,
           mass: Math.min(1, Math.max(0, (b.size - 1.8) / 2.2)),
           weight,
           style,
@@ -505,8 +514,15 @@ const drainToWorld = (): void => {
         haptic('tick')
         break
       }
-      case 'hurt': playFx('hurt', 0, pan(e.x)); break
+      case 'hurt':
+        // The body's own wound from the crush bank: a beetle's shell cracking
+        // without the goo, so the player hears the blow was progress.
+        setSquishVoice({ bug: e.bug, style, heavy: e.heavy })
+        playFx('hurt', 0, pan(e.x))
+        break
       case 'clang':
+        // No `bug` means the blow rang off the boss's own body.
+        setSquishVoice({ bug: e.bug ?? spec.value.boss, style, heavy: e.heavy ?? false })
         playFx('clang', 0, pan(e.x))
         // A blow that rang off a shell — the ONE moment the charged stomp is an
         // answer to a question the player is actually asking. The first cut armed
@@ -540,10 +556,18 @@ const drainToWorld = (): void => {
       case 'salt': playFx('salt', 0, pan(e.x)); break
       case 'magnet': playFx('magnet', 0, pan(e.x)); break
       case 'sweep': playFx('sweep', 0, pan(e.x)); break
-      case 'podPop': playFx('podPop', 0, pan(e.x)); break
-      case 'podHatch': playFx('podHatch', 0, pan(e.x)); break
+      case 'podPop':
+        setSquishVoice({ style })
+        playFx('podPop', 0, pan(e.x))
+        break
+      case 'podHatch':
+        // Its own crack-and-scurry from the crush bank, in the player's style.
+        setSquishVoice({ style })
+        playFx('podHatch', 0, pan(e.x))
+        break
       case 'chain-arc': playFx('arc'); break
       case 'bossHit':
+        setSquishVoice({ bug: spec.value.boss, style, heavy: e.counter })
         playFx(e.counter ? 'bossCounter' : 'bossHit', 0, pan(e.x))
         if (e.counter) haptic('reward')
         break
@@ -552,6 +576,7 @@ const drainToWorld = (): void => {
         teachForBoss()
         break
       case 'bossDown':
+        setSquishVoice({ bug: spec.value.boss, style, heavy: true })
         playFx('bossDie')
         haptic('reward')
         break
@@ -597,6 +622,62 @@ const nearestBody = (want?: (id: string) => boolean): { x: number; y: number } |
   return best
 }
 
+/**
+ * The nearest body a TAP is the right answer to, for the lessons whose hand
+ * drops onto a body: the stomp, the chain and the goal.
+ *
+ * They pointed at the nearest body of any kind, which was harmless while the
+ * first thing that could hurt arrived on 2-2 — by then those three were long
+ * retired. With the caterpillar on 1-2 a player still owed the chain lesson can
+ * be standing next to one, and a hand dropping onto spikes teaches the one
+ * thing the spike lesson exists to un-teach. A shell is skipped for the same
+ * reason at lower stakes (a tap only bounces), and is still better than
+ * pointing at nothing when the floor is all beetles.
+ */
+const nearestTapTarget = (): { x: number; y: number } | null => {
+  const shoe = equippedSpec.value
+  const light = blowPierce(shoe, false)
+  const safe = (id: string): boolean => !bugSpec(id as BugId).spiky || shoe.spikeProof
+  return nearestBody((id) => safe(id) && bugSpec(id as BugId).armor <= light)
+    ?? nearestBody(safe)
+}
+
+/**
+ * The boss, when its CURRENT phase is a shell the equipped shoe bounces a tap
+ * off and opens with a slam — the Queen's charge phase in the starter sneaker.
+ * The slam lesson counts it as one more body to teach on; see `armBodyLessons`.
+ */
+const bossShell = (): { x: number; y: number } | null => {
+  const boss = game.getBoss()
+  if (!boss || !boss.alive) return null
+  const p = boss.spec.phases[boss.phase]
+  if (!p || !p.vulnerable) return null
+  const shoe = equippedSpec.value
+  return slamTeaches(blowPierce(shoe, false), blowPierce(shoe, true), p.armor)
+    ? { x: boss.x, y: boss.y }
+    : null
+}
+
+/**
+ * The nearest egg still on the floor, or null — in ANY boss fight, not only a
+ * `pods` phase: every fight has eggs now, so the eggs lesson goes up the first
+ * frame one lands in front of a player who has never popped one (on 1-4, the
+ * Queen's second phase; on a later boss for a player who skipped it). An egg
+ * still in its hop from the boss is not on the floor yet, and a hand dropping
+ * onto the spot it is flying over would be pointing at bare floor.
+ */
+const nearestPod = (): { x: number; y: number } | null => {
+  const foot = game.getFoot()
+  let best: { x: number; y: number } | null = null
+  let bestD = Infinity
+  for (const pod of game.getPods()) {
+    if (!pod.alive || pod.fly > 0) continue
+    const d = (pod.x - foot.x) ** 2 + (pod.y - foot.y) ** 2
+    if (d < bestD) { bestD = d; best = { x: pod.x, y: pod.y } }
+  }
+  return best
+}
+
 /** Where each lesson points. World positions go through the art transform;
  *  HUD controls are read off their own rects. */
 const aimLesson = (id: LessonId): void => {
@@ -611,12 +692,12 @@ const aimLesson = (id: LessonId): void => {
       return
     case 'stomp':
     case 'chain':
-      lessonAt.value = world(nearestBody())
+      lessonAt.value = world(nearestTapTarget())
       return
     case 'goal': {
       // The only lesson with two ends: a body on the floor, and the bar at the
       // top of the screen that fills when it is squished.
-      lessonAt.value = world(nearestBody())
+      lessonAt.value = world(nearestTapTarget())
       lessonTo.value = elCentre('.hud__rail') ?? { x: windowWidth.value / 2, y: 40 }
       return
     }
@@ -624,12 +705,16 @@ const aimLesson = (id: LessonId): void => {
       // A shell THIS SHOE CAN OPEN, and the foot if there is none on the floor
       // right now. The old fallback was `?? nearestBody()`, which pointed the
       // hold-and-release lesson at the nearest ant — teaching a child to charge
-      // up against a body a tap kills.
+      // up against a body a tap kills. The boss is the last shell looked for:
+      // on 1-4 an add-free charge phase has nothing else to point at.
       lessonAt.value = world(nearestBody((b) => slamTeaches(
         blowPierce(equippedSpec.value, false),
         blowPierce(equippedSpec.value, true),
         bugSpec(b as never).armor
-      )))
+      )) ?? bossShell())
+      return
+    case 'pods':
+      lessonAt.value = world(nearestPod())
       return
     case 'spike':
       lessonAt.value = world(nearestBody((b) => bugSpec(b as never).spiky))
@@ -744,6 +829,9 @@ watch(game.feverCharged, (ready) => {
 
 /** Hitting the boss retires the boss lesson. */
 watch(game.bossHp, (hp, prev) => { if (hp < prev) tutor.complete('boss') })
+
+/** Squishing an egg retires the eggs lesson. */
+watch(game.podsPopped, (n, prev) => { if (n > prev) tutor.complete('pods') })
 
 // ─── The meta lessons ───────────────────────────────────────────────────────
 //
@@ -923,12 +1011,16 @@ const startLevel = (n: number): void => {
   // ── A scene, on the way in ──
   //
   // 01 opens the game; 02, 03 and 04 open their world on its first level; a boss
-  // stinger fronts each of the four boss levels. Whichever it is, it takes the
-  // banner, the music and the lesson timers with it — all three are things that
-  // belong to the START of a level, and the level has not started for the player
-  // yet. `endCutscene` does them when the scene lets go.
-  const opening = cutsceneForLevel(level.value)
-    ?? (spec.value.boss ? bossStinger(spec.value.boss) : null)
+  // stinger fronts the FIRST fight with each boss. "First" is not a level number:
+  // the stinger is once-ever and keyed by boss (`stinger-queenAnt`), and whatever
+  // level `levelSpec` puts a boss on is where it plays — so the Queen's plays
+  // before 1-4, her half-strength debut, and her 1-10 rematch gets a scene of its
+  // own ("Seconds", `REMATCH`), which a replay of 1-10 never swaps for the
+  // stinger. Whichever scene it is, it takes the banner, the music and the
+  // lesson timers with it — all three are things that belong to the START of a
+  // level, and the level has not started for the player yet. `endCutscene` does
+  // them when the scene lets go.
+  const opening = openingCutscene(level.value, spec.value.boss)
   if (opening && cut.startCutscene(opening)) {
     afterCutscene = null
     showBanner.value = false
@@ -953,6 +1045,12 @@ const startLevel = (n: number): void => {
 
 let bannerTimer: ReturnType<typeof setTimeout> | null = null
 const hintTimers: ReturnType<typeof setTimeout>[] = []
+
+/** Each species with a primer pill of its own, earliest debut first. */
+const SPECIES_PRIMERS: ReadonlyArray<readonly [BugId, HintId]> = ([
+  ['caterpillar', 'spike'], ['beetle', 'beetle'], ['sprinter', 'sprinter'],
+  ['flea', 'flea'], ['stinkbug', 'stink']
+] as const).slice().sort((a, b) => bugSpec(a[0]).debut - bugSpec(b[0]).debut)
 
 /**
  * What this level introduces — the text pills AND the wordless lessons.
@@ -989,14 +1087,16 @@ const teachLevelHints = (): void => {
   const ids = new Set(s.roster.map((r) => r.id))
   hintTimers.push(setTimeout(() => {
     if (s.boss) { teach('boss', 5000); tutor.arm('boss'); return }
-    if (ids.has('caterpillar')) teach('spike')
-    // Before the beetle: the sprinter debuts on 1-2 and the beetle on 1-4, and
-    // a primer that arrives two levels after the thing it is about is not a
-    // primer.
-    else if (ids.has('sprinter')) teach('sprinter')
-    else if (ids.has('beetle')) teach('beetle')
-    else if (ids.has('flea')) teach('flea')
-    else if (ids.has('stinkbug')) teach('stink')
+    // The first species primer this player has NOT had, in the order the
+    // campaign introduces the species. It used to be a fixed if/else chain on
+    // the roster, and a chain stops at the first species PRESENT, not the first
+    // one UNSEEN: once the sprinter was open on every picnic level its
+    // already-seen primer won the slot on every one of them, and the beetle's
+    // and the flea's primers could never be reached in world 1 at all. Ordered
+    // by `debut` rather than by hand, so moving a debut (the caterpillar to 1-2,
+    // the beetle to 1-3, the sprinter to 1-5) re-orders the primers with it.
+    const pill = SPECIES_PRIMERS.find(([bug, hint]) => ids.has(bug) && !hintsSeen.value[hint])
+    if (pill) teach(pill[1])
   }, 2400))
   hintTimers.push(setTimeout(() => {
     for (const h of s.hazards) {
@@ -1011,7 +1111,7 @@ const teachLevelHints = (): void => {
 /**
  * Is this banner the right one to explain the quest badges on?
  *
- * Four conditions, and each is a way the beat fails if it is dropped:
+ * Five conditions, and each is a way the beat fails if it is dropped:
  *
  *   THE CARD HAS ROWS. A boss card shows the boss's name instead of the
  *   objective strip, so there would be nothing for the arrow's tail to start on.
@@ -1022,9 +1122,17 @@ const teachLevelHints = (): void => {
  *
  *   THE OPENING THREE ARE BEHIND THEM. Two instructions on one screen is no
  *   instruction, and a new player's first level is already teaching the control
- *   and the verb. In practice this puts the lesson on the SECOND level, which is
- *   also the first banner they reach having already met the star row on a result
- *   screen — so "those are stars" is an idea they arrive with.
+ *   and the verb. That rules out 1-1; the first banner a player reaches having
+ *   already met the star row on a result screen — so "those are stars" is an
+ *   idea they arrive with — is 1-2.
+ *
+ *   NOTHING ON THIS BOARD CAN HURT THEM YET. 1-2 is also the caterpillar's
+ *   level, and the spike lesson has to be free to take the screen the frame the
+ *   first one appears. A HUD arrow already up when it walks in would either be
+ *   cut off half-drawn or hold the spike lesson in the queue for two seconds of
+ *   a caterpillar under the foot. So a board carrying spikes the player has not
+ *   been taught (in a shoe they hurt in) does not spend its banner on the
+ *   badges — which in practice moves this lesson from 1-2 to 1-3.
  *
  *   THEY ARE ACTUALLY HERE. `quests` is not a `whilePaused` lesson, so its clock
  *   only runs on frames the player is present for. Armed on the banner of a
@@ -1037,6 +1145,8 @@ const wantsQuestLesson = (): boolean => {
   if (!sawInput) return false
   const s = spec.value
   if (s.boss) return false
+  if (!tutor.isTaught('spike') && !equippedSpec.value.spikeProof
+    && s.roster.some((r) => bugSpec(r.id).spiky)) return false
   return s.objectives.some((o) => o.kind !== 'clear')
 }
 
@@ -1051,6 +1161,12 @@ const wantsQuestLesson = (): boolean => {
  * The slam is the exception, and takes `dt` for it: a shell on the floor is not
  * a reason to explain the charged stomp, only permission to start counting.
  * `tutor.armSlam` owns the rest of that rule.
+ *
+ * The boss fight's two questions ride here too. The Queen's charge phase is a
+ * shell like a beetle's (1-4 asks for the slam one level after 1-3 taught it,
+ * and a player whose slam lesson bailed out there gets it again off HER), and
+ * her eggs are a subject that is either on the floor or not — the same shape
+ * as a caterpillar.
  */
 const armBodyLessons = (dt: number): void => {
   if (game.phase.value !== 'play' || showResult.value) return
@@ -1076,19 +1192,54 @@ const armBodyLessons = (dt: number): void => {
     if (b.spec.spiky) sawSpike = true
     if (b.spec.dodges) sawDodge = true
   }
+  if (bossShell()) sawArmour = true
   // Spikes first: it is the only one of the three that costs the player
   // something to learn the hard way.
-  if (sawSpike && !equippedSpec.value.spikeProof) tutor.arm('spike')
+  if (sawSpike && !equippedSpec.value.spikeProof) armOnTheClock('spike')
+  if (nearestPod()) armOnTheClock('pods')
+  // A Fever lesson pushed off the screen by one of those comes back for as long
+  // as the vial is still full.
+  if (game.feverCharged.value && !tutor.isTaught('fever')) tutor.arm('fever')
   // Not `arm`: see `armSlam` in `use/useTutorial.ts`. A shell only opens the
   // window; the ricochet — or the grace running out — puts the lesson on screen.
   tutor.armSlam(dt, sawArmour)
   if (sawDodge) tutor.arm('dodge')
 }
 
+/**
+ * Arm a lesson whose subject is on the board ON A CLOCK — and let it take the
+ * screen from a lesson it outranks that is ALREADY up.
+ *
+ * Every other beat waits its turn in the director's queue. Two cannot:
+ *
+ *   spike  on 1-2 a caterpillar can walk in while the Fever button's lesson, a
+ *          HUD arrow or the chest is mid-show, and nine seconds of pointing at
+ *          the vial is nine seconds of spikes nobody has explained.
+ *   pods   on 1-4 the eggs hatch 6.9 s after they land, and a player four
+ *          levels in who is watching a hand point at the chest instead is not
+ *          hurt, only stuck in a phase that will not end.
+ *
+ * `shelve` does not mark the displaced lesson taught: the quest arrow comes
+ * round on the next banner, Fever is re-armed in `armBodyLessons` while the
+ * vial is full, and the chest re-arms itself every frame it is ready
+ * (`armChestLesson`). The chest is the case a browser run caught — it is a
+ * `whilePaused` lesson, the first cut left those alone, and a player whose
+ * chest was ready as they reached 1-2 got the chest instead of the spikes, and
+ * on 1-4 the chest instead of the eggs. Nothing that runs through a pause can
+ * be up during PLAY except the chest; the other three live on modals, and this
+ * only ever runs in play.
+ */
+const armOnTheClock = (id: LessonId): void => {
+  if (tutor.isTaught(id)) return
+  tutor.arm(id)
+  const up = activeLesson.value
+  if (up !== null && up !== id && outranks(id, up)) tutor.shelve(up)
+}
+
 const teachForBoss = (): void => {
   const s = spec.value
   if (!s.boss) return
-  const p = bossSpec(s.boss).phases[game.bossPhaseIndex.value]
+  const p = bossSpec(s.boss, s.bossScale).phases[game.bossPhaseIndex.value]
   if (p?.script === 'pods') teach('pods', 4200)
   else if (p?.script === 'charge') teach('boss', 4200)
 }
@@ -1223,8 +1374,10 @@ const resultRank = computed(() => {
 
 const resultCompact = computed(() => isMobileLandscape.value || isShortViewport.value)
 
+/** At the LEVEL's strength: the half-strength Queen's phases are 3/3/2 hits,
+ *  and ticks drawn off her full 5/6/4 would sit where no phase boundary is. */
 const bossTicks = computed(() =>
-  spec.value.boss ? bossPhaseTicks(bossSpec(spec.value.boss)) : [])
+  spec.value.boss ? bossPhaseTicks(bossSpec(spec.value.boss, spec.value.bossScale)) : [])
 
 const railProgress = computed(() => {
   if (spec.value.boss) return 1 - game.bossHp.value
@@ -1263,6 +1416,15 @@ watch(gameplayLive, (live) => syncGameplayLifecycle(live))
 // multiplier rises". Watched rather than set per frame: it changes on a rung,
 // which is a few times a level, not sixty times a second.
 watch(game.chainMult, (m) => setMusicRate(comboMusicRate(m)))
+
+// The crush bank renders every body's crush on idle slots, so it has to know
+// which bodies the level can show and which Juice Style they are made of — the
+// cast first, before anyone has stomped one. Cheap to call: it only queues.
+// Immediate, because the first `startLevel` usually sets `level` to the value
+// it already holds and a plain watcher would never fire for level one.
+watch([level, userJuiceStyle], ([lv, style]) => {
+  primeCrushBank({ style, cast: levelCast(lv), boss: levelSpec(lv).boss })
+}, { immediate: true })
 
 watch(userHighVis, (v) => art.setHighVis(v))
 
@@ -1347,7 +1509,8 @@ const onStarLand = (): void => playFx('star')
 
     //- ── HUD overlay ───────────────────────────────────────────────────────
     //- Non-interactive by default; individual controls opt back in.
-    div.scene__hud
+    //- Hidden — not unmounted — while a cutscene owns the screen: see `.is-cutscene`.
+    div.scene__hud(:class="{ 'is-cutscene': cut.cutsceneActive.value }")
       div.scene__top(ref="topBarRef")
         SplatHud.scene__hud-main(
           :label="label"
@@ -1600,6 +1763,16 @@ const onStarLand = (): void => playFx('star')
   pointer-events: none
   display: flex
   flex-direction: column
+
+  // A cutscene is the game's own camera over the game's own board, and a score,
+  // a clock and "Clear the swarm!" written across it read as a HUD that forgot
+  // to get out of the way. `visibility`, never `display`: `syncBoard` measures
+  // these bars to size the board the level spawns its boss onto BEFORE the
+  // scene hands over, and a display:none bar measures zero. `visibility: hidden`
+  // also drops the controls' own `pointer-events: auto`, so the first tap reaches
+  // the skip rather than the Locker button under it.
+  &.is-cutscene
+    visibility: hidden
 
 // ─── Top bar ────────────────────────────────────────────────────────────────
 

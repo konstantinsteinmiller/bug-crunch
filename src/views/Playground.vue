@@ -4,13 +4,19 @@ import { BUGS, type BugId } from '@/game/bugs'
 import { SHOES, shoeSpec, type ShoeId } from '@/game/shoes'
 import { BOSS_IDS, bossSpec, type BossId } from '@/game/bosses'
 import { HAZARDS, type HazardId } from '@/game/hazards'
-import { ART_BRAND, ART_CATALOGUE } from '@/game/artCatalogue'
+import { ART_BRAND, ART_CATALOGUE, BUG_PART_ART_IDS } from '@/game/artCatalogue'
 import {
-  artOverridesEnabled, artOverrideSource, refreshArtOverrides, setArtOverrides, spriteFor
+  ART_FOLDERS, artOverridesEnabled, artOverrideSource, refreshArtOverrides, setArtOverrides, spriteFor
 } from '@/game/art'
-import { paintBug, paintBoss, bugFrame, bugFrameEdge, primeBugs, bakeSlice, BUG_R_FRAC } from '@/game/bugArt'
+import { blitSceneArt, paintSceneRef } from '@/game/cutsceneArt'
+import { SCENE_ART_BOX } from '@/game/cutscene'
+import {
+  paintBug, paintBoss, paintSegment, bugFrame, bugFrameEdge, primeBugs, bakeSlice, BUG_R_FRAC, SEGMENT_ART_BOX
+} from '@/game/bugArt'
 import { paintShoe, shoeSprite } from '@/game/footArt'
-import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
+import {
+  isEggPropId, paintCoin, paintEggProp, paintHaze, paintHazard, paintPod, paintSaltBurst
+} from '@/game/propArt'
 import { floorTile, paintFloorTile, FLOOR_TILE_PX, resetFloors } from '@/game/floorArt'
 import {
   blitBanner, paintShockRing, paintSplat, paintUiIcon,
@@ -81,17 +87,19 @@ const rows = computed<Row[]>(() => {
     out.push({
       key: `${kind}/${id}`,
       label,
-      target: `images/${kind === 'bug' ? 'bugs' : kind === 'boss' ? 'bosses' : kind === 'shoe' ? 'shoes' : kind}/${id}.webp`,
+      target: `${ART_FOLDERS[kind]}/${id}.webp`,
       painted: !!spriteFor(kind, id)
     })
   }
   for (const b of BUGS) add('bug', b.id, b.id)
+  for (const id of BUG_PART_ART_IDS) add('bug', id, id)
   for (const s of SHOES) add('shoe', s.id, s.id)
   for (const b of BOSS_IDS) add('boss', b, b)
   for (const id of ART_CATALOGUE.prop) add('prop', id, id)
   for (const id of ART_CATALOGUE.fx) add('fx', id, id)
   for (const id of ART_CATALOGUE.bg) add('bg', id, id)
   for (const id of ART_CATALOGUE.ui) add('ui', id, id)
+  for (const id of ART_CATALOGUE.scene) add('scene', id, id)
   return out
 })
 
@@ -143,7 +151,10 @@ const drawProcedural = (
   ctx.translate(CELL / 2, CELL / 2)
   switch (kind) {
     case 'bug':
-      paintBug(ctx, id as BugId, half * BUG_R_FRAC * 1.6, 0)
+      // A bug PART (the centipede's tail segment) is not a design and has no
+      // `paintBug` drawer; it is drawn by its own painter into its own box.
+      if (BUG_PART_ART_IDS.includes(id)) paintSegment(ctx, half / SEGMENT_ART_BOX, 0, 0, { procedural: true })
+      else paintBug(ctx, id as BugId, half * BUG_R_FRAC * 1.6, 0)
       break
     case 'shoe':
       ctx.translate(0, -CELL * 0.06)
@@ -155,6 +166,8 @@ const drawProcedural = (
     case 'prop':
       if (id === 'coin') paintCoin(ctx, half * 0.8, 0)
       else if (id === 'pod') paintPod(ctx, half * 0.8, 0, '#ffd07a')
+      // The brood at its last stage, the one with the most to get wrong.
+      else if (isEggPropId(id)) paintEggProp(ctx, id, half, 3)
       else paintHazard(ctx, id as HazardId, half * 0.85, { t: 0, angle: 0 }, 3)
       break
     case 'fx':
@@ -181,6 +194,17 @@ const drawProcedural = (
         ctx.fill()
       }
       break
+    case 'scene': {
+      // Into a box of the dressing's own shape, so a wide sandwich is not drawn
+      // squashed into a square cell — and the PAINTED column uses the same box.
+      ctx.restore()
+      const b = sceneCellBox(id, half)
+      ctx.save()
+      ctx.translate(CELL / 2 - b.w / 2, CELL / 2 - b.h / 2)
+      paintSceneRef(ctx, id, b.w, b.h)
+      ctx.restore()
+      return
+    }
     case 'bg': {
       ctx.restore()
       const w = Number(id.slice('floor-'.length)) as WorldId
@@ -223,6 +247,17 @@ const drawProcedural = (
 const drawPainted = (
   ctx: CanvasRenderingContext2D, kind: string, id: string, half: number
 ): void => {
+  if (kind === 'bug' && BUG_PART_ART_IDS.includes(id)) {
+    // Through the game's own path — the strip, sliced and played at stride 0 —
+    // and only when it is actually painted, or this column would show the
+    // drawing twice and read as a perfect registration.
+    if (!spriteFor('bug', id)) return
+    ctx.save()
+    ctx.translate(CELL / 2, CELL / 2)
+    paintSegment(ctx, half / SEGMENT_ART_BOX, 0, 0)
+    ctx.restore()
+    return
+  }
   if (kind === 'bug') {
     const frame = bugFrame(id as BugId, 0)
     if (!frame) return
@@ -237,6 +272,23 @@ const drawPainted = (
     const w = half * 2 * (SHOE_BOX.w / SHOE_BOX.h)
     const h = half * 2
     ctx.drawImage(img, CELL / 2 - w / 2, CELL / 2 - h * 0.5, w, h)
+    return
+  }
+  if (kind === 'scene') {
+    const b = sceneCellBox(id, half)
+    ctx.save()
+    ctx.translate(CELL / 2 - b.w / 2, CELL / 2 - b.h / 2)
+    blitSceneArt(ctx, id, b.w, b.h)
+    ctx.restore()
+    return
+  }
+  if (kind === 'prop' && isEggPropId(id)) {
+    // Through the game's own path, at the same stage as the drawn column: the
+    // file is a 2 x 2 stage sheet, and a raw blit of it is four eggs in a cell.
+    ctx.save()
+    ctx.translate(CELL / 2, CELL / 2)
+    paintEggProp(ctx, id, half, 3, true)
+    ctx.restore()
     return
   }
   if (kind === 'bg') {
@@ -266,6 +318,13 @@ const drawPainted = (
   const img = spriteFor(kind as Parameters<typeof spriteFor>[0], id)
   if (!img || !img.naturalWidth) return
   ctx.drawImage(img, CELL / 2 - half, CELL / 2 - half, half * 2, half * 2)
+}
+
+/** A cell-sized box in a piece of set dressing's own proportions. */
+const sceneCellBox = (id: string, half: number): { w: number; h: number } => {
+  const b = SCENE_ART_BOX[id] ?? { hw: 1, hh: 1 }
+  const k = (half * 2) / (2 * Math.max(b.hw, b.hh))
+  return { w: 2 * b.hw * k, h: 2 * b.hh * k }
 }
 
 /** The goo the splat A/B is tinted with: the SPRINTER's own, straight out of

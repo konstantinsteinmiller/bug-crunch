@@ -33,10 +33,12 @@ export const BIG_READY_AT_MS = 10 * 60 * 1000
  * ── What playing pays ──
  *
  * `levelPayout` in `game/stages.ts` is `20 + world*14 + stars*(8 + world*4)`,
- * plus a boss bonus on every tenth level. A three-star clear therefore pays:
+ * plus a boss bonus on every boss level, scaled by the boss's strength. A
+ * three-star clear therefore pays:
  *
  *     world 1 → 70    world 2 → 96    world 3 → 122   world 4 → 148
- *     and the four bosses → 190 / 246 / 302 / 358
+ *     and the four finales → 190 / 246 / 302 / 358
+ *     (the half-strength Queen on 1-4 → 130)
  *
  * A level runs 48-90 s on the clock (`WORLDS[*].time`), and with the card, the
  * result screen and the odd retry a level CYCLE is about two minutes of wall

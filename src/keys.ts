@@ -97,7 +97,7 @@ export const ONBOARDED_KEY = 'bc_onboarded'
  * Which one-shot hints have already been shown, as `{ [hintId]: true }`.
  *
  * One map rather than a flag per hint, because the hints arrive across the whole
- * campaign — the beetle's shell on 1-4, the spikes on 2-2, the cobwebs on 3-1,
+ * campaign — the spikes on 1-2, the beetle's shell on 1-3, the cobwebs on 3-1,
  * the conveyor on 4-1 — and by the time the late ones fire every player is
  * `onboarded`. Without this the mechanics most likely to read as bugs are
  * exactly the ones nobody is ever told about.

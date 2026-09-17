@@ -4,6 +4,8 @@ import {
 } from '@/game/tutorial'
 import * as tutor from '@/use/useTutorial'
 import { HOLD_TO_LEARN_MS } from '@/use/useTutorial'
+import { EGG_LAY_MS, bossSpec } from '@/game/bosses'
+import { BOSS_FIGHTS } from '@/game/stages'
 
 /**
  * ─── The curriculum, and the director that runs it ──────────────────────────
@@ -75,7 +77,7 @@ describe('the lesson list', () => {
     // header of `game/tutorial.ts`.
     for (const id of [
       'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever',
-      'boss', 'stars', 'quests', 'chest', 'locker', 'buy'
+      'boss', 'pods', 'stars', 'quests', 'chest', 'locker', 'buy'
     ] as LessonId[]) {
       expect(LESSON_IDS).toContain(id)
     }
@@ -126,7 +128,7 @@ describe('the quest-badge lesson', () => {
     // A caterpillar walking into the foot always wins the screen. This is the
     // least urgent thing the game ever explains.
     for (const id of [
-      'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever', 'boss'
+      'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever', 'boss', 'pods'
     ] as LessonId[]) {
       expect(outranks(id, 'quests'), `${id} must outrank quests`).toBe(true)
     }
@@ -290,6 +292,92 @@ describe('the director\'s clock', () => {
     expect(tutor.activeLesson.value).toBe('chain')
     tutor.step(50, false)
     expect(tutor.activeLesson.value).toBe('chain')
+  })
+})
+
+/**
+ * ─── The boss's eggs ────────────────────────────────────────────────────────
+ *
+ * The first boss moved from 1-10 to 1-4, which puts her egg phase in front of a
+ * player four levels into the game. Until then the only thing that said "the
+ * eggs are the job now" was a line of text under the boss bar.
+ */
+describe('the eggs lesson', () => {
+  const pods = lessonSpec('pods')
+
+  it('shows the hand dropping onto an egg — the stomp lesson, on a new target', () => {
+    expect(pods.gesture).toBe('tap')
+    // Retired by the first egg squished, not by being looked at.
+    expect(pods.holdMs).toBeUndefined()
+    expect(pods.scrim).toBe('soft')
+    expect(pods.whilePaused).toBeUndefined()
+  })
+
+  it('waits for the boss to be introduced first, and still beats the HUD lessons', () => {
+    expect(outranks('boss', 'pods')).toBe(true)
+    expect(outranks('pods', 'quests')).toBe(true)
+    expect(outranks('pods', 'stars')).toBe(true)
+  })
+
+  it('never nags: a player who squished an egg on their own is never shown it', () => {
+    tutor.complete('pods')
+    tutor.arm('pods')
+    expect(tutor.activeLesson.value).toBeNull()
+  })
+
+  // Every boss fight has eggs now, and a hatch is the lesson's second half: the
+  // consequence of NOT tapping. So the hand has to stay up long enough for the
+  // first egg it points at to hatch under it, in every fight a player can meet
+  // one in — the half-strength Queen's slower clock, and her egg's hop, included.
+  it('stays up long enough to watch the egg it points at hatch, in every boss fight', () => {
+    for (const [level, fight] of Object.entries(BOSS_FIGHTS)) {
+      const egg = bossSpec(fight.boss, fight.scale).podHatchMs + EGG_LAY_MS
+      expect(pods.bailoutMs, `level ${level}: an egg takes ${egg} ms`).toBeGreaterThan(egg)
+    }
+  })
+
+  it('is armed by an egg the same way wherever it lands — by its id, once', () => {
+    tutor.arm('pods')
+    expect(tutor.activeLesson.value).toBe('pods')
+    tutor.complete('pods')
+    expect(tutor.isTaught('pods')).toBe(true)
+    tutor.arm('pods')
+    expect(tutor.activeLesson.value).toBeNull()
+  })
+})
+
+/**
+ * ─── A lesson that has to come before the harm ──────────────────────────────
+ *
+ * The director never pre-empts: a lesson armed while another is up waits in the
+ * queue. The scene makes ONE exception, for spikes — the first board that can
+ * hurt the player is now 1-2, where a HUD arrow or the Fever button's lesson can
+ * be mid-show when the first caterpillar walks in — using nothing but `arm` and
+ * `shelve`. This pins that those two primitives are enough.
+ */
+describe('spikes taking the screen', () => {
+  it('can displace a lesson it outranks without teaching it', () => {
+    tutor.arm('fever')
+    expect(tutor.activeLesson.value).toBe('fever')
+    expect(outranks('spike', 'fever')).toBe(true)
+
+    // What `armBodyLessons` does: queue spikes, then shelve what is up.
+    tutor.arm('spike')
+    expect(tutor.activeLesson.value).toBe('fever')
+    tutor.shelve('fever')
+    expect(tutor.activeLesson.value).toBe('spike')
+    expect(tutor.isTaught('fever')).toBe(false)
+
+    // …and Fever comes back once spikes are done, because the vial is still full.
+    tutor.arm('fever')
+    tutor.complete('spike')
+    expect(tutor.activeLesson.value).toBe('fever')
+  })
+
+  it('is never displaced itself by the lessons the scene arms beside it', () => {
+    for (const id of ['dodge', 'fever', 'boss', 'pods', 'quests'] as LessonId[]) {
+      expect(outranks('spike', id), `spike must outrank ${id}`).toBe(true)
+    }
   })
 })
 

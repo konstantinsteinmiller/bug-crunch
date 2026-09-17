@@ -251,7 +251,11 @@ describe('the baked snapshot is the bottom rung, reached only on failure', () =>
     for (let stage = 1; stage <= 12; stage++) await lb.reportRun(stage, 100)
 
     const writes = sent.filter((u) => u.endsWith('/score'))
-    expect(writes.length, `a 12-stage climb cost ${writes.length} writes`).toBe(1)
+    // The whole request log in the message, because the two ways this can fail
+    // read the same from a bare count: twelve writes is the quota bug this test
+    // exists for, and ZERO writes means the client never reported at all — a
+    // different fault entirely (no endpoint, or a throw before the POST).
+    expect(writes.length, `a 12-stage climb cost ${writes.length} writes; sent=${JSON.stringify(sent)}`).toBe(1)
   })
 
   it('the end of a run always posts, however recently one went out', async () => {

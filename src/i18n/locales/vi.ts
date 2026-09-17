@@ -268,6 +268,7 @@ export default {
       'hard': 'Bọ nhanh hơn và sân đông hơn.'
     },
     'musicTracks': {
+      'parade': 'Diễu hành giòn tan',
       'trance': 'Nhịp bọ',
       'cozy': 'Dã ngoại thảnh thơi'
     },

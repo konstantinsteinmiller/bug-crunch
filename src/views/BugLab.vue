@@ -13,6 +13,11 @@ import {
 } from '@/game/uiArt'
 import { JUICE_STYLES, type JuiceStyleId } from '@/game/juiceStyle'
 import type { WorldId } from '@/game/stages'
+import {
+  CRUSH_JITTER, CRUSH_MIX, CRUSH_RENDER_RATE, CRUSH_SUBJECTS, crushKindsFor, crushVariants, renderCrush,
+  type CrushKind, type CrushSubject
+} from '@/game/audio/crushSynth'
+import { getAudioContext } from '@/use/useAssets'
 
 /**
  * `/bug-lab` — the design bench for the cast.
@@ -35,7 +40,7 @@ const cycle = ref(0)
 const auto = ref(true)
 const world = ref<WorldId>(1)
 const style = ref<JuiceStyleId>('ooze')
-const tab = ref<'bugs' | 'shoes' | 'bosses' | 'props' | 'fx'>('bugs')
+const tab = ref<'bugs' | 'shoes' | 'bosses' | 'props' | 'fx' | 'audio'>('bugs')
 
 // The narrowing lives HERE and not in the template. A template expression is
 // compiled to plain JavaScript, so `tab = k as any` inside one is a TypeScript
@@ -69,6 +74,7 @@ const rows = computed<string[]>(() => {
     case 'bosses': return [...BOSS_IDS]
     case 'props': return HAZARDS.map((h) => h.id)
     case 'fx': return ['splat', 'word-squish', 'word-crunch', 'word-splat', 'word-ultra', 'alert', 'star', 'damage', 'segment']
+    case 'audio': return []
   }
 })
 
@@ -194,6 +200,66 @@ onUnmounted(() => {
 })
 
 watch([tab, world, style], () => draw())
+
+// ─── Audio: the crush bank, one button per sound ────────────────────────────
+//
+// The same pure renderer the game fills its bank from, played on the game's own
+// shared AudioContext — so what you hear here is byte-for-byte what a kill
+// plays, minus the pan. Each press renders fresh (a few ms) and steps to the
+// next variant, so pressing one button repeatedly walks its variations; "×6"
+// fires six kills in 1.2 s with the runtime's own rate and gain jitter, which
+// is the machine-gun test. "loud" lifts everything 12 dB for a laptop speaker;
+// off, it is the in-game level at the default SFX slider.
+
+interface AudioButton { label: string; kind: CrushKind; heavy: boolean }
+
+const audioButtons = (s: CrushSubject): AudioButton[] => {
+  const out: AudioButton[] = []
+  for (const kind of crushKindsFor(s)) {
+    out.push({ label: kind, kind, heavy: false })
+    if (kind !== 'clang' && s !== 'pod' && s !== 'hatch') out.push({ label: `${kind} heavy`, kind, heavy: true })
+  }
+  return out
+}
+
+const loud = ref(true)
+const lastInfo = ref('')
+const variantAt = new Map<string, number>()
+
+const playCrushSample = (s: CrushSubject, b: AudioButton, at = 0, variant?: number): void => {
+  const ctx = getAudioContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') void ctx.resume()
+  const key = `${s}|${b.kind}|${b.heavy}`
+  const n = crushVariants(s, b.kind, b.heavy)
+  const v = variant ?? (variantAt.get(key) ?? 0) % n
+  if (variant === undefined) variantAt.set(key, v + 1)
+  const t0 = performance.now()
+  const data = renderCrush({ subject: s, kind: b.kind, style: style.value, variant: v, heavy: b.heavy, sampleRate: CRUSH_RENDER_RATE })
+  const ms = performance.now() - t0
+  const buf = ctx.createBuffer(1, data.length, CRUSH_RENDER_RATE)
+  buf.getChannelData(0).set(data)
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  src.playbackRate.value = 1 + CRUSH_JITTER[b.kind] * (Math.random() * 2 - 1)
+  const g = ctx.createGain()
+  g.gain.value = CRUSH_MIX[b.kind] * 0.7 * (loud.value ? 4 : 1) * (0.9 + Math.random() * 0.2)
+  src.connect(g).connect(ctx.destination)
+  src.start(ctx.currentTime + at)
+  lastInfo.value = `${style.value} · ${s} · ${b.label} · variant ${v + 1}/${n} · ${Math.round((data.length / CRUSH_RENDER_RATE) * 1000)} ms · rendered in ${ms.toFixed(1)} ms`
+}
+
+const playRapid = (s: CrushSubject): void => {
+  const b: AudioButton = { label: 'crush', kind: 'crush', heavy: false }
+  const n = crushVariants(s, 'crush', false)
+  let last = -1
+  for (let i = 0; i < 6; i++) {
+    let v = Math.floor(Math.random() * n)
+    if (n > 1 && v === last) v = (v + 1) % n
+    last = v
+    playCrushSample(s, b, i * 0.2, v)
+  }
+}
 </script>
 
 <template lang="pug">
@@ -205,7 +271,7 @@ watch([tab, world, style], () => draw())
         |  The 24 px column is the question: a design that is mud there is mud on a
         |  phone.
       .bar
-        button(v-for="k in ['bugs', 'shoes', 'bosses', 'props', 'fx']" :key="k"
+        button(v-for="k in ['bugs', 'shoes', 'bosses', 'props', 'fx', 'audio']" :key="k"
           :class="{ on: tab === k }" @click="setTab(k)") {{ k }}
         span.sep
         button.ghost(v-for="w in [1, 2, 3, 4]" :key="`w${w}`"
@@ -218,8 +284,19 @@ watch([tab, world, style], () => draw())
           input(type="checkbox" v-model="auto")
           |  animate
         input.slider(type="range" min="0" max="1" step="0.01" v-model.number="cycle" :disabled="auto")
+        template(v-if="tab === 'audio'")
+          span.sep
+          label
+            input(type="checkbox" v-model="loud")
+            |  loud
 
-    canvas(ref="canvasRef")
+    .audio(v-if="tab === 'audio'")
+      p.info {{ lastInfo || 'Pick a Juice Style above, then press a sound. Pressing again steps through its variants.' }}
+      .audio-row(v-for="s in CRUSH_SUBJECTS" :key="s")
+        span.name {{ s }}
+        button(v-for="b in audioButtons(s)" :key="b.label" @click="playCrushSample(s, b)") {{ b.label }}
+        button.ghost(@click="playRapid(s)") ×6
+    canvas(v-show="tab !== 'audio'" ref="canvasRef")
 </template>
 
 <style scoped lang="sass">
@@ -267,6 +344,28 @@ button
 
 .slider
   width: 180px
+
+.audio
+  display: grid
+  gap: 6px
+  margin-bottom: 16px
+
+.info
+  margin: 0 0 8px
+  color: #9aa7b4
+  font-family: ui-monospace, monospace
+  font-size: 12px
+
+.audio-row
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  gap: 6px
+
+  .name
+    width: 110px
+    color: #e6edf3
+    font-weight: 700
 
 canvas
   display: block

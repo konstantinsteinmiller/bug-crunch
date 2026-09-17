@@ -39,7 +39,7 @@ of on a comma.
 *Build it:* a strip under the star row, fed by `levelSpec(n + 1 … n + 3)` — the
 generator is already pure and memoised, so this costs nothing. Show each level's
 label, its new bug (first `roster` entry whose `debut === n`), and a boss crown
-on the tenth. Reuse `ObjectiveList`'s chip styling and `GameIcon`.
+on a boss level (`levelSpec(n).boss` — 1-4 as well as every tenth). Reuse `ObjectiveList`'s chip styling and `GameIcon`.
 `GameScene.vue`'s `warmNextLevelArt` already pre-warms the art for `level + 1`;
 extend it to the strip's range so the preview is never a blank box.
 
@@ -345,6 +345,13 @@ item says so.
   exactly one new creature or floor object, with a problem always one level
   ahead of its answer. Part of what **#1 (the "next up" strip)** was for is now
   handled by the levels themselves; the strip is still worth building.
+* **A second re-cut, and the first boss inside the funnel.** Players still
+  drifted off 30-50 s in, so world 1 now runs ant · caterpillar · beetle ·
+  **Goliath Queen at half strength (1-4)** · sprinter · crumbs · piñata fly ·
+  flea · honey · full Queen (1-10); the salt shaker moved to 2-2. Boss levels are
+  data (`BOSS_FIGHTS` in `stages.ts`), strength is one helper (`scaleBoss`), and
+  the boss's egg phase got its own wordless lesson. Scouted numbers are in the
+  world-1 block of `stages.ts`.
 
 ---
 

@@ -9,7 +9,9 @@ import {
 import {
   paintFootShadow, paintShoe, paintStompRing, shoeSprite, LIFT_SCALE, SHOE_BOX, SHOE_FRAC
 } from '@/game/footArt'
-import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
+import {
+  paintCoin, paintEggShell, paintHaze, paintHazard, paintPod, paintSaltBurst
+} from '@/game/propArt'
 import {
   floorAmbient, floorPattern, paintVignette, resetFloor, resetFloors, VIGNETTE_STRENGTH
 } from '@/game/floorArt'
@@ -24,7 +26,9 @@ import {
   getJuiceStyle, getLevel, getPods, getShoe, isFever, isTouchInput,
   segmentAt, stompRadius, type Bug, type GameEvent
 } from '@/use/useBugCrunchGame'
-import { CHARGE_TELL_MS, CHARGE_WINDUP_MS, POD_HATCH_MS, POD_SIZE, BEAM_HALF, BEAM_TELL_MS } from '@/game/bosses'
+import {
+  CHARGE_TELL_MS, EGG_LAY_MS, POD_SIZE, BEAM_HALF, BEAM_TELL_MS, type EggLook
+} from '@/game/bosses'
 import { HIDE_READOUTS } from '@/game/previewFeed'
 
 /**
@@ -150,6 +154,24 @@ export const stampSplat = (
     g.restore()
     decalCount = Math.floor(DECAL_BUDGET * 0.5)
   }
+}
+
+/**
+ * Stamp a hatched egg's empty shell into the floor layer — the same persistent
+ * canvas the splats live in, so the floor remembers every egg that got away for
+ * the cost of one stamp.
+ */
+export const stampShell = (x: number, y: number, r: number, look: EggLook, seed: number): void => {
+  ensureDecals()
+  const g = decalCtx
+  const c = decals
+  if (!g || !c) return
+  const k = (c.width / Math.max(1, viewW))
+  g.save()
+  g.translate(x * pxPerU * k, y * pxPerU * k)
+  paintEggShell(g, r * pxPerU * k, look, seed)
+  g.restore()
+  decalCount++
 }
 
 // ─── Camera ─────────────────────────────────────────────────────────────────
@@ -483,20 +505,57 @@ export const applyEvents = (list: readonly GameEvent[]): void => {
         punchZoom(0.05)
         shake(1)
         break
-      case 'podPop':
+      case 'podPop': {
+        // A popped egg is paid like a kill, and it LOOKS like one: shell chips,
+        // a splat of what was inside stamped into the floor, and the chain's
+        // word once the chain has earned one. An egg's goo is yolk; a capsule's
+        // is its boss's coolant.
+        const bs = getBoss()
+        const capsule = bs?.spec.eggLook === 'capsule'
+        const goo = capsule && bs ? bs.spec.goo : EGG_YOLK
+        const s = JUICE_STYLE[style]
         pushRing(e.x, e.y, POD_SIZE * 3, 380, 'rgba(255,240,200,0.9)', 1)
         for (let i = 0; i < 12; i++) {
           const a = Math.random() * Math.PI * 2
           emitParticle({
             x: e.x, y: e.y, vx: Math.cos(a) * 24, vy: Math.sin(a) * 24,
-            life: 520, size: 0.6, color: [240, 220, 174], drag: 3.4, shape: 1,
+            life: 520, size: 0.6, color: capsule ? [200, 210, 226] : [240, 220, 174], drag: 3.4, shape: 1,
             rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 10
           })
         }
-        shake(0.2)
+        if (s.decalAlpha > 0.02) {
+          stampSplat(e.x, e.y, POD_SIZE * 0.95 * s.decalScale, `rgb(${goo[0]},${goo[1]},${goo[2]})`,
+            splatSeed++, style, 1, 0)
+        }
+        if (e.mult >= 3) pushWord(e.x, e.y, wordText(e.word), e.word, POD_SIZE * 1.3 * pxPerU)
+        shake(0.16 + Math.min(0.3, e.mult / 60))
         break
-      case 'podHatch':
-        screenFlash(0.12, '255,120,120')
+      }
+      case 'podHatch': {
+        // The consequence, made LEGIBLE rather than punishing: the old cue was a
+        // red flash, which told a six-year-old they had done something wrong
+        // when all that happened is that some ants arrived. Now it is a pop —
+        // a ring, chips of shell, the empty halves left on the floor — and the
+        // ants' own scurry out of it (`hatchEgg`) is the rest of the picture.
+        const bs = getBoss()
+        const look: EggLook = bs?.spec.eggLook ?? 'egg'
+        pushRing(e.x, e.y, POD_SIZE * 2.6, 360, look === 'capsule' ? 'rgba(110,240,255,0.85)' : 'rgba(255,236,190,0.9)', 0.9)
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2 + Math.random() * 0.5
+          emitParticle({
+            x: e.x, y: e.y, vx: Math.cos(a) * 20, vy: Math.sin(a) * 20,
+            life: 420, size: 0.55, color: look === 'capsule' ? [200, 210, 226] : [244, 228, 190],
+            drag: 4, shape: 1, rot: Math.random() * 6.28, vrot: (Math.random() - 0.5) * 8
+          })
+        }
+        stampShell(e.x, e.y, POD_SIZE, look, (e.x * 0.137 + e.y * 0.071) % 1)
+        shake(0.1)
+        break
+      }
+      case 'podLand':
+        // A laid egg touching down: a puff, so the eye follows it to where it
+        // can be stomped.
+        pushRing(e.x, e.y, POD_SIZE * 1.7, 260, 'rgba(255,255,255,0.6)', 0.6)
         break
       case 'sweep':
         shake(0.18)
@@ -611,12 +670,35 @@ export const drawScene = (
   const r = stompRadius(heavy) * pxPerU
   paintFootShadow(ctx, toX(foot.x), toY(foot.y), r, foot.z, fever ? '120,80,0' : '0,0,0')
 
-  // ── The boss egg pods ──
+  // ── The brood: boss eggs, on the floor and in the air ──
+  //
+  // Each egg's clock is its OWN (`pod.hatchMs`, the scaled boss's), so a
+  // half-strength Queen's egg shows the same crack at the same fraction of its
+  // longer clock. A laid egg in its hop is drawn along the arc over a shadow
+  // that stays on the floor, which is what says "not yet — there".
+  const eggLook: EggLook = boss ? boss.spec.eggLook : 'egg'
+  const eggTint = boss ? boss.spec.accent : '#ffd07a'
+  const eggClock = performance.now()
   for (const pod of getPods()) {
     if (!pod.alive) continue
+    let ex = pod.x
+    let ey = pod.y
+    let lift = 0
+    if (pod.fly > 0) {
+      const k = 1 - pod.fly / pod.flyMs
+      ex = pod.fromX + (pod.x - pod.fromX) * k
+      ey = pod.fromY + (pod.y - pod.fromY) * k
+      lift = Math.sin(k * Math.PI) * EGG_HOP_U
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'
+      ctx.beginPath()
+      ctx.ellipse(toX(ex), toY(ey), POD_SIZE * 0.8 * pxPerU, POD_SIZE * 0.55 * pxPerU, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.save()
-    ctx.translate(toX(pod.x), toY(pod.y))
-    paintPod(ctx, POD_SIZE * pxPerU, 1 - pod.t / POD_HATCH_MS, boss ? boss.spec.accent : '#ffd07a')
+    ctx.translate(toX(ex), toY(ey - lift))
+    paintPod(ctx, POD_SIZE * pxPerU, 1 - pod.t / pod.hatchMs, eggTint, {
+      look: eggLook, clock: eggClock, seed: pod.seed
+    })
     ctx.restore()
   }
 
@@ -640,8 +722,18 @@ export const drawScene = (
     } else {
       ctx.rotate(boss.aim + Math.PI / 2)
       if (boss.sub === 'windup') {
-        const p = Math.min(1, boss.subT / CHARGE_WINDUP_MS)
+        const p = Math.min(1, boss.subT / boss.spec.windupMs)
         ctx.scale(1 - p * 0.1, 1 + p * 0.14)
+      }
+      // Laying: a squat as the egg leaves her, and — for the Queen holding still
+      // after a spent charge — a slow heave for as long as the hold lasts, so
+      // the open window LOOKS open.
+      if (boss.laying > 0) {
+        const q = Math.sin((boss.laying / EGG_LAY_MS) * Math.PI)
+        ctx.scale(1 + q * 0.08, 1 - q * 0.1)
+      } else if (boss.sub === 'spent' && boss.subT < 0) {
+        const q = Math.sin(boss.subT / 110)
+        ctx.scale(1 + q * 0.03, 1 - q * 0.04)
       }
     }
     paintBoss(ctx, boss.spec.id, boss.size * pxPerU, (performance.now() / 700) % 1, boss.phase)
@@ -681,6 +773,11 @@ export const drawScene = (
 }
 
 const HAZE_R_PX = (): number => 22 * pxPerU
+
+/** How high a laid egg's hop peaks, u. */
+const EGG_HOP_U = 5
+/** An egg's goo when it is an egg: yolk. */
+const EGG_YOLK = [255, 212, 88] as const
 
 // ─── Bodies ─────────────────────────────────────────────────────────────────
 
@@ -737,6 +834,16 @@ const drawBug = (ctx: CanvasRenderingContext2D, b: Bug, style: JuiceStyleId): vo
   }
 
   if (b.dmg > 0) paintDamage(ctx, spec.size * pxPerU, b.dmg / spec.hp)
+  // A carrier holds its egg up in front of its head. Counter-turned so the
+  // egg's light stays upper-left however the ant is walking.
+  if (b.carry) {
+    ctx.save()
+    ctx.translate(0, -spec.size * pxPerU * 1.05)
+    ctx.rotate(-(b.heading + Math.PI / 2))
+    const bs = getBoss()
+    paintPod(ctx, POD_SIZE * 0.72 * pxPerU, 0, bs ? bs.spec.accent : '#ffd07a', { look: bs?.spec.eggLook ?? 'egg' })
+    ctx.restore()
+  }
   if (b.held > 0) {
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.lineWidth = Math.max(1, pxPerU * 0.2)
@@ -902,7 +1009,7 @@ const drawBossTells = (ctx: CanvasRenderingContext2D, boss: NonNullable<ReturnTy
     // The lane the boss is about to run down. It brightens as the wind-up
     // completes, so the player can time the counter-slam off the floor rather
     // than off the body — which is what makes the counter learnable.
-    const k = boss.sub === 'windup' ? Math.min(1, boss.subT / CHARGE_WINDUP_MS) : boss.subT / CHARGE_TELL_MS * 0.4
+    const k = boss.sub === 'windup' ? Math.min(1, boss.subT / boss.spec.windupMs) : boss.subT / CHARGE_TELL_MS * 0.4
     const len = Math.max(viewW, viewH) / pxPerU
     ctx.save()
     ctx.translate(toX(boss.x), toY(boss.y))

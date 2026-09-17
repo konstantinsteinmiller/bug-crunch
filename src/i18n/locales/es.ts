@@ -268,6 +268,7 @@ export default {
       'hard': 'Bichos más rápidos y tableros más llenos.'
     },
     'musicTracks': {
+      'parade': 'Desfile crujiente',
       'trance': 'Ritmo bicho',
       'cozy': 'Pícnic tranquilo'
     },

@@ -45,7 +45,10 @@ const PURE = process.argv.join(' ').includes('feed=pure')
 export default {
   // The port-ownership check. Twenty-odd games in this folder run their dev
   // server on 2050 and every one of them answers a fetch perfectly happily.
-  title: 'bug-crunch',
+  // Matched case-insensitively against `<title>` as a SUBSTRING, so it has to be
+  // the page's own spelling: the old 'bug-crunch' never matched "Bug Crunch",
+  // and the scout refused to start even on the server it launched itself.
+  title: 'Bug Crunch',
 
   // The DEV server, not a production build: `window.__preview` and the feed
   // flag are both `import.meta.env.DEV` only.

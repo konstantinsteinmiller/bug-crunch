@@ -169,3 +169,20 @@ dpr 2.
   purpose (see `useBugCrunchGame`), so a scouting run that fills it leaves it full
   for the take. Every staging call therefore follows `play()` with
   `resetVial()`.
+- **The players could not slam, and never aimed at an egg.** The autopilot let
+  go of a charge at `chargeMs + 40`, but a press always opens with a quick stomp
+  and the charge only starts after it recovers — so every "slam" landed as a tap,
+  for every policy, and every number scouted before the fix is a player who never
+  slams. It now holds until the foot's ring is full. It also only ever stood on a
+  boss when the floor was empty, which left a `pods` phase to end by accident;
+  eggs, and a boss whose phase can be hurt, are targets now. Both change what the
+  staging reaches, so re-scout before trusting an old beat sheet's lead times —
+  the fail clips' Matriarch still runs the clock out (about a quarter of her bar
+  left, where it used to be two thirds).
+- **Every boss fight has eggs now** ("The brood" in `src/game/bosses.ts`), laid
+  by the Queen and Roach Prime and carried in by ants for the King and the
+  Matriarch. The autopilot already aimed at every egg; it now skips one still in
+  its hop from the boss (it cannot be stomped until it lands) and prices a
+  carrier ant as its egg plus the ant. Eggs pay the chain and hatch into ants, so
+  every boss clip's chain and vial timings moved — re-scout before trusting a
+  boss beat sheet's lead times.

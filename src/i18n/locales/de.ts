@@ -268,6 +268,7 @@ export default {
       'hard': 'Schnellere Käfer und vollere Felder.'
     },
     'musicTracks': {
+      'parade': 'Knusper-Parade',
       'trance': 'Käfer-Groove',
       'cozy': 'Gemütliches Picknick'
     },

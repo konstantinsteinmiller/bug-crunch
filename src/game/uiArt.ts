@@ -1,5 +1,5 @@
 import {
-  blob, cel, ink, rough, densify, tones, terminator, INK, SHADOW_DIR, type Pt
+  blob, cel, ink, rough, densify, tones, terminator, trace, INK, SHADOW_DIR, type Pt
 } from '@/game/inkArt'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
 import type { GameIconName } from '@/components/icons/iconNames'
@@ -610,9 +610,52 @@ export const paintStar = (
 export const BANNER = { w: 1344, h: 576, cap: 0.171 } as const
 
 /**
- * The banner: a fat sticker-cut ribbon in picnic red and cream, swallow-tailed
- * at both ends, with a gold bind top and bottom and a button at each notch.
- * The middle stays plain — the title goes there.
+ * A rounded rectangle as a point loop.
+ *
+ * Everything else in this file is a `blob` or a hand-listed polygon so it can
+ * go through `cel`, `terminator` and `ink` like any other drawn shape. The
+ * banner's plate is the one piece that genuinely wants straight sides, and a
+ * bare `ctx.roundRect` would not survive `rough()` or take an ink contour.
+ */
+const roundedLoop = (
+  x0: number, y0: number, x1: number, y1: number, r: number
+): Pt[] => {
+  const rad = Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2)
+  const pts: Pt[] = []
+  const corner = (cx: number, cy: number, from: number): void => {
+    for (let i = 0; i <= 6; i++) {
+      const a = from + (i / 6) * (Math.PI / 2)
+      pts.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad])
+    }
+  }
+  corner(x1 - rad, y0 + rad, -Math.PI / 2)
+  corner(x1 - rad, y1 - rad, 0)
+  corner(x0 + rad, y1 - rad, Math.PI / 2)
+  corner(x0 + rad, y0 + rad, Math.PI)
+  return pts
+}
+
+/**
+ * The banner: a plate of dark iron with two gold rails, capped at each end by
+ * a gold block with a round stud in it. The middle stays plain, because the
+ * title goes there.
+ *
+ * This used to be a swallow-tailed ribbon in picnic red, and it was the odd one
+ * out in two directions at once. `FReward`'s own layout has always described
+ * the banner as a plate of dark iron, and once the PAINTING was made that, the
+ * drawn version was a different design for the same element: red with the art
+ * layer off, dark iron with it on, and a visible red-to-dark pop in between as
+ * the painting decoded.
+ *
+ * It matters past the fallback. `ArtSheets` draws the ribbon's REFERENCE from
+ * this function, so a red drawing here is a red layout handed to the painter,
+ * and the next repaint comes back red however the prompt is worded.
+ *
+ * Everything that can stretch is a HORIZONTAL. The middle of this image is
+ * pulled to the width of whatever caption sits in it (`border-image`, sliced at
+ * `BANNER.cap`), so the two rails are the only long elements — a line survives
+ * any scale — and every piece of detail, caps and studs, sits inside the outer
+ * `cap` of each end where the nine-slice never stretches.
  */
 export const paintBanner = (
   ctx: CanvasRenderingContext2D, w: number, h: number, o?: UiPaintOpts
@@ -622,58 +665,92 @@ export const paintBanner = (
     ctx.drawImage(painted, 0, 0, w, h)
     return
   }
-  const cap = BANNER.cap * w
-  const notch = cap * 0.55
-  const top = h * 0.07
-  const bot = h * 0.93
+  const iron = tones('#1f1b1d', 0.95)
+  const gold = tones('#f4c551', 1)
+  const top = h * 0.113
+  const bot = h * 0.883
   const mid = h / 2
-  const cloth = tones('#e8534f', 1.2)
-  const gold = tones('#ffcd00', 1)
 
   ctx.save()
 
-  const plate: Pt[] = rough(densify([
-    [0, top], [w, top], [w - notch, mid], [w, bot], [0, bot], [notch, mid]
-  ] as Pt[], 8), h * 0.005, 7, 0.7)
-  cel(ctx, plate, cloth, {
-    shade: terminator(plate, Math.PI / 2, 0.35, 0.05, 3),
-    lit: terminator(plate, -Math.PI / 2, 0.62, 0.04, 5)
-  })
+  const plate = rough(
+    densify(roundedLoop(w * 0.047, top, w * 0.953, bot, h * 0.13), 8),
+    h * 0.0012, 7, 0.5
+  )
+  // The plate's light is a BAND, not a terminator. `terminator` measures its
+  // offset against the shape's longest axis, and this shape is nearly three
+  // times as wide as it is tall: every offset that reads as "a rim along the
+  // top" on a creature lands hundreds of pixels clear of the plate here. A flat
+  // slab lit from above wants a hard rim along its top edge anyway, so the band
+  // is also the truer drawing — and the body stays one even value, because this
+  // is the surface a caption has to be legible on.
+  const lit = rough(densify([
+    [-w, top - h * 0.05], [w * 2, top - h * 0.05],
+    [w * 2, top + (bot - top) * 0.1], [-w, top + (bot - top) * 0.1]
+  ] as Pt[], 10), h * 0.006, 5, 0.6)
+  cel(ctx, plate, iron, { lit })
 
+  // The bottom edge catches the light too — it is a bevel, not an underside,
+  // and drawing it dark would make the plate read as peeling up off the card.
+  ctx.save()
+  ctx.beginPath()
+  trace(ctx, plate)
+  ctx.clip()
+  ctx.strokeStyle = iron.lit
+  ctx.lineWidth = h * 0.05
+  ctx.beginPath()
+  ctx.moveTo(w * 0.05, bot - h * 0.018)
+  ctx.lineTo(w * 0.95, bot - h * 0.018)
+  ctx.stroke()
+  ctx.restore()
+
+  // The rails. Shadow line first, so the gold sits on its own dark edge under
+  // the same upper-left key light the rest of the game is drawn to.
   ctx.lineCap = 'round'
-  for (const y of [top + h * 0.085, bot - h * 0.085]) {
+  for (const y of [h * 0.219, h * 0.76]) {
     ctx.strokeStyle = gold.shade
-    ctx.lineWidth = h * 0.03
+    ctx.lineWidth = h * 0.062
     ctx.beginPath()
-    ctx.moveTo(notch + h * 0.06, y + h * 0.008)
-    ctx.lineTo(w - notch - h * 0.06, y + h * 0.008)
+    ctx.moveTo(w * 0.133, y + h * 0.009)
+    ctx.lineTo(w * 0.867, y + h * 0.009)
     ctx.stroke()
     ctx.strokeStyle = gold.base
-    ctx.lineWidth = h * 0.02
+    ctx.lineWidth = h * 0.048
     ctx.beginPath()
-    ctx.moveTo(notch + h * 0.06, y)
-    ctx.lineTo(w - notch - h * 0.06, y)
+    ctx.moveTo(w * 0.133, y)
+    ctx.lineTo(w * 0.867, y)
+    ctx.stroke()
+    ctx.strokeStyle = gold.lit
+    ctx.lineWidth = h * 0.014
+    ctx.beginPath()
+    ctx.moveTo(w * 0.14, y - h * 0.015)
+    ctx.lineTo(w * 0.86, y - h * 0.015)
     ctx.stroke()
   }
 
+  // The end caps and their studs, both wholly inside the un-stretched band.
   for (const side of [0, 1] as const) {
     const sx = (x: number): number => (side === 0 ? x : w - x)
-    const button = blob(sx(notch + h * 0.15), mid, h * 0.075, h * 0.075, 21 + side, 0.05)
-    cel(ctx, button, gold, {
-      shade: terminator(button, SHADOW_DIR, 0.1, 0.1, 23 + side),
-      lit: terminator(button, SHADOW_DIR + Math.PI, 0.6, 0.08, 25 + side)
+    const l = Math.min(sx(w * 0.052), sx(w * 0.124))
+    const r = Math.max(sx(w * 0.052), sx(w * 0.124))
+    const block = rough(
+      densify(roundedLoop(l, h * 0.328, r, h * 0.66, h * 0.055), 7),
+      h * 0.0012, 11 + side, 0.5
+    )
+    cel(ctx, block, gold, {
+      shade: terminator(block, SHADOW_DIR, 0.52, 0.05, 13 + side),
+      lit: terminator(block, SHADOW_DIR + Math.PI, 0.58, 0.05, 15 + side)
     })
-    ink(ctx, button, { width: h * 0.014, color: INK, seed: 27 + side, breakUp: 0.2 })
-    for (const y of [top + h * 0.19, bot - h * 0.19]) {
-      const stitch = blob(sx(cap * 0.86), y, h * 0.032, h * 0.032, 31 + side, 0.08)
-      cel(ctx, stitch, tones('#fdf4ea', 1), {
-        lit: terminator(stitch, SHADOW_DIR + Math.PI, 0.5, 0.1, 33 + side)
-      })
-      ink(ctx, stitch, { width: h * 0.01, color: INK, seed: 35 + side, breakUp: 0.2 })
-    }
+    ink(ctx, block, { width: h * 0.02, color: INK, seed: 17 + side, breakUp: 0.04 })
+
+    const stud = blob((l + r) / 2, mid, h * 0.036, h * 0.036, 21 + side, 0.04)
+    cel(ctx, stud, tones('#d79a12', 1), {
+      lit: terminator(stud, SHADOW_DIR + Math.PI, 0.45, 0.08, 23 + side)
+    })
+    ink(ctx, stud, { width: h * 0.012, color: INK, seed: 25 + side, breakUp: 0.12 })
   }
 
-  ink(ctx, plate, { width: h * 0.026, color: INK, seed: 41, breakUp: 0.06 })
+  ink(ctx, plate, { width: h * 0.032, color: INK, seed: 41, breakUp: 0.03 })
   ctx.restore()
 }
 

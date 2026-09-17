@@ -268,6 +268,7 @@ export default {
       'hard': '虫子更快，场面更热闹。'
     },
     'musicTracks': {
+      'parade': '咔嚓大游行',
       'trance': '虫虫律动',
       'cozy': '悠闲野餐'
     },

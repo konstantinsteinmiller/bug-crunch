@@ -871,6 +871,23 @@ try {
         dropBorders = true
       }
 
+      // The paint-out paints MAGENTA, and magenta is only free where the key
+      // takes it back out. An opaque sheet is never keyed and an edge-to-edge
+      // one owns its outer band, so the band stays: the Art Desk passes
+      // --drop-borders on every slice, and the door tile shipped with a magenta
+      // frame welded round it. Such a sheet has no ground to draw a rule on
+      // anyway — so the flag is dropped for it, and a rule the detector did
+      // see is refused rather than painted over.
+      if (dropBorders && (sheet.bg === 'opaque' || sheet.fill)) {
+        if (ruled.some((f) => f > 0.7)) {
+          console.error('  ✗ panel borders are painted on an opaque/edge-to-edge sheet — there is no')
+          console.error('    background to paint them out with. Nothing was written; re-generate it.')
+          failed++
+          continue
+        }
+        dropBorders = false
+      }
+
       // The two repairs that are pure geometry, done in one pass over the
       // sheet before anything is measured off it or cut out of it.
       if (dropBorders || MIRROR) {

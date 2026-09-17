@@ -354,6 +354,7 @@ export default {
       'hard': 'Faster bugs and a busier board.'
     },
     'musicTracks': {
+      'parade': 'Crunch Parade',
       'trance': 'Bug Groove',
       'cozy': 'Cozy Picnic'
     },

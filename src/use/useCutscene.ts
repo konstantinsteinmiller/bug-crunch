@@ -2,7 +2,10 @@ import { computed, ref } from 'vue'
 import { getState, setState } from '@/use/useBugCrunchState'
 import { CUTSCENES_SEEN_KEY } from '@/keys'
 import { qualityTier, type QualityTier } from '@/use/useVfx'
-import { INTRO, cutsceneFrame, cutsceneLength, type CutsceneFrame, type CutsceneSpec } from '@/game/cutscene'
+import {
+  INTRO, cutsceneFrame, cutsceneLength,
+  type CutsceneFrame, type CutsceneSpec, type CutsceneStage
+} from '@/game/cutscene'
 
 /**
  * ─── Running a cutscene ─────────────────────────────────────────────────────
@@ -42,6 +45,15 @@ import { INTRO, cutsceneFrame, cutsceneLength, type CutsceneFrame, type Cutscene
  * phone that cannot draw sixteen creatures on an attic floor gets six, and every
  * named actor — the greeter, the foreman, the last ant — is exempt, because a
  * story beat is not an effect and must not be thinned away.
+ *
+ * The multiplier is read ONCE, when the scene starts, and held for the whole of
+ * it — the same way `calm` is. The tier ladder calibrates over the first ten
+ * seconds of rendering, which for a new player are exactly the seconds the intro
+ * plays in, and on a slow phone it will step down mid-scene. Read live, that
+ * step re-spaces every column in shot and deletes the back half of every raid in
+ * one frame: the very pop the staging is built to never show. A scene drawn at
+ * the tier it started on for nine seconds costs a few blits; a colony that
+ * halves itself on screen costs the scene.
  */
 
 /** How much of a generated crowd each tier draws. */
@@ -55,6 +67,8 @@ const active = ref<CutsceneSpec | null>(null)
 const elapsed = ref(0)
 /** Reduced motion: every beat becomes a cut. Set once when the scene starts. */
 const calm = ref(false)
+/** The crowd multiplier. Also set once when the scene starts — see the header. */
+const crowd = ref(CROWD.high)
 /** Bumped every frame so a template reading `frame()` re-renders. */
 const tick = ref(0)
 
@@ -91,6 +105,7 @@ export const startCutscene = (spec: CutsceneSpec = INTRO): boolean => {
   elapsed.value = 0
   calm.value = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+  crowd.value = CROWD[qualityTier()]
   tick.value++
   return true
 }
@@ -124,24 +139,35 @@ export const skipCutscene = (): void => {
   tick.value++
 }
 
-/** What the screen should look like right now. */
-export const cutsceneFrameNow = (): CutsceneFrame | null => {
+/**
+ * What the screen should look like right now.
+ *
+ * `stage` is what the level underneath has already put on the board, when the
+ * caller can say (`cutsceneStageFrom`). It is passed per frame rather than held
+ * from the start: a phone turned mid-scene re-lays the board's HUD and moves
+ * where the board sits on screen, and a Queen pinned to where she WAS would land
+ * forty pixels from where the fight then draws her.
+ */
+export const cutsceneFrameNow = (stage: CutsceneStage | null = null): CutsceneFrame | null => {
   void tick.value
   const s = active.value
   if (!s) return null
-  return cutsceneFrame(s, elapsed.value, calm.value, CROWD[qualityTier()])
+  return cutsceneFrame(s, elapsed.value, calm.value, crowd.value, stage)
 }
 
-/** The last frame of a scene — what a skip lands on. */
-export const cutsceneEndFrame = (spec: CutsceneSpec = INTRO): CutsceneFrame =>
-  cutsceneFrame(spec, cutsceneLength(spec), calm.value, CROWD[qualityTier()])
+/** The last frame of a scene — what a skip lands on. Drawn at the crowd the
+ *  scene played at, so the frame a skip lands on is the frame the scene ends on. */
+export const cutsceneEndFrame = (
+  spec: CutsceneSpec = INTRO, stage: CutsceneStage | null = null
+): CutsceneFrame =>
+  cutsceneFrame(spec, cutsceneLength(spec), calm.value, crowd.value, stage)
 
 /** Which beat is on screen, so the scene can fire its cue exactly once. */
 export const cutsceneBeat = (): number => {
   void tick.value
   const s = active.value
   if (!s) return -1
-  return cutsceneFrame(s, elapsed.value, calm.value, CROWD[qualityTier()]).beat
+  return cutsceneFrame(s, elapsed.value, calm.value, crowd.value).beat
 }
 
 /** Test seam: forget that anything was watched. */

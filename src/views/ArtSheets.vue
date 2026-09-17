@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   WALKS, STILLS, GRIDS, framesOf, colsOf, rowsOf, promptDocs,
   type WalkSpec, type StillSpec, type GridSpec
 } from '@/game/artSheet'
-import { paintBug, paintBoss, BUG_R_FRAC } from '@/game/bugArt'
+import { paintBug, paintBoss, paintSegment, BUG_R_FRAC, SEGMENT_ART_BOX } from '@/game/bugArt'
 import { paintShoe } from '@/game/footArt'
 import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
-import { paintCoin, paintHaze, paintHazard, paintPod, paintSaltBurst } from '@/game/propArt'
+import {
+  isEggPropId, paintCoin, paintEggProp, paintHaze, paintHazard, paintPod, paintSaltBurst
+} from '@/game/propArt'
+import { paintSceneRef } from '@/game/cutsceneArt'
 import {
   paintBanner, paintChest, paintShockRing, paintSplat, paintUiIcon,
   SPLAT_REACH, SPLAT_REF_SEEDS, UI_ICON_IDS, type SplatSheetId, type UiIconId
@@ -19,6 +22,7 @@ import type { BossId } from '@/game/bosses'
 import { hazardSpec, type HazardId } from '@/game/hazards'
 import type { WorldId } from '@/game/stages'
 import { SHOE_BOX } from '@/game/artBoxes'
+import { artOverridesEnabled, setArtOverrides } from '@/game/art'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
 import { isGameIconName } from '@/components/icons/iconNames'
 
@@ -201,6 +205,14 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       ctx.translate(cx, cy)
       paintBoss(ctx, s.id as BossId, half * 0.62, cycle, 0)
       break
+    case 'bug':
+      // A bug PART (the designs themselves are walks, not stills): the
+      // centipede's tail segment, at the radius that makes the half-panel its
+      // painted box — `bugArt.SEGMENT_ART_BOX` on both sides of the round trip.
+      // `cycle` is `i / frames`, the stride position the runtime plays it at.
+      ctx.translate(cx, cy)
+      paintSegment(ctx, half / SEGMENT_ART_BOX, 0, cycle, { procedural: true })
+      break
     case 'bg': {
       // A floor tile is drawn at its own tile resolution and scaled up, so the
       // reference is exactly what `floorArt` will later be replaced by.
@@ -212,10 +224,20 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       ctx.drawImage(tile, 0, 0, s.w, s.h)
       break
     }
+    case 'scene':
+      // Cutscene set dressing, through the scene renderer's own drawing, into the
+      // panel exactly as `SCENE_ART_BOX` maps it at run time — the panel IS the
+      // box, so there is no margin to add and nothing to centre by eye.
+      paintSceneRef(ctx, s.id, s.w, s.h)
+      break
     case 'prop':
       ctx.translate(cx, cy)
       if (s.id === 'coin') paintCoin(ctx, half * 0.82, 0)
       else if (s.id === 'pod') paintPod(ctx, half * 0.82, 0, '#ffd07a')
+      // The brood: a crack-stage sheet is one stage per panel (`cycle` is
+      // `i / frames`, so this is the panel index back), a shell is one still.
+      // The half-panel IS the painting's box — see `propArt.EGG_ART_BOX`.
+      else if (isEggPropId(s.id)) paintEggProp(ctx, s.id, half, Math.round(cycle * framesOf(s)))
       else if (s.id === 'conveyor' || s.id === 'sweeper') {
         // The bar-shaped props fill their panel edge to edge along x.
         paintHazard(ctx, s.id as HazardId, half, { t: 0, angle: 0 }, 3)
@@ -701,6 +723,30 @@ const exportSheets = async (): Promise<void> => {
     busy.value = false
   }
 }
+
+/**
+ * The bench draws with the painted layer OFF, always.
+ *
+ * Every painter in the game asks `spriteFor()` first and blits the painting
+ * when one exists — that is the whole point of the override layer. It is also
+ * exactly wrong here: a reference exported with the layer on is a photograph of
+ * the PAINTING, so the next round of the pipeline paints from a painting, and
+ * the placeholder drawing the layout is supposed to come from is gone.
+ *
+ * It bit us silently. `VITE_ENABLE_ART_OVERRIDES` ships on, so an export run
+ * off a normal dev server quietly replaced thirteen boss and prop references
+ * with their own finished art, and the only visible symptom was `art:status`
+ * reporting them stale.
+ *
+ * A few painters take `{ procedural: true }` and those calls stay — they are
+ * the contract at the call site, and the splat needs its `opaque` sibling
+ * anyway — but a per-painter flag cannot be the defence, because a painter that
+ * GAINS an override path later (as `paintBoss` just did) would break the bench
+ * again with no change here at all. The switch belongs to the view.
+ */
+const artWas = artOverridesEnabled()
+setArtOverrides(false, false)
+onBeforeUnmount(() => { if (artWas) setArtOverrides(true, false) })
 
 onMounted(preview)
 

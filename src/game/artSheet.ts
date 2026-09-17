@@ -1,13 +1,16 @@
 import { BUGS, type BugId } from '@/game/bugs'
 import { SHOES } from '@/game/shoes'
-import { BOSSES, type BossId } from '@/game/bosses'
+import { BOSSES, EGG_STAGES, type BossId } from '@/game/bosses'
 import { HAZARDS } from '@/game/hazards'
 import { WORLDS } from '@/game/stages'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
-import { ART_BRAND, TINTED_GLYPHS, UI_MARK_FOR_GLYPH, artIdForGlyph } from '@/game/artCatalogue'
+import {
+  ART_BRAND, CENTIPEDE_SEGMENT_ART, TINTED_GLYPHS, UI_MARK_FOR_GLYPH, artIdForGlyph
+} from '@/game/artCatalogue'
 import { BANNER, SPLAT_COLS, SPLAT_ROWS, SPLAT_VARIANTS } from '@/game/uiArt'
 import { SHOE_BOX } from '@/game/artBoxes'
+import { SCENE_ART_BOX } from '@/game/cutscene'
 
 /**
  * ─── Art sheet manifest ─────────────────────────────────────────────────────
@@ -94,7 +97,11 @@ const LOOK = [
   '  gentle picture-book game for children, NOT a gritty or realistic one.',
   '· A warm near-black ink contour (#2b1b2e, never pure black) around every shape,',
   '  drawn with a slightly uneven pressure so it thickens on the shadow side and',
-  '  thins where the light hits. It reads as a brush, not as a border.',
+  '  thins where the light hits. It reads as a brush, not as a border — and it is',
+  '  FAT: at its heaviest about 2% of the shorter side of the panel, the weight of',
+  '  a brush pen and not of a technical pen. Hold the finished picture at thumbnail',
+  '  size; if the outline has thinned to a hairline there, it is several times too',
+  '  thin and the whole shape will fall apart at the size the game draws it.',
   '· Flat, saturated fills with ONE soft cel shadow and ONE soft top-light per',
   '  shape. No gradients running the whole body, no photographic texture, no',
   '  airbrush, no lens flare.',
@@ -105,8 +112,65 @@ const LOOK = [
   '  things that are meant to hurt (a caterpillar\'s spikes, a robot\'s chassis) and',
   '  they should read as the exception.',
   '· Key light from the UPPER LEFT, always, on every drawable.',
+  '· ONE small crisp specular glint on every rounded or glazed surface, up at the',
+  '  light — the wet shine on a carapace, on glass, on china, on painted metal, on',
+  '  a lacquered shell. A hard-edged white shape, not a soft bloom and not a haze',
+  '  over the whole body.',
   '· NO gore, NO blood, NO realistic insect photography, NO horror. Squished bugs',
   '  burst into bright cartoon slime; that is as far as it ever goes.'
+]
+
+/**
+ * The failures, named.
+ *
+ * `PROMPT-ANATOMY.md` § 8: a prohibition written from what actually came back
+ * beats another adjective about what is wanted, and a stated negative example
+ * beats a positive instruction. Everything below is a thing a return did.
+ *
+ * ── Why this block had to be written ──
+ *
+ * The eleven `scene` stills were painted in one run and every one of them came
+ * back as CLIP ART: a pale even hairline where the ink contour should be, one
+ * flat fill with no lit side and no shadow side, and no glint anywhere. The
+ * plate is a white disc, the book a blue rectangle, the door a brown one. Next
+ * to the painted ant walking over them — fat warm ink, cel shadow, wet shine —
+ * they are visibly a different game, and the intro cutscene puts all five picnic
+ * pieces on screen in the first second a new player ever sees.
+ *
+ * The prompt that produced them was not the problem in any way the old failure
+ * catalogue could see: it is generated from this manifest like every other, and
+ * it carried the whole of `LOOK`. The props painted from the SAME generated
+ * shape — a magnet, a salt shaker, a treasure chest, all equally faceless, all
+ * from equally flat placeholder drawings — came back correct. So the brief was
+ * survivable rather than binding, and one drifting session was enough to lose
+ * it.
+ *
+ * What made it survivable is the last bullet here. Most of `LOOK` is about
+ * creatures — the eyes, the blush, the slime — so on an object with no face the
+ * only clauses left with any grip are "flat, saturated fills" and "no
+ * gradients", and read alone those two describe a vector icon exactly. The
+ * clause that was missing is the one that says a prop is not an exception.
+ */
+const AVOID_RULE = [
+  'AVOID — this is exactly how earlier returns came back, and every one of them',
+  'had to be repainted:',
+  '· A THIN, PALE, EVEN HAIRLINE in place of the ink contour — a one-pixel grey',
+  '  pencil outline that disappears entirely at the size the game draws this at.',
+  '  The contour is FAT, dark and warm, and visibly heavier on the shadow side.',
+  '· NO LIGHT ON THE OBJECT AT ALL: one even fill from edge to edge with no lit',
+  '  side, no shadow side and no glint. A plate came back as a plain white disc,',
+  '  a book as a plain blue rectangle, a door as a plain brown rectangle.',
+  '· The CLIP-ART, VECTOR ICON, FLAT-DESIGN, STICKER-PACK or infographic',
+  '  register — the look of a stock icon set. This is a PAINTING: brush-inked,',
+  '  lit, shaded and glinting, and it has to hold up in the same frame as a',
+  '  hand-painted ant walking across it.',
+  '· WASHED-OUT, DUSTY or PASTEL colour. Keep the fills as saturated as the',
+  '  colours named above — a muted version of the right hue is the wrong hue.',
+  '· AN OBJECT WITH NO FACE IS NOT AN EXCEPTION TO ANY OF THIS. Most of the look',
+  '  above is written about creatures, so on a plain object it is easy to read',
+  '  the flat-fill line as the whole brief and hand back an icon. A plate, a',
+  '  book, a door, a crate or a napkin is painted to exactly the same standard as',
+  '  a creature is, with the same ink, the same light and the same shine.'
 ]
 
 /**
@@ -121,7 +185,13 @@ const LOOK = [
  * follows the sprite around and cannot be removed.
  */
 export const houseStyle = (wordmark = false, ground = true): string =>
-  [...LOOK, ...(wordmark ? WORDMARK_TEXT_RULE : NO_TEXT_RULE), ...(ground ? GROUND_RULE : [])].join('\n')
+  [
+    ...LOOK,
+    ...(wordmark ? WORDMARK_TEXT_RULE : NO_TEXT_RULE),
+    ...(ground ? GROUND_RULE : []),
+    '',
+    ...AVOID_RULE
+  ].join('\n')
 
 export const HOUSE_STYLE = houseStyle()
 
@@ -302,12 +372,25 @@ const CAST: Record<BugId, { blurb: string; colour: string; motion: string }> = {
       + ' very slightly left and right. The antennae sweep.'
   },
   centipede: {
+    // The first painting came back UPSIDE DOWN and shipped that way: fangs at the
+    // bottom of the panel under the eyes (a face, composed like a portrait) and a
+    // body stub with a gold "crown" at the top — so on the board the centipede
+    // walked backwards, glaring at its own tail. "Mandibles at the top" alone did
+    // not hold against the pull of a face; the clause below names both ends, says
+    // what the bottom edge IS, and names the failure. "Crown" left the colour
+    // clause for the same reason: it was painted as one.
     blurb: 'The HEAD SEGMENT ONLY of a centipede, from DIRECTLY ABOVE: one rounded'
-      + ' armoured plate with two curved mandibles at the top of the panel, two legs a'
-      + ' side, two antennae. Two bright eyes with a slanted brow. It is the head of a'
-      + ' long creature whose body is drawn by the game — do NOT paint a body or a tail.',
-    colour: 'a hot amber-orange plate with a pale gold crown, a dark rust underside,'
-      + ' ivory mandibles.',
+      + ' armoured plate, two legs a side, two antennae. THE FRONT IS THE TOP OF THE'
+      + ' PANEL: the two antennae AND two short curved mandibles both point UP, out of'
+      + ' the top edge of the plate, and the two bright eyes with a slanted brow sit just'
+      + ' below them. The BOTTOM edge of the plate is the NECK, where the game joins the'
+      + ' body on: plain and rounded, with nothing on it — no mandibles, no fangs, no'
+      + ' mouth, no body stub. A head painted the other way up, fangs at the bottom under'
+      + ' the eyes, walks BACKWARDS in the game, and that is how the last one came back.'
+      + ' It is the head of a long creature whose body is drawn by the game — do NOT'
+      + ' paint a body or a tail.',
+    colour: 'a hot amber-orange plate with a paler golden highlight at its upper left,'
+      + ' dark rust legs and underside, ivory mandibles.',
     motion: 'A fast scuttle: the four legs blur through a tripod gait and the head'
       + ' rocks a few degrees left and right. The mandibles open and close once.'
   },
@@ -460,7 +543,17 @@ export interface StillSpec {
    */
   variants?: true
   /**
-   * One line per panel, saying what THAT panel is.
+   * The panels are ONE subject at successive moments of ONE change, in order —
+   * the boss eggs' crack stages. Neither a loop (the game never plays panel 4
+   * back into panel 1) nor a set of variants (it is the same egg in all four):
+   * the game picks the panel from how far the egg's clock has run. Cut, composed
+   * and read back exactly as a variation sheet is; only the prompt's sentence
+   * about what it is looking at differs, and a stage sheet is told its panels
+   * are a sequence.
+   */
+  stages?: true
+  /**
+   * One line per panel, saying what THAT panel is. (A stage sheet's roster too.)
    *
    * Asking for variety in the abstract does not produce it. The first splat
    * sheet carried "a different outline, a different number of fingers thrown at
@@ -503,6 +596,7 @@ interface StillOpts {
   rows?: number
   cycle?: string
   variants?: true
+  stages?: true
   variantBlurbs?: readonly string[]
   target?: string
   extra?: { target: string; size: number }[]
@@ -538,6 +632,7 @@ const still = (
   rows: o.rows,
   cycle: o.cycle,
   variants: o.variants,
+  stages: o.stages,
   variantBlurbs: o.variantBlurbs
 })
 
@@ -617,6 +712,188 @@ const BOSS_STILLS: StillSpec[] = (Object.keys(BOSSES) as BossId[]).map((id) =>
       + ' leave the floor empty and do not paint any UI.'
   }))
 
+/**
+ * ─── The centipede's tail ───────────────────────────────────────────────────
+ *
+ * The walk strip is the HEAD ONLY — its own prompt says "do NOT paint a body or a
+ * tail" — because the tail is six segments the game chains along the head's path
+ * one at a time (`bugArt.paintSegment`). So once the head was painted, the tail
+ * was the last inked creature part on the board: a painted head towing six
+ * drawn blobs.
+ *
+ * One segment, as an eight-panel strip of its leg stroke. The game plays it
+ * behind the head with a lag per segment, which is what makes the tail ripple,
+ * and turns each one along the path — so it is authored head-end UP like every
+ * creature here. The colour clause is the PAINTED head's, sampled off
+ * `images/bugs/centipede.webp`, not the drawing's browner palette: the segment has
+ * to read as the same animal as the painting it follows, and the drawing it
+ * replaces is the thing that did not.
+ */
+const BUG_PART_STILLS: StillSpec[] = [
+  still('bug', CENTIPEDE_SEGMENT_ART, 'Centipede — tail segment',
+    'ONE BODY SEGMENT of a cartoon centipede, from DIRECTLY ABOVE, the head end'
+    + ' toward the TOP of the panel: a single rounded armoured plate, a little wider'
+    + ' than it is long, with ONE short jointed leg sticking out of each side. The'
+    + ' plate is hot amber-orange — bright orange (#f09020) where the light hits at its'
+    + ' upper left, deeper orange (#d06010) across the middle, dark rust (#7a2e0c) in'
+    + ' the shadow at its lower right — with a thick warm near-black ink contour; the'
+    + ' legs are dark rust with the same ink. The same armour as the painted centipede'
+    + ' head it follows. NOTHING else: no head, no eyes, no antennae, no mandibles, no'
+    + ' neighbouring segments, no tail tip, no ground.', {
+      w: 320, h: 320, frames: 8, cols: 4, rows: 2,
+      // The segment is blitted into `2 · SEGMENT_ART_BOX · r` = 7.9 u of a 3.3 u
+      // centipede, three quarters of the head frame's 10.6 u — so three quarters
+      // of the walk strips' 224 px a frame.
+      maxEdge: 168,
+      anchor: 'centre',
+      authored: 'Head end to the TOP of the panel. The game turns every segment to'
+        + ' follow the path the head took, so it must be drawn straight up.',
+      cycle: 'ONE full stride of the two legs over the eight panels, and nothing else'
+        + ' moves. Both legs swing TOGETHER, mirror images of each other, like a pair of'
+        + ' oars: panel 1 both legs straight out to the sides, panels 2 and 3 both'
+        + ' swinging forward toward the head end, panel 3 the furthest forward, back'
+        + ' through straight out at panel 5, panel 7 the furthest back toward the tail'
+        + ' end, and panel 8 on the way back to panel 1. The plate itself never moves,'
+        + ' turns, grows or changes colour.',
+      live: 'The game chains six of these behind the painted head, each turned to'
+        + ' follow the head\'s path and a step behind the one in front of it in the'
+        + ' stride — so paint ONE segment on its own, with no shadow and no floor.'
+    })
+]
+
+/**
+ * ─── The brood: every boss fight's eggs ─────────────────────────────────────
+ *
+ * See "The brood" in `bosses.ts`. Two looks — the ant egg four bosses bring, and
+ * Roach Prime's capsule — and each is TWO drawables:
+ *
+ *   a STAGE sheet   four panels, whole → hairline → cracked → splitting, which
+ *                   the game picks between by how far the egg's clock has run
+ *                   (`propArt.eggStage`). Painted as stages rather than as one
+ *                   egg with drawn cracks on top because the old `pod` still was
+ *                   exactly that, and with the art layer on its cracks were
+ *                   never drawn: a painted egg that did not crack was an egg
+ *                   that gave no warning. 2 × 2 so the sheet is square, which
+ *                   every image tool offers.
+ *   a SHELL still   the empty halves a hatch leaves stamped on the floor.
+ *
+ * `fit: false` on the stage sheets for the splat's reason: the bench measures
+ * panel 0 (a whole egg), and the last panel's lifted cap makes the union of the
+ * returned panels systematically taller — normalising onto panel 0 would shrink
+ * all four. The size is in the words instead, and the panel box is
+ * `propArt.EGG_ART_BOX` on both sides of the round trip.
+ *
+ * The capsule earns its own sheets: it is the final boss's, the arcade world is
+ * steel and neon where a cream egg reads as a stray from world 1, and its
+ * cutscene already shows a production line of pods. The rocking, the pop, the
+ * hatch burst and the ants coming out are the game's, so none of them is
+ * painted.
+ */
+const EGG_STAGE_LIVE = 'The game rocks it from side to side as its clock runs out, and pops or'
+  + ' hatches it with a burst of its own, so paint no motion lines, no burst, no'
+  + ' shadow and no floor.'
+
+/**
+ * The clause both stage sheets carry, and the reason it is in the BLURB rather
+ * than trusted to the style block's "no halo": the first two rolls of the egg
+ * were told its inside was LIGHT that "spills out", and then that the light
+ * "stays inside the outline" — and both came back with a soft yellow-pink bloom
+ * spreading past the shell over the magenta, which keys to a pink smear. Light
+ * is the word that paints a bloom. Paint is the word that does not.
+ */
+const BROOD_NO_GLOW = (colour: string, what: string): string =>
+  `NOTHING IN THIS SHEET GLOWS: the ${colour} parts are FLAT ${colour} PAINT with a`
+  + ' crisp ink edge, never light — no bloom, no halo, no soft haze, and not one pixel'
+  + ` of ${colour} or pink tint outside the ${what}'s ink line. A glow painted over the`
+  + ` background cannot be cut away and arrives in the game as a pink smear around the ${what}.`
+
+const BROOD_STILLS: StillSpec[] = [
+  still('prop', 'egg', 'Boss egg — hatch stages',
+    'A big cartoon ANT EGG seen from DIRECTLY ABOVE, standing on end: a smooth pale'
+    + ' cream oval, a little wider at the bottom, with a few faint tan speckles, one soft'
+    + ' cel shadow along its lower right, and one small white sheen at its upper left.'
+    + ' The shell is solid and opaque: no patch, stain, yolk or shape showing through it.'
+    + ' The SAME egg in all four panels, at four moments of getting ready to hatch, and'
+    + ' it stays cute in all of them — a present about to open, never something broken'
+    + ' or gross. In every panel it covers about three quarters of the panel\'s height'
+    + ' and three fifths of its width, dead centre. ' + BROOD_NO_GLOW('golden-yellow', 'egg'), {
+      fit: false, frames: EGG_STAGES, cols: 2, rows: 2, stages: true,
+      cycle: 'Only the cracks and the golden inside change. The egg does not move,'
+        + ' turn, grow or change colour between panels except where a panel below'
+        + ' says so: the four panels are one egg seen four times as it gets ready.',
+      variantBlurbs: [
+        'WHOLE. The egg smooth and unbroken — no crack anywhere.',
+        'A HAIRLINE. One thin dark zigzag crack running from the top of the egg a third'
+          + ' of the way down it. Otherwise the same egg as panel 1.',
+        'CRACKED. That crack is longer and forks, a second crack comes in from the left'
+          + ' side, and one small chip of shell is missing near the top, the hole showing'
+          + ' the flat golden-yellow inside with an ink edge round it.',
+        'SPLITTING. The egg has split along a zigzag line across its middle: the top'
+          + ' half is lifted a little and tipped, the bottom half is a cup, and the gap'
+          + ' between them is a band of flat golden-yellow with an ink line along both'
+          + ' broken rims, with two tiny, cute ant antennae with a round bead on each tip'
+          + ' poking up out of it. The yellow stays exactly inside the gap. The two halves'
+          + ' are still the same cream shell.'
+      ],
+      live: EGG_STAGE_LIVE
+    }),
+  still('prop', 'egg-shell', 'Boss egg — empty shell',
+    'The EMPTY SHELL of a hatched cartoon ant egg lying on the floor, seen from'
+    + ' DIRECTLY ABOVE: two broken halves with zigzag rims lying a little apart — a'
+    + ' bigger cup at the lower left showing its pale inside, a smaller cap at the'
+    + ' upper right tipped over — and three tiny chips of shell nearby. Pale cream'
+    + ' shell with a slightly darker, warmer inside. Clean and empty: nothing inside'
+    + ' it, no goo, no creature.', {
+      live: 'The game stamps it flat on the floor where an egg hatched, under the bugs,'
+        + ' the shoe and every effect, so paint only the shell pieces — no shadow and'
+        + ' no floor.'
+    }),
+  still('prop', 'egg-capsule', 'Robot egg capsule — hatch stages',
+    'A cartoon ROBOT EGG CAPSULE seen from DIRECTLY ABOVE, standing on end: a rounded'
+    + ' metal pill of brushed pale steel, lit from the upper left and shading to slate'
+    + ' blue on the right, with a dark band around its middle holding a thin bright'
+    + ' CYAN line, two small dark rivets above the band and two below it, and a round'
+    + ' porthole window near the top in cyan. A toy out of an arcade machine — shiny,'
+    + ' chunky and friendly, never a weapon or a bomb. The SAME capsule in all four'
+    + ' panels, at four moments of opening. In every panel it covers about three'
+    + ' quarters of the panel\'s height and half its width, dead centre. '
+    + BROOD_NO_GLOW('cyan', 'capsule'), {
+      fit: false, frames: EGG_STAGES, cols: 2, rows: 2, stages: true,
+      cycle: 'Only the cyan parts, the bolts and the seam change. The capsule does not'
+        + ' move, turn, grow or change colour between panels except where a panel below'
+        + ' says so: the four panels are one capsule seen four times as it gets ready to'
+        + ' open.',
+      variantBlurbs: [
+        'CLOSED. Sealed shut, the band\'s line and the porthole a soft pale cyan.',
+        'HUMMING. The same capsule with one thin panel line across its lower half, and'
+          + ' the band\'s line and the porthole a brighter cyan.',
+        'RATTLING. Two small bolts have popped half out of their holes, two tiny solid'
+          + ' white-yellow spark marks fly off the side of the band, and the cyan is'
+          + ' brighter still.',
+        'OPENING. The capsule has split along its middle band: the top half is lifted a'
+          + ' little and tipped, the gap between the halves is a band of flat bright cyan'
+          + ' with an ink line along both rims, and two tiny, cute ant antennae with a'
+          + ' round bead on each tip poke up out of it. The cyan stays exactly inside the'
+          + ' gap.'
+      ],
+      live: EGG_STAGE_LIVE
+    }),
+  still('prop', 'egg-capsule-shell', 'Robot egg capsule — empty halves',
+    'The EMPTY HALVES of an opened cartoon robot egg capsule lying on the floor, seen'
+    + ' from DIRECTLY ABOVE: two brushed-steel cups with smooth rims and dark'
+    + ' navy insides, a thin cyan light strip running straight across each dark inside,'
+    + ' lying a little apart — a bigger one at the lower left, a smaller one at the upper'
+    + ' right tipped over — and three tiny triangular chips of steel nearby. Clean and'
+    + ' empty: nothing inside. NO SHADOW OF ANY KIND: the first return laid a darker'
+    + ' magenta shadow under each cup, and a shadow tinted into the background cannot be'
+    + ' keyed — it arrives as a purple smear on the floor. The magenta touching the metal'
+    + ' is the same flat #FF00FF as the corners of the image.', {
+      live: 'The game stamps it flat on the floor where a capsule opened, under the'
+        + ' bugs, the shoe and every effect, so paint only the metal pieces — no'
+        + ' shadow, no glow pad and no floor.'
+    })
+]
+
 /** The floor props. */
 const HAZARD_BLURB: Record<string, string> = {
   honey: 'A puddle of golden honey seen from DIRECTLY ABOVE: an irregular glossy'
@@ -668,7 +945,8 @@ const PROP_STILLS: StillSpec[] = [
   still('prop', 'coin', 'Coin',
     'A fat round gold coin seen face-on: a bevelled rim, a raised inner ring, a warm'
     + ' specular highlight at the upper left. Chunky and cartoonish, like an arcade'
-    + ' token.', { maxEdge: 128, extra: [{ target: 'images/props/coin_128x128.webp', size: 128 }] })
+    + ' token.', { maxEdge: 128, extra: [{ target: 'images/props/coin_128x128.webp', size: 128 }] }),
+  ...BROOD_STILLS
 ]
 
 /**
@@ -1444,9 +1722,207 @@ const MASCOT_STILL: StillSpec = still('ui', 'mascot', 'Splash mascot',
       + ' clipped by the frame.'
   })
 
+/**
+ * ─── The cutscenes' set dressing ────────────────────────────────────────────
+ *
+ * Everything the cutscenes draw that is not a creature, a boss, a hazard or a
+ * floor: the picnic, the attic, the arcade, and 1-10's nursery. Each panel is
+ * the shape of the box `cutscene.SCENE_ART_BOX` blits it into — the reference
+ * is drawn by `cutsceneArt.paintSceneRef` into exactly that box — so a return
+ * lands at the size and on the spot the drawing had.
+ *
+ * Every blurb names what the game draws ON TOP, because in these scenes a lot
+ * is: the sandwich is a separate painting laid on the plate, the door's daylight
+ * and the cabinet's attract screen and the machines' chevrons glow on a dial,
+ * and every shadow is the renderer's.
+ */
+const scenePanel = (id: string, long = 512): { w: number; h: number } => {
+  const b = SCENE_ART_BOX[id]!
+  const k = long / (2 * Math.max(b.hw, b.hh))
+  return { w: Math.round(2 * b.hw * k), h: Math.round(2 * b.hh * k) }
+}
+
+/** The shadow clause every placed piece shares. */
+const SCENE_SHADOW = 'The game draws its soft shadow on the floor under it, so paint no shadow and no floor.'
+
+const SCENE_STILLS: StillSpec[] = [
+  still('scene', 'plate', 'Scene — picnic plate',
+    'An EMPTY round white china dinner plate (#fbf6ee) seen from DIRECTLY ABOVE: a'
+    + ' perfect circle with a fat warm-ink rim, a raised lip and a faint thin inner'
+    + ' ring where the flat middle begins, and a small soft highlight on the lip at'
+    + ' the upper left. Nothing on it at all — no food, no crumbs, no cutlery, no'
+    + ' pattern.', {
+      ...scenePanel('plate'), maxEdge: 512,
+      live: 'The game lays the SANDWICH on it as a separate picture and eats it off'
+        + ' the plate over the course of a scene, so the plate must be empty. '
+        + SCENE_SHADOW
+    }),
+  still('scene', 'sandwich', 'Scene — the sandwich',
+    'The sandwich the whole war is about: ONE round sandwich cut in half, seen from'
+    + ' DIRECTLY ABOVE, the two HALVES tilted apart from each other in a shallow V —'
+    + ' each a fat rounded wedge of golden crust (#f0c987) around a soft pale bread'
+    + ' face (#fbe6bd), with a frilly bright-green lettuce edge (#7fbf5a) peeking out'
+    + ' along its cut side. Cartoon picnic lunch, soft and appetising, the halves'
+    + ' side by side and not touching. Just the two halves — no plate, no crumbs. BOTH'
+    + ' HALVES WHOLE: no bite out of either, no missing corner, no teeth marks — the'
+    + ' scene opens on an untouched lunch and the game does the eating.', {
+      ...scenePanel('sandwich'), maxEdge: 512,
+      live: 'The game puts it on a plate or across the backs of four ants carrying'
+        + ' it, and SHRINKS it as it is carried off or eaten, so paint it whole and'
+        + ' evenly lit. ' + SCENE_SHADOW
+    }),
+  still('scene', 'glass', 'Scene — lemonade glass',
+    'A glass of lemonade seen from DIRECTLY ABOVE, looking straight down into it: a'
+    + ' round clear glass rim, pale blue-white and slightly see-through, around a disc'
+    + ' of bright yellow lemonade (#ffd95e), with one pale lemon slice (#fff3b0,'
+    + ' showing its segments) floating at the lower right and a small white glint on'
+    + ' the rim at the upper left. A perfect circle. No straw, no ice cubes.', {
+      ...scenePanel('glass'),
+      live: SCENE_SHADOW
+    }),
+  still('scene', 'book', 'Scene — paperback',
+    'A paperback book lying FACE DOWN on a picnic blanket, seen from DIRECTLY ABOVE,'
+    + ' upright in the panel with its long edges running top to bottom: a soft blue'
+    + ' (#4a7fb5) back cover with gently rounded corners, a little curled and'
+    + ' sun-softened, and the cream (#f3e7cf) edge of the page block showing as a'
+    + ' narrow strip down the RIGHT-hand side. A plain back cover — no title, no'
+    + ' lettering, no barcode, no picture.', {
+      ...scenePanel('book'), maxEdge: 384,
+      authored: 'Straight up in the panel; the game lays it on the blanket at a slant.',
+      live: 'Ants crawl out from UNDER it, and the game turns it to its angle. '
+        + SCENE_SHADOW
+    }),
+  still('scene', 'crumb', 'Scene — one crumb',
+    'ONE single bread crumb seen from DIRECTLY ABOVE, filling the frame: a small'
+    + ' rounded golden (#e8c98a) nugget, a little wider than it is tall and tipped'
+    + ' slightly, with a soft darker crust edge, a paler face, one tiny highlight at'
+    + ' the upper left and a warm ink contour.', {
+      ...scenePanel('crumb'), maxEdge: 128,
+      live: 'An ant carries it ahead of its head, and the game scales it up for the'
+        + ' big piece a beetle hauls — so paint one crumb and nothing else.'
+    }),
+  still('scene', 'attic-box', 'Scene — attic box',
+    'A taped-shut cardboard storage box seen from DIRECTLY ABOVE, a little wider than'
+    + ' it is tall: warm brown corrugated cardboard (#b98b55) with softly rounded'
+    + ' corners and a slightly dusty top, the seam between its two top flaps running'
+    + ' straight up and down through the middle from one edge of the lid to the other,'
+    + ' and one strip of pale packing tape (#e8d6b2) running straight across the middle,'
+    + ' side to side, over the seam. No labels, no writing, no letters, no stickers, no'
+    + ' arrows — the first return wrote the words for its own directions around the box,'
+    + ' and every letter on it is a letter the game cannot remove.', {
+      ...scenePanel('attic-box'), maxEdge: 384,
+      authored: 'Square to the panel; the game turns each box to its own angle and'
+        + ' stretches this one painting to four slightly different box sizes.',
+      live: SCENE_SHADOW
+    }),
+  still('scene', 'door', 'Scene — door edge (tile)',
+    'One repeating section of the lower edge of a closed wooden interior door, seen'
+    + ' flat as the game shows it, filling the frame: very dark chocolate-brown wood'
+    + ' (#3a2a1e) everywhere, one recessed rectangular panel (#4e3a28) centred in the'
+    + ' upper two-thirds with a dark inset line round it and a faint warm bevel'
+    + ' highlight just inside that, a thin dark rail groove running the full width'
+    + ' below the panel, and the door\'s bottom edge as a fat warm-ink line along the'
+    + ' very bottom of the frame. The top strip above the panel is plain door wood.'
+    + ' Faint wood grain at most. No handle, no hinges, no keyhole, no light.'
+    // The first return lit it like a portrait — a bright orange corner at the
+    // upper left fading to dark at the right — which no tile survives: laid side
+    // by side, every seam is a step from dark to bright.
+    + ' EVENLY LIT, edge to edge: no light gradient across the wood, no bright corner,'
+    + ' no vignette. The left edge, the right edge and the whole top strip are the same'
+    + ' flat dark #3a2a1e, so the tiles meet without a seam and the top of the tile'
+    + ' meets the plain door colour the game fills in above it. The house rule about a'
+    + ' key light from the upper left applies only to the small bevel on the panel.', {
+      ...scenePanel('door'), maxEdge: 512, bg: 'opaque', fill: true, tile: 'x',
+      authored: 'Laid side by side along the whole width of the door; the game fills'
+        + ' everything above the tiles with the same plain wood colour.',
+      anchorNote: 'THE TILE IS THE FRAME: there is no margin and no subject to centre.'
+        + ' The door\'s bottom-edge line runs along the very BOTTOM of the frame and the'
+        + ' panel sits centred left to right, so that tiles laid side by side put one'
+        + ' panel in the middle of each and the edge line runs unbroken along the bottom.',
+      live: 'The game draws the bright strip of daylight leaking out from UNDER the'
+        + ' door, below this tile, and fills the rest of the door above it with plain'
+        + ' #3a2a1e — so paint no light, no glow and no floor, and keep the top edge'
+        + ' plain wood that meets that colour.'
+    }),
+  still('scene', 'cabinet', 'Scene — arcade cabinet',
+    'The FRONT FACE of a retro arcade cabinet seen straight on and filling the frame:'
+    + ' a deep navy (#141833) body with softly rounded corners, a glowing cyan'
+    + ' (#3de0ff) neon edge all the way round with a thin hot-pink (#ff4f7a) neon line'
+    + ' just inside it; near the top a wide marquee panel of dark purple (#231041)'
+    + ' framed in pink neon, with two horizontal neon light bars across it (cyan above,'
+    + ' pink below) standing in for a logo; and below that one big rounded-rectangle'
+    + ' screen framed in cyan, its glass almost black (#080b18) and empty. No'
+    + ' joystick, no buttons, no coin slot, no logo, no letters, no words. Every neon line is a'
+    + ' crisp bright tube whose glow stays INSIDE the cabinet\'s outline — no halo or'
+    + ' bloom out onto the background.'
+    // Measured off the reference. The first return was a whole cabinet in
+    // silhouette — head, angled sides, a control shelf — with a small screen in
+    // its upper half, and the game draws the attract picture and the roach's
+    // walk onto the rectangles below, wherever the painting put its own.
+    + ' IT IS A FLAT UPRIGHT RECTANGLE, not a cabinet silhouette: straight sides, no'
+    + ' angled head, no control-panel shelf, no stand. The game draws onto two exact'
+    + ' places on it, so they are not a composition choice: the marquee panel spans'
+    + ' from 7% to 27% of the way down the face and from 7% to 92% across; the screen'
+    + ' spans from 32% to 93% of the way down and from 7% to 92% across — by far the'
+    + ' biggest thing on the face, filling nearly all of its lower two thirds. Below'
+    + ' the screen there is only a THIN strip of navy, no wider than the strip down each'
+    + ' side of it — the second return stopped its screen three quarters of the way'
+    + ' down and the picture the game plays ran on over the body under it. The whole face is in'
+    + ' the image: the cyan outline runs round all four sides, the bottom one included.', {
+      ...scenePanel('cabinet'), maxEdge: 512,
+      live: 'The game runs the attract-mode picture ON the screen (a glowing grid and'
+        + ' two chevrons), lays scanlines and a glint over the glass, and blows the'
+        + ' screen out to white as the camera goes through it — so leave the screen'
+        + ' dark and empty and paint no scanlines, no glare and no picture.'
+    }),
+  still('scene', 'hopper', 'Scene — conveyor machine',
+    'A chunky arcade-factory machine seen from DIRECTLY ABOVE, a little taller than'
+    + ' it is wide: a dark navy steel box (#1b2046) with rounded corners and a glowing'
+    + ' cyan (#3de0ff) neon outline, a couple of panel seams and rivets, and on its'
+    + ' right-hand side a dark intake slot (#070918), the height of a conveyor belt and'
+    + ' rimmed in hot-pink neon, where the belt runs into the machine. The lid is'
+    + ' otherwise plain: no letters, no numbers, no warning signs. A FLAT PLAN VIEW,'
+    + ' straight down onto the lid: no side faces, no depth, no bevelled edges showing'
+    + ' underneath, no perspective — the first return was a three-quarter box whose'
+    + ' sides pushed the lid off-centre. The slot is set INTO the right-hand edge of the'
+    + ' box, inside its outline, and nothing sticks out past it. The neon is a crisp bright tube whose glow stays INSIDE the'
+    + ' machine\'s outline — no halo or bloom out onto the background.', {
+      ...scenePanel('hopper'),
+      authored: 'The slot on the RIGHT. The game mirrors the whole machine for the'
+        + ' other end of the line, so nothing may be drawn that only reads one way'
+        + ' round.',
+      live: 'The game draws a glowing arrow on the lid, a small status light in one'
+        + ' corner and the soft shadow under it, and a belt of robots runs into the'
+        + ' slot — so paint no arrows, no lights, no belt, no shadow and no floor.'
+    }),
+  still('scene', 'nest', 'Scene — napkin nest',
+    'A little ant nursery made from a crumpled white paper napkin, seen from DIRECTLY'
+    + ' ABOVE: a soft squarish cream-white (#f6efe2) napkin pushed into a shallow'
+    + ' bowl, its edges crinkled and folded over in a few soft pleats, one faded blue'
+    + ' picnic stripe along the lower hem, and a hollow in the middle shaded warm'
+    + ' beige (#e4d6bf). Cosy and home-made, like something built out of picnic'
+    + ' litter. Nothing in the hollow, and nothing written anywhere on it.', {
+      ...scenePanel('nest'), maxEdge: 384,
+      live: 'The game sets the Goliath Queen\'s clutch of eggs in the hollow and makes'
+        + ' them wobble, and her nurses crawl over it — so paint the nest EMPTY, with'
+        + ' no eggs, no ants and no crumbs. ' + SCENE_SHADOW
+    }),
+  still('scene', 'puff', 'Scene — puff of steam',
+    'ONE small round cartoon puff of steam seen from above: a fat white cloud of four'
+    + ' bubbly overlapping lobes with a single warm-ink contour round the OUTSIDE only,'
+    + ' and a soft pale lilac-grey shade low on its right side. The steam a grumpy'
+    + ' cartoon character huffs out when it is cross — cute and bouncy, not smoke,'
+    + ' not a speech bubble, nothing written in it.', {
+      ...scenePanel('puff'), maxEdge: 128,
+      live: 'The game pops these out beside the Queen\'s head in pairs, grows them,'
+        + ' drifts them apart and fades them — so paint ONE puff, fully opaque.'
+    })
+]
+
 export const STILLS: StillSpec[] = [
   ...SHOE_STILLS,
   ...BOSS_STILLS,
+  ...BUG_PART_STILLS,
   ...PROP_STILLS,
   ...FX_STILLS,
   ...FLOOR_STILLS,
@@ -1454,7 +1930,8 @@ export const STILLS: StillSpec[] = [
   ...GLYPH_STILLS,
   LOGO_STILL,
   MARK_STILL,
-  MASCOT_STILL
+  MASCOT_STILL,
+  ...SCENE_STILLS
 ]
 
 /** Everything the pipeline can produce, as `kind/id` — the id space the Art
@@ -1613,12 +2090,20 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
           + ' per panel. This is NOT an animation and NOT one object seen four times:'
           + ' the game picks ONE panel per use, so four panels that resemble each other'
           + ' are four chances to paint the same picture.'
-        : `A SPRITE SHEET: ${n} panels of ONE object through ONE loop of its own movement.`)
+        : s.stages
+          ? `A STAGE SHEET: ${n} panels of ONE object at ${n} moments of ONE change, in`
+            + ' order. This is NOT a loop and NOT different objects: the game shows panel'
+            + ` 1 first and panel ${n} last and never goes back, so every panel is the same`
+            + ' object, a step further along than the panel before it.'
+          : `A SPRITE SHEET: ${n} panels of ONE object through ONE loop of its own movement.`)
       : 'A SINGLE OBJECT, alone in the frame.',
     'One image comes with this prompt:',
     `  \`art-sheets/${s.file}.png\` — THE LAYOUT: the game's own rough placeholder`,
     '     drawing, at exactly the size and position the painting must land at. Match',
-    '     its SHAPE, its SIZE IN THE FRAME and its ORIENTATION; take nothing else.',
+    '     its SHAPE, its SIZE IN THE FRAME and its ORIENTATION; take nothing else —',
+    '     not its line weight, its colours, its shading or its style. It is a flat',
+    '     stand-in for a painting that does not exist yet, and a repaint that keeps',
+    '     its flatness has repainted the stand-in.',
     '',
     `WHAT IT IS: ${s.blurb}`,
     ''
@@ -1653,9 +2138,11 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
       + ' but nothing may be clipped off by them.', '')
   }
   if (n > 1 && s.cycle) {
-    lines.push(`${s.variants ? 'WHAT DIFFERS BETWEEN THE PANELS' : 'THE MOVEMENT'}: ${s.cycle}`, '')
+    const label = s.variants ? 'WHAT DIFFERS BETWEEN THE PANELS'
+      : s.stages ? 'WHAT CHANGES FROM PANEL TO PANEL' : 'THE MOVEMENT'
+    lines.push(`${label}: ${s.cycle}`, '')
   }
-  if (n > 1 && s.variants && s.variantBlurbs?.length) {
+  if (n > 1 && (s.variants || s.stages) && s.variantBlurbs?.length) {
     lines.push(
       `WHAT IS IN EACH PANEL, in reading order — left to right along the top row${rowsOf(s) > 1 ? ', then the next' : ''}:`,
       '',
@@ -1670,7 +2157,12 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
       + ' on it — no shadow, no floor, no gradient, no vignette. The magenta is keyed'
       + ' out to transparency; anything else left on it becomes part of the sprite, and'
       + ' a soft shadow fading into the magenta becomes a pink fringe around the whole'
-      + ' thing that no amount of keying can take off again.', '')
+      + ' thing that no amount of keying can take off again.'
+      // A wide return (the sandwich, 1.59 : 1) came back matted: the magenta
+      // stopped short of the image's edge inside a white border, which is not
+      // magenta, is not keyed, and was cut into the sprite as a grey rule.
+      + ' The magenta runs all the way to the four edges of the IMAGE ITSELF: no white'
+      + ' or coloured border, frame, matte or letterbox strip around the picture.', '')
   } else {
     lines.push('THE IMAGE IS FULLY OPAQUE: it has no transparent parts and no magenta.', '')
   }

@@ -153,10 +153,13 @@ export const BUGS: readonly BugSpec[] = [
   bug({
     // ── The sprinter ant ──
     //
-    // The game's SECOND level, and the first time a target has an opinion about
-    // the player. Everything about it is the ant except one rule, on purpose:
-    // same march, same straight lines, same one hit point, so the only new
-    // thing a child has to learn on 1-2 is "the teal one runs".
+    // The first time a target has an opinion about the player — on 1-5, the
+    // level after the half-strength Queen. It used to open the game on 1-2, and
+    // moved back to let the caterpillar and the beetle bring the first "a tap is
+    // not always right" lessons forward (see the world-1 block in `stages.ts`).
+    // Everything about it is the ant except one rule, on purpose: same march,
+    // same straight lines, same one hit point, so the only new thing a child has
+    // to learn on 1-5 is "the teal one runs".
     //
     // `speed` 15 against the ant's 13. Only a shade faster at rest — the
     // sprinter is not a fast bug, it is a bug that has ONE fast move, and a
@@ -180,15 +183,18 @@ export const BUGS: readonly BugSpec[] = [
     score: 24, juice: 0.053, armor: 0,
     dodges: false, sprints: true, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [46, 232, 196], body: '#1f8f8a', shade: '#0d4f4d', accent: '#ffe27a',
-    coins: 0, cost: 2, debut: 2
+    coins: 0, cost: 2, debut: 5
   }),
   bug({
+    // 1-3, one level after the caterpillar and one level BEFORE the Queen: her
+    // third phase is armour a tap bounces off, and the charged stomp that opens
+    // it has to be in the player's hand before she asks for it.
     id: 'beetle', name: 'beetle',
     hp: 3, size: 4.8, speed: 7, motion: 'crawl',
     score: 45, juice: 0.150, armor: 2,
     dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [66, 225, 122], body: '#2f7a45', shade: '#17442a', accent: '#b8f2c6',
-    coins: 0, cost: 4, debut: 4
+    coins: 0, cost: 4, debut: 3
   }),
   bug({
     id: 'flea', name: 'flea',
@@ -196,15 +202,24 @@ export const BUGS: readonly BugSpec[] = [
     score: 30, juice: 0.070, armor: 0,
     dodges: true, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [120, 200, 255], body: '#4a4358', shade: '#262030', accent: '#cdb8ff',
-    coins: 0, cost: 3, debut: 6
+    coins: 0, cost: 3, debut: 8
   }),
   bug({
+    // ── The caterpillar ──
+    //
+    // Pulled forward from 2-2 to 1-2, the game's second level. "Stomping is not
+    // always free" is the cheapest new idea there is to teach — it asks the
+    // player to do LESS — and it is the first thing on the board that is not
+    // simply "the brown thing again", which is what the opening was losing
+    // players to. Read the 1-2 note in `stages.ts` before weighting it up: a
+    // caterpillar the player is right to leave alone never dies, and holds its
+    // slot in `maxAlive` for the rest of the level.
     id: 'caterpillar', name: 'caterpillar',
     hp: 1, size: 4.3, speed: 5, motion: 'crawl',
     score: 35, juice: 0.100, armor: 0,
     dodges: false, sprints: false, spiky: true, stinks: false, segments: 0, airborne: false,
     goo: [180, 255, 90], body: '#93c33a', shade: '#5b7f18', accent: '#fff3a8',
-    coins: 0, cost: 5, debut: 11
+    coins: 0, cost: 5, debut: 2
   }),
   bug({
     id: 'stinkbug', name: 'stinkbug',
@@ -228,11 +243,11 @@ export const BUGS: readonly BugSpec[] = [
     score: 120, juice: 0.180, armor: 0,
     dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [255, 214, 64], body: '#f5c42b', shade: '#c58a00', accent: '#fff6d0',
-    // Held back from 3 to 5. At 3 it shared a level with nothing else new and
-    // arrived at weight 10 of 90, so most players met one piñata in the whole
-    // of world 1 and never learned it was a thing to chase. At 5 it gets a
+    // Held back from 3, and now to 7. At 3 it shared a level with nothing else
+    // new and arrived at weight 10 of 90, so most players met one piñata in the
+    // whole of world 1 and never learned it was a thing to chase. It gets a
     // level of its own — see the world-1 block in `stages.ts`.
-    coins: 6, cost: 4, debut: 5
+    coins: 6, cost: 4, debut: 7
   }),
   bug({
     id: 'moth', name: 'moth',

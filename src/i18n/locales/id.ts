@@ -268,6 +268,7 @@ export default {
       'hard': 'Serangga lebih cepat dan papan lebih ramai.'
     },
     'musicTracks': {
+      'parade': 'Parade kriuk',
       'trance': 'Groove serangga',
       'cozy': 'Piknik santai'
     },

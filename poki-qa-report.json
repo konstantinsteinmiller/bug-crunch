@@ -1,8 +1,8 @@
 {
-  "version": "Bug Crunch 0.2.1",
-  "versionId": "7b0855a6-5a57-4271-aa80-1dca7b82418b",
-  "when": "2026-09-15T12:15:17.556Z",
-  "inspector": "https://inspector.poki.dev/?game=poki-7b0855a6-5a57-4271-aa80-1dca7b82418b",
+  "version": "Bug Crunch 0.3.1",
+  "versionId": "7c1e046f-e8e4-4499-b91b-0d0b60a40060",
+  "when": "2026-09-15T18:32:59.770Z",
+  "inspector": "https://inspector.poki.dev/?game=poki-7c1e046f-e8e4-4499-b91b-0d0b60a40060",
   "evidence": {
     "sdkInit": {
       "verdict": "pass",
@@ -21,16 +21,16 @@
       "evidence": "a gameplayStop followed another tab taking the foreground"
     },
     "commercialBreak": {
-      "verdict": "unproven",
-      "evidence": "no commercial break within 120 s of play, even with \"Force show ads\" on"
+      "verdict": "pass",
+      "evidence": "Event log: commercial break, with \"Force show ads\" on"
     },
     "adAudioMuted": {
-      "verdict": "unproven",
-      "evidence": "no break occurred to sample audio during"
+      "verdict": "fail",
+      "evidence": "1 audible element(s), 1 running AudioContext(s) of 3 tracked, sampled during the break"
     },
     "adNotInterrupted": {
-      "verdict": "unproven",
-      "evidence": "no break occurred to interrupt"
+      "verdict": "pass",
+      "evidence": "space, arrow and escape did not end the break"
     },
     "gameplayStop": {
       "verdict": "pass",
@@ -38,15 +38,15 @@
     },
     "noDuplicates": {
       "verdict": "pass",
-      "evidence": "sequence: start → stop → start → stop → start"
+      "evidence": "sequence: start → stop → start → stop → start → stop"
     },
     "rewardedBreak": {
       "verdict": "unproven",
       "evidence": "no `hooks.triggerRewarded` configured — only the player can open a rewarded ad"
     },
     "noCrashes": {
-      "verdict": "pass",
-      "evidence": "no uncaught errors, canvas still alive after the pass"
+      "verdict": "unproven",
+      "evidence": "still running, but 3 console error(s): %cPOKI:%c game error font-weight: bold  NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41 | NotFoundError: Fa"
     },
     "noBreakingBugs": {
       "verdict": "unproven",
@@ -159,8 +159,8 @@
       "module": "Technical Stability",
       "match": {},
       "probe": "noCrashes",
-      "verdict": "pass",
-      "action": "ticked (proven by this run)"
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
     },
     {
       "id": "no-breaking-bugs",
@@ -271,8 +271,8 @@
       "module": "Ad Implementation",
       "match": {},
       "probe": "commercialBreak",
-      "verdict": "unproven",
-      "action": "ticked (not decidable by the harness — your declaration)"
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
     },
     {
       "id": "rewarded-breaks",
@@ -287,16 +287,16 @@
       "module": "Ad Implementation",
       "match": {},
       "probe": "adAudioMuted",
-      "verdict": "unproven",
-      "action": "ticked (not decidable by the harness — your declaration)"
+      "verdict": "fail",
+      "action": "ticked — but THIS RUN DISPROVED IT, see the report"
     },
     {
       "id": "ad-not-interrupted",
       "module": "Ad Implementation",
       "match": {},
       "probe": "adNotInterrupted",
-      "verdict": "unproven",
-      "action": "ticked (not decidable by the harness — your declaration)"
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
     },
     {
       "id": "pointer-lock",
@@ -310,28 +310,12 @@
   "warnings": [],
   "hosts": [
     [
-      "65a6c74e-f283-4b8b-b72e-78206eaeb581.gdn.poki.com",
-      305
-    ],
-    [
-      "game-cdn.poki.com",
-      4
+      "api.poki.com",
+      1
     ],
     [
       "a.poki-cdn.com",
       7
-    ],
-    [
-      "geo.poki.io",
-      2
-    ],
-    [
-      "ads.poki.com",
-      2
-    ],
-    [
-      "api.poki.com",
-      1
     ],
     [
       "v.poki-cdn.com",
@@ -339,6 +323,22 @@
     ],
     [
       "t.poki.io",
+      2
+    ],
+    [
+      "65a6c74e-f283-4b8b-b72e-78206eaeb581.gdn.poki.com",
+      283
+    ],
+    [
+      "game-cdn.poki.com",
+      4
+    ],
+    [
+      "geo.poki.io",
+      2
+    ],
+    [
+      "ads.poki.com",
       2
     ]
   ],

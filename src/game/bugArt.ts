@@ -35,6 +35,7 @@ import { spriteFor } from '@/game/art'
 import { stripFrame } from '@/game/spriteStrip'
 import { BUGS, bugSpec, type BugId, type BugSpec } from '@/game/bugs'
 import { BOSSES, type BossId } from '@/game/bosses'
+import { CENTIPEDE_SEGMENT_ART } from '@/game/artCatalogue'
 
 // ─── The frame box ──────────────────────────────────────────────────────────
 
@@ -52,6 +53,14 @@ export const BUG_FRAME_ASPECT = 1
  * frame or a painted return will have them clipped off at the panel edge.
  */
 export const BUG_R_FRAC = 0.62
+
+/**
+ * A centipede tail segment's painted box: its half-edge, as a multiple of the
+ * body radius `paintSegment` is handed. The drawn legs reach 1.08 of it at the
+ * top of their stroke, so 1.2 is that with a little air — and the bench renders
+ * the reference at exactly this, so the two cannot disagree.
+ */
+export const SEGMENT_ART_BOX = 1.2
 
 // ─── Deterministic wobble ───────────────────────────────────────────────────
 //
@@ -820,10 +829,26 @@ export const paintBug = (
  * Its own function rather than a frame of the walk because the tail is not
  * animated on the head's clock — each segment follows the one in front of it
  * through the head's own path history, so its ANGLE is its animation.
+ *
+ * PAINTED FIRST, like every other drawable: `bug/centipede-segment` is an
+ * eight-panel strip of one segment's leg stroke, and segment `i` plays it
+ * `i · 0.7` radians behind the head — the same lag the drawing's own `sin`
+ * carries — so the tail still ripples. Without it a painted centipede was a
+ * painted head towing six inked blobs, two art styles on one creature.
+ * `procedural` is the bench's: a reference drawn from the painting proves nothing.
  */
 export const paintSegment = (
-  ctx: CanvasRenderingContext2D, r: number, i: number, cycle01: number
+  ctx: CanvasRenderingContext2D, r: number, i: number, cycle01: number,
+  o: { procedural?: boolean } = {}
 ): void => {
+  if (!o.procedural) {
+    const frame = stripFrame('bug', CENTIPEDE_SEGMENT_ART, 1, cycle01 - (i * 0.7) / (Math.PI * 2))
+    if (frame) {
+      const e = r * SEGMENT_ART_BOX
+      ctx.drawImage(frame, -e, -e, e * 2, e * 2)
+      return
+    }
+  }
   const s = bugSpec('centipede')
   const seed = seedOf('centipede') + i
   ctx.save()

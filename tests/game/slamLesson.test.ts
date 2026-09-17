@@ -2,9 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import * as sim from '@/use/useBugCrunchGame'
 import * as tutor from '@/use/useTutorial'
 import { SLAM_GRACE_MS, lessonSpec, slamTeaches } from '@/game/tutorial'
+import { bossSpec } from '@/game/bosses'
 import { SLAM_PIERCE_BONUS, blowPierce, shoeSpec } from '@/game/shoes'
 import { bugSpec } from '@/game/bugs'
-import { levelSpec } from '@/game/stages'
+import { allLevels, levelSpec } from '@/game/stages'
 
 /**
  * ─── The big stomp's lesson ─────────────────────────────────────────────────
@@ -19,7 +20,8 @@ import { levelSpec } from '@/game/stages'
  * written once and the game never mentions the charged stomp again. That
  * combination is what makes the arming moment worth a file of its own.
  *
- * The regression this suite exists for, measured in a browser on 1-4: the
+ * The regression this suite exists for, measured in a browser on the beetle's
+ * level (1-4 then; the beetle has since moved to 1-3, see `stages.ts`): the
  * lesson was armed by the SIGHT of an armoured body, spent its fifteen-second
  * bail-out while the player was across the board squishing ants, and wrote
  * itself `taught` at t ≈ 14 s — before the player had touched a beetle even
@@ -29,7 +31,10 @@ import { levelSpec } from '@/game/stages'
 const BOARD = { w: 100, h: 180, x0: 5, y0: 10, x1: 95, y1: 170 }
 const FRAME = 1000 / 60
 
-const start = (level = 4, over: Partial<sim.StartOptions> = {}): void => {
+/** 1-3: the beetle's level, and so the slam's. */
+const BEETLE_LEVEL = 3
+
+const start = (level = BEETLE_LEVEL, over: Partial<sim.StartOptions> = {}): void => {
   sim.setBoard(BOARD)
   sim.setTouch(false)
   sim.startLevel({
@@ -97,7 +102,7 @@ beforeEach(() => {
   // Forwards, never back: `lastPressAt` survives `startLevel`.
   vi.advanceTimersByTime(60_000)
   tutor.__resetTutorial()
-  start(4)
+  start(BEETLE_LEVEL)
 })
 
 describe('when the lesson is worth teaching at all', () => {
@@ -107,7 +112,7 @@ describe('when the lesson is worth teaching at all', () => {
   const light = (s: typeof sneaker) => blowPierce(s, false)
   const heavy = (s: typeof sneaker) => blowPierce(s, true)
 
-  it('teaches the starter sneaker about the beetle — the whole point of 1-4', () => {
+  it('teaches the starter sneaker about the beetle — the whole point of 1-3', () => {
     const beetle = bugSpec('beetle')
     expect(slamTeaches(light(sneaker), heavy(sneaker), beetle.armor)).toBe(true)
   })
@@ -140,9 +145,23 @@ describe('when the lesson is worth teaching at all', () => {
   })
 
   it('is reachable on the level the game introduces the shell on', () => {
-    // If 1-4's roster ever stops carrying the beetle, the lesson has no moment.
-    expect(levelSpec(4).roster.map((r) => r.id)).toContain('beetle')
-    expect(bugSpec('beetle').debut).toBeLessThanOrEqual(4)
+    // If 1-3's roster ever stops carrying the beetle, the lesson has no moment.
+    expect(levelSpec(BEETLE_LEVEL).roster.map((r) => r.id)).toContain('beetle')
+    expect(bugSpec('beetle').debut).toBeLessThanOrEqual(BEETLE_LEVEL)
+  })
+
+  // The first boss asks for the slam the level after the beetle taught it, and
+  // her third phase is the same question: a shell a tap bounces off and a slam
+  // opens. If a rebalance ever let the half-strength Queen be TAPPED through, the
+  // scene would stop counting her as a shell and 1-4 would stop being the slam's
+  // second chance — and if it made her unslammable, the lesson would point at a
+  // gesture that does not work.
+  it('counts the first boss\'s charge phase as a shell the lesson can answer', () => {
+    const sneaker = shoeSpec('sneaker')
+    const first = allLevels().find((l) => l.boss !== null)!
+    expect(first.id).toBeGreaterThan(BEETLE_LEVEL)
+    const charge = bossSpec(first.boss!, first.bossScale).phases.find((p) => p.script === 'charge')!
+    expect(slamTeaches(blowPierce(sneaker, false), blowPierce(sneaker, true), charge.armor)).toBe(true)
   })
 })
 
@@ -234,7 +253,7 @@ describe('the lesson matches the mechanic it is about', () => {
   it('does not black out a board that is already being played', () => {
     // `hole` is the OPENING scrim — see `Scrim` in `game/tutorial.ts`. The slam
     // is the first board lesson that arrives mid-level, and it shipped dimming
-    // two thirds of a live 1-4 floor for up to fifteen seconds while an
+    // two thirds of a live beetle floor for up to fifteen seconds while an
     // armoured beetle walked into the foot.
     expect(lessonSpec('slam').scrim).toBe('soft')
   })

@@ -28,14 +28,16 @@ const PUBLIC = join(ROOT, 'public')
 const ALL = process.argv.includes('--all')
 const load = (rel) => import(pathToFileURL(join(ROOT, 'src', ...rel.split('/'))).href)
 
-const { ART_CATALOGUE, ART_BRAND } = await load('game/artCatalogue.ts')
+const { ART_CATALOGUE, ART_BRAND, BUG_PART_ART_IDS } = await load('game/artCatalogue.ts')
 const { ART_FOLDERS } = await load('game/art.ts')
 const { BUG_IDS } = await load('game/bugs.ts')
 const { SHOE_IDS } = await load('game/shoes.ts')
 const { BOSS_IDS } = await load('game/bosses.ts')
 
 const catalogue = {
-  bug: [...BUG_IDS],
+  // The designs' walk strips, and the parts a design is composed from (the
+  // centipede's tail segment) — both live in `images/bugs/`.
+  bug: [...BUG_IDS, ...BUG_PART_ART_IDS],
   shoe: [...SHOE_IDS],
   boss: [...BOSS_IDS],
   ...ART_CATALOGUE

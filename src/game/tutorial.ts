@@ -51,6 +51,7 @@ export type LessonId =
   | 'dodge'
   | 'fever'
   | 'boss'
+  | 'pods'
   // ── The meta ──
   | 'stars'
   | 'quests'
@@ -152,7 +153,7 @@ export const LESSONS: readonly Lesson[] = [
   // ── 5. The second verb, taught at the first thing that needs it. ──
   //
   // `soft`, not `hole`. This is the first lesson in the list that arrives with
-  // the level already underway — 1-4, a floor of ants and two beetles, a clock
+  // the level already underway — 1-3, a floor of ants and two beetles, a clock
   // running — and `hole` is documented three screens up as the OPENING scrim,
   // "for the beats where the player has nothing else to be doing". It shipped
   // as `hole` and it black-screened two thirds of a live board for up to
@@ -165,6 +166,13 @@ export const LESSONS: readonly Lesson[] = [
   lesson({ id: 'slam', gesture: 'hold', scrim: 'soft', bailoutMs: 15_000, order: 50 }),
 
   // ── 6. The one lesson whose answer is "don't". ──
+  //
+  // Met on 1-2 — the game's second level, and the first board that can HURT.
+  // That makes it the one board lesson allowed to take the screen from a lesson
+  // it outranks that is already up (see `armBodyLessons` in `GameScene.vue`):
+  // every other beat can wait its turn in the queue, but a caterpillar that
+  // walks under the foot while the fever button is being pointed at teaches
+  // "spikes" the hard way, which is the exact thing this row exists to prevent.
   lesson({ id: 'spike', gesture: 'avoid', scrim: 'soft', bailoutMs: 8_000, holdMs: 3_200, order: 60 }),
 
   // ── 7. A body that does not wait to be stomped. ──
@@ -173,15 +181,36 @@ export const LESSONS: readonly Lesson[] = [
   // ── 8. The reward. ──
   lesson({ id: 'fever', gesture: 'point', scrim: 'soft', bailoutMs: 9_000, order: 80 }),
 
-  // ── 9. The thing at the end of a world. ──
+  // ── 9. The thing at the end of a world — and, first, on 1-4. ──
   lesson({ id: 'boss', gesture: 'watch', scrim: 'soft', bailoutMs: 7_000, holdMs: 2_800, order: 90 }),
 
-  // ── 10. What the three stars are for. ──
+  // ── 10. The eggs. ──
+  //
+  // The boss's second phase makes HER invulnerable and the eggs she drops the
+  // job, and until the first boss moved to 1-4 the only thing that said so was
+  // a line of text under the boss bar — which a six-year-old, four levels into
+  // the game, does not read. A `tap` on the nearest egg: the same hand the stomp
+  // lesson used on the first ant, pointed at a new kind of target. Retired by
+  // the first egg squished (`podsPopped`, which a carrier ant's egg counts in too).
+  //
+  // Every boss fight has eggs now, so it is armed by the first egg ON THE FLOOR
+  // in any of them (`armBodyLessons` in `GameScene.vue`) — on 1-4 for a new
+  // player, the Queen's egg phase. An egg that hatches does not hurt: it cracks
+  // in four stages, rocks, pops and lets out a scurry of ants. That consequence
+  // is the second half of the lesson, and the bail-out is set so it can be SEEN:
+  // nine seconds of present time outlasts the slowest egg's clock (1-4's, 6.9 s,
+  // plus its hop), so a player who watches the hand instead of copying it
+  // watches an egg they did not pop crack open under it. A test holds the two
+  // together. In a `pods` phase a player who never learns this is still stuck —
+  // the boss stays armoured — which is why the lesson outranks every meta beat.
+  lesson({ id: 'pods', gesture: 'tap', scrim: 'soft', bailoutMs: 9_000, order: 95 }),
+
+  // ── 11. What the three stars are for. ──
   //
   // On the result screen, which is a modal: no scrim of our own.
   lesson({ whilePaused: true, id: 'stars', gesture: 'watch', scrim: 'none', bailoutMs: 6_000, holdMs: 2_600, order: 100 }),
 
-  // ── 11. Where those words WENT. ──
+  // ── 12. Where those words WENT. ──
   //
   // The level card spends a second and a half telling the player, in their own
   // language, what the other two stars want. Then it dissolves, and two glyph
@@ -203,10 +232,10 @@ export const LESSONS: readonly Lesson[] = [
   // and it is armed at the calmest moment a level has.
   lesson({ id: 'quests', gesture: 'flow', scrim: 'soft', bailoutMs: 5_200, holdMs: 2_200, order: 105 }),
 
-  // ── 12. The chest pays you for coming back. ──
+  // ── 13. The chest pays you for coming back. ──
   lesson({ whilePaused: true, id: 'chest', gesture: 'point', scrim: 'soft', bailoutMs: 9_000, order: 110 }),
 
-  // ── 13-14. The shop, in two halves, because it is two decisions. ──
+  // ── 14-15. The shop, in two halves, because it is two decisions. ──
   //
   // A child who has never opened the Locker does not know a Locker exists, and
   // one looking at an open Locker does not know that the card has to be pressed
@@ -247,13 +276,14 @@ export const outranks = (a: LessonId, b: LessonId): boolean =>
  * ─── When the big stomp is worth explaining ─────────────────────────────────
  *
  * The slam lesson shipped armed by the SIGHT of an armoured body: the frame a
- * beetle became alive on 1-4, the lesson went up. Measured in a browser, that
+ * beetle became alive on its debut level (1-4 then, 1-3 now), the lesson went
+ * up. Measured in a browser, that
  * is the wrong frame twice over.
  *
  * FIRST, it is too early to mean anything. A child who has never tried to
  * squash a beetle has no question that a hand pressing and holding is the
  * answer to. The level's own design note says what the moment is —
- * "1-4  the beetle  a tap is not enough: the slam" — and "a tap is not enough"
+ * "1-3  the beetle  a tap is not enough: the slam" — and "a tap is not enough"
  * is something that happens TO the player, on the frame their tap bounces. The
  * simulation already announces it: `clang`.
  *
@@ -261,13 +291,19 @@ export const outranks = (a: LessonId, b: LessonId): boolean =>
  * bail-out counts as taught. Armed at the beetle's spawn, the fifteen seconds
  * are spent while the player is across the board squishing ants, and it retires
  * itself — permanently, into the save — before they ever touch the shell. A
- * headless run of 1-4 that tapped only unarmoured bodies had `bc_taught.slam`
- * written `true` at t≈14 s, after which the game has no way left to mention the
+ * headless run of the beetle level that tapped only unarmoured bodies had
+ * `bc_taught.slam`
+ * written `true` at t≈14 s, after which the game had no way left to mention the
  * charged stomp, ever, on any level. The whole mechanic was being taught to an
  * empty room.
  *
  * So the trigger is the ricochet, with a grace window behind it for the player
  * who simply walks around beetles until the board jams.
+ *
+ * The Queen's third phase counts as a shell too (`armBodyLessons` in
+ * `GameScene.vue`): 1-4 asks for the slam one level after 1-3 taught it, and a
+ * player whose lesson bailed out unlearned there still gets it on the tap that
+ * bounces off HER.
  */
 
 /**
@@ -276,14 +312,14 @@ export const outranks = (a: LessonId, b: LessonId): boolean =>
  *
  * Present time, like every other clock in this system, and deliberately LONG.
  * The number has to be read against the bail-out it hands over to: at fifteen
- * seconds of `slam`, a grace of six would put the lesson up at t ≈ 6 s of 1-4
+ * seconds of `slam`, a grace of six would put the lesson up at t ≈ 6 s of 1-3
  * and retire it at t ≈ 21 s — which is the measured failure with an extra seven
  * seconds bolted on, not a fix. Eighteen leaves the ricochet almost always
  * getting there first, which is the entire point: the lesson should land on the
  * player's question, not ahead of it.
  *
  * What it still catches is the player it is for — one who walks around beetles.
- * 1-4 runs 54 seconds, so eighteen seconds of a shell standing on the floor
+ * 1-3 runs 50 seconds, so eighteen seconds of a shell standing on the floor
  * untouched means the board is already jamming (an armoured body a weak player
  * will not slam does not die; it sits in `maxAlive` and the spawner stops
  * refilling), and that player needs telling more than anyone.

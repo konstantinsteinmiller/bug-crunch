@@ -119,8 +119,8 @@ export const saveFixture = (over = {}) => ({
   // opens on a hand glyph explaining the stomp is a clip of a tutorial.
   bc_taught: {
     move: true, stomp: true, goal: true, chain: true, slam: true, spike: true,
-    dodge: true, fever: true, boss: true, stars: true, chest: true,
-    locker: true, buy: true
+    dodge: true, fever: true, boss: true, pods: true, stars: true, quests: true,
+    chest: true, locker: true, buy: true
   },
 
   // The relief system, pinned flat: a failure record hands the next attempt a
@@ -388,11 +388,51 @@ export const installDrive = async (ctx, { level, seed, policy = 'ace', autoFever
         let value = b.spec.score + b.spec.juice * 400
         if (spiky) value = -value
         if (armoured) value *= 0.55
+        // A carrier ant has a boss egg over its head, and a stomp on it pops the
+        // egg too — priced as the egg below plus the ant, because a player sees
+        // the egg, not the ant under it.
+        if (b.carry) value += 150
         const score = value / (6 + d)
         if (best === null || score > best.score) {
           // The BODY is kept, not a copy of where it was: the aim tracks it as
           // it walks, which is what makes a moving target feel aimed at.
           best = { score, bug: b, heavy: armoured || b.spec.hp > 1, id: b.id }
+        }
+      }
+      // ── The boss fight's own targets ──
+      //
+      // Neither was a target before, and a boss could not be scouted without
+      // them: the policy chased the adds and only stood on the boss when the
+      // floor was empty, so a `pods` phase — where the boss is invulnerable and
+      // the EGGS are the job — was only ever ended by a pod that happened to be
+      // under a stomp aimed at something else. Scouted on the Goliath Queen, that
+      // left the `good` player in phase 2 for sixty seconds with forty hatched
+      // beetles on the floor. A player of any skill reads "Squish the eggs!" and
+      // a dozen eggs; what separates them is reach, reaction and aim, which the
+      // policy already prices.
+      //
+      // Every boss fight has eggs now, not only a `pods` phase (see "The brood"
+      // in `bosses.ts`), and this loop already aims at all of them. The one
+      // thing it must skip is an egg still in the air: it cannot be stomped
+      // until it lands, and a press aimed at it is a miss on bare floor.
+      for (const pod of G.getPods()) {
+        if (!pod.alive || pod.fly > 0) continue
+        const d = Math.hypot(pod.x - f.x, pod.y - f.y)
+        if (d > player.reach) continue
+        // Worth more than any add: clearing them is the only way the phase ends.
+        const score = 150 / (6 + d)
+        if (best === null || score > best.score) best = { score, pod, heavy: false, id: 'pod' }
+      }
+      // …and the boss itself, whenever a blow on it can count. Priced above an
+      // add for the same reason, and heavy when its armour wants a slam.
+      if (boss && boss.alive) {
+        const p = boss.spec.phases[boss.phase]
+        const d = Math.hypot(boss.x - f.x, boss.y - f.y)
+        if (p && p.vulnerable && d <= player.reach + boss.size) {
+          const score = 150 / (6 + Math.max(0, d - boss.size))
+          if (best === null || score > best.score) {
+            best = { score, bug: null, boss: true, heavy: shoe.pierce < p.armor, id: 'boss' }
+          }
         }
       }
       // Nothing worth taking: go and stand on the boss, which is always worth
@@ -416,6 +456,9 @@ export const installDrive = async (ctx, { level, seed, policy = 'ace', autoFever
       if (locked.boss) {
         const b = G.getBoss()
         return b && b.alive ? { x: b.x + locked.ox, y: b.y + locked.oy } : null
+      }
+      if (locked.pod) {
+        return locked.pod.alive ? { x: locked.pod.x + locked.ox, y: locked.pod.y + locked.oy } : null
       }
       if (!locked.bug || !locked.bug.alive) return null
       return { x: locked.bug.x + locked.ox, y: locked.bug.y + locked.oy }
@@ -463,7 +506,21 @@ export const installDrive = async (ctx, { level, seed, policy = 'ace', autoFever
         holding += dtMs
         // A slam is released once it is charged; a tap was already fired on the
         // way down (see `press`), so it is let go immediately.
-        if (!heavyWanted || holding >= shoe.chargeMs + 40) {
+        //
+        // "Charged" is read off the FOOT, never off a timer. This used to let go
+        // at `chargeMs + 40`, which never once produced a slam: a press always
+        // opens with a quick stomp (drop 70 ms, impact 70 ms, the shoe's own
+        // cooldown to recover), the charge only STARTS after that, and at 360 ms
+        // the sneaker's ring stood at about a fifth — under `MIN_SLAM_CHARGE`, so
+        // every "slam" the policies chose landed as a tap. Every scouted number
+        // taken before this line (1-4's beetle measurements included) was a
+        // player who could not slam at all. What a child is shown by the lesson
+        // is "hold until the ring is full", so that is what this does — with a
+        // give-up, for a hold the foot never gets to charge (a stun, a pivot).
+        const f = G.getFoot()
+        const full = f.state === 'charge' && f.charge >= 0.98
+        const giveUp = holding >= 70 + 70 + shoe.cooldown + shoe.chargeMs + 400
+        if (!heavyWanted || full || giveUp) {
           G.release()
           holding = -1
           rest = restMs(shoe)

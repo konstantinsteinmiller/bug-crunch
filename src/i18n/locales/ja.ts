@@ -268,6 +268,7 @@ export default {
       'hard': '虫は速く、画面はにぎやか。'
     },
     'musicTracks': {
+      'parade': 'ザクザクパレード',
       'trance': 'むしグルーヴ',
       'cozy': 'のんびりピクニック'
     },

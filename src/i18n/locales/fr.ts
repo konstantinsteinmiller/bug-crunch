@@ -268,6 +268,7 @@ export default {
       'hard': 'Insectes plus rapides et terrains chargés.'
     },
     'musicTracks': {
+      'parade': 'Parade croustillante',
       'trance': 'Groove des insectes',
       'cozy': 'Pique-nique tranquille'
     },

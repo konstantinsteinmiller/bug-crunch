@@ -43,6 +43,8 @@
     "art:desk": "node tools/art-desk/server.mjs",
     "art:promotion": "node --import ./tools/ts-resolve.mjs tools/art-promotion.mjs",
     "preview:video": "node tools/preview-video/record.mjs",
+    "audio:render": "node --import ./tools/ts-resolve.mjs tools/audio/render-sfx.mjs",
+    "music:render": "node tools/music/render.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

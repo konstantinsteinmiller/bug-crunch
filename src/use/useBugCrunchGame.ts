@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef } from 'vue'
+import { perfFlag } from '@/use/perfVariants'
 import {
   blowDamage, bugSpec, resolveStomp, type BugId, type BugSpec, type StompVerdict
 } from '@/game/bugs'
@@ -15,9 +16,9 @@ import {
   type ChainState, type FeverState, type SplatWord
 } from '@/game/combo'
 import {
-  BEAM_HALF, BEAM_SWEEP_MS, BEAM_TELL_MS, CHARGE_COUNTER_HITS, CHARGE_RUN_MS,
-  CHARGE_SPENT_MS, CHARGE_TELL_MS, CHARGE_WINDUP_MS, POD_HATCH_MS, POD_PER_BEAT,
-  POD_QUOTA, POD_SIZE, bossSpec, type BossSpec
+  BEAM_HALF, BEAM_SWEEP_MS, BEAM_TELL_MS, CARRIER_WALK_MS, CHARGE_COUNTER_HITS, CHARGE_RUN_MS,
+  CHARGE_TELL_MS, EGG_JUICE, EGG_LAND_U, EGG_LAY_MS, EGG_SCORE, HATCH_SCURRY_MS,
+  POD_PER_BEAT, POD_SIZE, bossSpec, type BossPhase, type BossSpec
 } from '@/game/bosses'
 import { levelSpec, worldOf, type LevelSpec } from '@/game/stages'
 import { emptyTally, type RunTally } from '@/game/stars'
@@ -281,14 +282,40 @@ export interface Bug {
   phase: number
   /** Boss add bookkeeping: spawned by the boss, so a phase can count them. */
   fromBoss: boolean
+  /** A CARRIER: an ant walking a boss egg onto the board over its head. It sets
+   *  it down after `CARRIER_WALK_MS`, and a stomp on the way pops the egg too. */
+  carry: boolean
+  /** Came out of an egg — what `hatchlingCap` counts. */
+  hatched: boolean
 }
 
+/**
+ * A boss egg on the floor — every boss fight's, not only a `pods` phase's. See
+ * "The brood" in `bosses.ts`.
+ *
+ * Still called a pod, because the scene, the tutorial and the recorder's
+ * autopilot all read `getPods()` and `alive / x / y / t` off it; the fields
+ * below are additions, never changes.
+ */
 export interface Pod {
   alive: boolean
+  /** Where it lands and lies, u — the stomp is resolved here. */
   x: number
   y: number
-  /** ms until it hatches. */
+  /** ms until it hatches. Frozen at 0 while the board has no room for its ants. */
   t: number
+  /** The clock it started on, ms — the scaled boss's, so the renderer's crack
+   *  stage reads the same 0..1 on 1-4 as on 1-10. */
+  hatchMs: number
+  /** ms left of the hop from where it was laid. While it flies it can be
+   *  neither stomped nor hatched, and the renderer draws it along the arc. */
+  fly: number
+  /** The hop's length, ms, and where it started. */
+  flyMs: number
+  fromX: number
+  fromY: number
+  /** 0..1, stable for the egg's life — its wobble phase and its shell's angle. */
+  seed: number
 }
 
 export interface Hazard {
@@ -320,8 +347,11 @@ export interface Haze {
 /** One thing that happened this step, for the renderer and the audio to read. */
 export type GameEvent =
   | { k: 'squish'; x: number; y: number; bug: BugId; heavy: boolean; word: SplatWord; mult: number; stretch: number; angle: number }
-  | { k: 'hurt'; x: number; y: number; bug: BugId }
-  | { k: 'clang'; x: number; y: number }
+  // `heavy` on the two wound cues is for the crush bank: a slam that cracks a
+  // shell cracks it further, and sounds it. A clang with no `bug` rang off the
+  // boss's own body — the scene knows which boss is on the board.
+  | { k: 'hurt'; x: number; y: number; bug: BugId; heavy: boolean }
+  | { k: 'clang'; x: number; y: number; bug?: BugId; heavy?: boolean }
   | { k: 'spike'; x: number; y: number }
   | { k: 'stomp'; x: number; y: number; r: number; heavy: boolean; hit: boolean }
   | { k: 'miss'; x: number; y: number }
@@ -337,8 +367,12 @@ export type GameEvent =
   | { k: 'bossHit'; x: number; y: number; counter: boolean }
   | { k: 'bossPhase'; n: number }
   | { k: 'bossDown'; x: number; y: number }
-  | { k: 'podPop'; x: number; y: number }
-  | { k: 'podHatch'; x: number; y: number }
+  // An egg popped is paid like a kill, so it carries the kill's word and rung.
+  | { k: 'podPop'; x: number; y: number; mult: number; word: SplatWord }
+  // `n` ants came out of it.
+  | { k: 'podHatch'; x: number; y: number; n: number }
+  // A laid egg's hop has touched down.
+  | { k: 'podLand'; x: number; y: number }
   | { k: 'chain-arc'; x0: number; y0: number; x1: number; y1: number }
   | { k: 'end'; won: boolean }
 
@@ -364,6 +398,11 @@ export interface Boss {
   iframe: number
   /** Pods cleared this phase. */
   podsDown: number
+  /** ms since the last clutch of the brood. */
+  eggClock: number
+  /** ms left of the squat a laying boss makes as an egg leaves it — the
+   *  renderer's, nothing reads it in the sim. */
+  laying: number
   /** Alive, or playing its death. */
   alive: boolean
   /** Death animation clock, ms. */
@@ -389,11 +428,13 @@ const makeBug = (): Bug => ({
   alive: false, id: 'ant', spec: bugSpec('ant'),
   x: 0, y: 0, vx: 0, vy: 0, dmg: 0, cycle: 0, heading: 0, t: 0,
   sense: 0, bolt: 0, boltCd: 0, stun: 0, held: 0, panic: 0, dip: 0, lastSlide: -1e9,
-  segs: 0, trail: null, trailN: 0, phase: 0, fromBoss: false
+  segs: 0, trail: null, trailN: 0, phase: 0, fromBoss: false, carry: false, hatched: false
 })
 
 const bugs: Bug[] = Array.from({ length: MAX_BUGS }, makeBug)
-const pods: Pod[] = Array.from({ length: MAX_PODS }, () => ({ alive: false, x: 0, y: 0, t: 0 }))
+const pods: Pod[] = Array.from({ length: MAX_PODS }, () => ({
+  alive: false, x: 0, y: 0, t: 0, hatchMs: 1, fly: 0, flyMs: 1, fromX: 0, fromY: 0, seed: 0
+}))
 const hazes: Haze[] = Array.from({ length: 8 }, () => ({ alive: false, x: 0, y: 0, t: 0 }))
 let hazards: Hazard[] = []
 
@@ -413,22 +454,69 @@ const events: GameEvent[] = []
 export const score = ref(0)
 export const chainCount = ref(0)
 export const chainMult = ref(1)
-/** 0..1 of the chain window left. Published as a ref rather than recomputed by
- *  the HUD, because only the sim knows the window and the ring that draws it has
- *  to be right on the frame the chain lapses. */
+/**
+ * 0..1 of the chain window left. Published as a ref rather than recomputed by
+ * the HUD, because only the sim knows the window and the ring that draws it has
+ * to be right on the frame the chain lapses.
+ *
+ * QUANTISED to 1/24ths for the same reason `timeLeft` prints whole seconds: it
+ * is a thin ring on a HUD chip, and a fresh float every frame re-rendered the
+ * whole HUD sixty times a second for the whole of a chain — which is most of
+ * the time a good player spends in a level. A 1.5 s window drains in 24 steps
+ * of 4 %, and the frame the chain lapses is still exact, because a lapse goes
+ * through `syncChain` and writes 0.
+ */
 export const chainLeft = ref(0)
+/** Steps the chain ring is drawn in. See `chainLeft`. */
+const CHAIN_RING_STEPS = 24
+
+/**
+ * The A/B seam for both HUD quantisations — `PERF-LEDGER.md`, and read at
+ * module scope exactly as `perfVariants` requires. The flag names the OLD arm,
+ * so the shipping path is the quantised one.
+ *
+ * With it set, every frame writes a fresh float into both refs, which is what
+ * the build before this change did.
+ */
+const HUD_LEGACY_PER_FRAME = perfFlag('hud-per-frame-legacy')
+
+/** Write the chain ring, quantised — see `chainLeft`. */
+const setChainRing = (raw: number): void => {
+  const v = Math.max(0, raw)
+  if (HUD_LEGACY_PER_FRAME) { chainLeft.value = v; return }
+  const stepped = Math.round(v * CHAIN_RING_STEPS) / CHAIN_RING_STEPS
+  if (stepped !== chainLeft.value) chainLeft.value = stepped
+}
 /** Heavy slams landed this level. The tutorial's third beat reads it, and so
  *  does nothing else — it is a counter, not a mechanic. */
 export const slams = ref(0)
 export const juice = ref(0)
 export const feverMs = ref(0)
+/**
+ * Seconds left, as a WHOLE number — what the clock chip prints.
+ *
+ * The sim's own clock is `clockMs` below, a float in milliseconds. This ref is
+ * only written when the printed second changes, roughly once a second instead
+ * of sixty times, because every write re-renders the whole HUD: `SplatHud`, the
+ * quest badges, the vial and the chest all sit under one component that reads
+ * it, and a 20 s profile of a 6×-throttled phone spent ~3.2 s in Vue re-renders
+ * against ~2.2 s in the renderer that draws the actual game.
+ *
+ * Consumers that need the real clock (the tally the stars are scored from) read
+ * `clockMs`, so nothing rounds twice and no star moved when this changed.
+ */
 export const timeLeft = ref(0)
+/** The clock the level actually runs on: milliseconds, float, never a ref. */
+let clockMs = 0
 export const squished = ref(0)
 export const quota = ref(0)
 export const phase = ref<Phase>('intro')
 export const bossHp = ref(1)
 export const bossPhaseIndex = ref(0)
 export const bossTell = ref<string | null>(null)
+/** Boss egg pods stomped this level. Like `slams`, a counter for the tutorial —
+ *  the pods lesson retires on the first one — and nothing else. */
+export const podsPopped = ref(0)
 export const pivotReady = ref(true)
 
 /** The live tally the objective strip reads and the result screen grades. */
@@ -511,6 +599,9 @@ export interface StartOptions {
    * Applied to bug SPEED and to the clock, never to the quota: slowing the board
    * down helps the player who could not keep up, while shrinking the quota would
    * hand them the level and quietly delete the objective they were failing.
+   *
+   * It is a number ABOVE one, so the clock MULTIPLIES by it and bug speed
+   * DIVIDES by it. Multiplying both once made every retry's bugs faster.
    */
   relief: number
   /** Deterministic seed. The recorder pins it; play passes the level id. */
@@ -539,7 +630,7 @@ export const startLevel = (o: StartOptions): void => {
   rngState = (o.seed ?? level.id * 7919 + 13) >>> 0
 
   for (let i = 0; i < bugs.length; i++) bugs[i]!.alive = false
-  for (const p of pods) p.alive = false
+  for (const p of pods) { p.alive = false; p.fly = 0 }
   for (const h of hazes) h.alive = false
   bugCount = 0
   events.length = 0
@@ -573,7 +664,7 @@ export const startLevel = (o: StartOptions): void => {
   foot.speed = 0
 
   layoutHazards()
-  if (level.boss) spawnBoss(level.boss)
+  if (level.boss) spawnBoss(level.boss, level.bossScale)
   else seedBoard()
 
   score.value = 0
@@ -585,10 +676,12 @@ export const startLevel = (o: StartOptions): void => {
   feverMs.value = 0
   squished.value = 0
   quota.value = level.quota
-  timeLeft.value = Math.round(level.time * relief)
+  clockMs = Math.round(level.time * relief) * 1000
+  timeLeft.value = Math.round(clockMs / 1000)
   bossHp.value = 1
   bossPhaseIndex.value = 0
   bossTell.value = (boss as Boss | null)?.spec.phases[0]?.tell ?? null
+  podsPopped.value = 0
   pivotReady.value = true
   tally.value = emptyTally()
   phase.value = 'play'
@@ -680,6 +773,8 @@ const takeBug = (): Bug | null => {
   b.trailN = 0
   b.phase = rnd() * Math.PI * 2
   b.fromBoss = false
+  b.carry = false
+  b.hatched = false
   return b
 }
 
@@ -716,7 +811,7 @@ export const spawnBug = (id: BugId, x?: number, y?: number, fromBoss = false): B
   b.fromBoss = fromBoss
   if (x === undefined || y === undefined) edgeSpawn(b)
   else { b.x = x; b.y = y; b.heading = rnd() * Math.PI * 2 }
-  const sp = b.spec.speed * level.speed * difficulty * relief
+  const sp = b.spec.speed * level.speed * difficulty / relief
   b.vx = Math.cos(b.heading) * sp
   b.vy = Math.sin(b.heading) * sp
   if (b.spec.segments > 0) {
@@ -1077,7 +1172,15 @@ const land = (): void => {
   // After the blow has been resolved, so nothing it killed is scared by it.
   scareSprinters(foot.x, foot.y, r)
   const hitBoss = boss ? bossStomp(foot.x, foot.y, r, heavy) : false
-  const hit = hitBugs || hitBoss
+  // An egg under the sole is a hit too. The pods themselves are popped a step
+  // later, in `substep` (they are resolved against the whole impact, not just
+  // its first frame), so this only ASKS — and without it a stomp that took an
+  // egg and nothing else read as bare floor: a miss on the tally and a broken
+  // chain for doing exactly what the phase asks. The same bug `bossStomp`'s
+  // note describes for the body, one phase later; it cost nothing while the egg
+  // phase was 1-10's, and would have been a six-year-old's first boss fight.
+  const hitPod = boss ? podUnder(foot.x, foot.y, stompRadius(heavy)) : false
+  const hit = hitBugs || hitBoss || hitPod
   if (heavy) slams.value++
   emit({ k: 'stomp', x: foot.x, y: foot.y, r, heavy, hit })
 
@@ -1193,14 +1296,14 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
   tally.value = { ...t, hits: t.hits + 1 }
 
   if (verdict === 'ricochet') {
-    emit({ k: 'clang', x: b.x, y: b.y })
+    emit({ k: 'clang', x: b.x, y: b.y, bug: b.id, heavy })
     b.stun = Math.max(b.stun, 180)
     return
   }
 
   if (verdict === 'hurt') {
     b.dmg += blowDamage(heavy)
-    emit({ k: 'hurt', x: b.x, y: b.y, bug: b.id })
+    emit({ k: 'hurt', x: b.x, y: b.y, bug: b.id, heavy })
     b.stun = Math.max(b.stun, 220)
     return
   }
@@ -1243,6 +1346,9 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
 
   if (spec.coins > 0) emit({ k: 'coin', x: b.x, y: b.y, n: spec.coins })
   if (spec.stinks) spawnHaze(b.x, b.y)
+  // A carrier takes its egg down with it, paid as a rung of its own — two for
+  // one is the reward for catching the ant before it sets the egg down.
+  if (b.carry) { b.carry = false; popEgg(b.x, b.y, chainOk) }
 
   // A centipede does not die — it SPLITS, unless the head went.
   if (spec.segments > 0 && b.segs > 1 && !headshot) {
@@ -1251,7 +1357,7 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
     if (half) {
       half.segs = b.segs
       half.heading = b.heading + Math.PI
-      const sp = half.spec.speed * level.speed * difficulty * relief
+      const sp = half.spec.speed * level.speed * difficulty / relief
       half.vx = Math.cos(half.heading) * sp
       half.vy = Math.sin(half.heading) * sp
     }
@@ -1285,7 +1391,8 @@ const arcLightning = (x: number, y: number, _from: BugId, n: number): void => {
 const syncChain = (): void => {
   chainCount.value = chain.count
   chainMult.value = comboMultiplier(chain.count)
-  chainLeft.value = chain.count > 0 ? Math.max(0, chain.windowMs / COMBO_WINDOW_MS) : 0
+  if (chain.count > 0) setChainRing(chain.windowMs / COMBO_WINDOW_MS)
+  else chainLeft.value = 0
 }
 
 const spawnHaze = (x: number, y: number): void => {
@@ -1413,7 +1520,7 @@ const applyTerrain = (b: Bug, dt: number): number => {
       // Crumbs PULL: ants path toward them, which is how a level makes a swarm
       // walk into one place the player can slam.
       //
-      // Sprinters too, and that is the whole of 1-3. A crumb pile is BAIT: a
+      // Sprinters too, and that is the whole of 1-6. A crumb pile is BAIT: a
       // sprinter walking toward a pile is a sprinter walking toward a spot the
       // player already knows, and standing still beside that spot is exactly
       // the thing that does not set it off. The answer to the level before it,
@@ -1504,7 +1611,7 @@ const scareSprinters = (x: number, y: number, r: number): void => {
  * tell armed inside a puddle can never finish — which makes this check
  * redundant TODAY, and only today. It is the order of `stepFoot` before
  * `stepBugs` that makes it redundant, and the rule it is protecting (honey is
- * the answer to the sprinter, taught on 1-7) is worth more than one loop over
+ * the answer to the sprinter, taught on 1-9) is worth more than one loop over
  * at most four hazards on the frames a stomp lands. Stated at the site so that
  * reordering the step cannot silently delete a lesson.
  */
@@ -1528,8 +1635,11 @@ const stepBugs = (dt: number): void => {
     if (b.held > 0) b.held -= dt
     if (b.panic > 0) b.panic -= dt
     if (b.boltCd > 0) b.boltCd -= dt
+    // A carrier puts its egg down once it has walked far enough to be seen, and
+    // only on open floor — an egg set down in the HUD gutter is out of reach.
+    if (b.carry && b.t >= CARRIER_WALK_MS && inEggZone(b.x, b.y)) setEggDown(b)
 
-    let speed = spec.speed * level.speed * difficulty * relief
+    let speed = spec.speed * level.speed * difficulty / relief
     if (b.panic > 0) speed *= SALT_PANIC_SPEED
     // Kept, rather than folded straight into `speed`, because a bolt is not
     // driven by `speed` and still has to be slowed by the floor it crosses.
@@ -1739,9 +1849,17 @@ export const segmentAt = (b: Bug, k: number, out: { x: number; y: number; a: num
 
 // ─── The boss ───────────────────────────────────────────────────────────────
 
-const spawnBoss = (id: LevelSpec['boss']): void => {
+/**
+ * Put the level's boss on the floor, at the level's strength.
+ *
+ * `spec` is the SCALED spec from here on, and everything downstream reads it
+ * off the boss rather than off the table — hits per phase, adds per beat, the
+ * pod quota and hatch clock, the wind-up — so a half-strength Queen cannot be
+ * half-strength in the bar and full-strength in the fight.
+ */
+const spawnBoss = (id: LevelSpec['boss'], scale: number): void => {
   if (!id) return
-  const spec = bossSpec(id)
+  const spec = bossSpec(id, scale)
   boss = {
     spec,
     x: (board.x0 + board.x1) / 2,
@@ -1749,8 +1867,22 @@ const spawnBoss = (id: LevelSpec['boss']): void => {
     vx: 0, vy: 0,
     size: Math.min(spec.size, Math.min(board.x1 - board.x0, board.y1 - board.y0) * 0.22),
     phase: 0, hits: 0, beat: 0, sub: 'idle', subT: 0, aim: 0,
-    iframe: 0, podsDown: 0, alive: true, dying: 0
+    iframe: 0, podsDown: 0, eggClock: 0, laying: 0, alive: true, dying: 0
   }
+}
+
+/**
+ * One of the boss's own adds, if the board has room for it.
+ *
+ * Summons used to ignore `maxAlive` — harmless while every policy hit the boss
+ * straight away, and a flood the moment anybody did not: a player lingering in
+ * the Queen's first phase on 1-10 (scouted, hunting the chain star) had thirty
+ * ants on a phone-sized board, twice the level's own ceiling. The boss level's
+ * cap is the one every other body already minds, eggs' hatchlings included.
+ */
+const summonAdd = (id: BugId, x: number, y: number): void => {
+  if (bugCount >= level.maxAlive) return
+  spawnBug(id, x, y, true)
 }
 
 const stepBoss = (dt: number): void => {
@@ -1763,7 +1895,9 @@ const stepBoss = (dt: number): void => {
   const p = bs.spec.phases[bs.phase]!
   const s = dt / 1000
   bs.beat += dt
+  bs.eggClock += dt
   if (bs.iframe > 0) bs.iframe -= dt
+  if (bs.laying > 0) bs.laying -= dt
 
   const sp = p.speed * difficulty
 
@@ -1786,7 +1920,7 @@ const stepBoss = (dt: number): void => {
         bs.beat = 0
         for (let i = 0; i < p.addCount; i++) {
           const id = p.adds[i % p.adds.length]
-          if (id) spawnBug(id, bs.x + rndRange(-6, 6), bs.y + rndRange(-6, 6), true)
+          if (id) summonAdd(id, bs.x + rndRange(-6, 6), bs.y + rndRange(-6, 6))
         }
       }
       break
@@ -1796,7 +1930,9 @@ const stepBoss = (dt: number): void => {
       bs.y = clamp(bs.y, board.y0 + 12, board.y0 + (board.y1 - board.y0) * 0.4)
       if (bs.beat > p.beatMs) {
         bs.beat = 0
-        for (let i = 0; i < POD_PER_BEAT; i++) dropPod()
+        // The beat IS the clutch here, and `deliverEgg` still minds the cap: a
+        // player who has let four eggs pile up is not handed a fifth and sixth.
+        for (let i = 0; i < POD_PER_BEAT; i++) deliverEgg(bs)
       }
       break
     }
@@ -1804,7 +1940,7 @@ const stepBoss = (dt: number): void => {
       bs.subT += dt
       if (bs.sub === 'idle') { bs.sub = 'tell'; bs.subT = 0; bs.aim = Math.atan2(foot.y - bs.y, foot.x - bs.x) }
       else if (bs.sub === 'tell' && bs.subT > CHARGE_TELL_MS) { bs.sub = 'windup'; bs.subT = 0 }
-      else if (bs.sub === 'windup' && bs.subT > CHARGE_WINDUP_MS) { bs.sub = 'run'; bs.subT = 0 }
+      else if (bs.sub === 'windup' && bs.subT > bs.spec.windupMs) { bs.sub = 'run'; bs.subT = 0 }
       else if (bs.sub === 'run') {
         bs.x += Math.cos(bs.aim) * p.speed * s
         bs.y += Math.sin(bs.aim) * p.speed * s
@@ -1814,13 +1950,14 @@ const stepBoss = (dt: number): void => {
           bs.y = clamp(bs.y, board.y0, board.y1)
           bs.sub = 'spent'
           bs.subT = 0
+          layOnSpent(bs, p)
         }
-        if (bs.subT > CHARGE_RUN_MS) { bs.sub = 'spent'; bs.subT = 0 }
-      } else if (bs.sub === 'spent' && bs.subT > CHARGE_SPENT_MS) { bs.sub = 'idle'; bs.subT = 0 }
+        if (bs.sub === 'run' && bs.subT > CHARGE_RUN_MS) { bs.sub = 'spent'; bs.subT = 0; layOnSpent(bs, p) }
+      } else if (bs.sub === 'spent' && bs.subT > bs.spec.spentMs) { bs.sub = 'idle'; bs.subT = 0 }
       if (bs.beat > p.beatMs && p.adds.length > 0) {
         bs.beat = 0
         const id = p.adds[0]
-        if (id) spawnBug(id, bs.x + rndRange(-8, 8), bs.y + rndRange(-8, 8), true)
+        if (id) summonAdd(id, bs.x + rndRange(-8, 8), bs.y + rndRange(-8, 8))
       }
       break
     }
@@ -1840,7 +1977,7 @@ const stepBoss = (dt: number): void => {
         bs.beat = 0
         for (let i = 0; i < p.addCount; i++) {
           const id = p.adds[i % p.adds.length]
-          if (id) spawnBug(id, bs.x + rndRange(-10, 10), bs.y + rndRange(-4, 10), true)
+          if (id) summonAdd(id, bs.x + rndRange(-10, 10), bs.y + rndRange(-4, 10))
         }
       }
       break
@@ -1865,28 +2002,210 @@ const stepBoss = (dt: number): void => {
   bs.x = clamp(bs.x, board.x0 + bs.size * 0.5, board.x1 - bs.size * 0.5)
   bs.y = clamp(bs.y, board.y0 + bs.size * 0.5, board.y1 - bs.size * 0.5)
 
-  // Pods hatch on their own clock.
+  // The brood's clutch clock, for every phase that has one and is not already
+  // laying on a rhythm of its own: a `pods` phase lays on its beat, and a boss
+  // that LAYS while charging lays when a charge is spent (`layOnSpent`). A
+  // clutch refused by the cap keeps its clock, so the next one comes the
+  // moment the floor has room for it.
+  if (p.eggMs > 0 && p.script !== 'pods' && !(p.script === 'charge' && bs.spec.delivery === 'lay')
+    && bs.eggClock >= p.eggMs && deliverEgg(bs)) bs.eggClock = 0
+
+  // Every egg's own clock. A laid egg ticks from the moment it lands.
   for (const pod of pods) {
     if (!pod.alive) continue
-    pod.t -= dt
-    if (pod.t <= 0) {
-      pod.alive = false
-      emit({ k: 'podHatch', x: pod.x, y: pod.y })
-      const id = p.adds[0]
-      if (id) spawnBug(id, pod.x, pod.y, true)
+    if (pod.fly > 0) {
+      pod.fly -= dt
+      if (pod.fly <= 0) { pod.fly = 0; emit({ k: 'podLand', x: pod.x, y: pod.y }) }
+      continue
     }
+    pod.t -= dt
+    if (pod.t <= 0) hatchEgg(bs, pod)
   }
 }
 
-const dropPod = (): void => {
+// ─── The brood ──────────────────────────────────────────────────────────────
+//
+// See "The brood" in `bosses.ts` for the design and its numbers. Everything here
+// is a scan over two fixed pools — twelve egg slots, the live bodies — with no
+// allocation, and runs only on the frames an egg is laid, set down, hatched or
+// popped.
+
+/** Eggs in play: on the floor, in the air, or over a carrier's head. */
+const liveEggs = (): number => {
+  let n = 0
+  for (const pod of pods) if (pod.alive) n++
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.carry) n++
+  return n
+}
+
+const liveHatchlings = (): number => {
+  let n = 0
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.hatched) n++
+  return n
+}
+
+/** Open floor an egg may lie on: clear of the board's edges, where the HUD's
+ *  gutters are and a foot has to fight the clamp to reach. */
+const EGG_EDGE_U = 9
+const inEggZone = (x: number, y: number): boolean =>
+  x >= board.x0 + EGG_EDGE_U && x <= board.x1 - EGG_EDGE_U
+  && y >= board.y0 + EGG_EDGE_U && y <= board.y1 - EGG_EDGE_U
+
+/** Put an egg on the floor at (x, y), hopping in from (fromX, fromY) over
+ *  `flyMs` — 0 for none. False when the pool is full. */
+const placeEgg = (x: number, y: number, fromX: number, fromY: number, flyMs: number): boolean => {
+  const bs = boss
+  if (!bs) return false
   for (const pod of pods) {
     if (pod.alive) continue
     pod.alive = true
-    pod.x = board.x0 + rndRange(0.15, 0.85) * (board.x1 - board.x0)
-    pod.y = board.y0 + rndRange(0.35, 0.9) * (board.y1 - board.y0)
-    pod.t = POD_HATCH_MS
-    return
+    pod.x = clamp(x, board.x0 + EGG_EDGE_U, board.x1 - EGG_EDGE_U)
+    pod.y = clamp(y, board.y0 + EGG_EDGE_U, board.y1 - EGG_EDGE_U)
+    pod.fromX = fromX
+    pod.fromY = fromY
+    pod.fly = flyMs
+    pod.flyMs = Math.max(1, flyMs)
+    pod.t = bs.spec.podHatchMs
+    pod.hatchMs = bs.spec.podHatchMs
+    pod.seed = rnd()
+    return true
   }
+  return false
+}
+
+/** One egg, the way THIS boss brings them. False when the cap, the pool or the
+ *  board refused it. */
+const deliverEgg = (bs: Boss): boolean => {
+  if (liveEggs() >= bs.spec.eggCap) return false
+  return bs.spec.delivery === 'haul' ? sendCarrier() : layEgg(bs)
+}
+
+/**
+ * The boss lays: out of its back end, in a hop, onto the floor beside it.
+ *
+ * "Behind" is behind a charge (the Queen lands her egg in the lane she just ran
+ * down, which is where the player has just dodged to), and down the board for
+ * everything else — a boss lives in the top third, so down is towards the
+ * player and never into the top edge.
+ */
+const layEgg = (bs: Boss): boolean => {
+  const p = bs.spec.phases[bs.phase]!
+  const back = p.script === 'charge' ? bs.aim + Math.PI : Math.PI / 2
+  const a = back + rndRange(-1, 1)
+  const d = bs.size + rndRange(EGG_LAND_U[0], EGG_LAND_U[1])
+  const fx = bs.x + Math.cos(back) * bs.size * 0.55
+  const fy = bs.y + Math.sin(back) * bs.size * 0.55
+  if (!placeEgg(bs.x + Math.cos(a) * d, bs.y + Math.sin(a) * d, fx, fy, EGG_LAY_MS)) return false
+  bs.laying = EGG_LAY_MS
+  return true
+}
+
+/** A carrier ant walks in from an edge with the egg. It is a body like any
+ *  other, so it minds the level's `maxAlive` as every body does. */
+const sendCarrier = (): boolean => {
+  if (bugCount >= level.maxAlive) return false
+  const b = spawnBug('ant', undefined, undefined, true)
+  if (!b) return false
+  b.carry = true
+  return true
+}
+
+/** The carrier sets its egg down in front of itself and turns back the way it
+ *  came, so it walks away from the egg rather than over it. */
+const setEggDown = (b: Bug): void => {
+  const hx = b.x + Math.cos(b.heading) * b.spec.size
+  const hy = b.y + Math.sin(b.heading) * b.spec.size
+  const ahead = b.spec.size * 2.2
+  if (!placeEgg(b.x + Math.cos(b.heading) * ahead, b.y + Math.sin(b.heading) * ahead, hx, hy, 180)) return
+  b.carry = false
+  b.heading += Math.PI
+  const sp = b.spec.speed * level.speed * difficulty / relief
+  b.vx = Math.cos(b.heading) * sp
+  b.vy = Math.sin(b.heading) * sp
+}
+
+/**
+ * A laying boss's charge is spent: lay, and HOLD STILL while doing it.
+ *
+ * The hold is a negative `subT`, so the spent window the counter-slam already
+ * reads (`bossStomp`'s `open`) simply runs `layHoldMs` longer — no new state
+ * for the sim, the renderer or the lesson to learn. `eggMs` is the shortest gap
+ * between two lays, so a counter-slam that spends a charge early does not buy
+ * a second egg a beat later.
+ */
+const layOnSpent = (bs: Boss, p: BossPhase): void => {
+  if (bs.spec.delivery !== 'lay' || p.eggMs <= 0 || bs.eggClock < p.eggMs) return
+  if (!deliverEgg(bs)) return
+  bs.eggClock = 0
+  bs.subT = -bs.spec.layHoldMs
+}
+
+/**
+ * The clock ran out: the egg splits and the ants scurry out.
+ *
+ * Only as many as there is ROOM for under both caps. With no room at all the egg
+ * does not hatch — it waits on its last crack, wobbling, at `t = 0` — because an
+ * egg that pops with nothing in it, or silently vanishes, teaches that watching
+ * the cracks was pointless.
+ */
+const hatchEgg = (bs: Boss, pod: Pod): void => {
+  const room = Math.min(
+    bs.spec.broodAnts,
+    bs.spec.hatchlingCap - liveHatchlings(),
+    level.maxAlive - bugCount
+  )
+  if (room <= 0) { pod.t = 0; return }
+  pod.alive = false
+  emit({ k: 'podHatch', x: pod.x, y: pod.y, n: room })
+  for (let i = 0; i < room; i++) {
+    // Evenly spread OUT of the shell, each at salt-panic speed for a moment — a
+    // scurry, not three ants standing on a spot.
+    const a = pod.seed * Math.PI * 2 + (i / room) * Math.PI * 2 + rndRange(-0.3, 0.3)
+    const b = spawnBug('ant', pod.x + Math.cos(a) * 1.5, pod.y + Math.sin(a) * 1.5, true)
+    if (!b) break
+    b.hatched = true
+    b.heading = a
+    b.panic = HATCH_SCURRY_MS
+    const sp = b.spec.speed * level.speed * difficulty / relief
+    b.vx = Math.cos(a) * sp
+    b.vy = Math.sin(a) * sp
+  }
+}
+
+/**
+ * An egg was popped — under a foot, or in a carrier's arms. Paid exactly as a
+ * kill is paid: a rung on the chain (unless an Electric Sock arc did it — see
+ * `hitBug`'s `chainOk`), points on the multiplier, juice with the chain bonus,
+ * a hit on the tally. Never a squish: the level's quota and the kind objectives
+ * count creatures, and an egg is not one.
+ *
+ * In a `pods` phase it is also the phase's progress.
+ */
+const popEgg = (x: number, y: number, chainOk: boolean): void => {
+  podsPopped.value++
+  let multiplier = comboMultiplier(chain.count)
+  if (chainOk) {
+    const r = chainHit(chain)
+    chain = r.next
+    multiplier = r.multiplier
+    syncChain()
+    emit({ k: 'chain', n: chain.count, mult: multiplier, step: comboMultiplier(chain.count) > comboMultiplier(chain.count - 1) })
+  }
+  const feverBonus = fever.remainMs > 0 ? FEVER.scoreScale : 1
+  score.value += Math.round(squishScore(EGG_SCORE, multiplier) * feverBonus)
+  fever = { ...fever, juice: Math.min(1, fever.juice + juiceGain(EGG_JUICE, multiplier)) }
+  if (fever.remainMs <= 0) juice.value = fever.juice
+  const t = tally.value
+  tally.value = {
+    ...t, hits: t.hits + 1, bestCombo: Math.max(t.bestCombo, multiplier), score: score.value
+  }
+  emit({ k: 'podPop', x, y, mult: multiplier, word: splatWord(multiplier) })
+
+  const bs = boss
+  if (!bs || !bs.alive) return
+  if (bs.spec.phases[bs.phase]!.script !== 'pods') return
+  bs.podsDown++
+  if (bs.podsDown >= bs.spec.podQuota) advanceBossPhase()
 }
 
 const beamKill = (bs: Boss): void => {
@@ -1928,14 +2247,23 @@ const bossStomp = (x: number, y: number, r: number, heavy: boolean): boolean => 
 
   // A `pods` phase is armoured until its pods are cleared, and a charging boss
   // can only be hurt during the wind-up — the counter window.
+  //
+  // A `shield` opens to a SLAM and to nothing else — which is the whole of what
+  // `PhaseScript` says it is. It used to read `vulnerable` alone, and a shield
+  // phase is `vulnerable: false` by definition, so no blow ever landed: scouted
+  // on 4-10, the `good` player slammed Roach Prime fifty-five times in the steel
+  // boot and ran the clock out on a full bar, every seed. The final boss of the
+  // game could not be beaten.
   const counter = p.script === 'charge' && bs.sub === 'windup' && heavy
-  const open = p.vulnerable && (p.script !== 'charge' || bs.sub === 'windup' || bs.sub === 'spent')
+  const open = p.script === 'shield'
+    ? heavy
+    : p.vulnerable && (p.script !== 'charge' || bs.sub === 'windup' || bs.sub === 'spent')
   if (!open) { emit({ k: 'clang', x: bs.x, y: bs.y }); return true }
   if (blowPierce(shoe, heavy) < p.armor) { emit({ k: 'clang', x: bs.x, y: bs.y }); return true }
 
   bs.hits += counter ? CHARGE_COUNTER_HITS : 1
   bs.iframe = 260
-  if (counter) { bs.sub = 'spent'; bs.subT = 0 }
+  if (counter) { bs.sub = 'spent'; bs.subT = 0; layOnSpent(bs, p) }
   emit({ k: 'bossHit', x: bs.x, y: bs.y, counter })
   score.value += 120
   fever = { ...fever, juice: Math.min(1, fever.juice + 0.05) }
@@ -1946,19 +2274,25 @@ const bossStomp = (x: number, y: number, r: number, heavy: boolean): boolean => 
   return true
 }
 
-/** A stomp that lands on a pod. */
-const stompPods = (x: number, y: number, r: number): void => {
-  const bs = boss
-  if (!bs) return
+/** Is a live pod inside a stomp of radius `r` at (x, y)? Read-only — the same
+ *  reach `stompPods` pops with. An egg still in its hop is not on the floor. */
+const podUnder = (x: number, y: number, r: number): boolean => {
+  const reach = r + POD_SIZE
   for (const pod of pods) {
-    if (!pod.alive) continue
+    if (pod.alive && pod.fly <= 0 && dist2(x, y, pod.x, pod.y) <= reach * reach) return true
+  }
+  return false
+}
+
+/** A stomp that lands on a pod. Paid, and counted, by `popEgg`. */
+const stompPods = (x: number, y: number, r: number): void => {
+  if (!boss) return
+  for (const pod of pods) {
+    if (!pod.alive || pod.fly > 0) continue
     const reach = r + POD_SIZE
     if (dist2(x, y, pod.x, pod.y) > reach * reach) continue
     pod.alive = false
-    bs.podsDown++
-    score.value += 80
-    emit({ k: 'podPop', x: pod.x, y: pod.y })
-    if (bs.podsDown >= POD_QUOTA) advanceBossPhase()
+    popEgg(pod.x, pod.y, true)
   }
 }
 
@@ -1980,7 +2314,21 @@ const advanceBossPhase = (): void => {
   bs.sub = 'idle'
   bs.subT = 0
   bs.podsDown = 0
-  for (const pod of pods) pod.alive = false
+  // Clearing an egg phase BURSTS the rest of its clutch, paid pop by pop — the
+  // eggs used to be wiped silently with the phase, which was harmless while an
+  // egg was a chore and would now be a reward vanishing from under the foot.
+  // Not left to hatch either: scouted on 1-4, a pair of leftover eggs hatching
+  // into the charge phase was the difference between a weak player slamming
+  // the Queen and chasing ants for forty seconds (13 of 15 wins → 12). The
+  // phase that asks for the slam starts on a clean floor; its own eggs come
+  // one at a time, as the tell for her open window (`layOnSpent`).
+  if (bs.spec.phases[bs.phase - 1]!.script === 'pods') {
+    for (const pod of pods) {
+      if (!pod.alive) continue
+      pod.alive = false
+      popEgg(pod.x, pod.y, true)
+    }
+  }
   bossPhaseIndex.value = bs.phase
   bossTell.value = bs.spec.phases[bs.phase]!.tell
   emit({ k: 'bossPhase', n: bs.phase })
@@ -2006,7 +2354,10 @@ const finish = (won: boolean): void => {
   tally.value = {
     ...tally.value,
     cleared: won,
-    timeLeft: Math.max(0, Math.round(timeLeft.value)),
+    // From the float clock, not the printed second: the stars are scored off
+    // this, and rounding a number that was already rounded for a HUD chip would
+    // hand out a "finish with N seconds left" star half a second early.
+    timeLeft: Math.max(0, Math.round(clockMs / 1000)),
     score: score.value
   }
   emit({ k: 'end', won })
@@ -2058,7 +2409,7 @@ const substep = (dt: number): void => {
   const before = chain.count
   chain = chainStep(chain, dt)
   if (before > 0 && chain.count === 0) { emit({ k: 'chainLost' }); syncChain() }
-  else if (chain.count > 0) chainLeft.value = Math.max(0, chain.windowMs / COMBO_WINDOW_MS)
+  else if (chain.count > 0) setChainRing(chain.windowMs / COMBO_WINDOW_MS)
 
   const wasFever = fever.remainMs > 0
   fever = stepFever(fever, dt)
@@ -2068,8 +2419,19 @@ const substep = (dt: number): void => {
 
   // The clock. A boss level has one too — it is generous, and it exists so a
   // player who cannot beat the boss is not stuck in it forever.
-  timeLeft.value = Math.max(0, timeLeft.value - dt / 1000)
-  if (timeLeft.value <= 0) finish(false)
+  //
+  // `clockMs` is the clock; `timeLeft` is the chip. Writing the chip only when
+  // its printed second changes is what keeps a per-frame Vue re-render of the
+  // whole HUD out of the frame budget — see the ref's own note.
+  clockMs = Math.max(0, clockMs - dt)
+  if (HUD_LEGACY_PER_FRAME) timeLeft.value = clockMs / 1000
+  else {
+    // CEIL, because the chip already printed `Math.ceil(props.time)`: a clock
+    // that shows 1 while 0.4 s remain is the clock this game has always had.
+    const shown = Math.ceil(clockMs / 1000)
+    if (shown !== timeLeft.value) timeLeft.value = shown
+  }
+  if (clockMs <= 0) finish(false)
   else if (!boss && level.quota > 0 && squished.value >= level.quota) finish(true)
 }
 

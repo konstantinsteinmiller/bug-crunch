@@ -167,11 +167,12 @@ const survival = (stage) => {
  * them, and re-derives this table from `allLevels()` so the copy cannot drift
  * silently when the campaign is retuned.
  *
- * The four zeroes are the boss levels (10, 20, 30, 40), which carry no quota of
- * their own; `quotaFor` hands them the level below's.
+ * The zeroes are the boss levels (4, 10, 20, 30, 40 — `BOSS_FIGHTS` in
+ * `stages.ts`), which carry no quota of their own; `quotaFor` hands them the
+ * level below's.
  */
 export const QUOTA = [
-  8, 12, 14, 18, 21, 25, 30, 34, 39, 0,
+  8, 12, 12, 0, 21, 22, 26, 30, 34, 0,
   34, 36, 38, 41, 45, 48, 53, 57, 61, 0,
   56, 58, 61, 64, 68, 72, 77, 82, 87, 0,
   78, 80, 84, 88, 93, 98, 103, 109, 116, 0

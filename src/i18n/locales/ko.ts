@@ -268,6 +268,7 @@ export default {
       'hard': '벌레가 더 빠르고 화면이 더 북적여요.'
     },
     'musicTracks': {
+      'parade': '와작와작 퍼레이드',
       'trance': '벌레 그루브',
       'cozy': '느긋한 소풍'
     },
