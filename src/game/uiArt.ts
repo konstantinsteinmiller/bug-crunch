@@ -91,17 +91,30 @@ const burstPath = (
 export const paintComicWord = (
   ctx: CanvasRenderingContext2D,
   text: string, tone: SplatWord, size: number,
-  pop: number, rot: number, alpha: number, withBurst = true
+  pop: number, rot: number, alpha: number, withBurst = true,
+  maxWidth = 0
 ): void => {
   const c = WORD_TONE[tone]
   ctx.save()
   ctx.globalAlpha = alpha
   ctx.rotate(rot)
-  ctx.scale(pop, pop)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = `900 ${size}px Angry, system-ui, sans-serif`
   const w = ctx.measureText(text).width
+  // ── Fit it on the screen ──
+  //
+  // A caller sizes a word off the BODY it came out of, which is right for an ant
+  // and wrong for a boss: "ULTRA SPLAT!" at a fifteen-unit queen's scale is
+  // eleven characters at a cap height of a sixth of the board, and it ran off
+  // both edges — the loudest frame in the game rendered as "ULTRA SPLA".
+  //
+  // Measured rather than guessed at the call site, because the width depends on
+  // the string, the face and whether the face has even loaded yet (the fallback
+  // `system-ui` is a different width). `measureText` ignores the transform, so
+  // the drawn width is `w * pop` and the shrink that fits it is exact.
+  const fit = maxWidth > 0 ? Math.min(1, maxWidth / Math.max(1, w * pop)) : 1
+  ctx.scale(pop * fit, pop * fit)
 
   if (withBurst) {
     burstPath(ctx, Math.max(w * 0.62, size * 1.15), 11, 0.68, text.length + size)
@@ -242,7 +255,7 @@ export const SPLAT_REF_SEEDS: readonly number[] = [3, 17, 46, 71]
  *   ooze      a puddle of goo. `splat`.
  *   bubble    soap. It has no picture of its own TODAY — `paintSplat` draws it
  *             through the same puddle and the spec's own `decalAlpha` (0.12)
- *             and `decalScale` (1.2) are what make it "almost no decal at all".
+ *             and `decalScale` (0.78) are what make it "almost no decal at all".
  *             So it takes the same painting, faded by the same number, and the
  *             painted build looks like the drawn one did. Giving it a sheet of
  *             its own would be inventing a difference the styles do not have.
@@ -478,30 +491,87 @@ export const paintSplat = (
   ctx.closePath()
   ctx.fill()
 
-  // 2. Fingers — tapering teardrops radiating out of the body.
-  const fingers = 5 + Math.floor(hash(seed + 7, 0) * 4)
+  // 2. Fingers — tapering teardrops radiating out of the body, each with a BULB
+  //    on its tip.
+  //
+  //    The bulb is the one addition that changed how these read, and it is not
+  //    decoration: thrown liquid does not taper to a point, it necks and then
+  //    beads, because surface tension pulls the leading edge back into a ball
+  //    faster than the neck behind it can follow. Every splash photograph and
+  //    every hand-painted cartoon splat has them. Without one a finger is a
+  //    SPIKE, and eight spikes out of a circle is a sun, not a splat — which is
+  //    what the first cut of this looked like on a busy floor.
+  const fingers = 6 + Math.floor(hash(seed + 7, 0) * 5)
   for (let i = 0; i < fingers; i++) {
     const a = hash(seed + 11, i) * Math.PI * 2
     const len = r * (0.9 + hash(seed + 13, i) * 1.0)
     const wid = r * (0.1 + hash(seed + 17, i) * 0.16)
+    // Beaded on most of them, not all: a mark where every finger ends the same
+    // way is as mechanical as a mark where none of them does.
+    const bulb = hash(seed + 31, i) > 0.28 ? wid * (0.62 + hash(seed + 37, i) * 0.7) : 0
     ctx.save()
     ctx.rotate(a)
     ctx.beginPath()
     ctx.moveTo(0, -wid)
-    ctx.quadraticCurveTo(len * 0.7, -wid * 0.55, len, 0)
-    ctx.quadraticCurveTo(len * 0.7, wid * 0.55, 0, wid)
+    // The neck pinches in behind the bead — `wid * 0.34` at 80 % of the length
+    // against the bead's own radius at the tip.
+    ctx.quadraticCurveTo(len * 0.62, -wid * 0.52, len * 0.86, -Math.max(wid * 0.2, bulb * 0.5))
+    ctx.quadraticCurveTo(len, -bulb * 0.9, len + bulb * 0.5, 0)
+    ctx.quadraticCurveTo(len, bulb * 0.9, len * 0.86, Math.max(wid * 0.2, bulb * 0.5))
+    ctx.quadraticCurveTo(len * 0.62, wid * 0.52, 0, wid)
     ctx.closePath()
+    ctx.fill()
+    if (bulb > 0) {
+      ctx.beginPath()
+      ctx.arc(len + bulb * 0.35, 0, bulb, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+
+  // 3. TENDRILS — two or three long thin arms that reach much further than a
+  //    finger and curve as they go.
+  //
+  //    What they buy is SILHOUETTE. A splat built only from a lobed body and a
+  //    ring of fingers has one outline at every seed: a blob with bumps. The
+  //    tendrils are what make one mark on the floor read as a different event
+  //    from the one next to it, and they cost three quadratics each into a layer
+  //    that is stamped once and never redrawn.
+  const tendrils = 2 + Math.floor(hash(seed + 41, 1) * 2)
+  for (let i = 0; i < tendrils; i++) {
+    const a = hash(seed + 43, i) * Math.PI * 2
+    const len = r * (1.5 + hash(seed + 47, i) * 0.85)
+    const wid = r * (0.075 + hash(seed + 53, i) * 0.06)
+    // Which way it whips. Signed off the hash so a mark is not all one-handed.
+    const bend = (hash(seed + 59, i) - 0.5) * len * 0.75
+    const tip = wid * (0.9 + hash(seed + 61, i) * 0.9)
+    ctx.save()
+    ctx.rotate(a)
+    ctx.beginPath()
+    ctx.moveTo(0, -wid * 1.5)
+    ctx.quadraticCurveTo(len * 0.55, bend - wid * 0.5, len, bend)
+    ctx.quadraticCurveTo(len * 0.55, bend + wid * 0.5, 0, wid * 1.5)
+    ctx.closePath()
+    ctx.fill()
+    // …and the bead flung off its end, sitting just past the tip.
+    ctx.beginPath()
+    ctx.arc(len + tip * 0.4, bend, tip, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
   }
 
-  // 3. Droplets.
-  for (let i = 0; i < 9; i++) {
+  // 4. Droplets — the loose scatter, out to `SPLAT_REACH`'s own 2.4 r and no
+  //    further, because that number is the registration between this drawing and
+  //    the painting that replaces it.
+  for (let i = 0; i < 12; i++) {
     const a = hash(seed + 19, i) * Math.PI * 2
     const d = r * (1.1 + hash(seed + 23, i) * 1.3)
     const s = r * (0.05 + hash(seed + 29, i) * 0.13)
     ctx.beginPath()
-    ctx.ellipse(Math.cos(a) * d, Math.sin(a) * d, s, s * 0.82, a, 0, Math.PI * 2)
+    // Stretched ALONG its own flight line rather than round: a droplet that
+    // landed while it was still moving is an oval pointing away from the body,
+    // and a floor covered in circles reads as spots rather than as spray.
+    ctx.ellipse(Math.cos(a) * d, Math.sin(a) * d, s * 1.35, s * 0.78, a, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -510,6 +580,24 @@ export const paintSplat = (
   ctx.fillStyle = 'rgba(0,0,0,1)'
   ctx.beginPath()
   ctx.ellipse(0, 0, r * 0.42, r * 0.36, hash(seed, 3) * 3, 0, Math.PI * 2)
+  ctx.fill()
+
+  // …and the WET SHINE over it: a crescent on the upper-left rim, which is the
+  // light direction every other object on this board is lit from.
+  //
+  // White, and therefore invisible on the reference sheet — where the body is
+  // drawn white so the painter sends a greyscale silhouette. That is the right
+  // trade: the reference asks for the highlight in words ("a bright wet
+  // highlight runs along the upper-left rim") and the DRAWN build, which is what
+  // every portal ships, is the build that needs the drawing to carry it.
+  ctx.globalAlpha = alpha * 0.34
+  ctx.fillStyle = 'rgba(255,255,255,1)'
+  ctx.beginPath()
+  ctx.ellipse(-r * 0.2, -r * 0.24, r * 0.4, r * 0.2, -0.7, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = alpha * 0.2
+  ctx.beginPath()
+  ctx.ellipse(r * 0.22, r * 0.1, r * 0.17, r * 0.1, 0.5, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.restore()

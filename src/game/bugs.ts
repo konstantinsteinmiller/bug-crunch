@@ -137,7 +137,43 @@ export interface BugSpec {
    * rosters be written broadly and still open gently.
    */
   debut: number
+  /**
+   * What a SLAM that does not kill it does to it — Beetle Bowling.
+   *
+   *   flip     it goes over on its back, legs waving, for `FLIP_MS`: soft side
+   *            up, so one TAP finishes it, and a fast pass of the shoe across it
+   *            KICKS it spinning across the floor like a bowling ball
+   *   pinball  the same, and a kicked one rebounds off the edges `PINBALL_BOUNCES`
+   *            times instead of `PUCK_BOUNCES` — the robobug's plate is a better
+   *            bumper than a beetle's shell
+   *
+   * The most frustrating body in the game becomes ammunition. Measured in
+   * `RETENTION-FEATURES.md` §1: a weak player bounced off shells 26-56 times a
+   * level, and an armoured body that is never slammed twice never dies. A flip
+   * makes one slam enough.
+   */
+  flips?: 'flip' | 'pinball'
 }
+
+// ─── Beetle Bowling ─────────────────────────────────────────────────────────
+
+/** How long a flipped body lies on its back before it rights itself, ms. */
+export const FLIP_MS = 2600
+/** How fast the shoe must be travelling across a flipped body to kick it, u/s.
+ *  A drag, not a drift: a foot easing into position never kicks by accident. */
+export const KICK_SPEED = 42
+/** A kicked shell's launch speed, u/s, and its friction, per second. */
+export const PUCK_SPEED = 95
+export const PUCK_FRICTION = 1.6
+/** A puck slower than this has stopped rolling and splats itself, u/s. */
+export const PUCK_STOP_SPEED = 12
+/** Edge rebounds before a puck is spent: a beetle's, and a robobug's. */
+export const PUCK_BOUNCES = 2
+export const PINBALL_BOUNCES = 3
+/** The armour a rolling shell hits with — it cracks a beetle, not a robobug. */
+export const PUCK_PIERCE = 2
+/** At most this many pucks in play; a fourth kick just splats the body. */
+export const MAX_PUCKS = 3
 
 const bug = (s: BugSpec): BugSpec => s
 
@@ -194,7 +230,7 @@ export const BUGS: readonly BugSpec[] = [
     score: 45, juice: 0.150, armor: 2,
     dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [66, 225, 122], body: '#2f7a45', shade: '#17442a', accent: '#b8f2c6',
-    coins: 0, cost: 4, debut: 3
+    coins: 0, cost: 4, debut: 3, flips: 'flip'
   }),
   bug({
     id: 'flea', name: 'flea',
@@ -263,7 +299,7 @@ export const BUGS: readonly BugSpec[] = [
     score: 80, juice: 0.130, armor: 3,
     dodges: false, sprints: false, spiky: false, stinks: false, segments: 0, airborne: false,
     goo: [90, 240, 255], body: '#48566e', shade: '#232c3d', accent: '#6ef0ff',
-    coins: 1, cost: 7, debut: 31
+    coins: 1, cost: 7, debut: 31, flips: 'pinball'
   })
 ] as const
 

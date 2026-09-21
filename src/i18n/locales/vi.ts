@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} sao',
     'recordScore': '{n} điểm',
     'recordBeat': 'Kỷ lục cũ: {n}',
-    'chestCoins': '+{n} xu'
+    'chestCoins': '+{n} xu',
+    'move': 'Chiêu mới!'
+  },
+  'moves': {
+    'spin': 'Xoay gót',
+    'skid': 'Trượt',
+    'quake': 'Dậm động đất',
+    'echo': 'Dậm vang'
+  },
+  'party': {
+    'title': 'Tiệc bọ!',
+    'count': '{n} con bọ',
+    'best': 'Kỷ lục: {n}',
+    'newBest': 'Kỷ lục tiệc mới!'
   },
   'fever': {
     'filling': 'Cuồng Splat: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Bọ đã đạp nát',
     'starsEarned': '{n} trên 3 sao',
     'rankOf': 'trên {n}',
-    'worldUnlocked': 'Đã mở {n}!'
+    'worldUnlocked': 'Đã mở {n}!',
+    'peekNext': 'Xem trước {n}',
+    'secondWind': 'Hồi sức: lượt sau bắt đầu với lọ đầy',
+    'hintSlam': 'Mẹo: giữ để dậm vỡ vỏ',
+    'hintAvoid': 'Mẹo: đừng dậm con có gai',
+    'missed': 'Còn {n} con bọ'
   },
   'leaderboard': {
     'title': 'Bảng xếp hạng',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Chạm bất cứ đâu, chân sẽ bay tới con bọ gần nhất.'
   },
   'loading': {
-    'boo': 'Hù!',
-    'laugh': 'Hi hi!',
+    'uhOh': 'Ối trời!',
+    'missed': 'Trượt rồi!',
     'tooLong': 'Vẫn đang tải… kiểm tra kết nối nhé?'
   },
   'saveStatus': {

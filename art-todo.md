@@ -45,6 +45,28 @@ the half of an icon set that cannot be done one icon at a time. If one cell
 comes back wrong, re-roll that slot alone from `PROMPTS-STILLS.md` — every
 square slot still has a single-icon sheet of its own.
 
+**So every one of those slots is painted twice, and `UI_CUT_FROM` says which
+painting ships** (`src/game/artSheet.ts`, written to `art-sheets/cut-from.json`
+by `pnpm art:prompts`). Until 2026-09-18 nothing said, and each file was
+whichever painting the slicer happened to cut last — a full re-slice would have
+swapped the nine `grid-ui-objects-2` icons that ship for their stills' different
+designs. The table reproduces what shipped that day, measured pixel for pixel:
+47 slots from their own still, the nine objects-2 icons (coin, gem, heart,
+flask, wheel, gift, bug, splat, bolt) from the grid. The two designs of those
+nine are side by side in `art-sheets/compare/ui-objects-2-grid-vs-still.png`.
+To use a re-rolled still, set its slot to `'still'` and run `pnpm art:prompts`;
+a sheet all of whose files are cut elsewhere shows as **superseded** in
+`PAINT-STATUS.md` and the Art Desk, never as "to paint".
+
+**Ruled returns (2026-09-18).** Six sheets came back ruled like comic strips —
+black rules on the beetle and robobug, a purple line between the moths, a white
+cross on the splat, confetti and egg — and shipped only because the Art Desk
+painted rules out on every slice. The shared prompt clause lost for reasons
+`artSheet.ts` sets out above `continuousGround`; with it fixed, all six were
+repainted clean (the moth took three rolls: one refused by a grid check its own
+reference fails, one with its wing beat out of order). The desk now paints rules
+out only on a return that has them (`--drop-borders-if-ruled`).
+
 `/art-sheets` (dev route) renders the reference sheet for every drawable at the
 exact box, frame count and anchor the renderer expects. **Paint over that sheet.**
 `/bug-lab` (dev route) shows every drawing animated at 24 / 40 / 64 / 120 / 200 px
@@ -81,7 +103,7 @@ that is mud there is mud on a phone.
 | Stink bug | `bugs/stinkbug.webp` | 8 | Should look like it is about to burp. |
 | Centipede | `bugs/centipede.webp` | 8 | Head only — segments are drawn procedurally from `paintSegment`. |
 | Piñata fly | `bugs/pinatafly.webp` | 8 | The treat. Bright, papery, obviously worth chasing. |
-| Moth | `bugs/moth.webp` | 8 | Airborne; wings need a clear up/down in the cycle. |
+| Moth | `bugs/moth.webp` | 8 | Airborne; wings need a clear beat in the cycle — TWO per loop, as the drawing does (swept back in panels 2 and 6, widest in 4 and 8). |
 | Robobug | `bugs/robobug.webp` | 8 | Hardest shell in the game. Should read as metal, not as shell. |
 
 **Shadow note:** bodies are drawn with a soft contact shadow by the renderer.
@@ -142,16 +164,36 @@ enforces this for the splash tile and is the pattern to copy.
 ## Priority 5 — props and effects
 
 **Props** — `props/crumbs · honey · salt · sweeper · magnet · cobweb · conveyor ·
-pod · coin`.
+pod · coin · shoebox`.
 Honey and cobweb are the two that change how the game plays; paint those first.
 
+**`props/shoebox` was painted 2026-09-18**, the Shoebox Trials' present: a pink box
+with a yellow ribbon and bow, seen from above. It was the first subject that is
+pink all over, and it showed that the slicer's spill pass had been greying every
+pink and purple subject (see "Whose magenta is it" in `tools/slice-sheets.mjs`).
+The slicer now asks the reference drawing first, and those were re-cut the same
+day. The logo, Roach Prime's crown, the arcade cabinet's and hopper's neon, the
+bunny slipper, the roller skate, the sneaker, the fever ring and the stink haze
+have their painted pinks and purples back. Before, the logo's splat was half
+see-through. Every other sprite cuts byte-identically to before. The slick lane of
+the Spill twist is deliberately never painted — it is a strip as long as the board
+it is spilt across.
+
 **FX** — `fx/ring-stomp · ring-slam · ring-fever · burst · haze · salt-cloud ·
-spark · scorch · smoke`.
+spark · scorch · smoke · goo-drop`.
 
 * The three rings are separate assets on purpose: they are drawn at wildly
   different sizes and one ring stretched to all three reads wrong at the extremes.
 * `smoke` is the per-particle puff and **must be greyscale** — every emitter
   tints it.
+* `goo-drop` is the other tinted particle, and the only **2:1 landscape** still
+  in the manifest. It is `useVfx`'s shape 4 — the teardrop a squish, a popped egg
+  and a dying boss throw — and the game turns it to whichever way the droplet is
+  flying and stretches it with the droplet's own speed. So the painting must be
+  **head at the RIGHT, tail at the LEFT**, centred in its frame, and greyscale
+  for the same reason `smoke` is: it is tinted to the goo of whatever it came out
+  of. Painted at 192x96; `useVfx.bakeDropSprite` tints it with the same three ops
+  the dust puff uses, and `paintGooDropRef` is the drawing underneath it.
 
 ---
 
@@ -201,7 +243,7 @@ for the HUD marks and nothing else.
 | Slot | File | Notes |
 | --- | --- | --- |
 | Wordmark | `logo/logo_512x512.png` (+ 256/192 and the `icons/` copies) | The PWA manifest, the favicon and every portal store page read it. |
-| Mascot | `logo/mascot.webp` | The ant that floats out on the loading screen, shouts BOO and then giggles at its own prank. |
+| Mascot | `logo/mascot.webp` | The ant on the loading screen that a stomp comes for: it yelps as the ring closes in, dodges the shoe, and taunts it. |
 
 Neither is ever probed: the splash must be the same picture on a portal build
 with the art layer OFF, so both are read straight off disk and their manifest

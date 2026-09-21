@@ -138,6 +138,9 @@ const TAKE_ROWS = num('--take-rows', null)
 // first — see the border check below. Off by default: a ruled return usually
 // has captions inside the panels too, and those cannot be painted out.
 const DROP_BORDERS = flag('--drop-borders')
+// The same, but only for a return the detector actually finds ruled — a clean
+// one is cut as painted. What the Art Desk passes; see the border check below.
+const DROP_IF_RULED = flag('--drop-borders-if-ruled')
 // Flip the whole sheet before cutting, for a return that came back facing the
 // wrong way. Side-on creatures come back mirrored about half the time however
 // plainly the prompt says which way they face, and a flip is exact: the same
@@ -190,10 +193,24 @@ Slice repainted contact sheets back into drop-in bitmaps.
                    the rules out of the cut lines first. Refused by default —
                    look at the return before using this, because a ruled one
                    usually has captions inside the panels, and those stay.
+  --drop-borders-if-ruled
+                   The same salvage, but only on a return the detector finds
+                   ruled; a clean one is cut exactly as painted. What the Art
+                   Desk passes. A painted-out cut is recorded in the receipt, so
+                   a later run without the flag cuts those bytes the same way.
   --mirror         Flip every PANEL left-to-right before cutting, for a return
                    that came back facing the wrong way (the panel order is kept,
                    so the animation still runs forwards).
+  --ignore-cut-from  Cut every file a painting paints, even the ones
+                   art-sheets/cut-from.json says are cut from another painting.
+                   Only with --out <scratch>: it is for putting the two paintings
+                   of one slot side by side, and is refused into public/.
   --dry            Print the plan and write nothing.
+
+A file that two sheets paint (every icon on a contact sheet also has a still of
+its own) is cut only from the painting art-sheets/cut-from.json names — written
+from UI_CUT_FROM in src/game/artSheet.ts by pnpm art:prompts — whatever order the
+inputs arrive in. One that nothing settles is refused from both.
 `)
   process.exit(0)
 }
@@ -392,6 +409,74 @@ const AMBIGUOUS = new Set()
   }
 }
 
+// ─── One file, two paintings: which one it is cut from ──────────────────────
+//
+// The same refusal as above, one level up. Every slot on a contact sheet also
+// keeps a single-icon still of its own, so 56 files under images/ui/ are painted
+// TWICE — and which painting a file was cut from used to be whichever this
+// script happened to cut LAST. A full run cuts `grid-*` before `still-*`, so there
+// the stills won; the Art Desk slices one painting at a time, so there it was
+// whatever it touched last. That is how the nine cells of `grid-ui-objects-2`
+// came to ship from the grid, while the next full run would have swapped all
+// nine for their stills' entirely different designs — a cyan gem for the ruby —
+// and nothing in any diff would have said so.
+//
+// So the answer is written down: `UI_CUT_FROM` in `src/game/artSheet.ts`,
+// rendered into `art-sheets/cut-from.json` by `pnpm art:prompts`. A file that
+// two sheets paint is cut ONLY from the painting that names, in whatever order
+// the inputs arrive, and a file two sheets paint that nothing settles is cut
+// from NEITHER, loudly — picking one would be this script inventing an answer
+// only the person who painted them can give.
+const CUT_FROM = join(ROOT, 'art-sheets', 'cut-from.json')
+// For comparing the two paintings of a slot side by side — never for shipping.
+const IGNORE_CUT_FROM = flag('--ignore-cut-from')
+if (IGNORE_CUT_FROM && OUT_ROOT === resolve(ROOT, 'public')) {
+  console.error('--ignore-cut-from cuts BOTH paintings of a slot and the one cut last wins, which')
+  console.error('is exactly the accident cut-from.json exists to prevent. Use it with --out <scratch>')
+  console.error('to put the two side by side, never into public/.')
+  process.exit(1)
+}
+const cutFrom = (() => {
+  try {
+    const r = JSON.parse(readFileSync(CUT_FROM, 'utf-8'))
+    return r && typeof r.targets === 'object' ? r.targets : null
+  } catch {
+    return null
+  }
+})()
+/** target → the stem of every sheet in the index that paints it */
+const painters = new Map()
+for (const t of TARGETS) {
+  for (const c of t.cells) {
+    if (!c.target) continue
+    painters.set(c.target, (painters.get(c.target) ?? new Set()).add(t.stems[0]))
+  }
+}
+/**
+ * May the painting of `stem` write `target`? `{ ok: true }`, or `{ ok: false,
+ * owner }` where `owner` is the stem the file IS cut from — null when two sheets
+ * paint it and nothing (or a stale cut-from.json) settles which.
+ */
+const cutsFrom = (target, stem) => {
+  const who = painters.get(target)
+  if (IGNORE_CUT_FROM || !who || who.size < 2) return { ok: true }
+  const owner = cutFrom?.[target]?.from
+  if (owner && who.has(owner)) return owner === stem ? { ok: true } : { ok: false, owner }
+  return { ok: false, owner: null, who: [...who] }
+}
+{
+  const twice = [...painters].filter(([, s]) => s.size > 1).map(([t]) => t)
+  const open = twice.filter((t) => !cutsFrom(t, '').owner && !IGNORE_CUT_FROM)
+  if (twice.length && !cutFrom && !IGNORE_CUT_FROM) {
+    console.warn(`\n! ${relative(ROOT, CUT_FROM)} is missing — run pnpm art:prompts. Until it`
+      + ` exists, none of the ${twice.length} files that two sheets paint is cut from either.`)
+  } else if (open.length) {
+    console.warn(`\n! ${open.length} file(s) are painted by two sheets and ${basename(CUT_FROM)} settles`
+      + ' neither; they are refused below. Say which in UI_CUT_FROM (src/game/artSheet.ts),'
+      + ' then run pnpm art:prompts.')
+  }
+}
+
 // ─── Chrome, for decode / crop / WebP encode ────────────────────────────────
 
 const chromePath = CHROME_CANDIDATES.find((p) => existsSync(p))
@@ -509,6 +594,9 @@ const freshness = (file, sheet) => {
 
 let written = 0
 let skipped = 0
+// Paintings every one of whose files is cut from another painting — see "One
+// file, two paintings". Nothing wrong with them; they are simply not the source.
+let superseded = 0
 // The sheets refused above for having more than one return in the input are
 // already counted, so the run exits non-zero and the tally names them.
 let failed = AMBIGUOUS.size
@@ -577,6 +665,42 @@ try {
     // Reported once, up front, with every file that claims it.
     if (AMBIGUOUS.has(sheet.id)) continue
 
+    // The files this painting paints that are cut from ANOTHER painting — see
+    // "One file, two paintings". Settled elsewhere is not an error; unsettled is.
+    const notMine = new Map()
+    for (const c of sheet.cells) {
+      if (!c.target || notMine.has(c.target)) continue
+      const r = cutsFrom(c.target, sheet.stems[0])
+      if (!r.ok) notMine.set(c.target, r)
+    }
+    if (notMine.size) {
+      const all = new Set(sheet.cells.filter((c) => c.target).map((c) => c.target))
+      const open = [...notMine].filter(([, r]) => !r.owner)
+      const elsewhere = [...notMine].filter(([, r]) => r.owner)
+      const name = (t) => basename(t).replace(/\.[^.]+$/, '')
+      console.log(`\n${basename(file)} → "${sheet.id}"`)
+      if (elsewhere.length) {
+        const owners = [...new Set(elsewhere.map(([, r]) => r.owner))]
+        console.log(`  · ${elsewhere.length === all.size ? 'superseded — ' : ''}${elsewhere.length} of the`
+          + ` ${all.size} file(s) it paints ${elsewhere.length === 1 ? 'is' : 'are'} cut from`
+          + ` ${owners.length === 1 ? owners[0] : `${owners.length} other paintings`}, not from this one`
+          + ` (${relative(ROOT, CUT_FROM)}): ${elsewhere.map(([t]) => name(t)).join(', ')}.`)
+      }
+      for (const [t, r] of open) {
+        console.error(`  ✗ ${t} — ${r.who.join(' and ')} both paint it, and nothing settles which it is`
+          + ' cut from. Not written from either: say which in UI_CUT_FROM (src/game/artSheet.ts), then'
+          + ' run pnpm art:prompts.')
+        failed++
+      }
+      if (notMine.size === all.size) {
+        if (!open.length) {
+          console.log('    Nothing to write. To ship this painting instead, switch the slot in UI_CUT_FROM.')
+          superseded++
+        }
+        continue
+      }
+    }
+
     // A painting of a drawing that has since moved is not this drawing's
     // painting — see "The receipt" above.
     const fresh = freshness(file, sheet)
@@ -587,6 +711,22 @@ try {
     }
     if (!fresh.ok) console.warn(`\n  ! ${basename(file)} — ${fresh.why.split('\n')[0]} Slicing anyway (--stale-ok).`)
     if (fresh.warn) console.warn(`  ! ${fresh.warn}`)
+
+    // The DRAWING this was painted over, decoded beside it. The key asks it
+    // whether a panel's subject is itself pink or purple — "Whose magenta is
+    // it", in the cut below. No reference on disk (or one of another size) and
+    // every panel is keyed the way it always was.
+    const refFile = referenceOf(sheet)
+    await send('Runtime.evaluate', {
+      expression: refFile ? `(async () => {
+        globalThis.__ref = null;
+        const img = new Image();
+        img.src = 'data:image/png;base64,${readFileSync(refFile).toString('base64')}';
+        await img.decode();
+        if (img.naturalWidth === ${sheet.width} && img.naturalHeight === ${sheet.height}) globalThis.__ref = img;
+      })()` : 'globalThis.__ref = null',
+      awaitPromise: true
+    })
     // Held, not written: the receipt records what was actually CUT, and this
     // painting can still be refused below (a re-composed grid, a shape that
     // cannot be corrected, painted-on rules). Writing it here recorded a cut
@@ -834,7 +974,67 @@ try {
           };
           const inkV = ink(W, H, (x, y) => y * W + x, ${sheet.cols});
           const inkH = ink(H, W, (y, x) => y * W + x, ${sheet.rows});
-          return JSON.stringify({ cols: colsN, rows: rowsN, W, H, hex, isMagenta, inkV, inkH });
+
+          // ── Does the DRAWING itself run across its own cut lines? ──
+          //
+          // How clean the NOMINAL cut lines are, on the return and on the
+          // reference it was painted over: the cleanest line within two pixels
+          // of each cut, and the worst cut of the lot. Used only when the count
+          // above disagrees with the manifest — see "a subject that crosses its
+          // own cut line" where the grid is judged.
+          //
+          // Ground here is MAGENTA and nothing else. The count above also takes
+          // any colour on the outer ring as ground (a drawn divider reaching the
+          // edge is furniture), and a wing that touches the edge of the image
+          // puts the wing's own cream on that ring: measured that way the moth's
+          // reference read 98.4 % clean when three of its cuts are 69-75 %.
+          const worstCut = (n, m, parts, lineBg) => {
+            let worst = 1;
+            for (let i = 1; i < parts; i++) {
+              const a0 = Math.round((n * i) / parts);
+              let best = 0;
+              for (let o = -2; o <= 2; o++) {
+                const a = a0 + o;
+                if (a >= 0 && a < n) best = Math.max(best, lineBg(a));
+              }
+              worst = Math.min(worst, best);
+            }
+            return worst;
+          };
+          const magentaLine = (m, at) => (a) => {
+            let bg = 0;
+            for (let b = 0; b < m; b++) {
+              const i = at(a, b) * 4;
+              if (d[i + 3] < 8 || (d[i + 1] < 70 && d[i] > 190 && d[i + 2] > 190)) bg++;
+            }
+            return bg / m;
+          };
+          const nomClean = Math.min(
+            worstCut(W, H, ${sheet.cols}, magentaLine(H, (x, y) => y * W + x)),
+            worstCut(H, W, ${sheet.rows}, magentaLine(W, (y, x) => y * W + x)));
+          let refClean = null;
+          const REF = globalThis.__ref;
+          if (REF) {
+            const RW = REF.naturalWidth, RH = REF.naturalHeight;
+            const rcv = document.createElement('canvas');
+            rcv.width = RW; rcv.height = RH;
+            const rcx = rcv.getContext('2d');
+            rcx.drawImage(REF, 0, 0);
+            const rd = rcx.getImageData(0, 0, RW, RH).data;
+            // The reference is drawn on exact magenta, so exact magenta is its ground.
+            const refLine = (m, at) => (a) => {
+              let bg = 0;
+              for (let b = 0; b < m; b++) {
+                const i = at(a, b) * 4;
+                if (rd[i + 3] < 8 || (rd[i + 1] < 70 && rd[i] > 190 && rd[i + 2] > 190)) bg++;
+              }
+              return bg / m;
+            };
+            refClean = Math.min(
+              worstCut(RW, RH, ${sheet.cols}, refLine(RH, (x, y) => y * RW + x)),
+              worstCut(RH, RW, ${sheet.rows}, refLine(RW, (y, x) => y * RW + x)));
+          }
+          return JSON.stringify({ cols: colsN, rows: rowsN, W, H, hex, isMagenta, inkV, inkH, nomClean, refClean });
         })()`,
         returnByValue: true
       })
@@ -851,11 +1051,30 @@ try {
       // the cut lines first" — and a detector that has to agree before an
       // explicit flag takes effect is a flag that silently does nothing on the
       // one return whose rules it could not see.
-      let dropBorders = DROP_BORDERS
+      //
+      // `--drop-borders-if-ruled` is the other half, and it is what the Art
+      // Desk passes. The desk used to pass `--drop-borders` on EVERY slice, so a
+      // band of magenta 3 % of a panel wide was painted down every cut line of
+      // every return, ruled or clean — anything a painting put that close to a
+      // cut was erased with it. The moth that shipped has its wing tips sheared
+      // flat at the frame edge by exactly that band. With this flag a clean
+      // return is cut as painted, and only a return the detector finds ruled
+      // is painted out.
+      //
+      // And a painted-out cut is written into the receipt (`drop`), so a plain
+      // `pnpm slice-sheets` of the SAME bytes repeats it instead of refusing a
+      // painting the desk already accepted. That disagreement is how the desk
+      // could record `walk-moth.jpg` as cut while a full run refused it: two
+      // code paths giving two answers about one painting. The receipt line only
+      // speaks for the bytes it was written for, so a fresh return under the
+      // same name is judged on its own again.
+      const seenLine = receipt[basename(file)]
+      const acceptedRuled = !!seenLine?.drop && seenLine.painting === (fresh.own ?? revOf(file))
+      let dropBorders = DROP_BORDERS || acceptedRuled
       if (ruled.some((f) => f > 0.7)) {
         const shown = `a mark running ${ruled.filter((f) => f > 0.7).length} of the ${ruled.length}`
           + ` cut lines end to end (${ruled.map((f) => `${Math.round(f * 100)}%`).join(', ')})`
-        if (!DROP_BORDERS) {
+        if (!dropBorders && !DROP_IF_RULED) {
           console.error(`  ✗ panel borders are painted on it — ${shown}.`)
           console.error('    A return ruled like a comic strip carries the rules, and usually')
           console.error('    captions, into every frame. Nothing was written — re-generate it,')
@@ -867,13 +1086,18 @@ try {
         // Salvage: the rules lie ON the cut lines, which is ground no panel may
         // use, so painting a band of background over them costs nothing that
         // belongs to a creature — and saves a good generation from its frame.
-        console.warn(`  ! panel borders painted on it — ${shown}. Painting them out (--drop-borders).`)
+        console.warn(`  ! panel borders painted on it — ${shown}. Painting them out (`
+          + (DROP_BORDERS ? '--drop-borders' : DROP_IF_RULED ? '--drop-borders-if-ruled'
+            : `as when it was accepted, ${String(seenLine.at).slice(0, 10)} — see ${relative(ROOT, RECEIPT)}`) + ').')
         dropBorders = true
+      } else if (acceptedRuled && !DROP_BORDERS) {
+        console.log(`  · painting the cut lines out as when it was accepted (${String(seenLine.at).slice(0, 10)},`
+          + ` ${relative(ROOT, RECEIPT)}), so the same bytes cut the same way.`)
       }
 
       // The paint-out paints MAGENTA, and magenta is only free where the key
       // takes it back out. An opaque sheet is never keyed and an edge-to-edge
-      // one owns its outer band, so the band stays: the Art Desk passes
+      // one owns its outer band, so the band stays: the Art Desk used to pass
       // --drop-borders on every slice, and the door tile shipped with a magenta
       // frame welded round it. Such a sheet has no ground to draw a rule on
       // anyway — so the flag is dropped for it, and a rule the detector did
@@ -887,6 +1111,9 @@ try {
         }
         dropBorders = false
       }
+      // Recorded with the cut, so the same bytes are cut the same way by the
+      // next run that has no flag — see `--drop-borders-if-ruled` above.
+      if (dropBorders && receiptLine) receiptLine.drop = true
 
       // The two repairs that are pure geometry, done in one pass over the
       // sheet before anything is measured off it or cut out of it.
@@ -986,6 +1213,43 @@ try {
           + ` not ${wantCols}x${wantRows} — taking the first ${TAKE_ROWS} row(s),`
           + ` ${got.cols * TAKE_ROWS} panels, as the cycle.`)
         sheet = { ...sheet, cols: got.cols, rows: got.rows, frames: got.cols * TAKE_ROWS }
+      } else if (got.refClean != null && got.refClean < 0.985 && got.nomClean >= got.refClean - 0.05
+          && got.cols <= wantCols && got.rows <= wantRows
+          && wantCols % got.cols === 0 && wantRows % got.rows === 0) {
+        // ── A subject that crosses its own cut line ──
+        //
+        // The count above wants every cut line clean — 98.5 % ground — and
+        // that is right for a creature that stays in its panel. The MOTH does
+        // not: its wings run the full width of the panel in the reference
+        // itself, so every wing tip meets the next moth's, and the drawing's
+        // own cuts are only 69-75 % ground. A faithful painting of it touches
+        // in the same places — its first clean return (after the prompt fix
+        // that ended the ruled sheets) had no rule anywhere, and read "1x2"
+        // because the wings met across the vertical cuts (86-93 % ground
+        // there). It was refused as a re-composed grid and re-rolled: a
+        // generation spent on a good painting, by a check the reference itself
+        // fails. (A 1x1 reading was already cut on the nominal grid, below; a
+        // 1x2 one, which is what crossing only the vertical cuts produces, was
+        // refused.)
+        //
+        // So the nominal grid is cut after all, but only where all of it holds:
+        //   · the REFERENCE crosses its own cut lines — the painter was asked
+        //     for exactly this. Every other reference in the game is 100 %
+        //     ground on every cut, so nothing else can take this branch;
+        //   · the reading is a COARSENING of the nominal grid (a divisor of it
+        //     in both axes), which is what a subject crossing some cut lines
+        //     produces — a re-composed grid (4x6, 3x2) is not one, and is still
+        //     refused below;
+        //   · the return crosses its cut lines no more than the drawing does
+        //     (five points of margin), so what is on the line is a wing tip
+        //     where the reference has one, and not a creature re-drawn across
+        //     it — a 2x2 of double-width moths puts a body on every cut.
+        // Painted-on rules never get this far: they were judged above.
+        // The bleed eraser in the cut takes a neighbour's sliver off each edge.
+        console.warn(`  ! grid reads ${got.cols}x${got.rows}, not ${wantCols}x${wantRows} — but the drawing itself`
+          + ` runs across its own cut lines (its worst is ${(got.refClean * 100).toFixed(1)} % ground) and this`
+          + ` return crosses them no more (${(got.nomClean * 100).toFixed(1)} %). Cutting the nominal`
+          + ` ${wantCols}x${wantRows} — look at the panel edges for a neighbour's wing tip.`)
       } else {
         const n = got.cols * got.rows
         console.error(`  ✗ grid came back ${got.cols}x${got.rows} = ${n} panels,`
@@ -1049,7 +1313,8 @@ try {
       }
     }
 
-    const slices = sheet.cells.filter((c) => c.target)
+    // Minus the files another painting is the settled source of.
+    const slices = sheet.cells.filter((c) => c.target && !notMine.has(c.target))
     if (!slices.length) {
       console.log(`  (no cell on this ${sheet.kind} has a drop-in target — reference only)`)
       continue
@@ -1061,6 +1326,8 @@ try {
       letterboxed: c.letterboxed ?? null,
       sx: Math.round(c.x * sx), sy: Math.round(c.y * sy),
       sw: Math.round(c.w * sx), sh: Math.round(c.h * sy),
+      // The same panel on the reference drawing, for "Whose magenta is it".
+      rx: Math.round(c.x), ry: Math.round(c.y), rw: Math.round(c.w), rh: Math.round(c.h),
       // Square again. When the proportions drifted this is what undoes it;
       // when they did not, source and output are equal and nothing resamples.
       // A single-cell image is capped: a model handed back 1536x1536 would
@@ -1204,6 +1471,111 @@ try {
                 }
               }
             }
+            // ── Whose magenta is it ──
+            //
+            // The unmix and the spill suppression below run over EVERY pixel of
+            // the sprite, on the stated assumption that no art in the game has
+            // red and blue both above green. Pink and purple art does: the
+            // Shoebox Trial's candy-pink lid (253, 97, 144) came out of the
+            // spill pass as salmon (211, 97, 102), and its darker pinks sat just
+            // inside the unmix's reach and came out partly transparent — 6 236
+            // soft pixels in the middle of an opaque box.
+            //
+            // Restricting both passes to magenta the ground can REACH fixed the
+            // box and broke white art. A white shock ring's soft grey shadow,
+            // painted out into the ground, is magenta mixed with grey: too dark
+            // to flood through, too far from the edge to count as rim, so it
+            // stayed a magenta ring. The whole-sprite passes had been cleaning
+            // it up all along.
+            //
+            // So the DRAWING decides. A panel whose reference is itself pink or
+            // purple gets the restricted passes; every other panel keeps the
+            // whole-sprite passes it was tuned on. Measured on the drawing's
+            // solid interior only (2 px clear of the ground), and a neutral
+            // blended into magenta does not count — grey, white or black over
+            // #FF00FF keeps red and blue EQUAL, so a white glow or an ink
+            // contour's anti-aliasing never reads as pink. Over 179 drop-ins
+            // this picks out the shoebox, the fever ring, the stink haze, the
+            // shoes' pink legs and laces and the logo, and nothing white.
+            let ownPink = false;
+            const REF = globalThis.__ref;
+            if (REF && p.rw > 0 && p.rh > 0) {
+              const rc = document.createElement('canvas');
+              rc.width = p.rw; rc.height = p.rh;
+              const rcx = rc.getContext('2d');
+              rcx.drawImage(REF, p.rx, p.ry, p.rw, p.rh, 0, 0, p.rw, p.rh);
+              const rd = rcx.getImageData(0, 0, p.rw, p.rh).data;
+              const RW = p.rw, RH = p.rh;
+              const ground = (x, y) => {
+                if (x < 0 || y < 0 || x >= RW || y >= RH) return true;
+                const i = (y * RW + x) * 4;
+                return rd[i + 1] < 70 && rd[i] > 190 && rd[i + 2] > 190;
+              };
+              let solid = 0, pink = 0;
+              for (let y = 0; y < RH; y++) {
+                for (let x = 0; x < RW; x++) {
+                  if (ground(x, y)) continue;
+                  let near = false;
+                  for (let s = 1; s <= 2 && !near; s++) {
+                    near = ground(x - s, y) || ground(x + s, y) || ground(x, y - s) || ground(x, y + s);
+                  }
+                  if (near) continue;
+                  const i = (y * RW + x) * 4, r = rd[i], g = rd[i + 1], b = rd[i + 2];
+                  solid++;
+                  if (Math.min(r, b) - g > 30 && Math.abs(r - b) > 25) pink++;
+                }
+              }
+              ownPink = solid > 0 && pink / solid >= 0.02;
+            }
+
+            // Where magenta that needs removing can be, on a pink subject: it is
+            // CONNECTED to the ground — a halo painted over it, a JPEG fringe
+            // along the cut. Flood from the keyed ground through pixels that
+            // carry magenta's signature (red and blue above green) and are LIGHT,
+            // and stop at anything dark: the house style puts a fat ink contour
+            // round every shape, so the subject's own pinks are never reached.
+            // Pixels hard against the ground (the rim) stay covered either way,
+            // because that is where a JPEG's chroma smear is.
+            let reach = null;
+            if (ownPink) {
+              reach = new Uint8Array(N);
+              const stack = [];
+              for (let k = 0; k < N; k++) if (bg[k]) { reach[k] = 1; stack.push(k); }
+              const passable = (k) => {
+                const i = k * 4, r = d[i], g = d[i + 1], b = d[i + 2];
+                const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                return Math.min(r, b) - g > 10 && luma > 80;
+              };
+              while (stack.length) {
+                const k = stack.pop();
+                const x = k % W;
+                const next = [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W];
+                for (const n of next) {
+                  if (n < 0 || n >= N || reach[n]) continue;
+                  if (!passable(n)) continue;
+                  reach[n] = 1;
+                  stack.push(n);
+                }
+              }
+            }
+            const RIM = 3;
+            const rimOf = () => {
+              // Within RIM pixels of anything transparent right now.
+              let ring = new Uint8Array(N);
+              for (let k = 0; k < N; k++) if (d[k * 4 + 3] < 8) ring[k] = 1;
+              for (let pass = 0; pass < RIM; pass++) {
+                const grown = ring.slice();
+                for (let k = 0; k < N; k++) {
+                  if (ring[k]) continue;
+                  const x = k % W;
+                  if ((x > 0 && ring[k - 1]) || (x < W - 1 && ring[k + 1])
+                    || (k >= W && ring[k - W]) || (k + W < N && ring[k + W])) grown[k] = 1;
+                }
+                ring = grown;
+              }
+              return ring;
+            };
+
             // ── Unmix the soft edge from the magenta ──
             //
             // A hard key only removes what IS the ground. The moon is painted
@@ -1221,8 +1593,12 @@ try {
             // is exactly the case the clustering gate rejects.
             if (keyed > N_PIX * 0.03) {
               const LO = 60, HI = 210;
+              const rim0 = reach && rimOf();
               for (let i = 0; i < d.length; i += 4) {
                 if (d[i + 3] < 8) continue;
+                // On a pink subject, only magenta the ground can reach — see
+                // "Whose magenta is it".
+                if (reach && !reach[i >> 2] && !rim0[i >> 2]) continue;
                 const dist = Math.abs(d[i] - 255) + d[i + 1] + Math.abs(d[i + 2] - 255);
                 if (dist >= HI) continue;
                 if (dist <= LO) { d[i + 3] = 0; keyed++; continue; }
@@ -1336,8 +1712,11 @@ try {
             // what the glow was supposed to be. Warm art is untouched — cream
             // and tan have blue BELOW green, so they show no excess at all.
             if (keyed > N_PIX * 0.03) {
+              const rim1 = reach && rimOf();
               for (let i = 0; i < d.length; i += 4) {
                 if (d[i + 3] < 8) continue;
+                // A pink subject's own pinks and purples are not spill.
+                if (reach && !reach[i >> 2] && !rim1[i >> 2]) continue;
                 const g = d[i + 1];
                 const spill = Math.min(d[i], d[i + 2]) - g;
                 if (spill <= 0) continue;
@@ -2156,6 +2535,7 @@ try {
 
   console.log(`\n${DRY ? 'would write' : 'wrote'} ${written} file(s)`
     + `${skipped ? `, skipped ${skipped} empty` : ''}`
+    + `${superseded ? `, ${superseded} painting(s) superseded (${basename(CUT_FROM)})` : ''}`
     + `${failed ? `, ${failed} FAILED` : ''}`)
   if (written && !DRY) {
     console.log('\nTo see it: open the game with  ?art=on   (remembered; ?art=off reverts).')

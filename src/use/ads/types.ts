@@ -70,17 +70,16 @@ export interface AdProvider {
    */
   readonly ownsAdBlockUi?: boolean
   /**
-   * Opt-in: the provider mutes the game's audio + flips the pause gate
-   * ITSELF, only once the interstitial genuinely opens — by invoking the
-   * `onImpression` callback passed to `showMidgameAd`. Left falsy (the
-   * default) means `useAds` kills audio up front, before the SDK call.
-   *
-   * Why it exists: some SDKs (Yandex) report a no-fill by flashing the ad
-   * container open and closing it immediately — if we'd already killed the
-   * audio up front we'd have cut the win/lose result stinger for an ad the
-   * player never actually saw. Deferring the mute to the real `onOpen` means
-   * a no-fill leaves the sound untouched. GamePix-style SDKs that resolve
-   * before the ad closes MUST keep the up-front kill, so this stays opt-in.
+   * Informational only — `useAds` no longer branches on it. Every provider
+   * now gets the same treatment (`useAds.runAd`): audio is killed UP FRONT,
+   * before the SDK call, and again on the `onImpression` edge, and an ad that
+   * opens after the stuck-ad cap re-takes the gate. It used to mean: the
+   * provider mutes the game's audio + flips the pause gate itself, only once
+   * the interstitial genuinely opens, by invoking `onImpression` — so a
+   * Yandex-style no-fill (container flashed open and shut) would not cut the
+   * result stinger. In practice `useAds` killed up front on that branch too,
+   * and "silent for a break that never showed" is the safe side of that
+   * trade: sound under an ad is a graded rejection, a clipped stinger is not.
    */
   readonly managesMidgameAudio?: boolean
   init: () => Promise<void>

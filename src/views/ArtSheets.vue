@@ -6,7 +6,8 @@ import {
 } from '@/game/artSheet'
 import { paintBug, paintBoss, paintSegment, BUG_R_FRAC, SEGMENT_ART_BOX } from '@/game/bugArt'
 import { paintShoe } from '@/game/footArt'
-import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
+import { paintFloorTile, FLOOR_TILE_PX, type FloorRef } from '@/game/floorArt'
+import type { FloorId } from '@/game/floors'
 import {
   isEggPropId, paintCoin, paintEggProp, paintHaze, paintHazard, paintPod, paintSaltBurst
 } from '@/game/propArt'
@@ -15,7 +16,7 @@ import {
   paintBanner, paintChest, paintShockRing, paintSplat, paintUiIcon,
   SPLAT_REACH, SPLAT_REF_SEEDS, UI_ICON_IDS, type SplatSheetId, type UiIconId
 } from '@/game/uiArt'
-import { paintSmokeRef } from '@/use/useVfx'
+import { paintGooDropRef, paintSmokeRef } from '@/use/useVfx'
 import { shoeSpec, type ShoeId } from '@/game/shoes'
 import { bugSpec, type BugId } from '@/game/bugs'
 import type { BossId } from '@/game/bosses'
@@ -219,8 +220,16 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
       const tile = document.createElement('canvas')
       tile.width = FLOOR_TILE_PX
       tile.height = FLOOR_TILE_PX
-      const w = Number(s.id.slice('floor-'.length)) as WorldId
-      paintFloorTile(tile.getContext('2d')!, w)
+      // A `bg` sheet is one of two things, and this used to assume the first:
+      // a world's LEAD tile, whose id is `floor-<w>`, or one of the other
+      // thirty-six level floors, whose id is the floor's own (`picnic-planks`).
+      // `Number('-planks')` is NaN, `FLOORS[NaN]` is undefined, and the export
+      // died on the first sheet after them with `reading '0'`.
+      // `floorOf` already takes either, so hand it the right one.
+      const ref: FloorRef = s.id.startsWith('floor-')
+        ? (Number(s.id.slice('floor-'.length)) as WorldId)
+        : (s.id as FloorId)
+      paintFloorTile(tile.getContext('2d')!, ref)
       ctx.drawImage(tile, 0, 0, s.w, s.h)
       break
     }
@@ -320,6 +329,14 @@ const renderStillAlpha = (s: StillSpec, cycle = 0): HTMLCanvasElement => {
         }
         case 'smoke':
           paintSmokeRef(ctx, half * 0.94)
+          break
+        case 'goo-drop':
+          // A 2:1 panel, and the droplet's `r` is HALF ITS HEIGHT — the shape
+          // spans `4r` by `2r`, so this fills the frame end to end exactly as the
+          // runtime's 192x96 bake does. White and solid, because the sheet is
+          // greyscale by contract and the game tints every droplet to the goo it
+          // came out of.
+          paintGooDropRef(ctx, s.h * 0.48)
           break
       }
       break

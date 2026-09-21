@@ -132,7 +132,20 @@ export default {
     'starsTotal': 'スター{n}こ',
     'recordScore': '{n}てん',
     'recordBeat': 'まえのきろく: {n}',
-    'chestCoins': '+{n}コイン'
+    'chestCoins': '+{n}コイン',
+    'move': 'あたらしいわざ！'
+  },
+  'moves': {
+    'spin': 'かかとスピン',
+    'skid': 'すべりこみ',
+    'quake': 'じしんストンプ',
+    'echo': 'エコーストンプ'
+  },
+  'party': {
+    'title': 'むしパーティー！',
+    'count': '{n} ひき',
+    'best': 'ベスト：{n}',
+    'newBest': 'パーティーのベスト こうしん！'
   },
   'fever': {
     'filling': 'スプラットフィーバー: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'つぶした虫',
     'starsEarned': '3つ中 {n} スター',
     'rankOf': '/ {n}',
-    'worldUnlocked': '{n} かいほう！'
+    'worldUnlocked': '{n} かいほう！',
+    'peekNext': '{n} をのぞく',
+    'secondWind': 'セカンドウインド：つぎはビンがいっぱいでスタート',
+    'hintSlam': 'ヒント：ながおしでカラをつぶそう',
+    'hintAvoid': 'ヒント：トゲトゲはふまないで',
+    'missed': 'あと {n} ひき'
   },
   'leaderboard': {
     'title': 'ランキング',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'どこをタップしても足が一番近い虫へ飛ぶ。'
   },
   'loading': {
-    'boo': 'ばあ！',
-    'laugh': 'ヒヒッ！',
+    'uhOh': 'やばっ！',
+    'missed': 'はずれ〜！',
     'tooLong': 'まだ読み込み中… 通信を確認してみて'
   },
   'saveStatus': {

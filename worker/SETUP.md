@@ -1,13 +1,29 @@
-# Leaderboard setup, start to finish
+# Bug Crunch leaderboard — setup, start to finish
 
 Every command below is run on Windows in PowerShell, from the repo root unless
-it says otherwise. You already have a Cloudflare account logged in on the web —
-the CLI still needs its own one-time authorisation (step 2), which is a single
-click in the browser tab it opens.
+it says otherwise.
 
-Nothing here touches the game's behaviour until the very last step: until
-`VITE_LEADERBOARD_URL` is set, the client treats the board as "feature off" and
-the death screen simply shows no rank.
+## Where it lives (deployed 2026-09-18)
+
+| | |
+|---|---|
+| Cloudflare account | `rodent.race.app@gmail.com` — account id `7c5ee6a28676c02440e38e4f3e7bbb15` |
+| workers.dev subdomain | `rodent-race` |
+| Worker | `bug-crunch-leaderboard` → **https://bug-crunch-leaderboard.rodent-race.workers.dev** |
+| D1 database | `bug-crunch-leaderboard`, id `a3fca06c-ee50-4763-885d-8ccd8bfd4117`, region WEUR |
+| Signed submissions | **on** — `SCORE_SECRET` on the Worker, the same value in `VITE_LEADERBOARD_SECRET` in `.env` |
+
+**Not the `hyperg8` account.** The older boards (`survivalist-leaderboard`,
+`tower-siege-leaderboard`) live on a different Cloudflare account under the
+`hyperg8` subdomain. `wrangler` on this machine logs into the rodent-race
+account, and so do the newer boards (`glyphyx-`, `merge-idle-war-`,
+`spin-and-mow-leaderboard`, `leaderboard-chaos-arena`). If `wrangler whoami`
+ever shows a different account, stop: every command below would act on the
+wrong one.
+
+Steps 1–7 below have been done. They are kept as the procedure for a rebuild
+from scratch (new account, deleted database), and steps 6 and 7 double as the
+checks to re-run after changing the Worker.
 
 ---
 
@@ -21,45 +37,24 @@ cd worker
 npm install
 ```
 
-(`pnpm install` works too if you prefer to match the main project. The lockfile
-it creates is local to `worker/`.)
-
 ## 2. Authorise the CLI
 
 ```powershell
 npx wrangler login
+npx wrangler whoami     # must say rodent.race.app@gmail.com
 ```
 
-A browser tab opens on the account you are already signed into. Click **Allow**.
-The terminal then prints `Successfully logged in`.
-
-Check it picked the right account:
-
-```powershell
-npx wrangler whoami
-```
+The login uses whichever Cloudflare account the browser is signed into at the
+moment you click **Allow** — check it before clicking.
 
 ## 3. Create the database
 
 ```powershell
-npx wrangler d1 create tower-siege-leaderboard
+npx wrangler d1 create bug-crunch-leaderboard
 ```
 
-It prints a block like this:
-
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "tower-siege-leaderboard"
-database_id = "0f2c9a51-....-............"
-```
-
-**Copy the `database_id` value** and paste it into `worker/wrangler.toml`,
-replacing `REPLACE_ME`. That one line is the only edit the file needs:
-
-```toml
-database_id = "0f2c9a51-....-............"
-```
+Copy the printed `database_id` into `worker/wrangler.toml`. That one line is the
+only edit the file needs.
 
 ## 4. Create the tables
 
@@ -67,13 +62,10 @@ database_id = "0f2c9a51-....-............"
 npm run db:init
 ```
 
-This runs `schema.sql` against the **remote** database (the real one, not the
-local emulator). Wrangler asks for confirmation before touching remote data —
-answer `y`. You should see two `CREATE TABLE` statements and one `CREATE INDEX`
-execute.
-
-Verify from the dashboard if you like: **Storage & Databases → D1 →
-tower-siege-leaderboard → Tables** should now list `scores` and `board_cache`.
+Runs `schema.sql` against the **remote** database (the real one, not the local
+emulator). Wrangler asks before touching remote data — answer `y` (or pass
+`--yes`). Three statements run: two `CREATE TABLE` (`scores`, `board_cache`) and
+one `CREATE INDEX` (`idx_scores_rank`).
 
 ## 5. Deploy
 
@@ -81,98 +73,111 @@ tower-siege-leaderboard → Tables** should now list `scores` and `board_cache`.
 npm run deploy
 ```
 
-On a brand-new account this asks you to register a `workers.dev` subdomain
-first — pick anything, it becomes part of the URL. When it finishes it prints:
-
-```
-Published tower-siege-leaderboard
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev
-```
-
-**That URL is what the game needs.** Keep it.
+It prints `https://bug-crunch-leaderboard.rodent-race.workers.dev`. That URL is
+what the game needs.
 
 ## 6. Check it is alive
 
-```powershell
-# The board — empty at this point, which is the correct answer.
-Invoke-RestMethod https://tower-siege-leaderboard.<your-subdomain>.workers.dev/top
-
-# Post a fake score and get a rank back.
-$body = @{ id = 'testplayer01'; name = 'Tester'; score = 137; wave = 21 } | ConvertTo-Json
-Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $body `
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev/score
-```
-
-The first returns `entries: {}` / `total: 0`. The second returns
-`rank: 1, best: 137, total: 1`, and re-running `/top` now shows the entry.
-
-Sanity-check the guards while you are here — both should be **rejected**:
+### Read-only
 
 ```powershell
-# 422: a score no run could produce at that wave.
-$bad = @{ id = 'testplayer01'; name = 'Cheat'; score = 999999999; wave = 3 } | ConvertTo-Json
-Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $bad `
-  https://tower-siege-leaderboard.<your-subdomain>.workers.dev/score
-
-# 429: two writes for the same id inside the 3 s cooldown.
+Invoke-RestMethod https://bug-crunch-leaderboard.rodent-race.workers.dev/top
 ```
 
-Delete the test row when you are done:
+A new board answers `{"updatedAt":…,"total":0,"entries":[],"dist":[]}`.
+
+### The one sanctioned write, then clean it up
+
+Signing is on, so a test score must carry an HMAC of `id:score:squad` made with
+the secret from `.env`. On the wire `score` is the best single-level POINT
+total and `squad` is the deepest level cleared (the column kept its name from
+the schema the other games share).
 
 ```powershell
-npx wrangler d1 execute tower-siege-leaderboard --remote `
-  --command "DELETE FROM scores WHERE id = 'testplayer01'"
-# The cached blob still holds the old table until the next write rebuilds it:
-npx wrangler d1 execute tower-siege-leaderboard --remote `
-  --command "DELETE FROM board_cache"
+$base   = 'https://bug-crunch-leaderboard.rodent-race.workers.dev'
+$secret = (Select-String -Path .env -Pattern '^VITE_LEADERBOARD_SECRET=(.*)$').Matches[0].Groups[1].Value.Trim()
+$id = 'testplayer01'; $score = 13700; $squad = 12
+$hmac = [System.Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($secret))
+$sig  = -join ($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes("${id}:${score}:${squad}")) | ForEach-Object { $_.ToString('x2') })
+$body = @{ id = $id; name = 'Tester'; score = $score; squad = $squad; sig = $sig } | ConvertTo-Json
+Invoke-RestMethod -Method Post -ContentType 'application/json' -Body $body "$base/score"
 ```
+
+It returns `rank: 1, best: 13700`. `total` can read `0` for up to an hour: the
+histogram it is summed from is materialised on a 60-minute clock (see below),
+and the client already copes with a board whose total lags its rows.
+
+The guards, each of which must be **refused** (`Invoke-RestMethod` throws on a
+4xx — that is the pass):
+
+| Request | Expected |
+|---|---|
+| the same body without `sig` | `401 bad signature` |
+| a `sig` that is not the HMAC | `401 bad signature` |
+| `score` above 10 000 000 or `squad` above 1 000 | `422 implausible` |
+| a second valid write for the same id inside 3 s | `429 too fast` |
+
+Then delete the test row, and the materialised board that may still hold it:
+
+```powershell
+cd worker
+npx wrangler d1 execute bug-crunch-leaderboard --remote `
+  --command "DELETE FROM scores WHERE id = 'testplayer01'; DELETE FROM board_cache;"
+npx wrangler d1 execute bug-crunch-leaderboard --remote `
+  --command "SELECT (SELECT COUNT(*) FROM scores) AS scores, (SELECT COUNT(*) FROM board_cache) AS cache"
+```
+
+The last line must print `scores: 0, cache: 0`. The edge copy of `/top` expires
+by itself within 60 s.
+
+(The deploy on 2026-09-18 ran exactly this: 401 / 401 / 422 / 200 / 429, then
+the delete, then `0 / 0`.)
 
 ## 7. Point the game at it
 
-In the repo root, edit `.env`:
+`.env` (repo root):
 
 ```
-VITE_LEADERBOARD_URL=https://tower-siege-leaderboard.<your-subdomain>.workers.dev
+VITE_LEADERBOARD_URL=https://bug-crunch-leaderboard.rodent-race.workers.dev
+VITE_LEADERBOARD_SECRET=<the SCORE_SECRET value>
 ```
 
-Leave `VITE_LEADERBOARD_SECRET` empty for now (see "Signed submissions" below).
+Vite loads `.env` for **every** mode, so these two lines switch the live board
+on for `pnpm dev` and for every portal build — CrazyGames, GamePix, Playgama,
+GameMonetize, GameDistribution, itch, Glitch, Wavedash, Tauri — which then post
+real scores.
 
-Vite loads `.env` for **every** build mode, so this one line switches the board
-on for all of them. Two consequences worth knowing:
+**Poki and Yandex are the exceptions**, and their `.env.<mode>.local` files
+blank both variables again:
 
-* **You do not need to touch `csp.ts`.** `buildCsp()` reads this same variable
-  and folds the origin into `connect-src` itself, so the policy can never fall
-  out of step with the endpoint.
-* **Yandex is the exception.** Their moderator rejects third-party storage
-  endpoints found anywhere in the bundle, so `buildCsp()` deliberately omits the
-  host on Yandex builds. Turn the client off there too, so it does not fire a
-  request the policy will block — add this line to `.env.yandex.local`:
+* **Poki** forbids every external runtime request.
+* **Yandex**'s moderators reject third-party storage URLs anywhere in the bundle
+  or the CSP ("Service storage URL detected").
 
-  ```
-  VITE_LEADERBOARD_URL=
-  ```
+With the URL empty neither build makes a request. They ship the **seeded** board
+instead (see "The baked boards" below). The secret is blanked too, so it does
+not ship in bundles that have no use for it.
 
-Now run the game:
+You do not need to touch `csp.ts`: `buildCsp()` reads the same variable and
+folds its origin into `connect-src` (and leaves it out on Yandex).
 
-```powershell
-cd ..
-pnpm dev
-```
-
-Play until you die (or use the cheat sequence — type `cmarc`, then
-Ctrl+Shift+Alt+W to call waves). The defeat screen should show **SCORE** and
-**RANK**. In devtools' Network tab you should see exactly one request to the
-Worker: a `POST /score` on a personal record, or a `GET /top` when it is not.
+To see it working, `pnpm dev`, play a level to its result screen, and watch the
+Network tab: exactly one request to the Worker — a `POST /score` on a personal
+record, or a `GET /top` when it is not. **`pnpm dev` posts to the production
+board**, so a cheat-assisted dev run lands on the real board. Point a dev
+session at a local Worker (below) when that matters.
 
 ## 8. Ship it
 
-Nothing extra. `pnpm build:crazy-web`, `build:gamepix`, and the rest pick the
-variable up from `.env` automatically. To confirm before uploading, grep the
-built HTML for the origin — it must be present in the CSP meta tag:
+Nothing extra. `pnpm build:crazy-web`, `build:gamepix` and the rest pick the
+variable up from `.env`. To confirm before uploading, grep the built HTML for
+the origin — it must be present in the CSP meta tag:
 
 ```powershell
-Select-String -Path dist\index.html -Pattern "workers.dev"
+Select-String -Path dist\index.html -Pattern "rodent-race.workers.dev"
 ```
+
+and **absent** from a Poki or Yandex build.
 
 ---
 
@@ -187,31 +192,40 @@ npm run dev               # http://localhost:8787
 ```
 
 Then set `VITE_LEADERBOARD_URL=http://localhost:8787` in the game's `.env` while
-you work. The edge cache is a no-op locally, so every `/top` hits the database —
-that is expected and does not reflect production behaviour.
+you work. A local Worker has no `SCORE_SECRET` unless you give it one (a
+`worker/.dev.vars` file with `SCORE_SECRET=…`); without it, signed requests are
+simply accepted. The edge cache is a no-op locally, so every `/top` hits the
+database — expected, and not what production does.
 
-## Signed submissions (optional)
+## Signed submissions
 
-Raises the bar against hand-rolled POSTs. It does not make the board
+On. The Worker demands a signature whenever `SCORE_SECRET` exists, and the
+client sends one whenever `VITE_LEADERBOARD_SECRET` is set; the signed message
+is `${id}:${score}:${squad}` (HMAC-SHA256, lowercase hex) on both sides.
+
+It raises the bar against hand-rolled POSTs. It does not make the board
 tamper-proof: the secret ships inside a public bundle, so a determined player
-can extract it. The score bound in `plausible()` is what actually caps the
-damage.
+can extract it. The bound in `plausible()` is what actually caps the damage.
+
+To rotate it, change both sides together — an old build still in a portal's
+cache will get `401` on its next write until it is replaced:
 
 ```powershell
 cd worker
-npx wrangler secret put SCORE_SECRET     # paste any long random string
-npm run deploy
+npx wrangler secret put SCORE_SECRET     # paste the new long random string
 ```
 
-Then put the **same** string in the repo root `.env`:
+then put the same string in `.env` and rebuild every live portal build.
 
-```
-VITE_LEADERBOARD_SECRET=<the same string>
-```
+## The plausibility bound
 
-Both sides must be set or neither: the Worker only demands a signature when
-`SCORE_SECRET` exists, and the client only sends one when
-`VITE_LEADERBOARD_SECRET` does.
+`plausible()` refuses a score above `MAX_SCORE` (10 000 000) or a level above
+`MAX_LEVEL` (1 000). Real aces post in the tens of thousands; even a physically
+impossible run — every squish on the richest bug at a ×50 chain in Fever, plus a
+boss — lands around a million. The bound is a cap on the absurd, set where no
+honest run can reach it, because a false reject silently loses somebody's
+genuine best. (It was `MAX_STAGE = 2 000` until the first deploy, inherited from
+a board whose score was a stage count, and would have refused every good run.)
 
 ## Locking down origins (optional, later)
 
@@ -230,176 +244,104 @@ Then `npm run deploy` again.
 ## Watching it in production
 
 * **Live logs:** `npx wrangler tail` (from `worker/`), or the dashboard under
-  **Workers & Pages → tower-siege-leaderboard → Logs**.
-* **Quota use:** same page, **Metrics**. The numbers to watch are requests/day
-  (100k) and D1 rows written/day (100k). Reads are effectively free under this
-  design — see the table in `README.md`.
-* **The data:** **Storage & Databases → D1 → tower-siege-leaderboard → Console**
-  lets you run SQL straight from the browser, e.g.
+  **Workers & Pages → bug-crunch-leaderboard → Logs**.
+* **Quota use:** same page, **Metrics**. The free tier's numbers to watch are
+  requests/day (100k) and D1 rows written/day (100k). The rodent-race account
+  carries five boards, and they share one allowance.
+* **The data:** **Storage & Databases → D1 → bug-crunch-leaderboard → Console**
+  runs SQL straight from the browser, e.g.
   `SELECT * FROM scores ORDER BY score DESC LIMIT 20;`
 
-## Clearing the rows an unstable identity left behind
-
-If the board already holds several rows for the same person — the symptom of
-the pre-identity build, where each record could mint a fresh id — the honest fix
-is to empty it and let the new build repopulate. The rows cannot be merged
-reliably: they are all named `Anon`, so there is nothing to tell one player's
-duplicates from another player's rows.
+## Emptying the board
 
 ```powershell
 cd worker
-npx wrangler d1 execute tower-siege-leaderboard --remote --command "DELETE FROM scores"
-# The materialised top-N is a separate row and does not clear itself.
-npx wrangler d1 execute tower-siege-leaderboard --remote --command "DELETE FROM board_cache"
+npx wrangler d1 execute bug-crunch-leaderboard --remote --command "DELETE FROM scores"
+# The materialised top-N and histogram are separate rows and do not clear themselves.
+npx wrangler d1 execute bug-crunch-leaderboard --remote --command "DELETE FROM board_cache"
 ```
 
-If you would rather keep the highest score per name, and you accept that every
-`Anon` collapses into one row:
-
-```sql
-DELETE FROM scores WHERE id NOT IN (
-  SELECT id FROM scores s1
-  WHERE s1.score = (SELECT MAX(s2.score) FROM scores s2 WHERE s2.name = s1.name)
-  GROUP BY s1.name
-);
-DELETE FROM board_cache;
-```
-
-## The histogram on `/top`, and the baked board
+## The histogram on `/top`
 
 `GET /top` returns the published rows **and** a histogram of every score:
 
 ```json
 { "updatedAt": 1757254334067, "total": 2422,
   "entries": [ ... 100 rows ... ],
-  "dist": [[134,1],[74,1],[72,1], ...] }
+  "dist": [[13625,1],[12825,1],[11650,1], ...] }
 ```
 
-`dist` is `[score, howManyPlayersHaveIt]`, ordered score-descending, so the
-client can compute the rank this Worker would — `COUNT(*) WHERE score > ?` plus
-one — for **any** score, without asking. That is what removes `#100+` from the
-game: the rows stop at 100, and on a board of thousands the hundredth row sits
-around stage 13, so almost every player is below the cut and could otherwise
-only be told "past the end".
+`dist` is `[score, howManyPlayersHaveIt]`, score-descending, so the client can
+compute the rank this Worker would — `COUNT(*) WHERE score > ?` plus one — for
+**any** score without asking. That is what removes `#100+` from the game: the
+rows stop at 100, and on a board of thousands almost every player is below the
+cut.
 
 The histogram is materialised into `board_cache` under the id `dist` and rebuilt
-only when that row is older than `DIST_TTL_MS` (one hour). This matters: its
-`GROUP BY score` is the one query here that reads every row, so it must never
-run per request or on the write path.
+only when that row is older than `DIST_TTL_MS` (one hour); the top-100 under
+`top` on a five-minute clock. Its `GROUP BY score` is the one query here that
+reads every row, so it must never run per request or on the write path.
 
-### Poki and Yandex bake it at build time
+## The baked boards
 
-Both portals forbid the request — Poki bans every external runtime request,
-Yandex's moderators reject third-party storage URLs — so both builds ship
-`VITE_LEADERBOARD_URL` empty and make no call at all. They still show a
-leaderboard, from a copy of this response embedded in the bundle. Every other
-build carries the same copy as its offline fallback.
+Every build carries a board in the bundle, as `virtual:leaderboard-snapshot`
+(`vite.config.ts`), but not the same one:
 
-```bash
-pnpm leaderboard:snapshot        # writes data/leaderboard-snapshot.json
-pnpm build:poki                  # refreshes it first, then builds
-```
+| Build | Baked board | Why |
+|---|---|---|
+| Poki, Yandex (URL empty) | `data/leaderboard-seed.json` — **seeded**, modelled from a retention curve (`pnpm leaderboard:seed`, deterministic, committed) | They can never post, so the baked copy is their entire board forever. A snapshot of the live board would rank them against a survivorship sample. |
+| Everything else (URL set) | `data/leaderboard-snapshot.json` — a copy of the live `/top` | The bottom rung of the offline ladder (live fetch → per-device cache → this), shown when the fetch fails and the device has no cache yet. |
 
-`build:poki` and `build:yandex` refresh it themselves (with `--soft`, so an
-unreachable board can never break a build), and `vite.config.ts` refreshes it
-for anyone running `vite build` directly — skipping if the file was fetched in
-the last ten minutes, so one build makes one request. If the Worker is
-unreachable the committed file is used; if there is no file the game ships with
-no leaderboard, exactly as it did before. **Commit the JSON** — that is what
-makes an offline build reproducible.
+`pnpm leaderboard:snapshot` writes the snapshot from
+`DEFAULT_SOURCE` in `scripts/leaderboard-snapshot.mjs` (the rodent-race URL;
+override with `LEADERBOARD_SNAPSHOT_URL`). A live build refreshes it itself when
+the file is more than ten minutes old, and never fails on it.
 
-Set `LEADERBOARD_SNAPSHOT_URL` to point the refresh at a staging Worker.
+**Until real players post, there is no snapshot.** A fresh board has an empty
+histogram, which the script refuses to bake ("/top had no usable histogram
+buckets"), so live builds made now ship without the offline rung: the live board
+works, but a player whose fetch fails on a device with no cache sees no board.
+Once the board has players, run `pnpm leaderboard:snapshot` and **commit the
+JSON** — that is what makes an offline build reproducible.
 
-## Playgama builds post to two boards
+## Playgama's own leaderboard
 
-On Playgama the best score also goes to the portal's own leaderboard through
-`bridge.leaderboard` (`useNativeLeaderboard.ts`), on the same
-only-on-an-improvement rule as the Worker. Nothing to configure and no support
-ticket: the bridge advertises what the underlying platform can do, and the call
-is skipped when the answer is no.
-
-```
-bridge.leaderboard missing            → skipped
-isSupported === false                 → skipped
-isSetScoreSupported === false         → skipped
-isMultipleBoardsSupported === true    → a board name is sent
-setScore() throws                     → logged, ignored
-```
-
-The last line is the one to expect first. Several platforms behind the bridge
-only accept scores for a board that was **created in their developer console**,
-and some only from a signed-in player. Neither is something the game can arrange
-from inside itself, so the call fails and the Worker board — which needs no
-portal cooperation at all — carries the rank on the death screen regardless.
-
-Two deliberate omissions:
-
-* **No `authorizePlayer()` call.** The bridge can prompt for a login, but a
-  sign-in dialog on the defeat screen is a worse trade than a missing row on a
-  board the player never asked about.
-* **No reading back.** The rank shown comes from the Worker, which answers the
-  same way on every platform. Two rank sources that disagree is a worse screen
-  than one that is merely ours.
-
-To check what happened on a real Playgama session, look for
-`[playgama] leaderboard.setScore skipped` in the console — absent means it went
-through. If you do create a named board in a portal console, set
-`VITE_PLAYGAMA_LEADERBOARD_NAME` to match it.
+Not wired. Bug Crunch posts only to this Worker; there is no
+`bridge.leaderboard` call.
 
 ## How a player is identified
 
-`usePlayerIdentity.ts` resolves it in tiers, best first:
+`usePlayerIdentity.ts` resolves the id in tiers, best first:
 
-1. **The portal's own player id** — Yandex `getUniqueID()`, Playgama
-   `bridge.player.id`. Stable across reinstalls and devices, and it is the same
-   id the portal's cloud save is keyed on. CrazyGames supplies a *username* but
-   no id, so its players are keyed on tier 2/3 and merely labelled with it.
-2. **The uuid in the save blob** (`ts_player_id`) — rides the cloud save, so it
+1. **The uuid in the save blob** (`bc_player_id`) — rides the cloud save, so it
    follows the player between devices.
-3. **The uuid in its own localStorage key** (`towersiege_uid`) — deliberately
-   outside the `ts_`-prefixed blob that `SaveMergePolicy` syncs, so a cloud
-   hydrate arriving with an older blob cannot replace it. This is the tier that
-   stops duplicate rows.
+2. **The uuid in its own localStorage key** (`bug-crunch_uid`) — deliberately
+   outside the `bc_`-prefixed blob the cloud save mirrors, so a hydrate arriving
+   with an older blob cannot replace it. This is the tier that stops duplicate
+   rows.
+3. **A fresh mint.**
 
-Whichever answers, the id is written back to both local homes and flushed
-synchronously — an id living only in memory until a debounce fires is an id a
-reload can lose, and a lost id is a new row.
+There is no platform-SDK tier: the portals this game ships to either expose no
+stable player id or one that changes between anonymous sessions. Whichever
+answers, the id is written back to both homes and flushed synchronously — an id
+living only in memory until a debounce fires is an id a reload can lose, and a
+lost id is a new row.
 
 ## Player names
 
 Three tiers, highest first, each in its own storage slot so a later tier can
-still take over — collapsing them into one field means whatever is written first
-wins forever:
+still take over:
 
 | Tier | Slot | Source |
 |---|---|---|
-| 1 | `ts_player_name` | chosen by the player |
-| 2 | `ts_sdk_name` | CrazyGames username, Yandex `getName()`, Playgama `player.name` |
-| 3 | `ts_anon_name` | generated: `Watcher333915` — a random word and six random digits |
+| 1 | `bc_player_name` | chosen by the player (`setPlayerName()`) |
+| 2 | `bc_sdk_name` | the CrazyGames username — the only SDK here that offers one |
+| 3 | `bc_anon_name` (+ `bug-crunch_name`) | generated once: a word and six digits, e.g. `Roamer156962` |
 
-The generated name is minted once and cached in both the save blob and a
-standalone `towersiege_name` key, so replacing the blob (a cloud hydrate) does
-not rename the player. Nothing posts as `Anon`; a board of identical
-placeholders tells a player nothing, not even which row is theirs.
+A late SDK name is corrected with one write on the next `reportRun` (it compares
+against `bc_posted_name`); a quiet SDK keeps the last known name rather than
+flipping back to the generated one. Control codes, zero-width characters and
+bidi overrides are stripped and names are capped at 16 characters — on the
+client so the player sees what the board will show, and again on the Worker.
 
-Edge cases that are handled, because each of them is a way the board ends up
-showing the wrong name:
-
-* **The SDK answers late.** `getUser()` resolves after the first death, so the
-  opening submission can go up generated. The next `reportRun` notices the name
-  no longer matches `ts_posted_name` and sends one write to correct the row —
-  otherwise it would keep the generated name until the player beat their own
-  record, which might be never.
-* **The SDK goes quiet again** (offline, signed out, a slower `getUser()`). The
-  last known SDK name is remembered, so the player does not flip back to their
-  anonymous name and rename their row on the next submission.
-* **Hostile or empty names.** Control codes, zero-width joiners and bidi
-  overrides are stripped, and a name that sanitises to nothing falls through to
-  the next tier rather than posting an empty row. Everything is capped at 16
-  characters — the generated words are all ≤ 9 so `word + six digits` never
-  truncates. The Worker repeats all of this on arrival; the client copy exists
-  so the player sees locally what the board will show.
-
-Still missing is a UI for tier 1. `setPlayerName()` is wired and validated —
-what is absent is a text field on the death screen or in the options modal to
-call it.
+There is no UI for tier 1 yet: `setPlayerName()` is wired, but nothing calls it.

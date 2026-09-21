@@ -1,9 +1,11 @@
 import { computed, ref, shallowRef } from 'vue'
 import { perfFlag } from '@/use/perfVariants'
 import {
-  blowDamage, bugSpec, resolveStomp, type BugId, type BugSpec, type StompVerdict
+  blowDamage, bugSpec, resolveStomp, FLIP_MS, KICK_SPEED, MAX_PUCKS, PINBALL_BOUNCES,
+  PUCK_BOUNCES, PUCK_FRICTION, PUCK_PIERCE, PUCK_SPEED, PUCK_STOP_SPEED,
+  type BugId, type BugSpec, type StompVerdict
 } from '@/game/bugs'
-import { blowPierce, shoeSpec, STARTER_SHOE, type ShoeId, type ShoeSpec } from '@/game/shoes'
+import { SHOES, blowPierce, shoeSpec, STARTER_SHOE, type ShoeId, type ShoeSpec } from '@/game/shoes'
 import {
   CONVEYOR_SPEED, COBWEB_HOLD_MS, HAZE_FOOT_AGILITY, HAZE_MS, HAZE_R,
   MAGNET_ARMED_MS, MAGNET_PULL, MAGNET_REACH, SALT_BURST_R, SALT_PANIC_MS,
@@ -11,16 +13,25 @@ import {
   hazardSpec, type HazardId
 } from '@/game/hazards'
 import {
-  chainBreak, chainHit, chainStep, comboMultiplier, newChain, splatWord,
-  squishScore, startFever, stepFever, juiceGain, COMBO_WINDOW_MS, FEVER,
+  chainBreak, chainHit, chainScale, chainStep, comboMultiplier, feverReady, newChain, splatWord,
+  squishScore, startFever, stepFever, juiceGain, COMBO_WINDOW_MS, FEVER, MAX_RADIUS_SCALE,
   type ChainState, type FeverState, type SplatWord
 } from '@/game/combo'
+import {
+  ECHO_MS, QUAKE_CHARGE, QUAKE_REACH, QUAKE_SPEED, QUAKE_STUN_MS, SPIN_COOLDOWN_MS,
+  SPIN_SCALE, type MoveId
+} from '@/game/moves'
+import {
+  DRAFT_PUSH, SPRINKLER_PULL, SURGE_SPEED, TWIST_AT, twistSpec, type TwistId
+} from '@/game/twists'
 import {
   BEAM_HALF, BEAM_SWEEP_MS, BEAM_TELL_MS, CARRIER_WALK_MS, CHARGE_COUNTER_HITS, CHARGE_RUN_MS,
   CHARGE_TELL_MS, EGG_JUICE, EGG_LAND_U, EGG_LAY_MS, EGG_SCORE, HATCH_SCURRY_MS,
   POD_PER_BEAT, POD_SIZE, bossSpec, type BossPhase, type BossSpec
 } from '@/game/bosses'
-import { levelSpec, worldOf, type LevelSpec } from '@/game/stages'
+import {
+  levelSpec, partySpec, worldOf, type LevelSpec, type RushShape, type RushSpec
+} from '@/game/stages'
 import { emptyTally, type RunTally } from '@/game/stars'
 import { DEFAULT_JUICE_STYLE, type JuiceStyleId } from '@/game/juiceStyle'
 
@@ -79,10 +90,9 @@ export const DOUBLE_TAP_U = 9
 /** A partial charge below this does nothing extra on release. */
 const MIN_SLAM_CHARGE = 0.34
 
-/** The heel pivot's reach, as a multiple of the shoe's stomp radius, and what
- *  it costs. It is a panic button: wide, weak, and on a cooldown. */
-const PIVOT_SCALE = 2.1
-const PIVOT_COOLDOWN_MS = 2600
+/* The heel pivot's reach and cooldown are the Heel Spin's now — `SPIN_SCALE`
+ * and `SPIN_COOLDOWN_MS` in `game/moves.ts` — because it is a trophy, not a
+ * panic button every double tap used to set off. */
 
 /** How far above the finger the foot rides on touch, u.
  *
@@ -93,6 +103,27 @@ export const TOUCH_LIFT_U = 11
 
 /** Single-Tap Mode: how far a tap may reach for the nearest body, u. */
 const AUTO_AIM_U = 26
+
+/**
+ * How far a TOUCH tap reaches for the body it nearly hit, u.
+ *
+ * ── Why a finger needs this and a mouse does not ──
+ *
+ * The lift above puts the foot 11 u over the fingertip, which is right for a
+ * player who DRAGS the shoe and wrong for the one the game actually gets: five
+ * blind testers all TAPPED, at the bug, the way anyone taps a mole. Measured
+ * against this build, the zone of taps that kill an ant then sits 43 px BELOW
+ * the ant on a 390 px phone — 10 px of room above it, 84 below — so a tap that
+ * reads as dead centre misses by two units, and a miss looks exactly like a hit.
+ *
+ * Fourteen units is a fingertip at phone scale (≈ 55 px) and half a lift plus a
+ * body. It is deliberately SHORTER than Single-Tap Mode's reach: this one rescues
+ * a tap that was already aimed at a bug, where that one plays the aiming.
+ */
+const TOUCH_SNAP_U = 14
+
+/** Each press during a spike stun knocks this much off it, ms. */
+const STUN_SHAKE_MS = 260
 
 /** A dodger notices the shadow inside this many multiples of its own size, and
  *  leaps this far after this long. */
@@ -208,6 +239,71 @@ const SLIDE_REHIT_MS = 220
 /** How much of the board's short edge a spawn starts outside it, u. */
 const SPAWN_MARGIN = 6
 
+// ─── Rush Lines ─────────────────────────────────────────────────────────────
+
+/** The snare roll: the trail draws itself and the board holds its breath, ms. */
+export const RUSH_TELL_MS = 1100
+/** The breather after a rush lands, while the director stays quiet, ms. */
+const RUSH_LULL_MS = 1400
+/**
+ * Nose-to-tail spacing down the lane, centre to centre, in body RADII (`size`).
+ * 2.2 is a hair's gap between two ants — tight enough that a sneaker stomp in
+ * the middle of the line (9 u plus each ant's own 3.2) reaches three or four of
+ * them, loose enough that the line still reads as bodies rather than a rope.
+ */
+const RUSH_GAP = 2.2
+/** A rush never fires in the first seconds of a level: the banner is still up
+ *  and the player has not found the shoe yet. */
+const RUSH_EARLIEST_MS = 2000
+/** How far the lane keeps from the foot's own row, u — a conga that walks
+ *  straight into a parked shoe is a free kill, not a set piece. */
+const RUSH_CLEAR_U = 20
+/** The ring formation: its radius round the shoe, u, and how fast it closes. */
+const RUSH_RING_R = 34
+const RUSH_RING_SPEED = 0.6
+
+// ─── Big Finish ─────────────────────────────────────────────────────────────
+
+/** How long the board keeps moving after the whole level is won, ms — the tap
+ *  finisher's scatter, and the frame the celebration is drawn over. */
+const AFTERGLOW_MS = 900
+/**
+ * …and the longer one a BOSS gets, ms.
+ *
+ * The boss's own death animation is 1.2 s of squash, roll and fade (`dying`, in
+ * `useBugCrunchArt`'s section 5), and the four beats the renderer stages over it
+ * run to ~430 ms of EFFECT time — which, inside the death's own slow motion, is
+ * the better part of a second and a half of wall clock. An afterglow shorter
+ * than the animation it exists to run would freeze the queen halfway through
+ * falling over, which is the bug this replaced.
+ *
+ * `GameScene`'s `CELEBRATE_MS` is held to the same number, so nothing covers the
+ * ending before it has finished happening.
+ */
+export const BOSS_AFTERGLOW_MS = 1700
+/** From world 3 the gilded last body runs from a shoe inside this, u. */
+const FINALE_FLEE_U = 30
+/** Coins a slam finisher pays: one per this many bodies, up to the cap. */
+const FINISH_COIN_PER = 3
+const FINISH_COIN_CAP = 10
+
+// ─── Growth Spurt ───────────────────────────────────────────────────────────
+
+/** The shoe chases its chain's size — up in ~120 ms (a boing), down in ~260 ms
+ *  (a deflate the eye can follow). Time constants, ms. */
+const GROW_UP_MS = 120
+const GROW_DOWN_MS = 260
+
+// ─── Shoebox Trials ─────────────────────────────────────────────────────────
+
+/** How long the foot wears the shoe in the box, ms. */
+export const TRIAL_MS = 12_000
+/** A box for a player who owns every shoe holds gilded laces: a Fever this
+ *  long, and the vial untouched. */
+const LACES_MS = 6000
+/** A dropped box keeps this far from the foot, u. */
+const BOX_CLEAR_U = 18
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type FootState =
@@ -287,6 +383,31 @@ export interface Bug {
   carry: boolean
   /** Came out of an egg — what `hatchlingCap` counts. */
   hatched: boolean
+  /**
+   * ms left marching down a Rush Line. While it runs the body keeps the lane's
+   * heading (no wandering off the conga) and is allowed to walk in from past the
+   * board's edge. When it runs out — or the body leaves the far side and turns
+   * back — it is an ordinary body again.
+   */
+  rush: number
+  /** Its speed while it marches, as a multiple of its own: a V walks at its
+   *  point's pace, or the ants behind a beetle would overtake it. */
+  rushK: number
+  /** Which rush it came in with, 0 for none — so a sprinter line bolts as ONE. */
+  rushId: number
+  /** Carrying a crumb of the sandwich over its head. The intro's raid, still
+   *  going: the renderer draws it, nothing else reads it. */
+  crumb: boolean
+  /** ms on its back, legs waving — Beetle Bowling. A tap kills it outright. */
+  flipped: number
+  /** Kicked, and rolling across the floor as a bowling ball. */
+  puck: boolean
+  /** Edge rebounds a puck has used. */
+  bounces: number
+  /** When a puck last hit this body, sim ms — so one roll is one blow. */
+  lastPuck: number
+  /** Frozen by a twist's payoff (the blackout's lights coming back), ms. */
+  frozen: number
 }
 
 /**
@@ -335,6 +456,10 @@ export interface Hazard {
   dir: 1 | -1
   /** A stable per-instance seed, so its wobble never changes. */
   seed: number
+  /** The shoebox: the shoe inside it. */
+  shoe?: ShoeId
+  /** The slick lane: half its length over its half-width (see `PropState`). */
+  stretch?: number
 }
 
 export interface Haze {
@@ -346,7 +471,7 @@ export interface Haze {
 
 /** One thing that happened this step, for the renderer and the audio to read. */
 export type GameEvent =
-  | { k: 'squish'; x: number; y: number; bug: BugId; heavy: boolean; word: SplatWord; mult: number; stretch: number; angle: number }
+  | { k: 'squish'; x: number; y: number; bug: BugId; heavy: boolean; word: SplatWord; mult: number; stretch: number; angle: number; face: number }
   // `heavy` on the two wound cues is for the crush bank: a slam that cracks a
   // shell cracks it further, and sounds it. A clang with no `bug` rang off the
   // boss's own body — the scene knows which boss is on the board.
@@ -360,7 +485,33 @@ export type GameEvent =
   | { k: 'feverEnd' }
   | { k: 'coin'; x: number; y: number; n: number }
   | { k: 'chain'; n: number; mult: number; step: boolean }
-  | { k: 'chainLost' }
+  // `mult` is the rung that was lost — Growth Spurt only deflates audibly from ×3.
+  | { k: 'chainLost'; mult?: number }
+  // One stomp squished `n` ≥ 2 bodies.
+  | { k: 'multi'; x: number; y: number; n: number }
+  // ── Rush Lines ──
+  | { k: 'rushTell'; x0: number; y0: number; x1: number; y1: number; shape: RushShape; practice?: MoveId }
+  | { k: 'rushGo'; x: number; y: number }
+  // ── Big Finish ──
+  | { k: 'finishReady' }
+  | { k: 'finisher'; x: number; y: number; n: number; heavy: boolean }
+  // ── Beetle Bowling ──
+  | { k: 'flip'; x: number; y: number; bug: BugId }
+  | { k: 'kick'; x: number; y: number }
+  | { k: 'pins'; x: number; y: number; n: number }
+  // ── Shoebox Trials ──
+  | { k: 'boxDrop'; x: number; y: number }
+  | { k: 'boxHit'; x: number; y: number; left: number }
+  | { k: 'boxPoof'; x: number; y: number }
+  | { k: 'trial'; shoe: ShoeId | null; x: number; y: number }
+  | { k: 'trialEnd'; shoe: ShoeId | null }
+  // ── Boss Trophies ──
+  | { k: 'quake'; x: number; y: number }
+  | { k: 'echo'; x: number; y: number; r: number }
+  // ── Uh-oh! Twists ──
+  | { k: 'twistTell'; id: TwistId }
+  | { k: 'twistStart'; id: TwistId }
+  | { k: 'twistEnd'; id: TwistId }
   | { k: 'salt'; x: number; y: number }
   | { k: 'magnet'; x: number; y: number }
   | { k: 'sweep'; x: number; y: number }
@@ -374,7 +525,10 @@ export type GameEvent =
   // A laid egg's hop has touched down.
   | { k: 'podLand'; x: number; y: number }
   | { k: 'chain-arc'; x0: number; y0: number; x1: number; y1: number }
-  | { k: 'end'; won: boolean }
+  // `x`/`y` is the blow that ended it — the squash that met the quota, the
+  // finisher's own footfall, or the boss's body. The win beat's camera pushes
+  // in on it; see `game/winBeat.ts`.
+  | { k: 'end'; won: boolean; x: number; y: number }
 
 export interface Boss {
   spec: BossSpec
@@ -428,7 +582,8 @@ const makeBug = (): Bug => ({
   alive: false, id: 'ant', spec: bugSpec('ant'),
   x: 0, y: 0, vx: 0, vy: 0, dmg: 0, cycle: 0, heading: 0, t: 0,
   sense: 0, bolt: 0, boltCd: 0, stun: 0, held: 0, panic: 0, dip: 0, lastSlide: -1e9,
-  segs: 0, trail: null, trailN: 0, phase: 0, fromBoss: false, carry: false, hatched: false
+  segs: 0, trail: null, trailN: 0, phase: 0, fromBoss: false, carry: false, hatched: false,
+  rush: 0, rushK: 1, rushId: 0, crumb: false, flipped: 0, puck: false, bounces: 0, lastPuck: -1e9, frozen: 0
 })
 
 const bugs: Bug[] = Array.from({ length: MAX_BUGS }, makeBug)
@@ -518,6 +673,15 @@ export const bossTell = ref<string | null>(null)
  *  the pods lesson retires on the first one — and nothing else. */
 export const podsPopped = ref(0)
 export const pivotReady = ref(true)
+/**
+ * The one-to-go hold of a Big Finish: every body on the board is gilded and the
+ * next squish ends the level. Read by the renderer (the gold rims) and by the
+ * scene (the heartbeat, the lessons). A ref because it flips twice a level.
+ */
+export const finale = ref(false)
+/** The shoe the player is trialling out of a Shoebox, or null. `laces` is the
+ *  gilded-laces box for a player who owns every shoe. */
+export const trialShoe = ref<ShoeId | 'laces' | null>(null)
 
 /** The live tally the objective strip reads and the result screen grades. */
 export const tally = shallowRef<RunTally>(emptyTally())
@@ -543,6 +707,89 @@ let touch = false
 let difficulty = 1
 let relief = 1
 let running = false
+
+// ── Growth Spurt ──
+/** The shoe's size right now, as a multiple of its own radius: eased toward
+ *  `chainScale` of the live chain. 1 with no chain. */
+let growth = 1
+
+// ── Rush Lines ──
+let rushIdx = 0
+let rushPhase: 'idle' | 'tell' | 'lull' = 'idle'
+let rushT = 0
+let rushSerial = 0
+let rushCur: RushSpec | null = null
+const rushLane = { x0: 0, y0: 0, x1: 0, y1: 0, heading: 0 }
+/** ms the sugar trail stays on the floor after it is drawn — the renderer's. */
+let rushTrailMs = 0
+
+// ── Big Finish ──
+let finisherHeavy = false
+let finisherX = 0
+let finisherY = 0
+/**
+ * Where the last body died — the shot the win beat pushes the camera in on.
+ *
+ * `finisherX/Y` is not this and cannot be: it is only written on a level with a
+ * Big Finish (`hasFinish` — no boss, no party, quota > 1), so a quota-of-one
+ * level, a party and every boss fight would hand the camera the middle of the
+ * board. This is written by every squish that counts, so `finish` always has a
+ * point to look at. Seeded to the board's centre for the one frame before the
+ * first kill of a level.
+ */
+let lastKillX = 50
+let lastKillY = 50
+/** ms of board still moving after a won level. See `AFTERGLOW_MS`. */
+let afterglow = 0
+
+// ── Shoebox Trials ──
+let trialDropped = false
+let trialMs = 0
+let baseShoe: ShoeSpec = shoeSpec(STARTER_SHOE)
+/** A shoe swap waiting for the foot to be free — see `applyPendingShoe`. */
+let pendingShoe: ShoeSpec | null = null
+let ownedShoes: readonly ShoeId[] = [STARTER_SHOE]
+/** A vial held aside while a Fever that was not bought with it runs — a party's
+ *  or the gilded laces'. Put back the moment that Fever ends. */
+let heldJuice: number | null = null
+/**
+ * A full vial waiting to be spent.
+ *
+ * Fever fires ITSELF now, so the flag is what keeps that from happening in the
+ * one place where it would be wasted: a vial handed over full (So Close!, or
+ * carried in from the level before) at the instant a level opens, with nothing
+ * on the floor to stomp. It arms at the fill and spends on the first frame that
+ * has a body or a boss to spend it on.
+ */
+let feverArmed = false
+
+// ── Boss Trophies ──
+let moves: readonly MoveId[] = []
+const hasMove = (m: MoveId): boolean => moves.includes(m)
+const quake = { active: false, x: 0, y: 0, r: 0 }
+const echo = { at: -1, x: 0, y: 0, r: 0 }
+
+// ── Uh-oh! Twists ──
+let twistPhase: 'idle' | 'tell' | 'active' | 'after' | 'done' = 'idle'
+let twistT = 0
+/** The sprinkler's wet stripe and the draught's direction, per level. */
+let twistStripeY = 0
+let twistDrift = 0
+/** The conveyor's speed multiplier — 1, or the surge's reverse, or 0 stopped. */
+let conveyorK = 1
+
+// ── Bug Party ──
+const partyAt = { x: 50, y: 20 }
+
+/** Kills landed by the stomp being resolved right now — see `land`. */
+let stompKills = 0
+let inStomp = false
+/** Force the next blows to kill whatever they land on — the slam finisher. */
+let forceKill = false
+/** The blows being resolved cannot spike the player — a rolling puck's. */
+let spikeSafe = false
+/** Sim ms since the last squish: the vial only bleeds after a grace. */
+let sinceSquish = 0
 
 const foot: Foot = {
   x: 50, y: 50, tx: 50, ty: 50, z: 0.36, heading: -Math.PI / 2,
@@ -573,6 +820,64 @@ export const getShoe = (): ShoeSpec => shoe
 export const getJuiceStyle = (): JuiceStyleId => juiceStyle
 export const isFever = (): boolean => fever.remainMs > 0
 export const isTouchInput = (): boolean => touch
+
+/** The Rush Line the renderer draws: the lane, where in its life it is (0..1
+ *  of the trail's fade), and whether it is still being told. */
+export interface RushView {
+  x0: number; y0: number; x1: number; y1: number
+  shape: RushShape
+  /** 0..1 through the tell — the trail drawing itself. 1 once it has landed. */
+  tell: number
+  /** 1 while fresh, falling to 0 as the trail fades. */
+  life: number
+}
+const rushView: RushView = { x0: 0, y0: 0, x1: 0, y1: 0, shape: 'line', tell: 0, life: 0 }
+export const getRush = (): RushView | null => {
+  if (!rushCur || (rushPhase === 'idle' && rushTrailMs <= 0)) return null
+  rushView.x0 = rushLane.x0
+  rushView.y0 = rushLane.y0
+  rushView.x1 = rushLane.x1
+  rushView.y1 = rushLane.y1
+  rushView.shape = rushCur.shape
+  rushView.tell = rushPhase === 'tell' ? Math.min(1, rushT / RUSH_TELL_MS) : 1
+  rushView.life = rushPhase === 'tell' ? 1 : Math.max(0, Math.min(1, rushTrailMs / 4000))
+  return rushView
+}
+
+/** The Shoebox Trial's clock, 0..1 left, or 0 when none is running. */
+export const trialLeft = (): number => (trialShoe.value ? Math.max(0, trialMs / TRIAL_MS) : 0)
+
+/** The Quake Slam's ring, while it travels. */
+export const getQuake = (): { x: number; y: number; r: number } | null => (quake.active ? quake : null)
+
+/** Which twist is on, and where in its life: the renderer's grade and pictogram. */
+export interface TwistView {
+  id: TwistId
+  phase: 'tell' | 'active' | 'after'
+  /** 0..1 through the current phase. */
+  k: number
+  stripeY: number
+  drift: number
+}
+const twistView: TwistView = { id: 'spill', phase: 'tell', k: 0, stripeY: 0, drift: 0 }
+export const getTwist = (): TwistView | null => {
+  const id = level.twist
+  if (!id || twistPhase === 'idle' || twistPhase === 'done') return null
+  const t = twistSpec(id)
+  twistView.id = id
+  twistView.phase = twistPhase
+  const span = twistPhase === 'tell' ? t.tellMs : twistPhase === 'active' ? t.activeMs : Math.max(1, t.afterMs)
+  twistView.k = Math.max(0, Math.min(1, twistT / span))
+  twistView.stripeY = twistStripeY
+  twistView.drift = twistDrift
+  return twistView
+}
+
+/** Where a Bug Party pours out of — the stolen sandwich. */
+export const getPartyAt = (): { x: number; y: number } | null => (level.party ? partyAt : null)
+
+/** The shoe's size multiplier from the chain right now — Growth Spurt. */
+export const getGrowth = (): number => growth
 
 /** Drain the step's events. The caller owns them for exactly one frame. */
 export const drainEvents = (): GameEvent[] => {
@@ -606,6 +911,15 @@ export interface StartOptions {
   relief: number
   /** Deterministic seed. The recorder pins it; play passes the level id. */
   seed?: number
+  /** Boss Trophies the player owns. Absent is none — the double-tap is then just
+   *  two stomps, which is what it is until the Queen on 1-4 is beaten. */
+  moves?: readonly MoveId[]
+  /** Shoes the player owns, so a Shoebox never offers one they already have. */
+  owned?: readonly ShoeId[]
+  /** So Close!: the retry of a near miss opens with the vial full. */
+  secondWind?: boolean
+  /** A Bug Party rather than a level — `partySpec(level)`, the party after it. */
+  party?: boolean
 }
 
 /** Tell the sim how big the board is, in u, and which part the HUD leaves free. */
@@ -621,13 +935,19 @@ export const setBoard = (b: Board): void => {
 export const setTouch = (v: boolean): void => { touch = v }
 
 export const startLevel = (o: StartOptions): void => {
-  level = levelSpec(o.level)
+  level = o.party ? partySpec(o.level) : levelSpec(o.level)
   shoe = shoeSpec(o.shoe)
+  baseShoe = shoe
+  pendingShoe = null
+  moves = o.moves ?? []
+  ownedShoes = o.owned ?? [STARTER_SHOE]
   juiceStyle = o.juiceStyle
   singleTap = o.singleTap
   difficulty = o.difficulty
-  relief = o.relief
-  rngState = (o.seed ?? level.id * 7919 + 13) >>> 0
+  // A party cannot be lost, so it has nothing to be relieved of — and a longer
+  // clock would only be a longer Fever.
+  relief = o.party ? 1 : o.relief
+  rngState = (o.seed ?? level.id * 7919 + 13 + (o.party ? 101 : 0)) >>> 0
 
   for (let i = 0; i < bugs.length; i++) bugs[i]!.alive = false
   for (const p of pods) { p.alive = false; p.fly = 0 }
@@ -645,12 +965,53 @@ export const startLevel = (o: StartOptions): void => {
   // arrives — sometimes as the opening of the next level, which is a better
   // place for it anyway. Only the RUNNING fever is cleared; a level never
   // inherits somebody else's ten seconds.
-  fever = { juice: fever.juice, remainMs: 0 }
+  fever = { juice: heldJuice ?? fever.juice, remainMs: 0 }
+  heldJuice = null
+  // ── So Close! ── A near miss's retry opens with the vial full: the push the
+  // last run was one push short of. Only ever FILLS it — a player who carried a
+  // full vial in already has one.
+  if (o.secondWind) fever = { juice: 1, remainMs: 0 }
+  // ── Bug Party ── The gilded boot for the whole fifteen seconds, and the
+  // player's own vial set aside and handed back afterwards: the party is a gift,
+  // never a thing that spent something of theirs.
+  if (level.party) {
+    heldJuice = fever.juice
+    fever = { juice: 0, remainMs: level.time * 1000 }
+  }
+  // A vial that arrives full — carried in, or handed over by So Close! — is
+  // already armed, and spends itself on the first frame with a body on the floor.
+  feverArmed = feverReady(fever) && fever.remainMs <= 0
   elapsed = 0
   spawnAcc = 0
   pivotCd = 0
   slideId = 0
   boss = null
+  growth = 1
+  rushIdx = 0
+  rushPhase = 'idle'
+  rushT = 0
+  rushCur = null
+  rushTrailMs = 0
+  finisherHeavy = false
+  afterglow = 0
+  // Back to the middle of the board: a level that ends before anything dies —
+  // a timeout, a party — must not aim the win beat at the last level's corner.
+  lastKillX = (board.x0 + board.x1) / 2
+  lastKillY = (board.y0 + board.y1) / 2
+  trialDropped = false
+  trialMs = 0
+  quake.active = false
+  echo.at = -1
+  twistPhase = 'idle'
+  twistT = 0
+  twistDrift = 0
+  conveyorK = 1
+  stompKills = 0
+  inStomp = false
+  forceKill = false
+  sinceSquish = 0
+  partyAt.x = (board.x0 + board.x1) / 2
+  partyAt.y = board.y0 + 8
 
   foot.x = (board.x0 + board.x1) / 2
   foot.y = (board.y0 + board.y1) / 2
@@ -662,6 +1023,11 @@ export const startLevel = (o: StartOptions): void => {
   foot.charge = 0
   foot.squash = 1
   foot.speed = 0
+  // A press still held when the last level ended belongs to that level. Left
+  // set, the new foot went straight into a charge it could never leave until a
+  // release that — with the finger already lifted over the result screen — was
+  // never coming. The scout found it; a player would have met it as a dead shoe.
+  pressHeld = false
 
   layoutHazards()
   if (level.boss) spawnBoss(level.boss, level.bossScale)
@@ -672,8 +1038,10 @@ export const startLevel = (o: StartOptions): void => {
   chainMult.value = 1
   chainLeft.value = 0
   slams.value = 0
-  juice.value = fever.juice
-  feverMs.value = 0
+  juice.value = fever.remainMs > 0 ? 0 : fever.juice
+  feverMs.value = fever.remainMs
+  finale.value = false
+  trialShoe.value = null
   squished.value = 0
   quota.value = level.quota
   clockMs = Math.round(level.time * relief) * 1000
@@ -775,11 +1143,37 @@ const takeBug = (): Bug | null => {
   b.fromBoss = false
   b.carry = false
   b.hatched = false
+  b.rush = 0
+  b.rushK = 1
+  b.rushId = 0
+  b.crumb = false
+  b.flipped = 0
+  b.puck = false
+  b.bounces = 0
+  b.lastPuck = -1e9
+  b.frozen = 0
   return b
 }
 
-/** Remove body `i` by swapping the last live one into its slot. */
+/** Point a body along `a` at its own walking speed. */
+const setHeading = (b: Bug, a: number, k = 1): void => {
+  b.heading = a
+  const sp = b.spec.speed * level.speed * difficulty / relief * k
+  b.vx = Math.cos(a) * sp
+  b.vy = Math.sin(a) * sp
+}
+
+/**
+ * Remove body `i` by swapping the last live one into its slot.
+ *
+ * Guarded, because a kill can happen INSIDE a loop over the pool — the Electric
+ * Sock's arcs from inside a stomp, a puck's pins, the slam finisher — and a
+ * loop still holding an index past the end of the live range would otherwise
+ * "kill" a slot that is already dead, drop the count a second time, and walk it
+ * below zero: the scout's world-2 runs in a trialled sock crashed exactly so.
+ */
 const killSlot = (i: number): void => {
+  if (i < 0 || i >= bugCount) return
   const last = bugCount - 1
   if (i !== last) {
     const tmp = bugs[i]!
@@ -838,9 +1232,21 @@ export const spawnBug = (id: BugId, x?: number, y?: number, fromBoss = false): B
  * as an infestation. The director takes over from here and fills the rest.
  */
 const seedBoard = (): void => {
+  // A party opens on the sandwich already crawling: a knot of guests right at
+  // the spot the rest will pour out of, so the first frame says where to go.
+  if (level.party) {
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2
+      const b = spawnBug(pickBug(), partyAt.x + Math.cos(a) * 5, partyAt.y + Math.sin(a) * 3 + 4)
+      if (b) setHeading(b, Math.PI / 2 + rndRange(-1.1, 1.1))
+    }
+    return
+  }
   const n = Math.max(1, Math.round(level.maxAlive * 0.45))
   const margin = 10
-  const safe = stompRadius(true) * 1.4
+  // The UN-grown slam circle: the safe zone is about where the foot starts, and
+  // a chain from the last level must not push the opening board further out.
+  const safe = shoe.radius * shoe.slamScale * 1.4
   for (let i = 0; i < n; i++) {
     let x = 0
     let y = 0
@@ -866,15 +1272,219 @@ const seedBoard = (): void => {
  */
 const stepSpawns = (dt: number): void => {
   if (boss) return
-  if (bugCount >= level.maxAlive) return
+  // A rush owns the board while it is told and for a breath after it lands:
+  // the snare roll is a promise that something is coming, and a trickle of
+  // strays walking in over it would break the promise.
+  if (rushPhase !== 'idle') { spawnAcc = 0; return }
+  // Bodies that came in on a rush ride ON TOP of the trickle and never count
+  // against its ceiling. Counted, a conga the player did not catch — walking
+  // the far edge of a portrait board, well out of a small child's reach — held
+  // the board at its cap and stopped the director dead: the scout's weak player
+  // lost 1-1, the level built to be unlosable, 17 runs in 40 exactly that way.
+  let marchers = 0
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.rushId > 0) marchers++
+  const cap = level.maxAlive + marchers
+  if (bugCount >= cap) return
   const k = level.time > 0 ? Math.min(1, elapsed / (level.time * 1000)) : 0
   const interval = level.spawnMs[0] + (level.spawnMs[1] - level.spawnMs[0]) * k
   spawnAcc += dt
   const gap = interval / Math.max(0.5, difficulty)
-  while (spawnAcc >= gap && bugCount < level.maxAlive) {
+  while (spawnAcc >= gap && bugCount < cap) {
     spawnAcc -= gap
-    spawnBug(pickBug())
+    if (level.party) {
+      // Out of the sandwich, fanned downward across the board.
+      const b = spawnBug(pickBug(), partyAt.x + rndRange(-4, 4), partyAt.y + rndRange(0, 3))
+      if (b) setHeading(b, Math.PI / 2 + rndRange(-1.25, 1.25))
+    } else {
+      spawnBug(pickBug())
+    }
   }
+}
+
+// ─── Rush Lines ─────────────────────────────────────────────────────────────
+
+/**
+ * Lay a lane across the board's SHORT axis — so a conga is never 170 u long on
+ * a portrait phone — clear of the foot's own row, and past the body or crumb
+ * pile the rush wants to pass when there is one.
+ */
+const layRushLane = (r: RushSpec): void => {
+  const pw = board.x1 - board.x0
+  const ph = board.y1 - board.y0
+  const across = pw <= ph // true: the lane runs left/right
+  const lo = across ? board.y0 + 14 : board.x0 + 14
+  const hi = across ? board.y1 - 14 : board.x1 - 14
+  const footAt = across ? foot.y : foot.x
+  const valid = (v: number): boolean => v >= lo && v <= hi && Math.abs(v - footAt) >= RUSH_CLEAR_U
+
+  // Preferred: past a live body of the named kind, just off it (stomp the line,
+  // not the spikes); then through a crumb pile (the knot 1-6 is about).
+  let at = NaN
+  if (r.past) {
+    for (let i = 0; i < bugCount; i++) {
+      const b = bugs[i]!
+      if (b.id !== r.past || b.rush > 0) continue
+      const v = (across ? b.y : b.x) + (rnd() < 0.5 ? -7 : 7)
+      if (valid(v)) { at = v; break }
+    }
+  }
+  if (Number.isNaN(at)) {
+    for (const h of hazards) {
+      if (h.id !== 'crumbs') continue
+      const v = across ? h.y : h.x
+      if (valid(v)) { at = v; break }
+    }
+  }
+  if (Number.isNaN(at)) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const v = lo + rnd() * Math.max(1, hi - lo)
+      if (valid(v)) { at = v; break }
+    }
+  }
+  // A board too small to keep clear of the foot: the far half of it.
+  if (Number.isNaN(at)) at = footAt < (lo + hi) / 2 ? hi - 4 : lo + 4
+
+  const forward = rnd() < 0.5
+  if (across) {
+    rushLane.x0 = forward ? board.x0 : board.x1
+    rushLane.x1 = forward ? board.x1 : board.x0
+    rushLane.y0 = at
+    rushLane.y1 = at
+  } else {
+    rushLane.y0 = forward ? board.y0 : board.y1
+    rushLane.y1 = forward ? board.y1 : board.y0
+    rushLane.x0 = at
+    rushLane.x1 = at
+  }
+  rushLane.heading = Math.atan2(rushLane.y1 - rushLane.y0, rushLane.x1 - rushLane.x0)
+}
+
+/** Put a ring's lane where the ring will be — the renderer draws its tell. */
+const layRushRing = (): void => {
+  rushLane.x0 = foot.x
+  rushLane.y0 = foot.y
+  rushLane.x1 = foot.x + RUSH_RING_R
+  rushLane.y1 = foot.y
+  rushLane.heading = 0
+}
+
+/** Is the next rush due? Checked once a step; cheap. */
+const stepRush = (dt: number): void => {
+  if (level.party || boss) return
+  if (rushTrailMs > 0) rushTrailMs -= dt
+
+  if (rushPhase === 'tell') {
+    rushT += dt
+    if (rushT >= RUSH_TELL_MS) launchRush()
+    return
+  }
+  if (rushPhase === 'lull') {
+    rushT += dt
+    if (rushT >= RUSH_LULL_MS) { rushPhase = 'idle'; rushT = 0 }
+    return
+  }
+
+  const r = level.rushes[rushIdx]
+  if (!r || level.quota <= 0) return
+  if (elapsed < RUSH_EARLIEST_MS) return
+  // A practice formation OPENS its level: it comes on the clock, not on kills —
+  // it is the move's lesson, and a lesson that waited for two squishes would
+  // arrive in the middle of a board the player is already busy with.
+  if (!r.practice && squished.value < level.quota * r.at) return
+  // Never on top of a twist's tell: two warnings at once is no warning.
+  if (twistPhase === 'tell') return
+  rushIdx++
+  // A practice formation is the lesson of a move the player owns; without the
+  // move it is just a board with a ring of ants on it, so it is skipped.
+  if (r.practice && !hasMove(r.practice)) return
+  rushCur = r
+  rushSerial++
+  if (r.shape === 'ring') layRushRing()
+  else layRushLane(r)
+  rushPhase = 'tell'
+  rushT = 0
+  rushTrailMs = 0
+  emit({
+    k: 'rushTell', x0: rushLane.x0, y0: rushLane.y0, x1: rushLane.x1, y1: rushLane.y1,
+    shape: r.shape, ...(r.practice ? { practice: r.practice } : {})
+  })
+}
+
+/**
+ * The tell is over: put the formation down.
+ *
+ * Every body is placed where the camera cannot see it arrive — behind the lane's
+ * start, past the board's edge, for a line or a V — so a conga WALKS IN rather
+ * than popping into existence (the cutscenes' own no-pop rule, and the same
+ * mistake: `cutscenes.md`'s "1 ant turns into a line of ants"). A ring is the
+ * one exception: it is born round the shoe, which is the point of it, and its
+ * tell has been drawing the circle it appears on for a second.
+ */
+const launchRush = (): void => {
+  const r = rushCur
+  if (!r) return
+  rushPhase = 'lull'
+  rushT = 0
+  rushTrailMs = 4000
+  const crumbs = level.world === 1 && !r.practice
+  if (r.shape === 'ring') {
+    for (let i = 0; i < r.count; i++) {
+      const a = (i / r.count) * Math.PI * 2 + rnd() * 0.2
+      const b = spawnBug(r.bug, foot.x + Math.cos(a) * RUSH_RING_R, foot.y + Math.sin(a) * RUSH_RING_R)
+      if (!b) break
+      setHeading(b, a + Math.PI, RUSH_RING_SPEED)
+      b.rush = (RUSH_RING_R / Math.max(1, Math.hypot(b.vx, b.vy))) * 1000
+      b.rushK = RUSH_RING_SPEED
+      b.rushId = rushSerial
+      b.crumb = crumbs && b.spec.armor === 0
+    }
+    emit({ k: 'rushGo', x: foot.x, y: foot.y })
+    return
+  }
+
+  const h = rushLane.heading
+  const back = h + Math.PI
+  const side = h + Math.PI / 2
+  const bodies = r.shape === 'vee' && r.lead ? r.count + 1 : r.count
+  const gap = bugSpec(r.bug).size * RUSH_GAP
+  // The lane's length, and the time the slowest marcher needs to walk it and a
+  // bit — past that it is simply a body on the board.
+  const len = Math.hypot(rushLane.x1 - rushLane.x0, rushLane.y1 - rushLane.y0)
+  for (let i = 0; i < bodies; i++) {
+    const lead = r.shape === 'vee' && r.lead && i === 0
+    const id: BugId = lead ? r.lead! : r.bug
+    // Line: nose to tail. V: the point first, then pairs fanning back behind it.
+    let along = SPAWN_MARGIN + 2 + i * gap
+    let off = 0
+    if (r.shape === 'vee') {
+      const k = lead ? 0 : Math.ceil(i / 2)
+      along = SPAWN_MARGIN + 2 + k * gap * 0.9 + (lead ? 0 : bugSpec(r.lead ?? r.bug).size)
+      off = lead ? 0 : (i % 2 === 1 ? 1 : -1) * k * gap * 0.75
+    }
+    const x = rushLane.x0 + Math.cos(back) * along + Math.cos(side) * off
+    const y = rushLane.y0 + Math.sin(back) * along + Math.sin(side) * off
+    const b = spawnBug(id, x, y)
+    if (!b) break
+    // The whole formation walks at its point's pace.
+    b.rushK = Math.min(1, bugSpec(lead || !r.lead ? id : r.lead).speed / b.spec.speed)
+    setHeading(b, h, b.rushK)
+    const sp = Math.max(1, Math.hypot(b.vx, b.vy))
+    b.rush = ((len + along + SPAWN_MARGIN * 2) / sp) * 1000
+    b.rushId = rushSerial
+    b.crumb = crumbs && b.spec.armor === 0 && !b.spec.spiky
+  }
+  emit({ k: 'rushGo', x: rushLane.x0, y: rushLane.y0 })
+}
+
+/** Is `b` still walking IN from past the edge it entered by? Such a body is
+ *  exempt from `bounce`, which would otherwise turn it round before it arrives. */
+const entering = (b: Bug): boolean => {
+  if (b.rush <= 0) return false
+  const outside = b.x < board.x0 || b.x > board.x1 || b.y < board.y0 || b.y > board.y1
+  if (!outside) return false
+  const cx = (board.x0 + board.x1) / 2 - b.x
+  const cy = (board.y0 + board.y1) / 2 - b.y
+  return cx * Math.cos(b.heading) + cy * Math.sin(b.heading) > 0
 }
 
 // ─── Maths helpers ──────────────────────────────────────────────────────────
@@ -919,9 +1529,32 @@ export const aim = (x: number, y: number): void => {
  */
 export const press = (x: number, y: number, now: number): void => {
   if (!running || phase.value !== 'play') return
-  if (foot.state === 'stun') return
+  if (foot.state === 'stun') {
+    // A stun that silently eats every tap for 0.9 s reads as a broken game, and
+    // it lands on a player who has JUST been punished. Mashing shortens it —
+    // the oldest answer in the arcade, and one a six-year-old already knows.
+    foot.timer = Math.max(0, foot.timer - STUN_SHAKE_MS)
+    return
+  }
 
-  aim(x, y)
+  // ── The touch snap ──
+  //
+  // `x, y` arrived with the lift already taken off (the scene applies it), so
+  // the FINGERTIP is `y + TOUCH_LIFT_U`. A body within a fingertip of that is
+  // the body the player meant, and the foot is put on it outright rather than
+  // sprung at it: the spring has one drop's worth of travel to cover, which is
+  // not enough from across the board, and a tap that half-arrives is the miss
+  // this exists to remove. Never a spiky one — the game spends a whole lesson
+  // teaching a child to leave those alone, and aim that overrules the player
+  // into damage is worse than no aim at all.
+  const snap = touch && !singleTap ? snapBug(x, y + TOUCH_LIFT_U, TOUCH_SNAP_U) : null
+  if (snap) {
+    aim(snap.x, snap.y)
+    foot.x = snap.x
+    foot.y = snap.y
+  } else {
+    aim(x, y)
+  }
 
   const isDouble = now - lastPressAt < DOUBLE_TAP_MS
     && dist2(x, y, lastPressX, lastPressY) < DOUBLE_TAP_U * DOUBLE_TAP_U
@@ -929,7 +1562,10 @@ export const press = (x: number, y: number, now: number): void => {
   lastPressX = x
   lastPressY = y
 
-  if (isDouble && pivotCd <= 0) {
+  // The Heel Spin is the Queen's trophy (1-4). Before it is won, a double tap is
+  // simply two stomps — which also retires the accidental weak pivots a child
+  // mashing the screen used to set off on 1-1 without anything teaching them.
+  if (isDouble && hasMove('spin') && pivotCd <= 0) {
     heelPivot()
     return
   }
@@ -941,27 +1577,59 @@ export const press = (x: number, y: number, now: number): void => {
 
   pressHeld = true
   pressAt = now
-  if (foot.state === 'hover' || foot.state === 'recover') quickStomp()
+  // ── THE TAP WAITS FOR THE RELEASE, always ──
+  //
+  // A press used to open with a quick stomp, and the charge could only begin
+  // once that stomp had landed and recovered. That made a charge IMPOSSIBLE
+  // over anything worth charging at: press on a beetle to wind up a slam and
+  // the opening tap hit it first — bouncing off its shell, alerting it, or on
+  // a soft body killing the thing you were winding up for. The only way to
+  // charge was to hold over bare floor and then walk the foot across, which is
+  // not a control anybody discovers and is a large part of why the slam went
+  // untaught in practice.
+  //
+  // It was already fixed HERE, for one moment: on the gilded last body of a Big
+  // Finish, where the same collision was fatal to the finisher. The note that
+  // used to sit on that special case argued it exactly right — "a short press
+  // is still a tap, a long one is the slam", and "a tenth of a second of
+  // latency is worth a choice". That reasoning was never specific to the
+  // finale; it is the reason the control works at all, so it is now the whole
+  // game's rule and the special case is gone.
+  //
+  // What a player pays for it: a stomp resolves when the finger LIFTS rather
+  // than when it lands, so a deliberate tap costs its own duration in latency
+  // (tens of ms). What they get: every press can become a charge, and nothing
+  // is ever destroyed by an opening blow they did not ask for.
+  //
+  // `TAP_MS` still decides when the wind-up visibly begins (see `stepFoot`), so
+  // an ordinary tap never flashes a charge ring on its way past.
 }
 
 /** The press ended. A charge past the threshold lands as a slam. */
 export const release = (): void => {
   pressHeld = false
   if (!running || phase.value !== 'play') { foot.charge = 0; return }
-  if (foot.state === 'charge') {
-    if (foot.charge >= MIN_SLAM_CHARGE) {
-      // `slam()` deliberately LEAVES the charge on the foot: `land()` reads it
-      // to decide the blow is heavy and how far it reaches, and `impact` clears
-      // it afterwards. The first pass fell through to the `foot.charge = 0`
-      // below, one line later, which turned every held slam into an ordinary
-      // tap — so no shell could be opened by hand and the whole hold-to-slam
-      // mechanic was dead. Pinned by `tests/game/sim.test.ts`.
-      slam(foot.charge)
-      return
-    }
-    foot.state = 'recover'
-    foot.timer = 120
+  // A wind-up past the threshold is a slam.
+  //
+  // `slam()` deliberately LEAVES the charge on the foot: `land()` reads it to
+  // decide the blow is heavy and how far it reaches, and `impact` clears it
+  // afterwards. An early version cleared it one line later, which turned every
+  // held slam into an ordinary tap — no shell could be opened by hand and the
+  // whole mechanic was dead. Pinned by `tests/game/sim.test.ts`.
+  if (foot.state === 'charge' && foot.charge >= MIN_SLAM_CHARGE) {
+    slam(foot.charge)
+    return
   }
+  // Anything shorter is the tap the press owed — including a wind-up that was
+  // let go early. A partial charge that produced NOTHING would be the cruellest
+  // input in the game: the player held, saw the foot rise, let go a moment too
+  // soon and the turn silently did not happen.
+  if (foot.state === 'hover' || foot.state === 'recover' || foot.state === 'charge') {
+    quickStomp()
+    return
+  }
+  // Pressed and released inside a blow that was already happening (drop,
+  // impact, stun, slide, pivot). Nothing is owed — the foot is busy.
   foot.charge = 0
 }
 
@@ -982,6 +1650,8 @@ export const slamNow = (): void => {
  */
 export const resetVial = (): void => {
   fever = { juice: 0, remainMs: 0 }
+  heldJuice = null
+  feverArmed = false
   juice.value = 0
   feverMs.value = 0
 }
@@ -1000,6 +1670,34 @@ export const tryFever = (): boolean => {
   return true
 }
 
+/**
+ * The body a touch tap meant, or null.
+ *
+ * `nearestBug`'s stricter sibling: it refuses anything the player is being
+ * taught NOT to stomp (a spike, unless the boot is proof against it) and
+ * anything that is not a target at all (a puck is the player's own ball).
+ */
+const snapBug = (x: number, y: number, reach: number): Bug | null => {
+  let best: Bug | null = null
+  let bestD = reach * reach
+  for (let i = 0; i < bugCount; i++) {
+    const b = bugs[i]!
+    if (b.puck) continue
+    if (b.spec.spiky && !shoe.spikeProof && fever.remainMs <= 0) continue
+    if (b.spec.airborne && b.dip < 0.5) continue
+    const d = dist2(x, y, b.x, b.y)
+    if (d < bestD) { bestD = d; best = b }
+  }
+  return best
+}
+
+/** Is there anything on the floor worth spending a Fever on? */
+const somethingToStomp = (): boolean => {
+  if (boss !== null) return true
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.alive) return true
+  return false
+}
+
 const nearestBug = (x: number, y: number, reach: number): Bug | null => {
   let best: Bug | null = null
   let bestD = reach * reach
@@ -1014,10 +1712,17 @@ const nearestBug = (x: number, y: number, reach: number): Bug | null => {
 
 // ─── The foot ───────────────────────────────────────────────────────────────
 
-/** The stomp radius right now — the shoe's, grown by Fever. */
+/**
+ * The stomp radius right now — the shoe's, grown by the chain (Growth Spurt)
+ * and by Fever, under one cap so the gilded boot stays the biggest thing in the
+ * game without a chain on top of it swallowing the board.
+ */
 export const stompRadius = (heavy = false): number => {
   const base = shoe.radius * (heavy ? shoe.slamScale : 1)
-  return fever.remainMs > 0 ? base * FEVER.radiusScale : base
+  const grown = base * growth
+  return fever.remainMs > 0
+    ? Math.min(grown * FEVER.radiusScale, base * MAX_RADIUS_SCALE)
+    : grown
 }
 
 const quickStomp = (): void => {
@@ -1033,16 +1738,23 @@ const slam = (charge: number): void => {
   foot.charge = charge
 }
 
+/**
+ * The Heel Spin — the half-strength Queen's trophy.
+ *
+ * Wider and quicker than the weak panic pivot it replaces (`SPIN_SCALE` 2.4
+ * against 2.1, a 1.8 s cooldown against 2.6), because it is a move the player
+ * EARNED now rather than one they tripped over, and it FLIPS the shells it
+ * sweeps — the ring rush it answers on 1-5 and every beetle knot after it.
+ */
 const heelPivot = (): void => {
-  const r = stompRadius() * PIVOT_SCALE
-  pivotCd = PIVOT_COOLDOWN_MS
+  const r = stompRadius() * SPIN_SCALE
+  pivotCd = SPIN_COOLDOWN_MS
   pivotReady.value = false
   foot.state = 'pivot'
   foot.timer = 420
   emit({ k: 'pivot', x: foot.x, y: foot.y, r })
   // A sweep, not a stomp: it kills only the unarmoured, and it does not miss —
-  // it is the panic button, and a panic button that can break the chain is one
-  // nobody presses twice.
+  // a move that can break the chain is one nobody uses twice.
   resolveArea(foot.x, foot.y, r, false, true)
 }
 
@@ -1074,18 +1786,62 @@ const stepFoot = (dt: number): void => {
   foot.speed = s > 0 ? moved / s : 0
   if (moved > 0.02) foot.heading = Math.atan2(dy, dx)
 
+  // The draught leans on the shoe too — gently: the bodies are what it blows
+  // about, and a foot that drifted off its own aim would be a control bug.
+  if (twistPhase === 'active' && level.twist === 'draft') {
+    foot.x = clamp(foot.x + twistDrift * s * 0.6, board.x0, board.x1)
+  }
+
+  // ── The Shoebox Trial's clock ──
+  if (trialShoe.value !== null && trialShoe.value !== 'laces') {
+    trialMs -= dt
+    if (trialMs <= 0) endTrial()
+  }
+  // A shoe swap lands only between blows, never under one — every rule in the
+  // game reads the one `shoe`, and changing it mid-drop would land a blow that
+  // was pressed in one shoe with the reach of another.
+  if (pendingShoe && (foot.state === 'hover' || foot.state === 'recover')) {
+    shoe = pendingShoe
+    pendingShoe = null
+  }
+
+  // ── Beetle Bowling: the kick ──
+  //
+  // No press at all: a shoe travelling FAST across a body on its back sends it
+  // spinning along the shoe's own heading. A finger flick on touch, a cursor
+  // flick on a mouse — the drag the player has been doing since 1-1, given a
+  // direction and a purpose. Slow travel never kicks, so easing the foot into
+  // position beside a flipped beetle to tap it does exactly that.
+  if ((foot.state === 'hover' || foot.state === 'recover') && foot.speed > KICK_SPEED) {
+    const reach = stompRadius() * 0.8
+    for (let i = bugCount - 1; i >= 0; i--) {
+      const b = bugs[i]!
+      if (b.flipped <= 0 || b.puck) continue
+      const r = reach + b.spec.size
+      if (dist2(foot.x, foot.y, b.x, b.y) > r * r) continue
+      kick(b)
+    }
+  }
+
   // Height and squash, per state.
   const hover = shoe.hover
   switch (foot.state) {
     case 'hover':
       foot.z += (hover - foot.z) * (1 - Math.exp(-10 * s))
       foot.squash += (1 - foot.squash) * (1 - Math.exp(-14 * s))
+      // A finger dragged fast enough skates, before it is asked to wind up:
+      // the Skid is a movement, and a player throwing the foot across the board
+      // is not asking for a slam. See `trySlide`.
+      if (trySlide()) break
       if (pressHeld && performance.now() - pressAt > TAP_MS) {
         foot.state = 'charge'
         foot.charge = 0
       }
       break
     case 'charge': {
+      // …and out of a wind-up too, so a charge that starts moving becomes the
+      // skid it looks like rather than a slam dragged sideways.
+      if (trySlide()) { foot.charge = 0; break }
       foot.charge = Math.min(1, foot.charge + dt / shoe.chargeMs)
       const target = hover + (1 - hover) * foot.charge
       foot.z += (target - foot.z) * (1 - Math.exp(-12 * s))
@@ -1144,6 +1900,118 @@ const stepFoot = (dt: number): void => {
   }
 }
 
+// ─── Beetle Bowling ─────────────────────────────────────────────────────────
+
+/** Pucks rolling right now. A kick past the cap just finishes the body — the
+ *  fourth ball on a lane is a bowling alley nobody can read. */
+const puckCount = (): number => {
+  let n = 0
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.puck) n++
+  return n
+}
+
+/** Send a flipped body spinning along the foot's heading. */
+const kick = (b: Bug): void => {
+  if (puckCount() >= MAX_PUCKS) return
+  b.puck = true
+  b.flipped = 0
+  b.stun = 0
+  b.bounces = 0
+  b.rush = 0
+  b.heading = foot.heading
+  b.vx = Math.cos(foot.heading) * PUCK_SPEED
+  b.vy = Math.sin(foot.heading) * PUCK_SPEED
+  emit({ k: 'kick', x: b.x, y: b.y })
+}
+
+/**
+ * Put a body on its back — the slam that did not kill it, a Heel Spin that
+ * swept it, a Quake ring that crossed it. Soft side up for `FLIP_MS`.
+ */
+const flipBody = (b: Bug): void => {
+  if (!b.spec.flips || b.puck || b.flipped > 0) return
+  b.flipped = FLIP_MS
+  b.stun = Math.max(b.stun, FLIP_MS)
+  b.rush = 0
+  emit({ k: 'flip', x: b.x, y: b.y, bug: b.id })
+}
+
+/** The index of `b` in the live pool, or -1. Pucks are handled by reference,
+ *  because a kill swaps bodies about under a loop that holds indices. */
+const indexOfBug = (b: Bug): number => {
+  for (let i = 0; i < bugCount; i++) if (bugs[i] === b) return i
+  return -1
+}
+
+const pucks: Bug[] = []
+
+/**
+ * Roll every puck: friction, the board's edges as bumpers, and everything it
+ * rolls over takes a blow (pierce 2 — a shell cracks a beetle, never a robobug —
+ * on the chain, because the player aimed it). A puck that runs out of speed or
+ * of bounces splats itself: it was always going to die, and a ball that sat on
+ * the floor after the pins went down would be one more beetle to tap.
+ *
+ * A separate pass from `stepBugs`, and by REFERENCE: the blows it lands remove
+ * bodies from the pool, which swaps the last live one into the hole, and a loop
+ * holding indices would lose track of the puck it is moving.
+ */
+const stepPucks = (dt: number): void => {
+  pucks.length = 0
+  for (let i = 0; i < bugCount; i++) if (bugs[i]!.puck) pucks.push(bugs[i]!)
+  if (pucks.length === 0) return
+  const s = dt / 1000
+  for (const p of pucks) {
+    if (!p.alive) continue
+    const f = Math.exp(-PUCK_FRICTION * s)
+    p.vx *= f
+    p.vy *= f
+    p.x += p.vx * s
+    p.y += p.vy * s
+    p.cycle = (p.cycle + s * 6) % 1
+    // The edges are bumpers: reflect, and count it.
+    if (p.x < board.x0 || p.x > board.x1) {
+      p.x = clamp(p.x, board.x0, board.x1)
+      p.vx = -p.vx
+      p.bounces++
+    }
+    if (p.y < board.y0 || p.y > board.y1) {
+      p.y = clamp(p.y, board.y0, board.y1)
+      p.vy = -p.vy
+      p.bounces++
+    }
+    p.heading = Math.atan2(p.vy, p.vx)
+    // The pins.
+    let pins = 0
+    for (let j = bugCount - 1; j >= 0; j--) {
+      if (j >= bugCount) continue
+      const o = bugs[j]!
+      if (o === p || o.puck) continue
+      if (elapsed - o.lastPuck < 250) continue
+      const reach = p.spec.size + o.spec.size
+      if (dist2(p.x, p.y, o.x, o.y) > reach * reach) continue
+      o.lastPuck = elapsed
+      const before = squished.value
+      // A rolling shell does not care about spikes — it is the second answer to
+      // the caterpillar, and the player's foot is nowhere near it.
+      spikeSafe = true
+      hitBug(j, PUCK_PIERCE, false, true, true)
+      spikeSafe = false
+      if (squished.value > before) pins++
+    }
+    if (pins >= 3) emit({ k: 'pins', x: p.x, y: p.y, n: pins })
+    const limit = p.spec.flips === 'pinball' ? PINBALL_BOUNCES : PUCK_BOUNCES
+    if (Math.hypot(p.vx, p.vy) < PUCK_STOP_SPEED || p.bounces > limit) {
+      const i = indexOfBug(p)
+      if (i >= 0) {
+        forceKill = true
+        hitBug(i, 99, true, true, true)
+        forceKill = false
+      }
+    }
+  }
+}
+
 /** What the floor under the foot does to its agility. */
 const footTerrainAgility = (): number => {
   let k = 1
@@ -1168,7 +2036,19 @@ const land = (): void => {
 
   // The boss is resolved BEFORE the stomp event, because a blow that landed on
   // it is a hit — see `bossStomp` — and the event carries `hit` to the renderer.
+  //
+  // Kills inside this one blow are counted: two or more is a MULTI, the thing
+  // the Rush Lines and Growth Spurt exist to make happen, and the rush lesson
+  // retires on the first one.
+  stompKills = 0
+  inStomp = true
   const hitBugs = resolveArea(foot.x, foot.y, r, heavy, false)
+  inStomp = false
+  if (stompKills >= 2) {
+    const t = tally.value
+    tally.value = { ...t, multiKills: t.multiKills + 1 }
+    emit({ k: 'multi', x: foot.x, y: foot.y, n: stompKills })
+  }
   // After the blow has been resolved, so nothing it killed is scared by it.
   scareSprinters(foot.x, foot.y, r)
   const hitBoss = boss ? bossStomp(foot.x, foot.y, r, heavy) : false
@@ -1180,48 +2060,118 @@ const land = (): void => {
   // note describes for the body, one phase later; it cost nothing while the egg
   // phase was 1-10's, and would have been a six-year-old's first boss fight.
   const hitPod = boss ? podUnder(foot.x, foot.y, stompRadius(heavy)) : false
-  const hit = hitBugs || hitBoss || hitPod
+  // A shoebox under the sole is a hit too — the player aimed at the present.
+  const hitBox = boxUnder(foot.x, foot.y, r)
+  const hit = hitBugs || hitBoss || hitPod || hitBox
   if (heavy) slams.value++
   emit({ k: 'stomp', x: foot.x, y: foot.y, r, heavy, hit })
 
   if (heavy) armMagnets()
-  stompHazards(foot.x, foot.y, r)
+  stompHazards(foot.x, foot.y, r, heavy)
+
+  // ── The trophies that ride on a slam ──
+  if (heavy && hasMove('quake') && foot.charge >= QUAKE_CHARGE) {
+    // A FULL charge sends a ring out along the floor: everything it crosses is
+    // stunned, and every shell it crosses goes over on its back.
+    quake.active = true
+    quake.x = foot.x
+    quake.y = foot.y
+    quake.r = r * 0.6
+    emit({ k: 'quake', x: foot.x, y: foot.y })
+  }
+  if (heavy && hasMove('echo')) {
+    // The same spot again, 400 ms later — the flea that leapt the first one is
+    // landing, the moth is dipping.
+    echo.at = elapsed + ECHO_MS
+    echo.x = foot.x
+    echo.y = foot.y
+    echo.r = r
+  }
 
   if (!hit) {
     // A MISS: bare floor. The chain is over.
     emit({ k: 'miss', x: foot.x, y: foot.y })
     const t = tally.value
     tally.value = { ...t, misses: t.misses + 1 }
-    if (chain.count > 0) emit({ k: 'chainLost' })
-    chain = chainBreak(chain)
-    syncChain()
+    breakChain()
   }
 
-  // A slide can only start out of a landing, and only in a shoe that has one.
-  if ((shoe.slide || onSlickFloor()) && pressHeld && foot.speed > 12) {
-    foot.state = 'slide'
-    foot.timer = 900
-    slideId++
-  }
+  trySlide()
 }
 
+/**
+ * Start a skid, if this foot may have one and is moving fast enough under a
+ * held finger: in a shoe that has one, on a slick floor, or — once the Queen's
+ * Skid is won on 1-10 — anywhere at all.
+ *
+ * ── Why this is no longer only reachable out of a landing ──
+ *
+ * It used to live at the end of `land()`, and the note above it said a slide
+ * can only start out of a landing. That was never a design rule — it was a
+ * consequence of the OLD control, where a press opened with a stomp and so
+ * every drag began with a landing whether the player wanted one or not. With
+ * the blow moved to the release (see `press`) a dragged finger never lands
+ * anything, and the Skid silently stopped existing: `retentionSim`'s "a press
+ * dragged on bare floor slides" is what caught it.
+ *
+ * So the condition is unchanged and the reachability is widened — a landing
+ * still starts one (a slam dragged out of its own impact keeps skating), and
+ * now so does the drag itself.
+ */
+const trySlide = (): boolean => {
+  if (foot.state === 'slide') return false
+  if (!(shoe.slide || onSlickFloor() || hasMove('skid'))) return false
+  if (!pressHeld || foot.speed <= 12) return false
+  foot.state = 'slide'
+  foot.timer = 900
+  slideId++
+  return true
+}
+
+/** Break the chain, and say which rung was lost — the shoe deflates from it. */
+const breakChain = (): void => {
+  if (chain.count > 0) emit({ k: 'chainLost', mult: comboMultiplier(chain.count) })
+  chain = chainBreak(chain)
+  syncChain()
+}
+
+/** Is the foot on something slippery — honey's rim, or the spill's lane? */
 const onSlickFloor = (): boolean => {
   for (const h of hazards) {
-    if (h.id !== 'honey') continue
-    if (dist2(foot.x, foot.y, h.x, h.y) < h.r * h.r) return true
+    if (h.id === 'honey') {
+      if (dist2(foot.x, foot.y, h.x, h.y) < h.r * h.r) return true
+    } else if (h.id === 'slick') {
+      if (inLane(h, foot.x, foot.y)) return true
+    }
   }
   return false
 }
 
-/** While sliding, everything the sole crosses is crushed. */
+/** Is (x, y) inside a lane-shaped hazard — the conveyor, the spill? */
+const inLane = (h: Hazard, x: number, y: number): boolean => {
+  const dx = x - h.x
+  const dy = y - h.y
+  const along = dx * Math.cos(h.angle) + dy * Math.sin(h.angle)
+  const across = -dx * Math.sin(h.angle) + dy * Math.cos(h.angle)
+  return Math.abs(along) < h.r && Math.abs(across) < hazardSpec(h.id).size * (h.id === 'slick' ? 1 : 0.5)
+}
+
+/**
+ * While sliding, everything the sole crosses is crushed.
+ *
+ * The re-hit guard is on the SIM's clock. It read `performance.now()` — wall
+ * time inside a fixed-step simulation — which on a slow phone running three
+ * sub-steps a frame let one flea be hit three times per 220 "ms", and in a
+ * headless run (no wall time passing at all) let nothing be hit twice ever.
+ */
 const slideDamage = (): void => {
   const r = stompRadius() * 0.9
-  const now = performance.now()
   for (let i = bugCount - 1; i >= 0; i--) {
+    if (i >= bugCount) continue
     const b = bugs[i]!
-    if (now - b.lastSlide < SLIDE_REHIT_MS) continue
+    if (elapsed - b.lastSlide < SLIDE_REHIT_MS) continue
     if (dist2(foot.x, foot.y, b.x, b.y) > (r + b.spec.size) * (r + b.spec.size)) continue
-    b.lastSlide = now
+    b.lastSlide = elapsed
     hitBug(i, blowPierce(shoe, false), false, true)
   }
 }
@@ -1240,11 +2190,21 @@ const resolveArea = (x: number, y: number, r: number, heavy: boolean, sweep: boo
   let hit = false
   const pierce = sweep ? 0 : blowPierce(shoe, heavy)
   for (let i = bugCount - 1; i >= 0; i--) {
+    // An arc from an earlier kill in this same loop can empty the end of the
+    // pool under it — see `killSlot`.
+    if (i >= bugCount) continue
     const b = bugs[i]!
     const reach = r + b.spec.size
     if (dist2(x, y, b.x, b.y) > reach * reach) continue
     if (b.spec.airborne && b.dip < 0.55 && !sweep) continue
-    if (sweep && (b.spec.armor > 0 || b.spec.spiky)) continue
+    // A rolling puck is the player's ball, not a target.
+    if (b.puck) continue
+    if (sweep && (b.spec.armor > 0 || b.spec.spiky) && b.flipped <= 0) {
+      // The Heel Spin sweeps a shell OVER rather than past it — the ring it
+      // answers is how a child meets that on 1-5, and a beetle knot after it.
+      if (b.spec.flips && !b.spec.spiky) { flipBody(b); hit = true }
+      continue
+    }
     hit = true
     hitBug(i, pierce, heavy, false)
   }
@@ -1268,6 +2228,9 @@ const resolveArea = (x: number, y: number, r: number, heavy: boolean, sweep: boo
  * Electric Sock would be worth four rungs and the whole ladder would collapse.
  */
 const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, chainOk = true): void => {
+  // An index a loop was holding when something else in the same step emptied
+  // the end of the pool — see `killSlot`.
+  if (i < 0 || i >= bugCount) return
   const b = bugs[i]!
   const spec = b.spec
 
@@ -1276,10 +2239,15 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
   const headshot = spec.segments > 0 && !fromSlide
     && dist2(foot.x, foot.y, b.x, b.y) < (spec.size * 0.9) * (spec.size * 0.9)
 
-  const verdict: StompVerdict = resolveStomp({
-    bug: spec, damage: b.dmg, pierce, spikeProof: shoe.spikeProof,
-    fever: fever.remainMs > 0, heavy, headshot
-  })
+  // A body on its back is soft side up: anything kills it. The glitch twist
+  // drops every robobug's plate for its three seconds.
+  const soft = b.flipped > 0 || (glitchOn() && b.id === 'robobug')
+  const verdict: StompVerdict = forceKill || (soft && !spec.spiky)
+    ? 'splat'
+    : resolveStomp({
+      bug: spec, damage: b.dmg, pierce, spikeProof: shoe.spikeProof || spikeSafe,
+      fever: fever.remainMs > 0, heavy, headshot
+    })
 
   const t = tally.value
   if (verdict === 'spike') {
@@ -1287,9 +2255,7 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
     foot.state = 'stun'
     foot.timer = SPIKE_STUN_MS
     tally.value = { ...t, spikes: t.spikes + 1, hits: t.hits + 1 }
-    if (chain.count > 0) emit({ k: 'chainLost' })
-    chain = chainBreak(chain)
-    syncChain()
+    breakChain()
     return
   }
 
@@ -1297,6 +2263,7 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
 
   if (verdict === 'ricochet') {
     emit({ k: 'clang', x: b.x, y: b.y, bug: b.id, heavy })
+    tally.value = { ...tally.value, ricochets: tally.value.ricochets + 1 }
     b.stun = Math.max(b.stun, 180)
     return
   }
@@ -1305,6 +2272,9 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
     b.dmg += blowDamage(heavy)
     emit({ k: 'hurt', x: b.x, y: b.y, bug: b.id, heavy })
     b.stun = Math.max(b.stun, 220)
+    // ── Beetle Bowling ── A slam that cracks a shell without killing it turns
+    // the body over. One more tap finishes it; a flick sends it bowling.
+    if (heavy) flipBody(b)
     return
   }
 
@@ -1323,10 +2293,18 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
   // The vial is paid in mass, with a CHAIN BONUS on top — `juiceGain` owns both
   // numbers, so the balance lives in one file with the ladder it depends on.
   fever = { ...fever, juice: Math.min(1, fever.juice + juiceGain(spec.juice, multiplier)) }
+  // A full vial ARMS Fever; `stepFever` spends it on the next frame with a body
+  // still on the floor. Four of five blind testers never worked out that the
+  // vial was a button, and the one who read the hint reported it "pointed at
+  // nothing obvious" — so the game's best moment is no longer something a
+  // player has to know about to ever see.
+  if (feverReady(fever)) feverArmed = true
   if (fever.remainMs <= 0) juice.value = fever.juice
   if (fever.remainMs > 0) feverKills++
 
   squished.value++
+  sinceSquish = 0
+  if (inStomp) stompKills++
   const byKind = { ...tally.value.byKind }
   byKind[b.id] = (byKind[b.id] ?? 0) + 1
   tally.value = {
@@ -1337,11 +2315,16 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
     bestFeverKills: Math.max(tally.value.bestFeverKills, feverKills),
     score: score.value
   }
+  noteQuotaStep(b.x, b.y, heavy)
 
   const stretch = fromSlide ? clamp(1 + foot.speed / 40, 1, 2.6) : clamp(1 + foot.speed / 90, 1, 1.5)
   emit({
     k: 'squish', x: b.x, y: b.y, bug: b.id, heavy,
-    word: splatWord(multiplier), mult: multiplier, stretch, angle: foot.heading
+    word: splatWord(multiplier), mult: multiplier, stretch,
+    // `angle` is the BLOW's line and `face` is the BODY's — the renderer squashes
+    // the one along the other, so a ghost of what was just flattened is drawn
+    // facing the way the creature was actually facing.
+    angle: foot.heading, face: b.heading
   })
 
   if (spec.coins > 0) emit({ k: 'coin', x: b.x, y: b.y, n: spec.coins })
@@ -1350,8 +2333,9 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
   // one is the reward for catching the ant before it sets the egg down.
   if (b.carry) { b.carry = false; popEgg(b.x, b.y, chainOk) }
 
-  // A centipede does not die — it SPLITS, unless the head went.
-  if (spec.segments > 0 && b.segs > 1 && !headshot) {
+  // A centipede does not die — it SPLITS, unless the head went (or the blow is
+  // one that kills outright: a slam finisher, a spent puck).
+  if (spec.segments > 0 && b.segs > 1 && !headshot && !forceKill) {
     b.segs = Math.max(1, Math.floor(b.segs / 2))
     const half = spawnBug('centipede', b.x, b.y)
     if (half) {
@@ -1370,7 +2354,86 @@ const hitBug = (i: number, pierce: number, heavy: boolean, fromSlide: boolean, c
   // the arc has somewhere to come FROM.
   if (shoe.chain > 0 && chainOk) arcLightning(b.x, b.y, b.id, shoe.chain)
 
-  killSlot(i)
+  // The arcs may have killed bodies and swapped this one into another slot, so
+  // it is removed by IDENTITY rather than by the index it was hit at.
+  killSlot(bugs[i] === b ? i : indexOfBug(b))
+}
+
+// ─── Big Finish ─────────────────────────────────────────────────────────────
+//
+// The last body of a level glows gold and the world holds its breath. Stomp it
+// for a board-clear; once you can slam, let the board fill first and SLAM the
+// last one for the jackpot — every body on the floor goes in one shockwave. A
+// level used to end on whichever ordinary squish met the quota, and the loudest
+// frame of every level was the modal after it.
+
+/** Is this level one a Big Finish plays on? Boss levels have their crown
+ *  finish instead (the boss dying IS the finale), and a party has no quota. */
+const hasFinish = (): boolean => !boss && !level.party && level.quota > 1
+
+/** A squish landed: is it the one that leaves one to go — or the last one? */
+const noteQuotaStep = (x: number, y: number, heavy: boolean): void => {
+  // Before the early return, and deliberately: the win beat's camera needs a
+  // point on EVERY level, including the ones with no Big Finish to remember one
+  // for it. See `lastKillX`.
+  lastKillX = x
+  lastKillY = y
+  if (!hasFinish()) return
+  const n = squished.value
+  if (n === level.quota - 1 && !finale.value) {
+    finale.value = true
+    emit({ k: 'finishReady' })
+  }
+  // The blow that meets the quota is remembered: it decides tap or slam, and
+  // where the shockwave rolls out from.
+  if (n === level.quota) {
+    finisherHeavy = heavy
+    finisherX = x
+    finisherY = y
+  }
+}
+
+/**
+ * The quota fell: play the finisher, BEFORE the level is declared won, so its
+ * score reaches the tally and the leaderboard.
+ *
+ *   slam   every live body on the floor dies in one shockwave, on the chain,
+ *          paid a coin per three (capped) — the push-your-luck payout;
+ *   tap    the rest of the board panics and scatters, and the afterglow keeps
+ *          it running for the second the celebration is drawn over.
+ */
+const resolveFinisher = (): void => {
+  if (!hasFinish()) return
+  finale.value = false
+  let n = 0
+  if (finisherHeavy) {
+    forceKill = true
+    for (let i = bugCount - 1; i >= 0; i--) {
+      if (i >= bugCount) continue
+      const b = bugs[i]!
+      if (b.spec.airborne && b.dip < 0.55) b.dip = 1
+      const before = squished.value
+      hitBug(i, 99, true, false, true)
+      if (squished.value > before) n++
+    }
+    forceKill = false
+    const coins = Math.min(FINISH_COIN_CAP, Math.floor(n / FINISH_COIN_PER))
+    if (coins > 0) emit({ k: 'coin', x: finisherX, y: finisherY, n: coins })
+  } else {
+    for (let i = 0; i < bugCount; i++) {
+      const b = bugs[i]!
+      b.panic = SALT_PANIC_MS
+      b.rush = 0
+      b.heading = Math.atan2(b.y - finisherY, b.x - finisherX)
+    }
+  }
+  afterglow = AFTERGLOW_MS
+  // The BLOW, not whichever body the sweep happened to reach last. A heavy
+  // finisher kills the whole floor in one shockwave, so every one of those
+  // kills wrote itself to `lastKill` on the way past and the last writer is
+  // arbitrary — the shot the player wants is where their foot landed.
+  if (finisherHeavy) { lastKillX = finisherX; lastKillY = finisherY }
+  emit({ k: 'finisher', x: finisherX, y: finisherY, n, heavy: finisherHeavy })
 }
 
 /** The Electric Sock's arcs: `n` nearest bodies, each taking one un-chained
@@ -1379,6 +2442,7 @@ const arcLightning = (x: number, y: number, _from: BugId, n: number): void => {
   let left = n
   const reach = 22
   for (let i = bugCount - 1; i >= 0 && left > 0; i--) {
+    if (i >= bugCount) continue
     const b = bugs[i]!
     if (b.x === x && b.y === y) continue
     if (dist2(x, y, b.x, b.y) > reach * reach) continue
@@ -1416,13 +2480,14 @@ const armMagnets = (): void => {
   }
 }
 
-/** A stomp that lands on a shaker tips it. */
-const stompHazards = (x: number, y: number, r: number): void => {
+/** A stomp that lands on a shaker tips it; one on a shoebox knocks it open. */
+const stompHazards = (x: number, y: number, r: number, heavy = false): void => {
   for (const h of hazards) {
     if (!hazardSpec(h.id).stompable || h.charge < 0) continue
-    if (h.id !== 'salt') continue
     const reach = r + h.r
     if (dist2(x, y, h.x, h.y) > reach * reach) continue
+    if (h.id === 'shoebox') { hitBox(h, heavy); return }
+    if (h.id !== 'salt') continue
     h.charge = -1
     h.travel = 0
     emit({ k: 'salt', x: h.x, y: h.y })
@@ -1431,6 +2496,113 @@ const stompHazards = (x: number, y: number, r: number): void => {
       if (dist2(h.x, h.y, b.x, b.y) < SALT_BURST_R * SALT_BURST_R) b.panic = SALT_PANIC_MS
     }
   }
+}
+
+// ─── Shoebox Trials ─────────────────────────────────────────────────────────
+//
+// A present drops onto the floor. Three taps (a slam counts two) and the foot
+// wears the shoe inside it for `TRIAL_MS` — the steel boot on the caterpillar
+// level, the roller skate on the flea level — and then the sneaker is back and
+// the Locker button glows with the shoe's picture. Twelve seconds of OWNING a
+// thing is what makes buying it mean something; a stat sheet never did.
+
+/** Is a shoebox under a stomp of radius `r` at (x, y)? Read-only. */
+const boxUnder = (x: number, y: number, r: number): boolean => {
+  for (const h of hazards) {
+    if (h.id !== 'shoebox' || h.charge <= 0) continue
+    const reach = r + h.r
+    if (dist2(x, y, h.x, h.y) <= reach * reach) return true
+  }
+  return false
+}
+
+/**
+ * The shoe a box should hold for THIS player: the authored one, unless they
+ * already own it (or have it on), in which case the next shoe they do not own —
+ * and if they own the lot, gilded laces. A box is never a shrug.
+ */
+const trialFor = (authored: ShoeId, taken: ReadonlySet<ShoeId>): ShoeId | 'laces' => {
+  const free = (id: ShoeId): boolean =>
+    id !== STARTER_SHOE && !ownedShoes.includes(id) && id !== baseShoe.id && !taken.has(id)
+  if (free(authored)) return authored
+  for (const s of SHOES) if (free(s.id)) return s.id
+  return 'laces'
+}
+
+/** Drop the level's box (or pair) onto open floor, clear of the foot. */
+const dropTrial = (): void => {
+  const t = level.trial
+  if (!t) return
+  trialDropped = true
+  const spec = hazardSpec('shoebox')
+  const authored: readonly ShoeId[] = Array.isArray(t) ? t : [t as ShoeId]
+  const pw = board.x1 - board.x0
+  const ph = board.y1 - board.y0
+  const taken = new Set<ShoeId>()
+  for (let i = 0; i < authored.length; i++) {
+    const inside = trialFor(authored[i]!, taken)
+    if (inside !== 'laces') taken.add(inside)
+    let x = 0
+    let y = 0
+    for (let attempt = 0; attempt < 10; attempt++) {
+      // A pair sits on opposite sides; a single box anywhere open.
+      const fx = authored.length === 2 ? (i === 0 ? rndRange(0.15, 0.4) : rndRange(0.6, 0.85)) : rndRange(0.2, 0.8)
+      x = board.x0 + pw * fx
+      y = board.y0 + ph * rndRange(0.25, 0.75)
+      if (dist2(x, y, foot.x, foot.y) >= BOX_CLEAR_U * BOX_CLEAR_U) break
+    }
+    hazards.push({
+      id: 'shoebox', x, y, r: spec.size, angle: 0, phase: rnd(),
+      charge: spec.hp ?? 3, travel: 0, dir: 1, seed: 41 + i * 13,
+      shoe: inside === 'laces' ? undefined : inside
+    })
+    emit({ k: 'boxDrop', x, y })
+  }
+}
+
+/** A blow on a box: count it down, and open it at zero. */
+const hitBox = (h: Hazard, heavy: boolean): void => {
+  h.charge -= heavy ? 2 : 1
+  if (h.charge > 0) {
+    emit({ k: 'boxHit', x: h.x, y: h.y, left: h.charge })
+    return
+  }
+  // Open. Its twin, if it had one, goes *poof* — a pair is a CHOICE.
+  const inside = h.shoe ?? null
+  for (const o of hazards) {
+    if (o.id === 'shoebox' && o !== h && o.charge > 0) emit({ k: 'boxPoof', x: o.x, y: o.y })
+  }
+  hazards = hazards.filter((o) => o.id !== 'shoebox')
+  startTrial(inside, h.x, h.y)
+}
+
+/** Put the foot in the box's shoe — or, with no shoe inside, gilded laces. */
+const startTrial = (id: ShoeId | null, x: number, y: number): void => {
+  emit({ k: 'trial', shoe: id, x, y })
+  if (id === null) {
+    // Gilded laces: a short Fever that costs the vial nothing.
+    trialShoe.value = 'laces'
+    if (fever.remainMs <= 0) {
+      heldJuice = fever.juice
+      fever = { juice: 0, remainMs: LACES_MS }
+      feverMs.value = fever.remainMs
+      juice.value = 0
+      emit({ k: 'fever', x, y })
+    }
+    return
+  }
+  trialShoe.value = id
+  trialMs = TRIAL_MS
+  pendingShoe = shoeSpec(id)
+}
+
+/** The twelve seconds are up: back into the shoe the player came in. */
+const endTrial = (): void => {
+  const was = trialShoe.value
+  trialShoe.value = null
+  trialMs = 0
+  pendingShoe = baseShoe
+  emit({ k: 'trialEnd', shoe: was === 'laces' ? null : was })
 }
 
 const stepHazards = (dt: number): void => {
@@ -1469,12 +2641,13 @@ const sweepKill = (h: Hazard): void => {
     emit({ k: 'sweep', x: b.x, y: b.y })
     emit({
       k: 'squish', x: b.x, y: b.y, bug: b.id, heavy: true,
-      word: 'crunch', mult: 1, stretch: 1.8, angle: 0
+      word: 'crunch', mult: 1, stretch: 1.8, angle: 0, face: b.heading
     })
     squished.value++
     const byKind = { ...tally.value.byKind }
     byKind[b.id] = (byKind[b.id] ?? 0) + 1
     tally.value = { ...tally.value, squishes: tally.value.squishes + 1, byKind }
+    noteQuotaStep(b.x, b.y, false)
     killSlot(i)
   }
 }
@@ -1485,17 +2658,22 @@ const applyTerrain = (b: Bug, dt: number): number => {
   let k = 1
   for (const h of hazards) {
     const spec = hazardSpec(h.id)
-    if (h.id === 'sweeper') continue
+    if (h.id === 'sweeper' || h.id === 'shoebox') continue
     if (h.id === 'conveyor') {
       // A belt is a rectangle, not a circle: half its length along `angle` and
-      // a fixed half-width across it.
-      const dx = b.x - h.x
-      const dy = b.y - h.y
-      const along = dx * Math.cos(h.angle) + dy * Math.sin(h.angle)
-      const across = -dx * Math.sin(h.angle) + dy * Math.cos(h.angle)
-      if (Math.abs(along) < h.r && Math.abs(across) < spec.size * 0.5) {
-        b.x += Math.cos(h.angle) * CONVEYOR_SPEED * (dt / 1000)
-        b.y += Math.sin(h.angle) * CONVEYOR_SPEED * (dt / 1000)
+      // a fixed half-width across it. `conveyorK` is the Surge twist — the belt
+      // thrown into reverse at double speed, then stopped dead.
+      if (inLane(h, b.x, b.y)) {
+        b.x += Math.cos(h.angle) * CONVEYOR_SPEED * conveyorK * (dt / 1000)
+        b.y += Math.sin(h.angle) * CONVEYOR_SPEED * conveyorK * (dt / 1000)
+      }
+      continue
+    }
+    if (h.id === 'slick') {
+      // The spill: a lane, not a disc. Bodies in it wade and cannot leap.
+      if (inLane(h, b.x, b.y)) {
+        k *= spec.bugSpeed
+        b.sense = Math.min(b.sense, 0)
       }
       continue
     }
@@ -1601,6 +2779,19 @@ const scareSprinters = (x: number, y: number, r: number): void => {
     // Arm the SHARED tell rather than bolting on the spot: one code path, and
     // the "!" gets its moment on a phone too.
     b.sense = Math.max(b.sense, SPRINT_TELL_MS - SPRINT_SCARE_TELL_MS)
+    // A sprinter LINE bolts as one: the near miss on any of them sends the
+    // whole conga off, each straight away from the shoe, and they stop winded
+    // in a fan — which is the shot to take.
+    if (b.rushId > 0) {
+      for (let j = 0; j < bugCount; j++) {
+        const o = bugs[j]!
+        if (o === b || o.rushId !== b.rushId || !o.spec.sprints) continue
+        if (o.bolt > 0 || o.boltCd > 0 || o.stun > 0 || o.held > 0) continue
+        o.sense = Math.max(o.sense, SPRINT_TELL_MS - SPRINT_SCARE_TELL_MS)
+        o.rush = 0
+      }
+      b.rush = 0
+    }
   }
 }
 
@@ -1618,6 +2809,7 @@ const scareSprinters = (x: number, y: number, r: number): void => {
 const groundedAt = (b: Bug): boolean => {
   for (const h of hazards) {
     if (!hazardSpec(h.id).grounds) continue
+    if (h.id === 'slick') { if (inLane(h, b.x, b.y)) return true; continue }
     if (dist2(b.x, b.y, h.x, h.y) < h.r * h.r) return true
   }
   return false
@@ -1626,26 +2818,62 @@ const groundedAt = (b: Bug): boolean => {
 const stepBugs = (dt: number): void => {
   const s = dt / 1000
   const shadowR = stompRadius(foot.state === 'charge')
+  const tw = twistPhase
+  const twistId = level.twist
+  // The tell of a twist and of a rush both take the board's breath away: every
+  // body slows while the warning is up, so the warning can be READ.
+  const tellK = tw === 'tell' && twistId ? twistSpec(twistId).tellSpeed : 1
+  const sprinkling = tw === 'active' && twistId === 'sprinkler'
+  const drafting = tw === 'active' && twistId === 'draft'
+  // From world 3 the gilded last body runs from the shoe — greed with teeth.
+  const fleeing = finale.value && level.world >= 3
   for (let i = bugCount - 1; i >= 0; i--) {
     const b = bugs[i]!
     const spec = b.spec
     b.t += dt
 
+    // A puck is the player's ball and rolls in its own pass (`stepPucks`).
+    if (b.puck) continue
+
     if (b.stun > 0) { b.stun -= dt; b.cycle += s * 0.4 }
     if (b.held > 0) b.held -= dt
     if (b.panic > 0) b.panic -= dt
     if (b.boltCd > 0) b.boltCd -= dt
+    if (b.rush > 0) b.rush -= dt
+    if (b.flipped > 0) {
+      // On its back: legs going like mad, going nowhere.
+      b.flipped -= dt
+      b.cycle = (b.cycle + s * 4) % 1
+      continue
+    }
+    if (b.frozen > 0) { b.frozen -= dt; continue }
+    // The draught pushes everything that is not pinned down.
+    if (drafting && b.held <= 0) b.x += twistDrift * s
+    // The sprinkler herds everything near its wet stripe onto it, into a line.
+    if (sprinkling && Math.abs(b.y - twistStripeY) < 34) {
+      b.y += (twistStripeY - b.y) * Math.min(1, SPRINKLER_PULL * s)
+      if (b.bolt <= 0 && b.sense >= 0) b.heading = Math.cos(b.heading) >= 0 ? 0 : Math.PI
+    }
     // A carrier puts its egg down once it has walked far enough to be seen, and
     // only on open floor — an egg set down in the HUD gutter is out of reach.
     if (b.carry && b.t >= CARRIER_WALK_MS && inEggZone(b.x, b.y)) setEggDown(b)
 
-    let speed = spec.speed * level.speed * difficulty / relief
+    let speed = spec.speed * level.speed * difficulty / relief * tellK
     if (b.panic > 0) speed *= SALT_PANIC_SPEED
+    // A marcher keeps its formation's pace — see `rushK`.
+    if (b.rush > 0) speed *= b.rushK
     // Kept, rather than folded straight into `speed`, because a bolt is not
     // driven by `speed` and still has to be slowed by the floor it crosses.
     const terrain = applyTerrain(b, dt)
     speed *= terrain
     if (b.stun > 0 || b.held > 0) speed = 0
+    if (fleeing && b.bolt <= 0 && b.sense >= 0) {
+      const d2 = dist2(b.x, b.y, foot.x, foot.y)
+      if (d2 < FINALE_FLEE_U * FINALE_FLEE_U) {
+        b.heading = Math.atan2(b.y - foot.y, b.x - foot.x)
+        speed *= 1.4
+      }
+    }
 
     // ── The sprinter's bolt ──
     //
@@ -1731,7 +2959,11 @@ const stepBugs = (dt: number): void => {
     }
 
     // ── Steering, per motion kind ──
-    switch (spec.motion) {
+    //
+    // A marcher on a Rush Line does not steer: it is walking the lane. (Crumbs
+    // still bend it — `applyTerrain` — which is how 1-6's conga knots up on the
+    // pile, ready for a bowled beetle.)
+    if (b.rush <= 0) switch (spec.motion) {
       case 'march':
         // Straight until the edge. Crumbs bend the heading (see `applyTerrain`).
         break
@@ -1780,7 +3012,8 @@ const stepBugs = (dt: number): void => {
 
     if (spec.segments > 0 && b.trail) pushTrail(b)
 
-    bounce(b)
+    // A marcher still walking in from past the edge is not turned back by it.
+    if (!entering(b)) bounce(b)
   }
 }
 
@@ -2218,7 +3451,10 @@ const beamKill = (bs: Boss): void => {
     if (along < 0 || Math.abs(across) > BEAM_HALF) continue
     // The beam is the boss's own weapon and it kills its own adds — which is the
     // whole reason a player learns to stand behind them.
-    emit({ k: 'squish', x: b.x, y: b.y, bug: b.id, heavy: true, word: 'crunch', mult: 1, stretch: 1.4, angle: bs.aim })
+    emit({
+      k: 'squish', x: b.x, y: b.y, bug: b.id, heavy: true,
+      word: 'crunch', mult: 1, stretch: 1.4, angle: bs.aim, face: b.heading
+    })
     killSlot(i)
   }
 }
@@ -2303,6 +3539,22 @@ const advanceBossPhase = (): void => {
     bs.alive = false
     bs.dying = 0
     score.value += bs.spec.score
+    // ── The board keeps living while the boss dies ──
+    //
+    // `finish` stops the step dead, and the only thing that ever re-opened it
+    // was `resolveFinisher`'s afterglow — which a boss level never reaches,
+    // because the boss dying IS the finish. So the death animation the renderer
+    // has always had (a 1.2 s squash-roll-and-fade, keyed off `dying`) never
+    // advanced a millisecond: the queen froze mid-stride at full opacity while a
+    // ring expanded past her. Two minutes of fight ended on a still frame.
+    //
+    // The afterglow is what that animation runs on, so a boss kill claims one
+    // the same way a tap finisher does, and `step` advances the boss through it.
+    afterglow = BOSS_AFTERGLOW_MS
+    // The body IS the win condition on this level, so it is what the win beat
+    // holds on — not the last ant her beam happened to catch.
+    lastKillX = bs.x
+    lastKillY = bs.y
     emit({ k: 'bossDown', x: bs.x, y: bs.y })
     bossHp.value = 0
     finish(true)
@@ -2345,12 +3597,167 @@ const syncBossHp = (): void => {
   bossHp.value = clamp(1 - done / total, 0, 1)
 }
 
+// ─── Uh-oh! Twists ──────────────────────────────────────────────────────────
+//
+// See `game/twists.ts` for what each one is and the rules they keep. The
+// director here is a four-state clock — told, running, its payoff, done — that
+// fires once a level at `TWIST_AT` of the quota. A level keeps its twist on
+// replay: it is part of the board.
+
+/** The glitch twist is on: every robobug's plate is down. */
+const glitchOn = (): boolean => twistPhase === 'active' && level.twist === 'glitch'
+
+/** Lay the spill's lane across the board's short axis, clear of the foot. */
+const laySpill = (): void => {
+  const pw = board.x1 - board.x0
+  const ph = board.y1 - board.y0
+  const across = pw <= ph
+  const half = hazardSpec('slick').size
+  const lo = (across ? board.y0 : board.x0) + 16
+  const hi = (across ? board.y1 : board.x1) - 16
+  const footAt = across ? foot.y : foot.x
+  let at = lo + rnd() * Math.max(1, hi - lo)
+  for (let attempt = 0; attempt < 8 && Math.abs(at - footAt) < 22; attempt++) {
+    at = lo + rnd() * Math.max(1, hi - lo)
+  }
+  const len = (across ? pw : ph) / 2 + 6
+  hazards.push({
+    id: 'slick',
+    x: across ? board.x0 + pw / 2 : at,
+    y: across ? at : board.y0 + ph / 2,
+    r: len, angle: across ? 0 : Math.PI / 2,
+    phase: 0, charge: 0, travel: 0, dir: 1, seed: 29,
+    stretch: len / half
+  })
+}
+
+const startTwist = (id: TwistId): void => {
+  twistPhase = 'active'
+  twistT = 0
+  switch (id) {
+    case 'spill':
+      laySpill()
+      break
+    case 'sprinkler': {
+      // The wet stripe runs across the board at a row clear of the shoe.
+      const ph = board.y1 - board.y0
+      twistStripeY = board.y0 + ph * (foot.y > board.y0 + ph / 2 ? 0.3 : 0.7)
+      break
+    }
+    case 'draft':
+      twistDrift = (rnd() < 0.5 ? -1 : 1) * DRAFT_PUSH
+      break
+    case 'surge':
+      conveyorK = SURGE_SPEED
+      break
+    case 'glitch':
+      // Every robobug stutters in place for the whole glitch.
+      for (let i = 0; i < bugCount; i++) {
+        const b = bugs[i]!
+        if (b.id === 'robobug') b.stun = Math.max(b.stun, twistSpec('glitch').activeMs)
+      }
+      break
+    case 'blackout':
+      break
+  }
+  emit({ k: 'twistStart', id })
+}
+
+const endTwist = (id: TwistId): void => {
+  const spec = twistSpec(id)
+  switch (id) {
+    case 'spill':
+      hazards = hazards.filter((h) => h.id !== 'slick')
+      break
+    case 'blackout':
+      // The lights come back and nobody is ready: a second of frozen, blinking
+      // bodies — the free chain the dark was paying for.
+      for (let i = 0; i < bugCount; i++) bugs[i]!.frozen = spec.afterMs
+      break
+    case 'draft':
+      twistDrift = 0
+      break
+    case 'surge':
+      // Stopped dead — everything that was riding it piles up.
+      conveyorK = 0
+      break
+    default:
+      break
+  }
+  emit({ k: 'twistEnd', id })
+  if (spec.afterMs > 0) { twistPhase = 'after'; twistT = 0 } else twistPhase = 'done'
+}
+
+const stepTwist = (dt: number): void => {
+  const id = level.twist
+  if (!id || twistPhase === 'done' || boss || level.party) return
+  const spec = twistSpec(id)
+  if (twistPhase === 'idle') {
+    if (level.quota <= 0 || squished.value < level.quota * TWIST_AT) return
+    // Not over a rush's tell, and never in the last body of the level.
+    if (rushPhase === 'tell' || finale.value) return
+    twistPhase = 'tell'
+    twistT = 0
+    emit({ k: 'twistTell', id })
+    return
+  }
+  twistT += dt
+  if (twistPhase === 'tell' && twistT >= spec.tellMs) startTwist(id)
+  else if (twistPhase === 'active' && twistT >= spec.activeMs) endTwist(id)
+  else if (twistPhase === 'after' && twistT >= spec.afterMs) {
+    twistPhase = 'done'
+    conveyorK = 1
+  }
+}
+
+// ─── Boss Trophies that run on the clock ────────────────────────────────────
+
+/** The Quake Slam's ring rolls out along the floor, stunning and flipping. */
+const stepQuake = (dt: number): void => {
+  if (!quake.active) return
+  const r0 = quake.r
+  quake.r += QUAKE_SPEED * (dt / 1000)
+  for (let i = 0; i < bugCount; i++) {
+    const b = bugs[i]!
+    if (b.puck) continue
+    const d = Math.sqrt(dist2(quake.x, quake.y, b.x, b.y))
+    if (d < r0 - b.spec.size || d > quake.r + b.spec.size) continue
+    b.stun = Math.max(b.stun, QUAKE_STUN_MS)
+    flipBody(b)
+  }
+  if (quake.r >= QUAKE_REACH) quake.active = false
+}
+
+/** The Echo Stomp's second blow, on the same spot. Never a miss: an echo that
+ *  lands on bare floor is the floor ringing, not the player being wrong. */
+const stepEcho = (): void => {
+  if (echo.at < 0 || elapsed < echo.at) return
+  echo.at = -1
+  emit({ k: 'echo', x: echo.x, y: echo.y, r: echo.r })
+  stompKills = 0
+  inStomp = true
+  resolveArea(echo.x, echo.y, echo.r, true, false)
+  inStomp = false
+  if (boss) bossStomp(echo.x, echo.y, echo.r, true)
+  stompHazards(echo.x, echo.y, echo.r, true)
+}
+
 // ─── The clock and the end ──────────────────────────────────────────────────
 
 const finish = (won: boolean): void => {
   if (phase.value !== 'play') return
   running = false
   phase.value = won ? 'won' : 'lost'
+  finale.value = false
+  // A party's gilded boot, or a pair of gilded laces, was never bought with the
+  // player's vial — hand it back now, so the next level opens with what they
+  // walked in with.
+  if (heldJuice !== null) {
+    fever = { juice: heldJuice, remainMs: 0 }
+    heldJuice = null
+    feverMs.value = 0
+    juice.value = fever.juice
+  }
   tally.value = {
     ...tally.value,
     cleared: won,
@@ -2360,11 +3767,29 @@ const finish = (won: boolean): void => {
     timeLeft: Math.max(0, Math.round(clockMs / 1000)),
     score: score.value
   }
-  emit({ k: 'end', won })
+  emit({ k: 'end', won, x: lastKillX, y: lastKillY })
 }
 
 /** Force the level to end — the pause menu's "give up", and the recorder's. */
 export const endLevel = (won: boolean): void => finish(won)
+
+/**
+ * Take the boss down from wherever the fight has got to, through the real last
+ * blow — the same `advanceBossPhase` branch that claims the afterglow, emits
+ * `bossDown` and wins the level.
+ *
+ * A seam, and it exists because the DEATH cannot otherwise be reached in a
+ * headless test: every fight's last phase is armoured and open only on a counter
+ * window, so a suite that fought its way there would be testing the counter and
+ * the level clock instead of the ending, and would not finish inside either. The
+ * only thing this skips is the fighting.
+ */
+export const __bossDown = (): void => {
+  const bs = boss
+  if (!bs || !bs.alive || phase.value !== 'play') return
+  bs.phase = bs.spec.phases.length - 1
+  advanceBossPhase()
+}
 
 // ─── The step ───────────────────────────────────────────────────────────────
 
@@ -2377,6 +3802,19 @@ let acc = 0
  * work-per-frame.
  */
 export const step = (frameMs: number): number => {
+  // The afterglow of a won level: the board keeps moving (the tap finisher's
+  // scatter, and a beaten boss falling over) for the second the celebration is
+  // drawn over. Nothing is scored.
+  if (!running && phase.value === 'won' && afterglow > 0) {
+    const dt = Math.min(frameMs, STEP_MS * MAX_SUBSTEPS)
+    afterglow -= dt
+    stepBugs(dt)
+    // `stepBoss` on a dead boss does exactly one thing — advance `dying`, which
+    // is the clock its whole death animation is drawn off. Without it the body
+    // is frozen at full opacity for the entire celebration.
+    if (boss) stepBoss(dt)
+    return 1
+  }
   if (!running || phase.value !== 'play') return 0
   acc += Math.min(frameMs, STEP_MS * MAX_SUBSTEPS * 2)
   let n = 0
@@ -2391,11 +3829,20 @@ export const step = (frameMs: number): number => {
 
 const substep = (dt: number): void => {
   elapsed += dt
+  sinceSquish += dt
 
   stepFoot(dt)
   stepBugs(dt)
+  stepPucks(dt)
   stepHazards(dt)
+  stepRush(dt)
   stepSpawns(dt)
+  stepTwist(dt)
+  stepQuake(dt)
+  stepEcho()
+  if (!trialDropped && level.trial && level.quota > 0 && squished.value >= level.quota * (level.trialAt ?? 0.35)) {
+    dropTrial()
+  }
   if (boss) {
     stepBoss(dt)
     // Pods are stomped by the foot's own landing; the check lives here so it
@@ -2407,15 +3854,50 @@ const substep = (dt: number): void => {
 
   // The chain's window, and the vial's decay.
   const before = chain.count
+  const lostMult = comboMultiplier(before)
   chain = chainStep(chain, dt)
-  if (before > 0 && chain.count === 0) { emit({ k: 'chainLost' }); syncChain() }
+  if (before > 0 && chain.count === 0) { emit({ k: 'chainLost', mult: lostMult }); syncChain() }
   else if (chain.count > 0) setChainRing(chain.windowMs / COMBO_WINDOW_MS)
 
+  // ── Growth Spurt ── The shoe chases its chain's size: quick up (a boing),
+  // slower down (a deflate the eye can follow). `stompRadius` reads it, and so
+  // does the renderer — the shoe is drawn from the radius, so it grows for free.
+  const target = chainScale(comboMultiplier(chain.count))
+  const tau = target > growth ? GROW_UP_MS : GROW_DOWN_MS
+  growth += (target - growth) * (1 - Math.exp(-dt / tau))
+
   const wasFever = fever.remainMs > 0
-  fever = stepFever(fever, dt)
+  fever = stepFever(fever, dt, sinceSquish)
   feverMs.value = fever.remainMs
   if (fever.remainMs <= 0) juice.value = fever.juice
-  if (wasFever && fever.remainMs <= 0) { emit({ k: 'feverEnd' }); feverKills = 0 }
+
+  // ── Fever spends itself ──
+  //
+  // The vial fills, the boot comes down. No button, no caption, no knowing what
+  // the flame was for. It waits for a body on the floor so the gift is never
+  // spent on an empty board, and never fires during a Fever that is already
+  // running (a party's, or the gilded laces') — that vial is held aside and
+  // handed back, and this would spend it the frame it came home.
+  if (feverArmed && fever.remainMs <= 0 && somethingToStomp()) {
+    if (tryFever()) feverArmed = false
+  }
+  if (wasFever && fever.remainMs <= 0) {
+    emit({ k: 'feverEnd' })
+    feverKills = 0
+    // A Fever that was a gift (the gilded laces) hands the vial back as it ends.
+    if (heldJuice !== null && !level.party) {
+      fever = { juice: heldJuice, remainMs: 0 }
+      heldJuice = null
+      juice.value = fever.juice
+      // A vial that comes home FULL is armed again: the gift ran on its own
+      // fuel, so the player's own Fever is still owed to them.
+      if (feverReady(fever)) feverArmed = true
+    }
+    if (trialShoe.value === 'laces') {
+      trialShoe.value = null
+      emit({ k: 'trialEnd', shoe: null })
+    }
+  }
 
   // The clock. A boss level has one too — it is generous, and it exists so a
   // player who cannot beat the boss is not stuck in it forever.
@@ -2431,8 +3913,13 @@ const substep = (dt: number): void => {
     const shown = Math.ceil(clockMs / 1000)
     if (shown !== timeLeft.value) timeLeft.value = shown
   }
-  if (clockMs <= 0) finish(false)
-  else if (!boss && level.quota > 0 && squished.value >= level.quota) finish(true)
+  // A party's clock running out is the END of the party, and a party cannot be
+  // lost — it is a win on the timeout.
+  if (clockMs <= 0) finish(level.party === true)
+  else if (!boss && level.quota > 0 && squished.value >= level.quota) {
+    resolveFinisher()
+    finish(true)
+  }
 }
 
 /** 0..1 through the level's own objective — the HUD's progress rail. */
@@ -2445,9 +3932,14 @@ export const progress01 = computed(() => {
 
 /** Everything a headless harness needs to drive a level. Dev-only callers. */
 export const __sim = {
+  /** Empty the floor outright — a test that places its own bodies. */
+  clearBugs: (): void => {
+    for (let i = 0; i < bugCount; i++) bugs[i]!.alive = false
+    bugCount = 0
+  },
   bugs, pods, hazards: () => hazards, foot, boss: () => boss,
   spawnBug, step, startLevel, setBoard, press, release, slamNow, tryFever, resetVial,
-  aim, endLevel, drainEvents,
+  aim, endLevel, drainEvents, getRush, getTwist, trialLeft, getGrowth,
   state: () => ({
     score: score.value, chain: chain.count, mult: comboMultiplier(chain.count),
     juice: fever.juice, fever: fever.remainMs, squished: squished.value,

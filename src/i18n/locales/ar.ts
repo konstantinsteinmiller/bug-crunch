@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} نجمة',
     'recordScore': '{n} نقطة',
     'recordBeat': 'الرقم السابق: {n}',
-    'chestCoins': '+{n} عملة'
+    'chestCoins': '+{n} عملة',
+    'move': 'حركة جديدة!'
+  },
+  'moves': {
+    'spin': 'دوران الكعب',
+    'skid': 'انزلاق',
+    'quake': 'ضربة الزلزال',
+    'echo': 'دوسة الصدى'
+  },
+  'party': {
+    'title': 'حفلة الحشرات!',
+    'count': '{n} حشرة',
+    'best': 'الأفضل: {n}',
+    'newBest': 'رقم قياسي جديد للحفلة!'
   },
   'fever': {
     'filling': 'حُمّى Splat: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'الحشرات المسحوقة',
     'starsEarned': '{n} من 3 نجوم',
     'rankOf': 'من {n}',
-    'worldUnlocked': 'تم فتح {n}!'
+    'worldUnlocked': 'تم فتح {n}!',
+    'peekNext': 'ألقِ نظرة على {n}',
+    'secondWind': 'نَفَس ثانٍ: محاولتك التالية تبدأ بقارورة ممتلئة',
+    'hintSlam': 'نصيحة: اضغط مطولًا لسحق الدروع',
+    'hintAvoid': 'نصيحة: اترك الشائكة وشأنها',
+    'missed': 'بقي {n} من الحشرات'
   },
   'leaderboard': {
     'title': 'لوحة المتصدرين',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'المس أي مكان فتطير قدمك إلى أقرب حشرة.'
   },
   'loading': {
-    'boo': 'بو!',
-    'laugh': 'هي هي!',
+    'uhOh': 'أوه لا!',
+    'missed': 'لم تصبني!',
     'tooLong': 'ما زال التحميل جارياً… تحقّق من اتصالك؟'
   },
   'saveStatus': {

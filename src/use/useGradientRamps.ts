@@ -75,6 +75,22 @@ export const clearRamps = (): void => {
   sprites.clear()
 }
 
+/**
+ * Drop the baked SPRITES only, leaving the ramps alone.
+ *
+ * For the one event that stales a sprite without staling anything else: a
+ * painting the bakes are made FROM finishing its download. `bakePuffSprite` and
+ * `bakeDropSprite` read `spriteFor('fx', …)` at bake time and cache the result
+ * per colour, so a painting that decodes after the first burst would otherwise
+ * never be seen — the cache only turns over when it hits its own 64-entry cap,
+ * which on a level with four goo colours is never.
+ *
+ * Scoped to the sprites because the ramps are not made from art at all: they
+ * are gradients keyed on a radius and a colour, and throwing them away for an
+ * image download would be paying for a rebuild nothing asked for.
+ */
+export const clearSprites = (): void => { sprites.clear() }
+
 /** Test seam — the count is the assertion that a per-entity site is actually
  *  reusing one ramp rather than quietly building one per entity. */
 export const rampCount = (): number => ramps.size

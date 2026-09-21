@@ -119,9 +119,9 @@
          ------------------------------------------------------------------
          The same picture `FLogoProgress.vue` draws — the ant floating over the
          mark — at the SAME size in the SAME place, so when Vue mounts and this
-         element fades out, nothing moves. The speech bubble is the only thing
-         that is not here, and it pops in on top of this once the fade has
-         finished (see `LURK_MS` in that component).
+         element fades out, nothing moves. The stomp and the speech bubble are
+         the only things that are not here, and they start on top of this once
+         the fade has finished (see `LURK_MS` in that component).
 
          Duplicated rather than shared because this has to paint before any
          stylesheet or module has been fetched. Change one, change both.
@@ -146,8 +146,9 @@
 
       /* The mascot: one ant, floating. It stands in the LEFT half of the stage
          so the speech bubble the Vue splash pops in on top of this has the
-         right half to itself on a 320 px phone. */
-      .splash-wisp {
+         right half to itself on a 320 px phone. Its float is the one
+         FLogoProgress adopts the clock of at the handover. */
+      .splash-greeter {
           position: absolute;
           left: 1%;
           bottom: -2%;
@@ -160,7 +161,7 @@
          height beats the tag's own width/height attributes — those are
          presentational hints, and they are on the tag so this does not reflow
          when the file decodes. */
-      .splash-wisp img {
+      .splash-greeter img {
           display: block;
           max-width: none;
           width: 100%;
@@ -216,7 +217,7 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
-          .splash-wisp, .splash-tiles { animation: none; }
+          .splash-greeter, .splash-tiles { animation: none; }
       }
   </style>
 </head>
@@ -225,7 +226,7 @@
   <div class="splash-tiles" aria-hidden="true"></div>
   <div class="splash-greet">
     <div class="splash-stage">
-      <div class="splash-wisp">
+      <div class="splash-greeter">
         <img src="/images/logo/mascot.webp" alt="" width="512" height="512" fetchpriority="high">
       </div>
     </div>

@@ -59,9 +59,17 @@ export const perfFlag = (name: string): boolean => flags.has(name)
 export const activeVariants = (): string[] => [...flags]
 
 // ─── Live experiments ───────────────────────────────────────────────────────
-//
-// None. Add them here for the life of one experiment, then delete with the
-// losing branch. Example of the shape:
-//
-//   /** Baseline: rebuild the ramp per puff. See PERF-LEDGER 2026-09-04. */
-//   export const SMOKE_LEGACY = perfFlag('smoke-legacy')
+
+/**
+ * Baseline for the squish-juice pass: no goo droplets (the shape-4 teardrops a
+ * burst throws), no flattened body ghost, and the boss death back to one ring.
+ *
+ * Branched at the emitter, not per particle: `gooSpray` and `pushSquash` return
+ * immediately, and `bossDeath` takes its old three-line path — so the flag is
+ * read once at module scope and the check never lands in a per-particle loop.
+ *
+ * This one is a FEATURE with a cost rather than an optimization, so the verdict
+ * it is measured against is a budget ("does the new juice cost a throttled phone
+ * frames?") and not a win. See `PERF-LEDGER.md`.
+ */
+export const JUICE_LEGACY = perfFlag('juice-legacy')

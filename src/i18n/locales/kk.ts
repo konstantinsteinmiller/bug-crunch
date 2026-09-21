@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} жұлдыз',
     'recordScore': '{n} ұпай',
     'recordBeat': 'Ескі рекорд: {n}',
-    'chestCoins': '+{n} тиын'
+    'chestCoins': '+{n} тиын',
+    'move': 'Жаңа әдіс!'
+  },
+  'moves': {
+    'spin': 'Өкшемен айналу',
+    'skid': 'Сырғанау',
+    'quake': 'Жер сілкінісі',
+    'echo': 'Жаңғырық басу'
+  },
+  'party': {
+    'title': 'Қоңыз кеші!',
+    'count': '{n} қоңыз',
+    'best': 'Үздік: {n}',
+    'newBest': 'Кештің жаңа рекорды!'
   },
   'fever': {
     'filling': 'Splat қызуы: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Жанышталған жәндіктер',
     'starsEarned': '3-тен {n} жұлдыз',
     'rankOf': '{n} ішінен',
-    'worldUnlocked': '{n} ашылды!'
+    'worldUnlocked': '{n} ашылды!',
+    'peekNext': '{n} деңгейіне қарау',
+    'secondWind': 'Екінші тыныс: келесі әрекет толы құтымен басталады',
+    'hintSlam': 'Кеңес: сауытты жару үшін басып тұр',
+    'hintAvoid': 'Кеңес: тікенектілерді баспа',
+    'missed': 'Тағы {n} қоңыз'
   },
   'leaderboard': {
     'title': 'Көшбасшылар тақтасы',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Кез келген жерді түртіңіз — аяқ ең жақын жәндікке ұшады.'
   },
   'loading': {
-    'boo': 'Бу!',
-    'laugh': 'Хи-хи!',
+    'uhOh': 'Ой-ой!',
+    'missed': 'Тимеді!',
     'tooLong': 'Әлі жүктелуде… байланысты тексересіз бе?'
   },
   'saveStatus': {

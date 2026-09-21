@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} yulduz',
     'recordScore': '{n} ochko',
     'recordBeat': 'Eski rekord: {n}',
-    'chestCoins': '+{n} tanga'
+    'chestCoins': '+{n} tanga',
+    'move': 'Yangi usul!'
+  },
+  'moves': {
+    'spin': 'Tovon aylanishi',
+    'skid': 'Sirpanish',
+    'quake': 'Zilzila zarbasi',
+    'echo': 'Aks-sado zarbasi'
+  },
+  'party': {
+    'title': 'Hasharotlar bazmi!',
+    'count': '{n} ta hasharot',
+    'best': 'Eng yaxshi: {n}',
+    'newBest': 'Bazmning yangi rekordi!'
   },
   'fever': {
     'filling': 'Splat isitmasi: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Ezilgan hasharotlar',
     'starsEarned': '3 tadan {n} yulduz',
     'rankOf': '{n} tadan',
-    'worldUnlocked': '{n} ochildi!'
+    'worldUnlocked': '{n} ochildi!',
+    'peekNext': '{n} ga qarash',
+    'secondWind': 'Ikkinchi nafas: keyingi urinish to‘la shisha bilan boshlanadi',
+    'hintSlam': 'Maslahat: qobiqlarni ezish uchun bosib turing',
+    'hintAvoid': 'Maslahat: tikanlilarni bosmang',
+    'missed': 'Yana {n} ta hasharot'
   },
   'leaderboard': {
     'title': 'Reyting',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Istalgan joyni bosing — oyoq eng yaqin hasharotga uchadi.'
   },
   'loading': {
-    'boo': 'Bu!',
-    'laugh': 'Hi-hi!',
+    'uhOh': 'Voy-voy!',
+    'missed': 'Tegmading!',
     'tooLong': 'Hamon yuklanmoqda… aloqani tekshirasizmi?'
   },
   'saveStatus': {

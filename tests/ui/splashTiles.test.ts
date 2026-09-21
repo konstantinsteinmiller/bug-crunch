@@ -62,7 +62,7 @@ describe('the two splashes pan the same tile', () => {
   })
 
   it('both stand still for a player who asked motion to stop', () => {
-    // Both files carry more than one reduced-motion block (the wispling has
+    // Both files carry more than one reduced-motion block (the greeting has
     // its own), so look at all of them rather than the first.
     const reduced = (css: string): string =>
       [...css.matchAll(/prefers-reduced-motion/g)].map((m) => css.slice(m.index!, m.index! + 220)).join('\n')

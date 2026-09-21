@@ -1,0 +1,314 @@
+{
+  "source": "https://bug-crunch-leaderboard.rodent-race.workers.dev",
+  "fetchedAt": 1789940870943,
+  "updatedAt": 1789940871174,
+  "total": 38,
+  "entries": [
+    {
+      "rank": 1,
+      "name": "Scout985140",
+      "score": 6974,
+      "squad": 8
+    },
+    {
+      "rank": 2,
+      "name": "Wanderer348708",
+      "score": 2428,
+      "squad": 7
+    },
+    {
+      "rank": 3,
+      "name": "Strider216166",
+      "score": 2130,
+      "squad": 4
+    },
+    {
+      "rank": 4,
+      "name": "Survivor172894",
+      "score": 2100,
+      "squad": 4
+    },
+    {
+      "rank": 5,
+      "name": "Trekker310203",
+      "score": 1980,
+      "squad": 4
+    },
+    {
+      "rank": 6,
+      "name": "Survivor104048",
+      "score": 1970,
+      "squad": 4
+    },
+    {
+      "rank": 7,
+      "name": "Trekker171508",
+      "score": 1370,
+      "squad": 4
+    },
+    {
+      "rank": 8,
+      "name": "Survivor256957",
+      "score": 1250,
+      "squad": 4
+    },
+    {
+      "rank": 9,
+      "name": "Roamer617367",
+      "score": 1250,
+      "squad": 4
+    },
+    {
+      "rank": 10,
+      "name": "Roamer938700",
+      "score": 1250,
+      "squad": 4
+    },
+    {
+      "rank": 11,
+      "name": "Runner121772",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 12,
+      "name": "Survivor391141",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 13,
+      "name": "Survivor719549",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 14,
+      "name": "Drifter704287",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 15,
+      "name": "Roamer607220",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 16,
+      "name": "Trekker343640",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 17,
+      "name": "Survivor820567",
+      "score": 1165,
+      "squad": 3
+    },
+    {
+      "rank": 18,
+      "name": "Ranger565353",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 19,
+      "name": "Drifter451368",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 20,
+      "name": "Scout781128",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 21,
+      "name": "Runner233315",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 22,
+      "name": "Wanderer163069",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 23,
+      "name": "Strider205005",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 24,
+      "name": "Scout977859",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 25,
+      "name": "Drifter413907",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 26,
+      "name": "Survivor441710",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 27,
+      "name": "Drifter270659",
+      "score": 1155,
+      "squad": 3
+    },
+    {
+      "rank": 28,
+      "name": "Survivor433671",
+      "score": 1145,
+      "squad": 3
+    },
+    {
+      "rank": 29,
+      "name": "Nomad659512",
+      "score": 1130,
+      "squad": 3
+    },
+    {
+      "rank": 30,
+      "name": "Wanderer449918",
+      "score": 1000,
+      "squad": 3
+    },
+    {
+      "rank": 31,
+      "name": "Scout362168",
+      "score": 893,
+      "squad": 3
+    },
+    {
+      "rank": 32,
+      "name": "Drifter700878",
+      "score": 551,
+      "squad": 2
+    },
+    {
+      "rank": 33,
+      "name": "Wanderer908757",
+      "score": 433,
+      "squad": 2
+    },
+    {
+      "rank": 34,
+      "name": "Roamer445479",
+      "score": 425,
+      "squad": 2
+    },
+    {
+      "rank": 35,
+      "name": "Scout969977",
+      "score": 170,
+      "squad": 1
+    },
+    {
+      "rank": 36,
+      "name": "Nomad824087",
+      "score": 10,
+      "squad": 1
+    },
+    {
+      "rank": 37,
+      "name": "Nomad995205",
+      "score": 10,
+      "squad": 1
+    },
+    {
+      "rank": 38,
+      "name": "Ranger698828",
+      "score": 10,
+      "squad": 1
+    }
+  ],
+  "dist": [
+    [
+      6974,
+      1
+    ],
+    [
+      2428,
+      1
+    ],
+    [
+      2130,
+      1
+    ],
+    [
+      2100,
+      1
+    ],
+    [
+      1980,
+      1
+    ],
+    [
+      1970,
+      1
+    ],
+    [
+      1370,
+      1
+    ],
+    [
+      1250,
+      3
+    ],
+    [
+      1165,
+      7
+    ],
+    [
+      1155,
+      10
+    ],
+    [
+      1145,
+      1
+    ],
+    [
+      1130,
+      1
+    ],
+    [
+      1000,
+      1
+    ],
+    [
+      893,
+      1
+    ],
+    [
+      551,
+      1
+    ],
+    [
+      433,
+      1
+    ],
+    [
+      425,
+      1
+    ],
+    [
+      170,
+      1
+    ],
+    [
+      10,
+      3
+    ]
+  ]
+}

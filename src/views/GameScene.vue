@@ -8,6 +8,7 @@ import LevelBanner from '@/components/game/LevelBanner.vue'
 import BossBar from '@/components/game/BossBar.vue'
 import ControlHint, { type HintId } from '@/components/game/ControlHint.vue'
 import TutorialOverlay from '@/components/game/TutorialOverlay.vue'
+import WinBeat from '@/components/game/WinBeat.vue'
 import ObjectiveList from '@/components/game/ObjectiveList.vue'
 import QuestBadges from '@/components/game/QuestBadges.vue'
 import StarRow from '@/components/game/StarRow.vue'
@@ -27,12 +28,17 @@ import IconCoin from '@/components/icons/IconCoin.vue'
 
 import * as game from '@/use/useBugCrunchGame'
 import * as art from '@/use/useBugCrunchArt'
-import { playFx, primeCrushBank, setSquishVoice, warmAudio } from '@/use/useGameAudio'
+import { chainStepPower, holdFxLoop, playFx, primeCrushBank, setSquishVoice, stopFxLoop, warmAudio } from '@/use/useGameAudio'
 import { resetVfx, sampleFrame } from '@/use/useVfx'
-import { useMusic, setMusicRate } from '@/use/useSound'
+import { frameEnd, frameStart, phaseEnd, phaseStart } from '@/use/usePerfProbe'
+import {
+  useMusic, setMusicRate, setMusicScene, warmMusicFor, warmMusicCues,
+  playFeverStinger, endFeverStinger, playResultSting, cancelResultSting
+} from '@/use/useSound'
+import { resultStingDelayMs } from '@/game/musicRouting'
 import useSounds from '@/use/useSound'
 import { haptic } from '@/use/useHaptics'
-import useAssets from '@/use/useAssets'
+import useAssets, { splashReleased } from '@/use/useAssets'
 import useUser, {
   isMobileLandscape, isShortViewport, windowWidth, windowHeight, difficultyFactor
 } from '@/use/useUser'
@@ -47,13 +53,14 @@ import useSplatProgress from '@/use/useSplatProgress'
 import useLocker from '@/use/useLocker'
 import { getState, setState } from '@/use/useBugCrunchState'
 import { HINTS_SEEN_KEY, ONBOARDED_KEY, SEEN_BUGS_KEY, TUTORIAL_KEY } from '@/keys'
-import { levelCast, levelLabel, levelSpec, worldOf, WORLDS, TOTAL_LEVELS } from '@/game/stages'
+import { levelCast, levelLabel, levelSpec, partyAfter, worldOf, WORLDS, TOTAL_LEVELS } from '@/game/stages'
 import { bossPhaseTicks, bossSpec } from '@/game/bosses'
 import { starsEarned, evaluate, emptyTally, type RunTally } from '@/game/stars'
 import { FEVER_MS, comboMusicRate } from '@/game/combo'
 import { bugSpec, type BugId } from '@/game/bugs'
 import { blowPierce } from '@/game/shoes'
 import { rewardsForResult, nextSeenBugs, type CampaignReward } from '@/game/campaignRewards'
+import { winBeatPlan, winConditionOf, WIN_ZOOM_OUT_MS, type WinCondition } from '@/game/winBeat'
 import { warmNextLevelArt } from '@/game/artPreload'
 import { installPreviewSeam } from '@/game/previewFeed'
 import * as tutor from '@/use/useTutorial'
@@ -61,8 +68,16 @@ import * as cut from '@/use/useCutscene'
 import { drawCutscene } from '@/game/cutsceneArt'
 import { FINALE, cutsceneStageFrom, openingCutscene, type CutsceneSpec } from '@/game/cutscene'
 import CutsceneOverlay from '@/components/game/CutsceneOverlay.vue'
+import PeekCard from '@/components/game/PeekCard.vue'
+import MissedRail from '@/components/game/MissedRail.vue'
 import { outranks, slamTeaches, type LessonId } from '@/game/tutorial'
 import { mobileCheck } from '@/utils/function'
+import { nextHeadline } from '@/game/headline'
+import { missHint, nearMiss01, SECOND_WIND_AT } from '@/game/stars'
+import type { MoveId } from '@/game/moves'
+import type { ShoeId } from '@/game/shoes'
+import type { TwistId } from '@/game/twists'
+import { TRIALS_SEEN_KEY } from '@/keys'
 
 /**
  * ─── The scene ──────────────────────────────────────────────────────────────
@@ -162,14 +177,55 @@ interface Summary {
   isRecord: boolean
   unlockedWorld: number | null
   met: readonly [boolean, boolean, boolean]
+  /** How far the run got, 0..1 — the quota, or the boss bar. So Close! reads it. */
+  reached: number
+  /** A boss level's bar when the clock ran out — frozen on the fail screen. */
+  bossHpLeft: number
 }
 
 const summary = ref<Summary>({
   level: 1, cleared: false, stars: 0, previousStars: 0, coins: 0,
-  tally: emptyTally(), isRecord: false, unlockedWorld: null, met: [false, false, false]
+  tally: emptyTally(), isRecord: false, unlockedWorld: null, met: [false, false, false],
+  reached: 0, bossHpLeft: 1
 })
 
 const summarySpec = computed(() => levelSpec(summary.value.level))
+
+// ─── The set pieces' own state ──────────────────────────────────────────────
+
+/** The run on the board is a Bug Party, not a level. */
+const partyMode = ref(false)
+/** The party's card — its own compact screen, never the result screen. */
+const showPartyCard = ref(false)
+const partySummary = ref({ kills: 0, best: 0, isBest: false, coins: 0, chain: 0 })
+
+/**
+ * The shoe the player just wore out of a Shoebox and does not own: the Locker
+ * button glows with it until they go and look. Nothing pops up — the brief
+ * allows no nag screens, and a glow is a reason, not a demand.
+ */
+const lockerTease = ref<ShoeId | null>(null)
+
+/**
+ * Peek — what the NEXT level has that this one did not, under a napkin on the
+ * win screen. Null on a loss, and after the last level.
+ */
+const peek = computed(() => (summary.value.cleared ? nextHeadline(summary.value.level) : null))
+
+/** So Close!: a failed run that came most of the way gets a full vial on retry. */
+const secondWindOffer = computed(() =>
+  !summary.value.cleared && summary.value.reached >= SECOND_WIND_AT
+  && progress.secondWindFor(summary.value.level))
+
+/** The one tool the failed run most needed — a glyph on the retry button. */
+const failHint = computed(() => (summary.value.cleared ? null : missHint(summary.value.tally)))
+
+/** Bodies the failed run was short by — the ghosts on the rail. */
+const missingBodies = computed(() => {
+  const s = summarySpec.value
+  if (summary.value.cleared || s.boss || s.quota <= 0) return 0
+  return Math.max(0, s.quota - summary.value.tally.squishes)
+})
 
 // ─── The lessons ────────────────────────────────────────────────────────────
 //
@@ -227,7 +283,7 @@ const lessonShown = computed(() => {
   const spec = lessonSpecOf.value
   if (spec === null) return false
   if (spec.whilePaused === true) return true
-  return !isGamePaused.value && !showResult.value && !showReveals.value
+  return !isGamePaused.value && !showResult.value && !showReveals.value && !showPartyCard.value
 })
 
 /**
@@ -250,6 +306,31 @@ const lessonShown = computed(() => {
  */
 const bannerShown = computed(() =>
   showBanner.value || (activeLesson.value === 'quests' && lessonShown.value))
+
+/**
+ * The level card, taken away by the first stomp.
+ *
+ * The card never blocked anything — it lives in a `pointer-events: none` layer,
+ * so the level under it was always playable — but a blind tester read it as a
+ * dialog, tapped at it three or four times to make it go away, and reported the
+ * level clock running while he fought it. A card that looks modal has to behave
+ * like one, and the cheapest way to behave like one is to LEAVE when the player
+ * acts.
+ *
+ * `MIN_BANNER_MS` keeps a fast first tap from stealing the card before it has
+ * been read at all; the `quests` lesson that can hold it open is shelved rather
+ * than retired, so the beat it teaches comes back on a later level instead of
+ * being lost to one impatient thumb.
+ */
+const MIN_BANNER_MS = 600
+let bannerAt = 0
+
+const dismissBanner = (): void => {
+  if (!bannerShown.value) return
+  if (performance.now() - bannerAt < MIN_BANNER_MS) return
+  showBanner.value = false
+  if (activeLesson.value === 'quests') tutor.shelve('quests')
+}
 
 /** Is the lesson pointing at the quest badges right now? They light up in
  *  answer — an arrow that lands on something inert teaches nothing. */
@@ -381,6 +462,7 @@ const onPointerDown = (e: PointerEvent): void => {
   canvasRef.value?.setPointerCapture?.(e.pointerId)
   pointerActive.value = true
   sawInput = true
+  dismissBanner()
   const p = toWorld(e)
   // Right button is a direct slam on desktop — no charge, full power.
   if (e.button === 2) {
@@ -423,7 +505,32 @@ const onKeyDown = (e: KeyboardEvent): void => {
 
 /** The canvas accepts input only while the level is genuinely being played. */
 const interactive = computed(() =>
-  game.phase.value === 'play' && !showResult.value && !isGamePaused.value)
+  game.phase.value === 'play' && !showResult.value && !showPartyCard.value && !isGamePaused.value)
+
+/**
+ * Hands off the menu buttons while a finger is playing a live level.
+ *
+ * The mute, leaderboard, settings and locker buttons sit along the bottom of
+ * the screen, which on a phone is exactly where a thumb rests and where a child
+ * chasing a bug into the lower corners keeps landing. Two blind testers opened
+ * Settings or the Locker mid-level by accident — one of them twice inside 48
+ * seconds — and each time the level carried on behind a full-screen modal.
+ *
+ * So on touch they dim and stop taking input until the RESULT SCREEN is up.
+ *
+ * "Until the result screen" rather than "while the level is live", because the
+ * first cut of this used the live level and a six-year-old immediately found
+ * the gap: he opened the Locker twice in the seconds AFTER a level cleared,
+ * while the prize montage was playing — "where'd my bugs go, I wanted a bug not
+ * a shoe picture". Those seconds are still a thumb on a board, and the moment
+ * the game actually wants to offer a shop is the screen that already has its
+ * own Locker button on it.
+ *
+ * A mouse keeps them throughout — a cursor does not rest on the screen, and a
+ * desktop player who wants Settings mid-level has always been able to press
+ * Escape.
+ */
+const handsOff = computed(() => isTouch && !showResult.value)
 
 // ─── The frame ──────────────────────────────────────────────────────────────
 
@@ -435,9 +542,19 @@ const loop = (now: number): void => {
   const dt = lastT === 0 ? 16.7 : Math.min(100, now - lastT)
   lastT = now
   sampleFrame(dt)
+  // ── The perf probe's own clock ──
+  //
+  // `usePerfProbe` has always exported `frameStart` / `frameEnd`, `main.ts` has
+  // always installed the probe, and until now NOTHING called them — so every
+  // A/B this project has run reported `frames = 0` and no frame time at all,
+  // which is exactly the "INVALID — no usable numbers" row at the top of
+  // `PERF-LEDGER.md`. The probe is off unless `?perfprobe=1` asks for it, in
+  // which case both of these compile to a no-op arrow, so this costs a player
+  // two calls to an empty function per frame and nothing else.
+  frameStart(now)
 
   const ctx = canvasRef.value?.getContext('2d')
-  if (!ctx) return
+  if (!ctx) { frameEnd(); return }
 
   // ── A cutscene owns the frame ──
   //
@@ -465,20 +582,27 @@ const loop = (now: number): void => {
       fireCutsceneCue(spec, f.beat)
     }
     if (done) endCutscene()
+    frameEnd()
     return
   }
 
   if (!isGamePaused.value) {
+    phaseStart('step')
     game.step(dt)
     drainToWorld()
-    if (sawInput) { armBodyLessons(dt); armChestLesson() }
+    if (sawInput) armBodyLessons(dt)
+    stepSetPieces(dt)
+    phaseEnd('step')
   }
 
   // OUTSIDE the pause gate: the meta lessons are about the panels that cause
   // the pause, and would never get a frame if they stopped with the board.
   if (lessonShown.value) stepTutorial(dt)
 
+  phaseStart('draw')
   art.drawScene(ctx, window.innerWidth, window.innerHeight, isGamePaused.value ? 0 : dt)
+  phaseEnd('draw')
+  frameEnd()
 }
 
 /**
@@ -536,19 +660,100 @@ const drainToWorld = (): void => {
         haptic('impact')
         break
       case 'stomp':
-        playFx(e.heavy ? 'stompHeavy' : 'stompLight', e.heavy ? 1 : 0, pan(e.x))
+        // A stomp that hit nothing is the shoe landing on bare floor (`land`):
+        // duller than the blow, because a miss that sounds as good as a hit
+        // teaches nothing. That was true of the SLAM only, and the tap — the
+        // move a phone player makes a hundred times a level — crunched either
+        // way. It is the same rule; it now applies to both.
+        playFx(e.hit ? (e.heavy ? 'stompHeavy' : 'stompLight') : 'land', e.heavy ? 1 : 0, pan(e.x))
         if (e.heavy) haptic('impact')
         break
-      case 'pivot': playFx('pivot', 0, pan(e.x)); break
-      case 'chain':
-        if (e.step) playFx('chainStep', Math.min(1, (e.n - 1) / 14))
+      case 'pivot':
+        playFx('pivot', 0, pan(e.x))
+        // The Heel Spin, used: its lesson is learned.
+        tutor.complete('spin')
         break
-      case 'chainLost': playFx('chainBreak'); break
+      case 'chain':
+        if (e.step) {
+          // One ladder note per multiplier rung, climbing (see `chainStepPower`).
+          playFx('chainStep', chainStepPower(e.mult))
+          // Growth Spurt: the shoe boings up a size with every rung — and the
+          // first time it does after the chain has been explained, an arrow
+          // from the chain badge to the shoe says "THIS makes THAT bigger".
+          playFx('grow', Math.min(1, (e.mult - 2) / 18))
+          if (tutor.isTaught('chain')) tutor.arm('grow')
+        }
+        break
+      case 'chainLost':
+        playFx('chainBreak')
+        // …and it deflates, audibly, only from ×3 up: a lapse at ×2 is not
+        // worth a raspberry.
+        if ((e.mult ?? 1) >= 3) playFx('deflate')
+        break
+      case 'multi':
+        playFx('multi', Math.min(1, (e.n - 2) / 4), pan(e.x))
+        haptic('tick')
+        // Two or more in one stomp: the conga lesson, learned.
+        tutor.complete('rush')
+        break
+      case 'rushTell':
+        playFx('rushTell')
+        if (e.practice) armMoveLesson(e.practice)
+        else if (!tutor.isTaught('rush')) armOnTheClock('rush')
+        break
+      case 'rushGo': playFx('rushGo', 0, pan(e.x)); break
+      case 'finishReady':
+        // One to go. The music drops to a heartbeat and the board goes gold.
+        setMusicRate(0.85)
+        heartbeatAcc = 999
+        armFinishLesson()
+        break
+      case 'finisher':
+        playFx('finisher', e.heavy ? 1 : 0.3)
+        haptic('reward')
+        setMusicRate(1)
+        if (e.heavy) tutor.complete('bigFinish')
+        // A tap finish while the slam finish was being shown: the moment
+        // passed, and the lesson comes back next level (`retries`).
+        else if (activeLesson.value === 'bigFinish') tutor.missed('bigFinish')
+        break
+      case 'flip':
+        playFx('flip', 0, pan(e.x))
+        if (kickTaughtHere()) armOnTheClock('kick')
+        break
+      case 'kick':
+        playFx('kick', 0, pan(e.x))
+        tutor.complete('kick')
+        break
+      // Three or four pins is a clatter; five or more is a strike.
+      case 'pins': playFx('pins', e.n >= 5 ? 1 : 0, pan(e.x)); haptic('reward'); break
+      case 'boxDrop':
+        playFx('boxDrop', 0, pan(e.x))
+        armOnTheClock('shoebox')
+        break
+      case 'boxHit': playFx('boxHit', 1 - e.left / 3, pan(e.x)); break
+      case 'boxPoof': playFx('trialEnd', 0, pan(e.x)); break
+      case 'trial':
+        playFx('boxOpen', 0, pan(e.x))
+        haptic('reward')
+        tutor.complete('shoebox')
+        onTrialStart(e.shoe)
+        break
+      case 'trialEnd':
+        playFx('trialEnd')
+        if (e.shoe && !ownedShoes.value.includes(e.shoe)) lockerTease.value = e.shoe
+        break
+      case 'quake': playFx('quake'); tutor.complete('quake'); break
+      case 'echo': playFx('echo', 0, pan(e.x)); tutor.complete('echo'); break
+      case 'twistTell': playFx('twistTell'); break
+      case 'twistStart': armTwistLesson(e.id); break
       case 'fever':
         playFx('feverStart')
+        // The ten-second "Gilded Boot" stinger, instead of the bed.
+        playFeverStinger()
         haptic('reward')
         break
-      case 'feverEnd': playFx('feverEnd'); break
+      case 'feverEnd': playFx('feverEnd'); endFeverStinger(); break
       case 'coin':
         playFx('coin', 0, pan(e.x))
         progress.addCoins(e.n)
@@ -581,7 +786,7 @@ const drainToWorld = (): void => {
         haptic('reward')
         break
       case 'end':
-        void onLevelEnd(e.won)
+        void onLevelEnd(e.won, e.x, e.y)
         break
       default:
         break
@@ -730,10 +935,9 @@ const aimLesson = (id: LessonId): void => {
       return
     }
     case 'fever':
-      lessonAt.value = elCentre('.vial__button', '.scene__rail') ?? atFoot
-      return
-    case 'chest':
-      lessonAt.value = elCentre('.chest', '.scene__wallet') ?? atFoot
+      // Two ends, like `goal`: a body on the floor, and the glass its goo fills.
+      lessonAt.value = world(nearestTapTarget())
+      lessonTo.value = elCentre('.vial__flame', '.scene__rail') ?? atFoot
       return
     case 'locker':
       lessonAt.value = elCentre('.scene__locker button', '.scene__locker') ?? atFoot
@@ -758,6 +962,108 @@ const aimLesson = (id: LessonId): void => {
     }
     case 'stars':
       lessonAt.value = elCentre('.result__stars', '.result') ?? atFoot
+      return
+
+    // ── The set pieces ──
+    case 'rush': {
+      // Over the middle of the trail — or the ring — as the line comes down it.
+      const r = game.getRush()
+      lessonAt.value = r
+        ? (r.shape === 'ring'
+          ? { x: art.toX(r.x0), y: art.toY(r.y0) }
+          : { x: art.toX((r.x0 + r.x1) / 2), y: art.toY((r.y0 + r.y1) / 2) })
+        : world(nearestTapTarget())
+      return
+    }
+    case 'grow':
+      // From the chain badge to the shoe it is making bigger.
+      lessonAt.value = elCentre('.hud__chain', '.hud__score') ?? { x: windowWidth.value / 2, y: 40 }
+      lessonTo.value = atFoot
+      return
+    case 'finish':
+    case 'bigFinish':
+    case 'spin':
+    case 'quake':
+    case 'echo':
+    case 'skid':
+    case 'perkRollerSkate':
+    case 'perkElectricSock':
+    case 'twistBlackout':
+      lessonAt.value = atFoot
+      return
+    case 'shoebox': {
+      const box = game.getHazards().find((h) => h.id === 'shoebox')
+      lessonAt.value = box ? { x: art.toX(box.x), y: art.toY(box.y) } : atFoot
+      return
+    }
+    case 'perkSteelBoot':
+      lessonAt.value = world(nearestBody((b) => bugSpec(b as never).spiky))
+      return
+    case 'perkBunnySlipper':
+      lessonAt.value = world(nearestBody((b) => bugSpec(b as never).dodges || bugSpec(b as never).sprints))
+      return
+    case 'perkCleatBoot':
+      lessonAt.value = world(nearestBody((b) => bugSpec(b as never).armor > 0))
+      return
+    case 'kick': {
+      // Through the flipped body, toward the nearest bunch of the others.
+      const bugs = game.getBugs()
+      const n = game.getBugCount()
+      let ball: { x: number; y: number } | null = null
+      for (let i = 0; i < n; i++) {
+        const b = bugs[i]!
+        if (b.alive && b.flipped > 0) { ball = { x: b.x, y: b.y }; break }
+      }
+      lessonAt.value = world(ball)
+      let tx = 0
+      let ty = 0
+      let k = 0
+      for (let i = 0; i < n && ball; i++) {
+        const b = bugs[i]!
+        if (!b.alive || b.flipped > 0 || b.puck) continue
+        const d = (b.x - ball.x) ** 2 + (b.y - ball.y) ** 2
+        if (d > 45 * 45) continue
+        tx += b.x
+        ty += b.y
+        k++
+      }
+      lessonTo.value = ball && k > 0
+        ? { x: art.toX(tx / k), y: art.toY(ty / k) }
+        : { x: lessonAt.value.x + 140, y: lessonAt.value.y }
+      return
+    }
+    case 'twistSpill':
+    case 'twistSurge': {
+      const lane = game.getHazards().find((h) => h.id === (id === 'twistSpill' ? 'slick' : 'conveyor'))
+      lessonAt.value = lane ? { x: art.toX(lane.x), y: art.toY(lane.y) } : atFoot
+      return
+    }
+    case 'twistSprinkler': {
+      const t = game.getTwist()
+      const b = game.getBoard()
+      lessonAt.value = t
+        ? { x: art.toX((b.x0 + b.x1) / 2), y: art.toY(t.stripeY) }
+        : atFoot
+      return
+    }
+    case 'twistDraft': {
+      const b = game.getBoard()
+      lessonAt.value = { x: art.toX((b.x0 + b.x1) / 2), y: art.toY((b.y0 + b.y1) / 2) }
+      return
+    }
+    case 'twistGlitch':
+      lessonAt.value = world(nearestBody((b) => b === 'robobug'))
+      return
+    case 'party': {
+      const at = game.getPartyAt()
+      lessonAt.value = world(nearestTapTarget() ?? at)
+      return
+    }
+    case 'secondWind':
+      lessonAt.value = elCentre('.result__wind', '.result__actions') ?? atFoot
+      return
+    case 'peek':
+      lessonAt.value = elCentre('.peek__stage', '.peek') ?? atFoot
   }
 }
 
@@ -807,6 +1113,7 @@ watch(() => tutor.isTaught('move'), (done) => {
 watch(game.squished, (n, prev) => {
   if (n <= prev) return
   tutor.complete('stomp')
+  if (partyMode.value) tutor.complete('party')
   if (!tutor.isTaught('goal')) tutor.arm('goal')
   else if (n >= 2 && !tutor.isTaught('chain')) tutor.arm('chain')
 })
@@ -822,9 +1129,16 @@ watch(game.slams, (n, prev) => {
 /** Spending the vial retires the Fever lesson. */
 watch(game.feverMs, (n, prev) => { if (n > 0 && prev <= 0) tutor.complete('fever') })
 
-/** The vial filling for the first time is the moment to point at the button. */
-watch(game.feverCharged, (ready) => {
-  if (ready) { teach('fever', 4200); tutor.arm('fever') }
+/**
+ * A vial NEARLY full is the moment to teach it — not a full one.
+ *
+ * A full vial now spends itself on the next frame, so a lesson armed there
+ * would be retired by the frenzy before it drew a single frame. Three quarters
+ * is late enough that the arrow points at a glass the player can see is nearly
+ * there, and early enough to land before the boot does.
+ */
+watch(game.juice, (v, prev) => {
+  if (v >= 0.75 && prev < 0.75 && !tutor.isTaught('fever')) { teach('fever', 4200); tutor.arm('fever') }
 })
 
 /** Hitting the boss retires the boss lesson. */
@@ -847,30 +1161,19 @@ watch(game.podsPopped, (n, prev) => { if (n > prev) tutor.complete('pods') })
  * The chest was opened.
  *
  * The wallet has ALREADY been paid by the component — the coins are mid-flight
- * to the badge as this runs — so there is nothing to add here. Two things do
- * belong here: the lesson is over, and a GOLD prize off the board is worth a
- * gift screen. A gold prize mid-level is not: the coin burst is the feedback
- * there, and a modal over a running clock is a punishment for claiming.
+ * to the badge as this runs — so there is nothing to add here. One thing does
+ * belong here: a GOLD prize off the board is worth a gift screen. A gold prize
+ * mid-level is not: the coin burst is the feedback there, and a modal over a
+ * running clock is a punishment for claiming.
+ *
+ * There is no chest lesson to retire. The chest is an opt-in bonus for the
+ * player curious enough to find it, and is never pointed at — see where its
+ * lesson used to be in `game/tutorial.ts`.
  */
 const onChestClaimed = (p: { coins: number; gold: boolean }): void => {
-  tutor.complete('chest')
   if (!p.gold || !showResult.value) return
   pendingReveals.value = [{ kind: 'chest', coins: p.coins, gold: true }]
   showReveals.value = true
-}
-
-/**
- * The chest is claimable for the first time.
- *
- * Probed off the DOM rather than off the composable, and deliberately: the
- * chest owns its own 1 Hz clock inside the component, and a second copy of that
- * clock out here would be a second source of truth for when it is ready. What
- * the lesson needs is not the state, it is the BUTTON — which it has to find
- * anyway to point at.
- */
-const armChestLesson = (): void => {
-  if (tutor.isTaught('chest')) return
-  if (document.querySelector('.chest.is-ready')) tutor.arm('chest')
 }
 
 /**
@@ -889,8 +1192,21 @@ watch(affordableShoes, (n, before) => {
 
 /** The result screen is the natural pause to mention the shop in. */
 watch(showResult, (open) => {
-  if (!open) { tutor.shelve('stars'); tutor.shelve('locker'); return }
+  if (!open) {
+    cancelResultSting()
+    tutor.shelve('stars'); tutor.shelve('locker'); tutor.shelve('secondWind'); tutor.shelve('peek')
+    return
+  }
+  // A cleared level's screen gets its own three-second sting — held back until
+  // the level-clear sample has rung out, so the two never stack.
+  if (summary.value.cleared) playResultSting(resultStingDelayMs(performance.now(), levelEndAt))
   tutor.arm('stars')
+  // One tick, so the napkin and the retry badge are in the DOM to point at.
+  void nextTick(() => {
+    if (!showResult.value) return
+    if (secondWindOffer.value) tutor.arm('secondWind')
+    if (peek.value) tutor.arm('peek')
+  })
   if (affordableShoes.value > 0) tutor.arm('locker')
 })
 
@@ -963,6 +1279,7 @@ const endCutscene = (): void => {
   if (then) { then(); return }
 
   showBanner.value = true
+  bannerAt = performance.now()
   if (bannerTimer) clearTimeout(bannerTimer)
   bannerTimer = setTimeout(() => {
     showBanner.value = false
@@ -990,9 +1307,23 @@ const runCutscene = (spec: CutsceneSpec): Promise<void> => new Promise((resolve)
   afterCutscene = resolve
 })
 
-const startLevel = (n: number): void => {
+const startLevel = (n: number, opts: { secondWind?: boolean } = {}): void => {
   level.value = Math.max(1, Math.min(TOTAL_LEVELS, n))
   progress.setLevel(level.value)
+  // Where the music is: `startBattleMusic` (here, or when the opening scene
+  // lets go) routes the bed off it — the boss loop, the attic. The next level's
+  // bed and the two cues are fetched now, while this one plays.
+  setMusicScene({ level: level.value })
+  warmMusicFor(level.value)
+  warmMusicCues()
+  partyMode.value = false
+  showPartyCard.value = false
+  heartbeatAcc = 0
+  // Before `resetArt`, which snaps the camera home: a retry tapped while the
+  // win card is still up must not carry it — or its staged timers — into the
+  // level that is starting underneath it.
+  endWinBeat()
+  winCondition.value = null
   resetVfx()
   art.resetArt()
   art.setHighVis(userHighVis.value)
@@ -1004,7 +1335,10 @@ const startLevel = (n: number): void => {
     juiceStyle: userJuiceStyle.value,
     singleTap: userSingleTap.value,
     difficulty: difficultyFactor(),
-    relief: progress.reliefFor(level.value)
+    relief: progress.reliefFor(level.value),
+    moves: progress.ownedMoves.value,
+    owned: ownedShoes.value,
+    secondWind: opts.secondWind === true
   })
   showResult.value = false
 
@@ -1030,6 +1364,7 @@ const startLevel = (n: number): void => {
   }
 
   showBanner.value = true
+  bannerAt = performance.now()
   if (bannerTimer) clearTimeout(bannerTimer)
   bannerTimer = setTimeout(() => {
     showBanner.value = false
@@ -1045,6 +1380,65 @@ const startLevel = (n: number): void => {
 
 let bannerTimer: ReturnType<typeof setTimeout> | null = null
 const hintTimers: ReturnType<typeof setTimeout>[] = []
+
+/**
+ * ─── Bug Party ──────────────────────────────────────────────────────────────
+ *
+ * After 1-3 and after every world's sixth level, the forward button starts a
+ * PARTY instead of the next level: the ants pour out of the sandwich they stole
+ * in the intro, and the player crashes it in the gilded boot for fifteen
+ * seconds with nothing to lose. The level pointer does not move, the gameplay
+ * bracket stays open (it is gameplay), and no interstitial ever follows it.
+ */
+const startParty = (after: number): void => {
+  partyMode.value = true
+  // A party plays the player's own track, whatever world it follows.
+  setMusicScene({ level: after, party: true })
+  showPartyCard.value = false
+  showResult.value = false
+  heartbeatAcc = 0
+  resetVfx()
+  art.resetArt()
+  art.setHighVis(userHighVis.value)
+  syncBoard()
+  game.setTouch(isTouch)
+  game.startLevel({
+    level: after,
+    shoe: equippedShoe.value,
+    juiceStyle: userJuiceStyle.value,
+    singleTap: userSingleTap.value,
+    difficulty: difficultyFactor(),
+    relief: 1,
+    moves: progress.ownedMoves.value,
+    owned: ownedShoes.value,
+    party: true
+  })
+  playFx('party')
+  haptic('reward')
+  startBattleMusic()
+  setMusicRate(1.12)
+  tutor.arm('party')
+}
+
+/** The party is over: bank it and show its card. Never an ad, never a reveal. */
+const endParty = (): void => {
+  const t = game.tally.value
+  const banked = progress.bankParty(level.value, t.squishes)
+  partySummary.value = {
+    kills: t.squishes, best: banked.best, isBest: banked.isBest, coins: banked.coins, chain: t.bestCombo
+  }
+  stopBattleMusic()
+  setMusicRate(1)
+  playFx(banked.isBest ? 'unlock' : 'levelClear')
+  showPartyCard.value = true
+}
+
+/** Leave the party card for the level after the one the party followed. */
+const onPartyNext = (): void => {
+  showPartyCard.value = false
+  restartGameplayBracket()
+  startLevel(Math.min(TOTAL_LEVELS, level.value + 1))
+}
 
 /** Each species with a primer pill of its own, earliest debut first. */
 const SPECIES_PRIMERS: ReadonlyArray<readonly [BugId, HintId]> = ([
@@ -1199,7 +1593,7 @@ const armBodyLessons = (dt: number): void => {
   if (nearestPod()) armOnTheClock('pods')
   // A Fever lesson pushed off the screen by one of those comes back for as long
   // as the vial is still full.
-  if (game.feverCharged.value && !tutor.isTaught('fever')) tutor.arm('fever')
+  if (game.juice.value >= 0.75 && !tutor.isTaught('fever')) tutor.arm('fever')
   // Not `arm`: see `armSlam` in `use/useTutorial.ts`. A shell only opens the
   // window; the ricochet — or the grace running out — puts the lesson on screen.
   tutor.armSlam(dt, sawArmour)
@@ -1212,28 +1606,160 @@ const armBodyLessons = (dt: number): void => {
  *
  * Every other beat waits its turn in the director's queue. Two cannot:
  *
- *   spike  on 1-2 a caterpillar can walk in while the Fever button's lesson, a
- *          HUD arrow or the chest is mid-show, and nine seconds of pointing at
- *          the vial is nine seconds of spikes nobody has explained.
+ *   spike  on 1-2 a caterpillar can walk in while the Fever button's lesson or
+ *          a HUD arrow is mid-show, and nine seconds of pointing at the vial is
+ *          nine seconds of spikes nobody has explained.
  *   pods   on 1-4 the eggs hatch 6.9 s after they land, and a player four
- *          levels in who is watching a hand point at the chest instead is not
+ *          levels in who is watching a hand point somewhere else instead is not
  *          hurt, only stuck in a phase that will not end.
  *
  * `shelve` does not mark the displaced lesson taught: the quest arrow comes
- * round on the next banner, Fever is re-armed in `armBodyLessons` while the
- * vial is full, and the chest re-arms itself every frame it is ready
- * (`armChestLesson`). The chest is the case a browser run caught — it is a
- * `whilePaused` lesson, the first cut left those alone, and a player whose
- * chest was ready as they reached 1-2 got the chest instead of the spikes, and
- * on 1-4 the chest instead of the eggs. Nothing that runs through a pause can
- * be up during PLAY except the chest; the other three live on modals, and this
- * only ever runs in play.
+ * round on the next banner, and Fever is re-armed in `armBodyLessons` while the
+ * vial is full.
  */
 const armOnTheClock = (id: LessonId): void => {
   if (tutor.isTaught(id)) return
   tutor.arm(id)
   const up = activeLesson.value
   if (up !== null && up !== id && outranks(id, up)) tutor.shelve(up)
+}
+
+// ─── The set pieces' lessons and beats ──────────────────────────────────────
+//
+// Every feature from `RETENTION-FEATURES.md` teaches itself the same way the
+// rest of the game does — wordless, on the thing, retired by doing it — and is
+// armed by the moment it becomes real: the snare roll, the gilded last body,
+// the box landing, the beetle going over, the lemonade tipping.
+
+/** ms since the last heartbeat of a Big Finish's one-to-go hold. */
+let heartbeatAcc = 0
+
+/** Edge trackers for the sounds that ride a STATE rather than an event. */
+let tickShown = -1
+let vialWasFull = false
+let bossSubWas: string | null = null
+let bossSubT = 0
+
+/** Nothing state-driven sounds outside play: the loops stop, the trackers reset. */
+const quietSetPieces = (): void => {
+  stopFxLoop('charge')
+  stopFxLoop('slide')
+  tickShown = -1
+  vialWasFull = false
+  bossSubWas = null
+}
+
+/**
+ * Per-frame beats of the set pieces that have no event of their own: the
+ * finale's heartbeat (faster as the clock runs down), and the slide — there is
+ * no "slid" event, only a foot that is sliding.
+ *
+ * And the sounds that follow a state rather than an event: the charge's
+ * wind-up loop (held while the foot charges, stopped dead on release), the
+ * skate's loop, the vial filling (`feverReady`, the one cue a player must never
+ * miss), the last ten seconds' tick, and the boss's tells — the charge's 620 ms
+ * warning and the beam's charge-and-sweep, both of which the sim runs as
+ * sub-states without an event.
+ */
+const stepSetPieces = (dt: number): void => {
+  if (game.phase.value !== 'play') { quietSetPieces(); return }
+  if (game.finale.value) {
+    heartbeatAcc += dt
+    const every = game.timeLeft.value <= 5 ? 520 : 820
+    if (heartbeatAcc >= every) { heartbeatAcc = 0; playFx('heartbeat') }
+  }
+  const foot = game.getFoot()
+  if (foot.state === 'charge') holdFxLoop('charge', foot.charge, pan(foot.x))
+  else stopFxLoop('charge')
+  if (foot.state === 'slide') {
+    holdFxLoop('slide', 1, pan(foot.x))
+    tutor.complete('skid')
+    tutor.complete('perkRollerSkate')
+  } else stopFxLoop('slide')
+
+  const full = game.juice.value >= 1 && game.feverMs.value <= 0
+  if (full && !vialWasFull) playFx('feverReady')
+  vialWasFull = full
+
+  // One dry tick per second of the last ten — never over the heartbeat, which
+  // already owns the one-to-go hold.
+  const secs = game.timeLeft.value
+  if (secs !== tickShown) {
+    if (secs > 0 && secs <= 10 && tickShown > secs && !game.finale.value) playFx('tick')
+    tickShown = secs
+  }
+
+  const boss = game.getBoss()
+  const sub = boss ? boss.sub : null
+  if (boss && sub === 'tell' && bossSubWas !== 'tell') playFx('bossCharge', 0, pan(boss.x))
+  if (boss && sub === 'beam' && (bossSubWas !== 'beam' || boss.subT < bossSubT)) playFx('bossBeam')
+  bossSubWas = sub
+  bossSubT = boss ? boss.subT : 0
+}
+
+/** The lesson each Boss Trophy is taught by, on its practice formation. */
+const MOVE_LESSON: Record<MoveId, LessonId> = {
+  spin: 'spin', skid: 'skid', quake: 'quake', echo: 'echo'
+}
+const armMoveLesson = (m: MoveId): void => armOnTheClock(MOVE_LESSON[m])
+
+/**
+ * One to go: the Big Finish's lessons.
+ *
+ * The FIRST one-to-go a player ever meets (1-1) is a celebration and is only
+ * watched. Once they own the slam, and from 1-5 on — the level after the first
+ * boss, two after the slam was taught — the hand shows the other way to finish:
+ * let the board fill, and slam the last one for the jackpot.
+ */
+const armFinishLesson = (): void => {
+  if (!tutor.isTaught('finish')) { armOnTheClock('finish'); return }
+  const s = spec.value
+  const past15 = s.world > 1 || s.index >= 5
+  if (tutor.isTaught('slam') && past15 && !s.boss) armOnTheClock('bigFinish')
+}
+
+/**
+ * Is the kick taught on THIS level? From 1-6 — the crumb pile's knot is the
+ * first lane worth bowling down — and everywhere after world 1. A beetle
+ * flipped earlier is simply a soft target a tap finishes.
+ */
+const kickTaughtHere = (): boolean => spec.value.world > 1 || spec.value.index >= 6
+
+/** The perk lesson for each shoe's FIRST trial. */
+const PERK_LESSON: Partial<Record<ShoeId, LessonId>> = {
+  steelBoot: 'perkSteelBoot',
+  bunnySlipper: 'perkBunnySlipper',
+  rollerSkate: 'perkRollerSkate',
+  cleatBoot: 'perkCleatBoot',
+  electricSock: 'perkElectricSock'
+}
+
+/** A trial began: remember the shoe, and show what it is FOR, once per shoe. */
+const onTrialStart = (shoe: ShoeId | null): void => {
+  if (!shoe) return
+  const seen = getState<ShoeId[]>(TRIALS_SEEN_KEY, [])
+  const list = Array.isArray(seen) ? seen : []
+  if (!list.includes(shoe)) setState(TRIALS_SEEN_KEY, [...list, shoe])
+  const perk = PERK_LESSON[shoe]
+  // The skate's perk IS the skid; a player who learned it on the spill has it.
+  if (perk === 'perkRollerSkate' && tutor.isTaught('skid')) { tutor.complete(perk); return }
+  if (perk) armOnTheClock(perk)
+}
+
+const TWIST_LESSON: Record<TwistId, LessonId> = {
+  spill: 'twistSpill',
+  sprinkler: 'twistSprinkler',
+  blackout: 'twistBlackout',
+  draft: 'twistDraft',
+  surge: 'twistSurge',
+  glitch: 'twistGlitch'
+}
+
+/** A twist landed: point at what changed, once — and, for the spill, at the
+ *  drag it makes possible. */
+const armTwistLesson = (id: TwistId): void => {
+  armOnTheClock(TWIST_LESSON[id])
+  if (id === 'spill') tutor.arm('skid')
 }
 
 const teachForBoss = (): void => {
@@ -1244,7 +1770,100 @@ const teachForBoss = (): void => {
   else if (p?.script === 'charge') teach('boss', 4200)
 }
 
-const onLevelEnd = async (won: boolean): Promise<void> => {
+/**
+ * How long a won level holds before anything covers it, ms — the Big Finish's
+ * slow-motion confetti, or the boss's crown finish. An interstitial must never
+ * cut the celebration; the rule that the ad goes BEFORE the result screen still
+ * holds, it simply waits for the fireworks.
+ */
+const CELEBRATE_MS = 900
+
+/**
+ * …and what a BOSS level holds for instead.
+ *
+ * A boss going down is a four-beat sequence played in slow motion over a 1.2 s
+ * squash-and-fall (`bossDeath` in `useBugCrunchArt`, `BOSS_AFTERGLOW_MS` in the
+ * sim), and 900 ms cut it off somewhere around the second beat — the result
+ * screen slid up over a boss that was still bursting. Matched to the sim's own
+ * afterglow so the two cannot drift: the board stops moving and the screen
+ * opens on the same frame.
+ *
+ * It is also the one place in the game where a longer hold is the right trade.
+ * This is the payoff the whole level was for, it happens four times in a
+ * campaign, and the beat after it is an ad.
+ */
+const CELEBRATE_BOSS_MS = game.BOSS_AFTERGLOW_MS
+
+/** When the level-end sample fired (`performance.now()`), so the result sting
+ *  can wait for it — see `resultStingDelayMs`. */
+let levelEndAt: number | null = null
+
+// ─── The win beat ───────────────────────────────────────────────────────────
+//
+// What the level was asking for, held in the middle of the screen while the
+// camera sits on the squash that delivered it. The rules and every number are
+// in `game/winBeat.ts`; this is the wiring.
+//
+// The problem it fixes, in one sentence: the result screen used to arrive 900 ms
+// after the last squish, which is not a pause but a cut — a player who was
+// playing rather than reading the rail never saw the frame that said "that one
+// did it", and the game's best moment was a modal.
+
+/** What ended the level, for the card to draw. Null between levels. */
+const winCondition = ref<WinCondition | null>(null)
+/** Is the card up? Its own flag, because it comes up a beat AFTER the win — and
+ *  on a boss level, a good while after. */
+const winCardUp = ref(false)
+/** The beat's staged timers, so a retry tapped mid-hold does not fire them into
+ *  the next level. */
+const winTimers: number[] = []
+
+/**
+ * Play the beat and resolve when the hold is over.
+ *
+ * `x`/`y` is the blow the sim ended on — see the `end` event. It is a world
+ * point, which is what `focusOn` wants: the board is the viewport, so a resize
+ * mid-beat moves the anchor with it instead of off it.
+ */
+const playWinBeat = async (x: number, y: number): Promise<void> => {
+  const plan = winBeatPlan({
+    boss: spec.value.boss != null,
+    calm,
+    celebrateMs: spec.value.boss ? CELEBRATE_BOSS_MS : CELEBRATE_MS
+  })
+  winCondition.value = winConditionOf({
+    quota: spec.value.quota,
+    boss: spec.value.boss ?? null,
+    // A party never reaches here — `onLevelEnd` hands it to `endParty` on its
+    // first line — so this is a statement about the levels that do.
+    party: false
+  })
+  const at = (ms: number, fn: () => void): void => {
+    winTimers.push(window.setTimeout(fn, ms))
+  }
+  at(plan.zoomAtMs, () => art.focusOn(x, y, plan.zoomAmount, plan.zoomMs))
+  at(plan.cardAtMs, () => { winCardUp.value = true })
+  await new Promise<void>((r) => setTimeout(r, plan.holdMs))
+  endWinBeat()
+}
+
+/**
+ * Take the beat down.
+ *
+ * Idempotent, and called from three places: the end of the beat itself, the
+ * start of every level, and the unmount. The camera is RELEASED here rather
+ * than snapped, so the push eases out under the result screen sliding up —
+ * `resetArt` snaps it instead, which is the right answer for a retry.
+ */
+const endWinBeat = (): void => {
+  for (const id of winTimers) clearTimeout(id)
+  winTimers.length = 0
+  winCardUp.value = false
+  art.releaseFocus(WIN_ZOOM_OUT_MS)
+}
+
+const onLevelEnd = async (won: boolean, winX: number, winY: number): Promise<void> => {
+  if (partyMode.value) { endParty(); return }
   const tally = game.tally.value
   const stars = starsEarned(spec.value.objectives, tally)
   const previousStars = progress.starsFor(level.value)
@@ -1252,7 +1871,9 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
   // compared a number with itself would announce every run as a record.
   const starsBefore = progress.totalStars.value
   const bestBefore = progress.bestScore.value
-  const banked = progress.bankLevel(level.value, stars, tally)
+  const bossHpLeft = spec.value.boss ? game.bossHp.value : 1
+  const reached = nearMiss01(tally, spec.value.quota, spec.value.boss ? bossHpLeft : undefined)
+  const banked = progress.bankLevel(level.value, stars, tally, reached)
 
   summary.value = {
     level: level.value,
@@ -1263,7 +1884,9 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
     tally,
     isRecord: banked.isRecord,
     unlockedWorld: banked.unlockedWorld,
-    met: evaluate(spec.value.objectives, tally)
+    met: evaluate(spec.value.objectives, tally),
+    reached,
+    bossHpLeft
   }
 
   if (!onboarded.value && won) {
@@ -1272,8 +1895,19 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
   }
 
   playFx(won ? 'levelClear' : 'levelFail')
+  levelEndAt = performance.now()
   stopBattleMusic()
   setMusicRate(1)
+  heartbeatAcc = 0
+
+  // ── The Big Finish plays out, and then the win is HELD, before anything
+  //    covers either ──
+  //
+  // This used to be a bare `setTimeout` for `CELEBRATE_MS`. It is now the win
+  // beat, which still holds at least that long — the confetti's claim on the
+  // screen is unchanged — and spends the extra two seconds saying what was just
+  // achieved and where it happened.
+  if (won) await playWinBeat(winX, winY)
 
   // The board, then the screen. `reportRun` never throws and is never awaited
   // at a call site the player is waiting on.
@@ -1330,7 +1964,8 @@ const onLevelEnd = async (won: boolean): Promise<void> => {
     starsAfter: progress.totalStars.value,
     isRecord: banked.isRecord,
     previousBest: bestBefore,
-    seenBugs: seen
+    seenBugs: seen,
+    newMove: banked.newMove
   })
   const nextSeen = nextSeenBugs(seen, banked.tally)
   if (nextSeen !== seen) setState(SEEN_BUGS_KEY, nextSeen)
@@ -1348,13 +1983,29 @@ const onNext = (): void => {
   // A handover with no screen between two levels has to say so by hand, or the
   // portals hear one endless play — see `restartGameplayBracket`.
   restartGameplayBracket()
+  // After 1-3 and every world's sixth level, the party comes first.
+  if (summary.value.cleared && partyAfter(summary.value.level) && summary.value.level < TOTAL_LEVELS) {
+    startParty(summary.value.level)
+    return
+  }
   startLevel(next)
 }
 
 const onRetry = (): void => {
   showResult.value = false
   restartGameplayBracket()
-  startLevel(summary.value.level)
+  // So Close!: a near miss's retry opens with the vial full — once per level
+  // per session, and spent the moment the retry starts.
+  const wind = secondWindOffer.value
+  if (wind) progress.spendSecondWind(summary.value.level)
+  tutor.complete('secondWind')
+  startLevel(summary.value.level, { secondWind: wind })
+}
+
+/** The napkin was tapped: the thing under it hops, and its lesson is learned. */
+const onPeekTap = (): void => {
+  playFx('grow', 0.4)
+  tutor.complete('peek')
 }
 
 // ─── Result-screen readouts ─────────────────────────────────────────────────
@@ -1379,7 +2030,15 @@ const resultCompact = computed(() => isMobileLandscape.value || isShortViewport.
 const bossTicks = computed(() =>
   spec.value.boss ? bossPhaseTicks(bossSpec(spec.value.boss, spec.value.bossScale)) : [])
 
+/** The fail screen's frozen boss bar, at the strength the level fought her at. */
+const summaryBossTicks = computed(() => {
+  const s = summarySpec.value
+  return s.boss ? bossPhaseTicks(bossSpec(s.boss, s.bossScale)) : []
+})
+
 const railProgress = computed(() => {
+  // A party's rail is its clock: it fills as the fifteen seconds run.
+  if (partyMode.value) return 1 - Math.max(0, Math.min(1, game.timeLeft.value / game.getLevel().time))
   if (spec.value.boss) return 1 - game.bossHp.value
   return spec.value.quota > 0 ? Math.min(1, game.squished.value / spec.value.quota) : 0
 })
@@ -1396,7 +2055,7 @@ const unlockedWorldName = computed(() => {
 
 const gameplayLive = computed(() => isGameplayLive({
   phase: game.phase.value,
-  showResult: showResult.value,
+  showResult: showResult.value || showPartyCard.value,
   anyModalOpen: isAnyModalOpen.value,
   adShowing: isAdShowing.value,
   visibilityHidden: isVisibilityHidden.value,
@@ -1440,7 +2099,11 @@ watch(isGamePaused, (paused) => { if (paused) lastT = 0 })
 
 onMounted(async () => {
   await preloadAssets()
+  // Loaded is not the same as on screen: the splash holds past the load until
+  // its joke has landed, and a level started now would run its clock under it.
+  await splashReleased
   await nextTick()
+  art.setCalm(calm)
   resize()
   warmAudio()
   startLevel(progress.currentLevel.value)
@@ -1463,6 +2126,7 @@ onUnmounted(() => {
   if (hintTimer) clearTimeout(hintTimer)
   if (bannerTimer) clearTimeout(bannerTimer)
   for (const id of hintTimers) clearTimeout(id)
+  endWinBeat()
   // A scene that owns the screen when the view goes away never reaches
   // `endCutscene`, and the finale is AWAITED — an unresolved promise there would
   // leave `onLevelEnd` half-finished forever. Cheap insurance; the work it
@@ -1490,10 +2154,13 @@ const onFever = (): void => {
 
 const openLocker = (): void => {
   showLocker.value = true
+  // The trialled shoe's glow has done its job the moment they come to look.
+  lockerTease.value = null
   playSound('modal-open', 0.07)
 }
 
-const onStarLand = (): void => playFx('star')
+/** One rising note per star — B, D, G, inside the result sting's G major. */
+const onStarLand = (index: number): void => playFx('star', index / 2)
 </script>
 
 <template lang="pug">
@@ -1521,9 +2188,24 @@ const onStarLand = (): void => playFx('star')
           :time="game.timeLeft.value"
           :progress="railProgress"
           :squished="game.squished.value"
-          :quota="spec.quota"
+          :quota="partyMode ? 0 : spec.quota"
           :stars="progress.starsFor(level)"
         )
+          //- The boss bar, hung off the strip's own bottom edge, above the
+          //- chain badge. NOT under the whole top row: the wallet column
+          //- (coins, chest, quest stars) makes that row tall, and a bar under
+          //- it lands on the top third of the board — where the boss walks.
+          template(#under)
+            div.scene__boss(v-if="bossShown")
+              BossBar(
+                :show="bossShown"
+                :hp="game.bossHp.value"
+                :ticks="bossTicks"
+                :name="spec.boss ?? ''"
+                :tell="game.bossTell.value"
+                :phase="game.bossPhaseIndex.value"
+                :phases="3"
+              )
         //- The wallet column: what the player has, and the one thing on the
         //- HUD that pays them for coming back.
         div.scene__wallet
@@ -1544,6 +2226,7 @@ const onStarLand = (): void => playFx('star')
             //- badge would read as already lost.
             template(#under)
               QuestBadges(
+                v-if="!partyMode"
                 :objectives="spec.objectives"
                 :tally="game.tally.value"
                 :quota="spec.quota"
@@ -1551,18 +2234,6 @@ const onStarLand = (): void => playFx('star')
                 :time-left="game.timeLeft.value"
                 :spotlight="questsSpotlit"
               )
-
-      //- The boss bar, under the strip and clear of the chain badge.
-      div.scene__boss(v-if="bossShown")
-        BossBar(
-          :show="bossShown"
-          :hp="game.bossHp.value"
-          :ticks="bossTicks"
-          :name="spec.boss ?? ''"
-          :tell="game.bossTell.value"
-          :phase="game.bossPhaseIndex.value"
-          :phases="3"
-        )
 
       //- The middle band: the vial rail on the left, the board everywhere else.
       div.scene__mid
@@ -1572,7 +2243,6 @@ const onStarLand = (): void => playFx('star')
             :fever-ms="game.feverMs.value"
             :fever-total="FEVER_MS"
             :calm="calm"
-            @fever="onFever"
           )
 
       //- The control primer, centred above the bottom bar.
@@ -1580,7 +2250,7 @@ const onStarLand = (): void => playFx('star')
         ControlHint(:hint="activeHint" :suppressed="hintSuppressed")
 
       //- ── Bottom bar ────────────────────────────────────────────────────
-      div.scene__bottom(ref="bottomBarRef")
+      div.scene__bottom(ref="bottomBarRef" :class="{ 'is-live': handsOff }")
         div.scene__meta
           FMuteButton
           //- Gone entirely — not disabled — on a build with no board. A button
@@ -1599,11 +2269,13 @@ const onStarLand = (): void => playFx('star')
             @click="showOptions = true"
           )
         div.scene__locker
+          //- Glowing, too, for the shoe the player just wore out of a Shoebox:
+          //- twelve seconds of owning it, and then a reason to go and look.
           FHudButton(
             tone="green"
             icon="boot"
             art="locker"
-            :attention="affordableShoes > 0"
+            :attention="affordableShoes > 0 || lockerTease !== null"
             :aria-label="t('locker.title')"
             @click="openLocker"
           )
@@ -1621,6 +2293,16 @@ const onStarLand = (): void => playFx('star')
         :quota="spec.quota"
         :met="met"
         :boss="spec.boss"
+      )
+
+      //- What the level was asking for, the moment it was delivered. Two
+      //- seconds between the last squash and the result screen — see
+      //- `game/winBeat.ts`.
+      WinBeat(
+        :condition="winCondition"
+        :show="winCardUp"
+        :done="game.squished.value"
+        :calm="calm"
       )
 
       //- The wordless lesson. Inside the HUD layer for the same reason the rest
@@ -1660,10 +2342,40 @@ const onStarLand = (): void => playFx('star')
           //- that headlines the level just finished either way is a summary —
           //- the shape of an ending — and the level they cleared is already
           //- named on the ribbon above.
-          span.result__level(v-if="summary.cleared && summary.level < TOTAL_LEVELS")
-            | {{ t('result.upNext', { n: nextLabel }) }}
+          //-
+          //- Looking forward is a PEEK now, not a line of text: something under
+          //- a napkin that the next level has and this one did not. The words
+          //- stay for a screen reader.
+          template(v-if="summary.cleared && summary.level < TOTAL_LEVELS")
+            span.sr-only {{ t('result.upNext', { n: nextLabel }) }}
+            PeekCard(
+              v-if="peek"
+              :peek="peek"
+              :compact="resultCompact"
+              :calm="calm"
+              @tap="onPeekTap"
+            )
+            span.result__level(v-else) {{ t('result.upNext', { n: nextLabel }) }}
           span.result__level(v-else-if="summary.cleared") {{ t('result.campaignDone') }}
-          span.result__level(v-else) {{ t('result.retryLevel') }}
+          template(v-else)
+            span.result__level {{ t('result.retryLevel') }}
+            //- So Close!: the bodies the run was short by, as blinking ghosts —
+            //- or, on a boss, her bar frozen where the clock stopped it.
+            MissedRail(
+              v-if="missingBodies > 0"
+              :missing="missingBodies"
+              :roster="summarySpec.roster"
+            )
+            div.result__boss(v-else-if="summarySpec.boss")
+              BossBar(
+                :show="true"
+                :hp="summary.bossHpLeft"
+                :ticks="summaryBossTicks"
+                :name="summarySpec.boss"
+                :tell="null"
+                :phase="0"
+                :phases="3"
+              )
           span.result__record(v-if="summary.isRecord") {{ t('result.newRecord') }}
 
         //- What was and was not earned, so a replay has a reason.
@@ -1718,14 +2430,57 @@ const onStarLand = (): void => playFx('star')
             :aria-label="t('locker.title')"
             @click="openLocker"
           )
+          span.result__go
+            FButton(
+              icon-only
+              :icon="summary.cleared ? 'skip-forward' : 'replay'"
+              :size="resultCompact ? 'sm' : 'md'"
+              type="success"
+              :emphasis="1.25"
+              :aria-label="summary.cleared ? t('result.nextLevel') : t('result.tryAgain')"
+              @click="summary.cleared ? onNext() : onRetry()"
+            )
+            //- So Close!: the retry carries a full vial — the Second Wind the
+            //- next try opens with — and, when the run said so, the one tool
+            //- it most needed. Glyphs, read aloud through their labels.
+            span.result__wind(
+              v-if="!summary.cleared && (secondWindOffer || failHint)"
+              :class="{ 'is-wind': secondWindOffer }"
+            )
+              span.result__wind-mark(v-if="secondWindOffer" role="img" :aria-label="t('result.secondWind')")
+                GameIcon(name="flask")
+              span.result__wind-mark.is-hint(
+                v-if="failHint"
+                role="img"
+                :aria-label="failHint === 'slam' ? t('result.hintSlam') : t('result.hintAvoid')"
+              )
+                GameIcon(:name="failHint === 'slam' ? 'splat' : 'shield'")
+
+    //- ── The Bug Party's card ──────────────────────────────────────────────
+    //- Its own small screen, never the result screen: a party has no stars and
+    //- no fail. The haul, the best, the coins, and forward — to the level the
+    //- party was the reward for reaching.
+    FReward(v-model="showPartyCard" :show-continue="false" :reveal="partySummary.isBest")
+      template(#ribbon)
+        span {{ t('party.title') }}
+      div.party-card
+        div.party-card__haul
+          GameIcon.party-card__icon(name="bug")
+          span.party-card__count {{ t('party.count', { n: fmt(partySummary.kills) }) }}
+        span.party-card__best(v-if="partySummary.isBest") {{ t('party.newBest') }}
+        span.party-card__best(v-else) {{ t('party.best', { n: fmt(partySummary.best) }) }}
+        div.result__coins(v-if="partySummary.coins > 0")
+          IconCoin(class="result__coin-icon")
+          span.result__coin-value +{{ partySummary.coins }}
+        div.result__actions
           FButton(
             icon-only
-            :icon="summary.cleared ? 'skip-forward' : 'replay'"
+            icon="skip-forward"
             :size="resultCompact ? 'sm' : 'md'"
             type="success"
             :emphasis="1.25"
-            :aria-label="summary.cleared ? t('result.nextLevel') : t('result.tryAgain')"
-            @click="summary.cleared ? onNext() : onRetry()"
+            :aria-label="t('result.nextLevel')"
+            @click="onPartyNext"
           )
 
     //- Before FReward in the tree, because it plays before it on screen.
@@ -1805,14 +2560,16 @@ const onStarLand = (): void => playFx('star')
   flex-direction: column
   align-items: center
   gap: clamp(0.2rem, 1.4vmin, 0.5rem)
-  pointer-events: auto
+  // NONE, not auto: the coin badge and the star marks are readouts, and a body
+  // that walks under one used to swallow the tap aimed at it — a tester called
+  // that out as the one place the input felt unfair. The chest inside this
+  // column opts back in for itself (`.chest`), the way the HUD layer intends.
+  pointer-events: none
 
 .scene__boss
   display: flex
   justify-content: center
-  // Clear of the chain badge, which hangs off the strip's own bottom edge.
-  margin-top: clamp(1.7rem, 8vmin, 2.8rem)
-  padding-inline: clamp(0.5rem, 3vw, 1rem)
+  width: 100%
 
 // ─── The middle band ────────────────────────────────────────────────────────
 //
@@ -1864,6 +2621,20 @@ const onStarLand = (): void => playFx('star')
   display: flex
   align-items: center
   pointer-events: auto
+
+// A live level on touch: present, but not in the way. See `handsOff`.
+.scene__bottom.is-live
+  .scene__meta,
+  .scene__locker
+    opacity: 0.4
+    pointer-events: none
+    transition: opacity 200ms ease-out
+
+@media (prefers-reduced-motion: reduce)
+  .scene__bottom.is-live
+    .scene__meta,
+    .scene__locker
+      transition: none
 
 // ─── Result screen ──────────────────────────────────────────────────────────
 //
@@ -1994,6 +2765,91 @@ const onStarLand = (): void => playFx('star')
   justify-content: center
   gap: clamp(0.5rem, 3cqmin, 1.2rem)
   margin-top: clamp(0.15rem, 1.1cqmin, 0.5rem)
+
+// ─── So Close! ──────────────────────────────────────────────────────────────
+
+.result__boss
+  width: clamp(10rem, 50cqmin, 17rem)
+
+// The forward/retry button and its badge travel as one thing.
+.result__go
+  position: relative
+  display: inline-flex
+
+// The Second Wind: a full vial riding on the retry button's shoulder, and the
+// hint glyph beside it. It pulses — this one IS asking for the tap.
+.result__wind
+  position: absolute
+  top: -0.55em
+  right: -0.9em
+  display: inline-flex
+  gap: 0.15em
+  pointer-events: none
+
+.result__wind-mark
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: clamp(1.4rem, 6.4cqmin, 2rem)
+  height: clamp(1.4rem, 6.4cqmin, 2rem)
+  border-radius: 999px
+  background: radial-gradient(circle at 35% 30%, #fff3b0 0%, #ffd93c 50%, #e8a200 100%)
+  box-shadow: 0 0 0 2px #2b1b2e, 0 0 0.8em rgba(255, 217, 60, 0.7)
+  color: #2b1b2e
+
+  :deep(svg), :deep(img)
+    width: 64%
+    height: 64%
+
+  &.is-hint
+    background: #fdf4ea
+
+.is-wind .result__wind-mark:first-child
+  animation: wind-pulse 1.1s ease-in-out infinite
+
+@keyframes wind-pulse
+  0%, 100%
+    scale: 1
+  50%
+    scale: 1.14
+
+@media (prefers-reduced-motion: reduce)
+  .is-wind .result__wind-mark:first-child
+    animation: none
+
+// ─── The Bug Party's card ───────────────────────────────────────────────────
+
+.party-card
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: clamp(0.25rem, 1.6cqmin, 0.7rem)
+  width: 100%
+
+.party-card__haul
+  display: inline-flex
+  align-items: center
+  gap: 0.35em
+
+.party-card__icon
+  width: clamp(1.6rem, 7cqmin, 2.6rem)
+  height: clamp(1.6rem, 7cqmin, 2.6rem)
+  color: #ffd93c
+
+.party-card__count
+  color: #fff
+  font-weight: 900
+  line-height: 1
+  font-size: clamp(1.4rem, 7.5cqmin, 2.6rem)
+  text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000
+
+.party-card__best
+  color: #ffd93c
+  font-weight: 900
+  text-transform: uppercase
+  letter-spacing: 0.06em
+  font-size: clamp(0.6rem, 2.8cqmin, 0.95rem)
+  text-shadow: 2px 2px 0 #000
 
 .sr-only
   position: absolute

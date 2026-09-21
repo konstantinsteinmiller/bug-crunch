@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} étoiles',
     'recordScore': '{n} points',
     'recordBeat': 'Ancien record : {n}',
-    'chestCoins': '+{n} pièces'
+    'chestCoins': '+{n} pièces',
+    'move': 'Nouveau coup !'
+  },
+  'moves': {
+    'spin': 'Pirouette',
+    'skid': 'Glissade',
+    'quake': 'Séisme',
+    'echo': 'Écho'
+  },
+  'party': {
+    'title': 'Fête des insectes !',
+    'count': '{n} insectes',
+    'best': 'Record : {n}',
+    'newBest': 'Nouveau record de fête !'
   },
   'fever': {
     'filling': 'Fièvre Splat : {n}% pleine',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Insectes écrasés',
     'starsEarned': '{n} étoiles sur 3',
     'rankOf': 'sur {n}',
-    'worldUnlocked': '{n} débloqué !'
+    'worldUnlocked': '{n} débloqué !',
+    'peekNext': 'Aperçu de {n}',
+    'secondWind': 'Second souffle : ton prochain essai commence avec la fiole pleine',
+    'hintSlam': 'Astuce : maintiens pour écraser les carapaces',
+    'hintAvoid': 'Astuce : laisse les piquants tranquilles',
+    'missed': 'Encore {n} insectes'
   },
   'leaderboard': {
     'title': 'Classement',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Touche n\'importe où, ton pied file vers l\'insecte le plus proche.'
   },
   'loading': {
-    'boo': 'Bouh !',
-    'laugh': 'Hi hi !',
+    'uhOh': 'Oh oh !',
+    'missed': 'Raté !',
     'tooLong': 'Toujours en chargement… vérifie ta connexion ?'
   },
   'saveStatus': {

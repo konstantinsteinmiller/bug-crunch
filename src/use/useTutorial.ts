@@ -177,8 +177,31 @@ export const step = (dtMs: number, doing = false): void => {
   }
   // The bail-out. A player who does not do the thing is never stuck being told
   // to — and it counts as TAUGHT, because showing somebody a lesson they
-  // ignored twice is how a game becomes nagging.
-  if (shownMs >= spec.bailoutMs) complete(spec.id)
+  // ignored twice is how a game becomes nagging. The exception is a lesson with
+  // `retries`, whose moment can pass without the player having had a go at it.
+  if (shownMs >= spec.bailoutMs) missed(spec.id)
+}
+
+/** Bail-outs spent per lesson this session, against its `retries`. */
+const spentRetries: Partial<Record<LessonId, number>> = {}
+
+/**
+ * The lesson's moment passed without the player doing the thing — its bail-out
+ * ran, or its set piece ended (a conga walked off, a level closed on a tap).
+ *
+ * A lesson with `retries` left is put back UNTAUGHT, to be armed again by its
+ * next moment; everything else retires as taught, exactly as a bail-out always
+ * has.
+ */
+export const missed = (id: LessonId): void => {
+  const allowed = lessonSpec(id).retries ?? 0
+  const spent = spentRetries[id] ?? 0
+  if (spent < allowed) {
+    spentRetries[id] = spent + 1
+    shelve(id)
+    return
+  }
+  complete(id)
 }
 
 // ─── The slam's own trigger ─────────────────────────────────────────────────
@@ -226,6 +249,7 @@ export const __resetTutorial = (): void => {
   doneMs = 0
   sawRicochet = false
   armouredMs = 0
+  for (const k of Object.keys(spentRetries)) delete spentRetries[k as LessonId]
 }
 
 /** How far through the whole curriculum this player is, 0..1. For a future
@@ -235,7 +259,7 @@ export const curriculumProgress = computed(() =>
 
 const useTutorial = () => ({
   taught, activeLesson, activeSpec, lessonProgress,
-  arm, complete, shelve, clearLessons, step, isTaught, curriculumProgress,
+  arm, complete, shelve, missed, clearLessons, step, isTaught, curriculumProgress,
   noteRicochet, armSlam
 })
 

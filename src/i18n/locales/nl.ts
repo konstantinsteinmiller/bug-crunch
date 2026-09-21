@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} sterren',
     'recordScore': '{n} punten',
     'recordBeat': 'Oud record: {n}',
-    'chestCoins': '+{n} munten'
+    'chestCoins': '+{n} munten',
+    'move': 'Nieuwe truc!'
+  },
+  'moves': {
+    'spin': 'Hakdraai',
+    'skid': 'Slip',
+    'quake': 'Beving-stamp',
+    'echo': 'Echo-stamp'
+  },
+  'party': {
+    'title': 'Beestjesfeest!',
+    'count': '{n} beestjes',
+    'best': 'Beste: {n}',
+    'newBest': 'Nieuw feestrecord!'
   },
   'fever': {
     'filling': 'Splatkoorts: {n}% vol',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Geplette beestjes',
     'starsEarned': '{n} van 3 sterren',
     'rankOf': 'van {n}',
-    'worldUnlocked': '{n} vrijgespeeld!'
+    'worldUnlocked': '{n} vrijgespeeld!',
+    'peekNext': 'Gluur naar {n}',
+    'secondWind': 'Tweede adem: je volgende poging begint met een vol flesje',
+    'hintSlam': 'Tip: houd ingedrukt om schilden te kraken',
+    'hintAvoid': 'Tip: laat de stekelige met rust',
+    'missed': 'Nog {n} beestjes'
   },
   'leaderboard': {
     'title': 'Ranglijst',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Tik ergens en je voet vliegt naar het dichtstbijzijnde beestje.'
   },
   'loading': {
-    'boo': 'Boe!',
-    'laugh': 'Hihi!',
+    'uhOh': 'Oei!',
+    'missed': 'Mis!',
     'tooLong': 'Nog aan het laden… verbinding checken?'
   },
   'saveStatus': {

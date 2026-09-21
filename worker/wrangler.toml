@@ -5,8 +5,9 @@ compatibility_date = "2024-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "bug-crunch-leaderboard"
-# Replace with the id `wrangler d1 create bug-crunch-leaderboard` prints.
-database_id = ""
+# Created 2026-09-18 on the rodent.race.app@gmail.com account (workers.dev
+# subdomain `rodent-race`), region WEUR.
+database_id = "a3fca06c-ee50-4763-885d-8ccd8bfd4117"
 
 [vars]
 # Empty = allow any origin. Every portal build serves the game from a different

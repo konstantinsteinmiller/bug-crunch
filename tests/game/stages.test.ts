@@ -165,7 +165,11 @@ describe('levelSpec', () => {
     const one = levelSpec(1)
     expect(one.roster.map((r) => r.id)).toEqual(['ant'])
     expect(one.hazards).toHaveLength(0)
-    expect(one.quota).toBeLessThanOrEqual(10)
+    // Eleven, not eight, because five of them arrive in ONE conga: the rush is
+    // part of the quota, so 1-1 is three ants, a line of five, three ants.
+    expect(one.quota).toBeLessThanOrEqual(12)
+    const bodies = one.rushes.reduce((n, r) => n + r.count, 0)
+    expect(one.quota - bodies).toBeLessThanOrEqual(8)
   })
 })
 

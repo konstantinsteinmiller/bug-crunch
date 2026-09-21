@@ -19,8 +19,10 @@
  * reported that the stomp, the charged stomp, the chain, Fever and the GAME'S
  * OWN GOAL were never explained anywhere, and that "the player needs to be
  * guided through the game to not feel left behind". They were right: a game
- * with nine bug behaviours, a combo ladder, a resource meter, a shop and a
- * chest cannot teach three of them and hope.
+ * with nine bug behaviours, a combo ladder, a resource meter and a shop cannot
+ * teach three of them and hope. (The chest is the one deliberate exception:
+ * it is an opt-in bonus and is left for the curious to find — see where its
+ * lesson used to be, below.)
  *
  * So the lessons are a LIST, each with the moment it becomes relevant and the
  * action that retires it, and the scene arms them as the game reaches them. A
@@ -52,10 +54,34 @@ export type LessonId =
   | 'fever'
   | 'boss'
   | 'pods'
+  // ── The set pieces (RETENTION-FEATURES.md) ──
+  | 'rush'
+  | 'grow'
+  | 'finish'
+  | 'bigFinish'
+  | 'shoebox'
+  | 'perkSteelBoot'
+  | 'perkBunnySlipper'
+  | 'perkRollerSkate'
+  | 'perkCleatBoot'
+  | 'perkElectricSock'
+  | 'kick'
+  | 'spin'
+  | 'skid'
+  | 'quake'
+  | 'echo'
+  | 'twistSpill'
+  | 'twistSprinkler'
+  | 'twistBlackout'
+  | 'twistDraft'
+  | 'twistSurge'
+  | 'twistGlitch'
+  | 'party'
   // ── The meta ──
   | 'stars'
+  | 'secondWind'
+  | 'peek'
   | 'quests'
-  | 'chest'
   | 'locker'
   | 'buy'
 
@@ -70,8 +96,15 @@ export type LessonId =
  *   point  a hand pulsing at a control, with a ring around it
  *   flow   an arrow travelling from one point to another: this causes that
  *   watch  no hand at all, just a ring breathing around something to look at
+ *   double two quick drops on one spot and a swirl round it — the Heel Spin
+ *   skid   a hand that presses DOWN and drags along a track with the press
+ *          ring still under it — the slide, which is a tap that never lifts
+ *   flick  a fast swipe through a point, and a ghost of it rolling on down the
+ *          line — the kick that sends a flipped beetle bowling
  */
-export type Gesture = 'drag' | 'tap' | 'hold' | 'avoid' | 'point' | 'flow' | 'watch'
+export type Gesture =
+  | 'drag' | 'tap' | 'hold' | 'avoid' | 'point' | 'flow' | 'watch'
+  | 'double' | 'skid' | 'flick'
 
 /**
  * How much of the board is dimmed behind the lesson.
@@ -121,6 +154,17 @@ export interface Lesson {
    * the pause silenced them.
    */
   whilePaused?: boolean
+  /**
+   * How many times the lesson may run out WITHOUT counting as taught.
+   *
+   * Every other row treats a bail-out as taught, because showing somebody a
+   * lesson they ignored twice is nagging. Three rows are different: they are
+   * armed by a set piece that passes (a conga walks off, a beetle rights
+   * itself, a level ends on a tap), and a player who missed the moment has not
+   * ignored the lesson, they never got a go at it. Those come back with the next
+   * set piece, up to this many times, and then retire like everything else.
+   */
+  retries?: number
 }
 
 const lesson = (l: Lesson): Lesson => l
@@ -179,7 +223,15 @@ export const LESSONS: readonly Lesson[] = [
   lesson({ id: 'dodge', gesture: 'watch', scrim: 'soft', bailoutMs: 7_000, holdMs: 2_800, order: 70 }),
 
   // ── 8. The reward. ──
-  lesson({ id: 'fever', gesture: 'point', scrim: 'soft', bailoutMs: 9_000, order: 80 }),
+  //
+  // It used to POINT at a button: the vial filled, a flame lit under it, and
+  // the lesson asked for a press. Four of five blind testers never worked out
+  // what that flame was, so Fever now spends itself the moment the glass is
+  // full and there is nothing left to press. What is worth teaching is the
+  // other half — that the goo of every squish is what fills the glass — so this
+  // is a `flow` now, like `goal`: an arrow from a body on the floor to the vial,
+  // thrown while the vial is nearly full and the payoff is seconds away.
+  lesson({ id: 'fever', gesture: 'flow', scrim: 'soft', bailoutMs: 6_000, holdMs: 2_400, order: 80 }),
 
   // ── 9. The thing at the end of a world — and, first, on 1-4. ──
   lesson({ id: 'boss', gesture: 'watch', scrim: 'soft', bailoutMs: 7_000, holdMs: 2_800, order: 90 }),
@@ -205,10 +257,81 @@ export const LESSONS: readonly Lesson[] = [
   // the boss stays armoured — which is why the lesson outranks every meta beat.
   lesson({ id: 'pods', gesture: 'tap', scrim: 'soft', bailoutMs: 9_000, order: 95 }),
 
+  // ═══ The set pieces ═══════════════════════════════════════════════════════
+  //
+  // Every one of `RETENTION-FEATURES.md`'s features is a new thing to DO or to
+  // SEE, and the rule this list exists for applies to all of them: a mechanic
+  // nobody is shown is a mechanic a six-year-old never finds. Each is armed by
+  // the moment it becomes real on the board — the snare roll, the gilded last
+  // body, the box landing, the beetle going over — and retires on the doing.
+
+  // ── The conga. ── The hand hovers over the middle of the trail and drops as
+  // the line overlaps it. Retired by the first stomp that takes two or more; a
+  // rush that walks past untaken leaves it untaught, and the next rush arms it
+  // again (`retries`).
+  lesson({ id: 'rush', gesture: 'tap', scrim: 'soft', bailoutMs: 9_000, order: 45, retries: 2 }),
+
+  // ── The chain is the shoe. ── An arrow from the chain badge to the shoe as
+  // it puffs up: THIS makes THAT bigger. Seen, not done.
+  lesson({ id: 'grow', gesture: 'flow', scrim: 'soft', bailoutMs: 5_000, holdMs: 1_800, order: 47 }),
+
+  // ── One to go. ── A ring on the gilded last body. 1-1's Big Finish is a
+  // celebration, not a skill, so this is watched rather than performed.
+  lesson({ id: 'finish', gesture: 'watch', scrim: 'soft', bailoutMs: 4_000, holdMs: 1_200, order: 48 }),
+
+  // ── …or let it fill and SLAM it. ── From 1-5: the hand presses on the shoe
+  // and the ring fills. Retired by the first slam finisher; a tap finish puts it
+  // back for the next level (up to three times — see `GameScene`).
+  lesson({ id: 'bigFinish', gesture: 'hold', scrim: 'soft', bailoutMs: 8_000, order: 52, retries: 2 }),
+
+  // ── A present on the floor. ── The hand taps the box.
+  lesson({ id: 'shoebox', gesture: 'tap', scrim: 'soft', bailoutMs: 9_000, order: 54 }),
+
+  // ── What the shoe in the box is FOR. ── Once per shoe, on its first trial.
+  // The steel boot's is the loudest in the game: the hand drops onto the
+  // caterpillar the spike lesson said to leave alone. The rest point at the
+  // thing the shoe answers; the skate's is its drag.
+  lesson({ id: 'perkSteelBoot', gesture: 'tap', scrim: 'soft', bailoutMs: 6_000, order: 56 }),
+  lesson({ id: 'perkBunnySlipper', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 57 }),
+  lesson({ id: 'perkRollerSkate', gesture: 'skid', scrim: 'soft', bailoutMs: 8_000, order: 58 }),
+  lesson({ id: 'perkCleatBoot', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 59 }),
+  lesson({ id: 'perkElectricSock', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 61 }),
+
+  // ── Beetle Bowling. ── A flipped beetle, a dotted line through it towards
+  // the nearest group, and a hand flicking along it. Retired by the first kick.
+  lesson({ id: 'kick', gesture: 'flick', scrim: 'soft', bailoutMs: 9_000, order: 72, retries: 2 }),
+
+  // ── The Boss Trophies, each on the practice formation that answers it. ──
+  lesson({ id: 'spin', gesture: 'double', scrim: 'soft', bailoutMs: 9_000, order: 74 }),
+  lesson({ id: 'skid', gesture: 'skid', scrim: 'soft', bailoutMs: 9_000, order: 76 }),
+  lesson({ id: 'quake', gesture: 'hold', scrim: 'soft', bailoutMs: 9_000, order: 78 }),
+  lesson({ id: 'echo', gesture: 'hold', scrim: 'soft', bailoutMs: 9_000, order: 79 }),
+
+  // ── The Uh-oh! Twists. ── A ring on what just changed, the first time each
+  // one plays. The tell (the slowed board, the pictogram) runs EVERY time and
+  // says "something is coming"; these say, once, "it is this".
+  lesson({ id: 'twistSpill', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 81 }),
+  lesson({ id: 'twistSprinkler', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 82 }),
+  lesson({ id: 'twistBlackout', gesture: 'watch', scrim: 'none', bailoutMs: 5_000, holdMs: 2_200, order: 83 }),
+  lesson({ id: 'twistDraft', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 84 }),
+  lesson({ id: 'twistSurge', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 85 }),
+  lesson({ id: 'twistGlitch', gesture: 'watch', scrim: 'soft', bailoutMs: 5_000, holdMs: 2_200, order: 86 }),
+
+  // ── The party. ── The hand taps the river of ants. Retired by the first kill.
+  lesson({ id: 'party', gesture: 'tap', scrim: 'soft', bailoutMs: 6_000, order: 87 }),
+
   // ── 11. What the three stars are for. ──
   //
   // On the result screen, which is a modal: no scrim of our own.
   lesson({ whilePaused: true, id: 'stars', gesture: 'watch', scrim: 'none', bailoutMs: 6_000, holdMs: 2_600, order: 100 }),
+
+  // ── So Close! ── On a near-miss fail screen: the hand points at the vial on
+  // the retry button — the full vial the next try opens with. Retired on retry.
+  lesson({ whilePaused: true, id: 'secondWind', gesture: 'point', scrim: 'none', bailoutMs: 6_000, order: 102 }),
+
+  // ── Peek. ── A hand pulsing on the napkin: tap it and the thing under it
+  // hops. Short, because the screen already has a forward button to find.
+  lesson({ whilePaused: true, id: 'peek', gesture: 'point', scrim: 'none', bailoutMs: 4_000, order: 103 }),
 
   // ── 12. Where those words WENT. ──
   //
@@ -232,8 +355,15 @@ export const LESSONS: readonly Lesson[] = [
   // and it is armed at the calmest moment a level has.
   lesson({ id: 'quests', gesture: 'flow', scrim: 'soft', bailoutMs: 5_200, holdMs: 2_200, order: 105 }),
 
-  // ── 13. The chest pays you for coming back. ──
-  lesson({ whilePaused: true, id: 'chest', gesture: 'point', scrim: 'soft', bailoutMs: 9_000, order: 110 }),
+  // ── The chest is deliberately NOT taught. ──
+  //
+  // It had a lesson here — a ring round the chest and a pulsing pointer at it,
+  // run through pauses like the rest of the meta — and it was too loud for what
+  // the chest is: a bonus for a player who is curious enough to go looking and
+  // wants more coins, not a step every player has to be walked through. Worse,
+  // as a `whilePaused` lesson it stayed up through the pause the reward reveals
+  // hold, so the ring and the pointer showed through "A new bug!" at the top of
+  // the screen. The chest's own ready state is its whole invitation.
 
   // ── 14-15. The shop, in two halves, because it is two decisions. ──
   //

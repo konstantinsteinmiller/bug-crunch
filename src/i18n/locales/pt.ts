@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} estrelas',
     'recordScore': '{n} pontos',
     'recordBeat': 'Recorde anterior: {n}',
-    'chestCoins': '+{n} moedas'
+    'chestCoins': '+{n} moedas',
+    'move': 'Novo golpe!'
+  },
+  'moves': {
+    'spin': 'Giro de calcanhar',
+    'skid': 'Derrapagem',
+    'quake': 'Pisão sísmico',
+    'echo': 'Pisão eco'
+  },
+  'party': {
+    'title': 'Festa dos insetos!',
+    'count': '{n} insetos',
+    'best': 'Recorde: {n}',
+    'newBest': 'Novo recorde da festa!'
   },
   'fever': {
     'filling': 'Febre Splat: {n}% cheia',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Insetos esmagados',
     'starsEarned': '{n} de 3 estrelas',
     'rankOf': 'de {n}',
-    'worldUnlocked': '{n} desbloqueado!'
+    'worldUnlocked': '{n} desbloqueado!',
+    'peekNext': 'Espiar {n}',
+    'secondWind': 'Segundo fôlego: sua próxima tentativa começa com o frasco cheio',
+    'hintSlam': 'Dica: segure para esmagar as carapaças',
+    'hintAvoid': 'Dica: deixe os espinhosos em paz',
+    'missed': 'Faltavam {n} insetos'
   },
   'leaderboard': {
     'title': 'Classificação',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Toca em qualquer sítio e o pé voa para o inseto mais próximo.'
   },
   'loading': {
-    'boo': 'Bu!',
-    'laugh': 'Hi hi!',
+    'uhOh': 'Ai, ai!',
+    'missed': 'Errou!',
     'tooLong': 'Ainda a carregar… verifica a ligação?'
   },
   'saveStatus': {

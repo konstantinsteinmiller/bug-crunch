@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} gwiazdek',
     'recordScore': '{n} punktów',
     'recordBeat': 'Stary rekord: {n}',
-    'chestCoins': '+{n} monet'
+    'chestCoins': '+{n} monet',
+    'move': 'Nowy ruch!'
+  },
+  'moves': {
+    'spin': 'Obrót na pięcie',
+    'skid': 'Poślizg',
+    'quake': 'Trzęsienie',
+    'echo': 'Echo-tupnięcie'
+  },
+  'party': {
+    'title': 'Robaczkowa impreza!',
+    'count': '{n} robaków',
+    'best': 'Rekord: {n}',
+    'newBest': 'Nowy rekord imprezy!'
   },
   'fever': {
     'filling': 'Gorączka Splat: {n}% pełna',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Rozgniecione owady',
     'starsEarned': '{n} z 3 gwiazdek',
     'rankOf': 'z {n}',
-    'worldUnlocked': '{n} odblokowane!'
+    'worldUnlocked': '{n} odblokowane!',
+    'peekNext': 'Podejrzyj {n}',
+    'secondWind': 'Drugi oddech: następna próba zaczyna się z pełną fiolką',
+    'hintSlam': 'Wskazówka: przytrzymaj, by rozbić pancerze',
+    'hintAvoid': 'Wskazówka: omijaj te z kolcami',
+    'missed': 'Brakowało {n} robaków'
   },
   'leaderboard': {
     'title': 'Ranking',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Dotknij gdziekolwiek, a stopa poleci do najbliższego owada.'
   },
   'loading': {
-    'boo': 'Bu!',
-    'laugh': 'Chi chi!',
+    'uhOh': 'Ojej!',
+    'missed': 'Pudło!',
     'tooLong': 'Wciąż się wczytuje… sprawdź połączenie?'
   },
   'saveStatus': {

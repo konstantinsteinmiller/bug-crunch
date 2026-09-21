@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} Sterne',
     'recordScore': '{n} Punkte',
     'recordBeat': 'Alter Bestwert: {n}',
-    'chestCoins': '+{n} Münzen'
+    'chestCoins': '+{n} Münzen',
+    'move': 'Neuer Trick!'
+  },
+  'moves': {
+    'spin': 'Fersen-Dreh',
+    'skid': 'Rutscher',
+    'quake': 'Beben-Stampfer',
+    'echo': 'Echo-Stampfer'
+  },
+  'party': {
+    'title': 'Käferparty!',
+    'count': '{n} Käfer',
+    'best': 'Bestwert: {n}',
+    'newBest': 'Neuer Party-Rekord!'
   },
   'fever': {
     'filling': 'Platsch-Fieber: {n}% voll',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Zermatschte Käfer',
     'starsEarned': '{n} von 3 Sternen',
     'rankOf': 'von {n}',
-    'worldUnlocked': '{n} freigeschaltet!'
+    'worldUnlocked': '{n} freigeschaltet!',
+    'peekNext': 'Blick auf {n}',
+    'secondWind': 'Zweite Luft: Dein nächster Versuch startet mit vollem Fläschchen',
+    'hintSlam': 'Tipp: Halten, um die Panzer zu knacken',
+    'hintAvoid': 'Tipp: Lass die stacheligen in Ruhe',
+    'missed': 'Noch {n} Käfer'
   },
   'leaderboard': {
     'title': 'Bestenliste',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Tipp irgendwohin — dein Fuß fliegt zum nächsten Käfer.'
   },
   'loading': {
-    'boo': 'Buh!',
-    'laugh': 'Hihi!',
+    'uhOh': 'Oh-oh!',
+    'missed': 'Daneben!',
     'tooLong': 'Lädt noch… Verbindung prüfen?'
   },
   'saveStatus': {

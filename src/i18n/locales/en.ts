@@ -183,7 +183,27 @@ export default {
     'starsTotal': '{n} stars',
     'recordScore': '{n} points',
     'recordBeat': 'Old best: {n}',
-    'chestCoins': '+{n} coins'
+    'chestCoins': '+{n} coins',
+    'move': 'New move!'
+  },
+
+  // ─── Boss Trophies ────────────────────────────────────────────────────────
+  // The move a beaten boss drops, named on its gift card. Short: it sits under
+  // a big glyph on a card a six-year-old is being handed.
+  'moves': {
+    'spin': 'Heel Spin',
+    'skid': 'Skid',
+    'quake': 'Quake Slam',
+    'echo': 'Echo Stomp'
+  },
+
+  // ─── Bug Party ────────────────────────────────────────────────────────────
+  // The party's own card: its ribbon, the haul, and the best haul to beat.
+  'party': {
+    'title': 'Bug Party!',
+    'count': '{n} bugs',
+    'best': 'Best: {n}',
+    'newBest': 'New party best!'
   },
 
   // ─── Splat Fever ──────────────────────────────────────────────────────────
@@ -309,7 +329,14 @@ export default {
     'squishes': 'Bugs squished',
     'starsEarned': '{n} of 3 stars',
     'rankOf': 'of {n}',
-    'worldUnlocked': '{n} unlocked!'
+    'worldUnlocked': '{n} unlocked!',
+    // aria-labels of glyph-only marks on the result screen: the Peek napkin,
+    // So Close!'s full-vial badge and hint glyph, and the ghost bugs rail.
+    'peekNext': 'Peek at {n}',
+    'secondWind': 'Second wind: your next try starts with a full vial',
+    'hintSlam': 'Tip: hold to slam the shells',
+    'hintAvoid': 'Tip: leave the spiky ones alone',
+    'missed': '{n} bugs to go'
   },
 
   // ─── Leaderboard ──────────────────────────────────────────────────────────
@@ -380,12 +407,13 @@ export default {
   },
 
   // ─── The loading screen ───────────────────────────────────────────────────
-  // Two one-word speech bubbles from the bug on the splash, and one line for a
-  // load that has taken far too long. Keep the bubbles to a SINGLE short word —
-  // they sit inside a drawn speech balloon that does not resize.
+  // Two speech bubbles from the ant on the splash — `uhOh` as the stomp ring
+  // closes in on it, `missed` as it taunts the shoe it just dodged — and one
+  // line for a load that has taken far too long. Keep the bubbles to a word or
+  // two: they sit in a drawn speech balloon that wraps rather than grows.
   'loading': {
-    'boo': 'Boo!',
-    'laugh': 'Hee hee!',
+    'uhOh': 'Uh-oh!',
+    'missed': 'Missed me!',
     'tooLong': 'Still loading… check your connection?'
   },
 

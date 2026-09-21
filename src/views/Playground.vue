@@ -22,7 +22,7 @@ import {
   blitBanner, paintShockRing, paintSplat, paintUiIcon,
   UI_ICON_IDS, BANNER, SPLAT_REACH, type SplatSheetId, type UiIconId
 } from '@/game/uiArt'
-import { paintSmokeRef } from '@/use/useVfx'
+import { paintGooDropRef, paintSmokeRef } from '@/use/useVfx'
 import type { WorldId } from '@/game/stages'
 import { SHOE_BOX } from '@/game/artBoxes'
 import { ICON_PATHS } from '@/components/icons/iconPaths'
@@ -187,6 +187,9 @@ const drawProcedural = (
           id === 'splat-confetti' ? 'confetti' : 'ooze', 1, 0,
           { procedural: true, opaque: true })
       } else if (id === 'smoke') paintSmokeRef(ctx, half)
+      // `r` is half the droplet's HEIGHT: the shape spans 4r by 2r, so this is
+      // the widest one that fits a square A/B cell end to end.
+      else if (id === 'goo-drop') paintGooDropRef(ctx, half * 0.5)
       else {
         ctx.fillStyle = '#fff6c8'
         ctx.beginPath()

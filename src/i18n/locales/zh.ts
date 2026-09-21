@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} 颗星',
     'recordScore': '{n} 分',
     'recordBeat': '旧纪录：{n}',
-    'chestCoins': '+{n} 金币'
+    'chestCoins': '+{n} 金币',
+    'move': '新招式！'
+  },
+  'moves': {
+    'spin': '脚跟旋转',
+    'skid': '滑行',
+    'quake': '震地重踩',
+    'echo': '回声重踩'
+  },
+  'party': {
+    'title': '虫虫派对！',
+    'count': '{n} 只虫子',
+    'best': '最佳：{n}',
+    'newBest': '派对新纪录！'
   },
   'fever': {
     'filling': '狂踩模式：{n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': '踩扁的虫子',
     'starsEarned': '3 颗星中的 {n} 颗',
     'rankOf': '/ {n}',
-    'worldUnlocked': '{n} 已解锁！'
+    'worldUnlocked': '{n} 已解锁！',
+    'peekNext': '偷看 {n}',
+    'secondWind': '再接再厉：下次挑战开局瓶子就是满的',
+    'hintSlam': '提示：长按重踩来踩碎硬壳',
+    'hintAvoid': '提示：别踩带刺的虫子',
+    'missed': '还差 {n} 只虫子'
   },
   'leaderboard': {
     'title': '排行榜',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': '点击任意位置，脚会飞向最近的虫子。'
   },
   'loading': {
-    'boo': '哇！',
-    'laugh': '嘻嘻！',
+    'uhOh': '糟了！',
+    'missed': '没踩到！',
     'tooLong': '还在加载… 检查一下网络？'
   },
   'saveStatus': {

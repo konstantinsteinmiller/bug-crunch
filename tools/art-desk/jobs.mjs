@@ -23,10 +23,12 @@
  * and it is exactly the text an operator would otherwise copy by hand, so
  * what is automated is what was being done manually, byte for byte.
  *
- * STATUS is the same four-state answer `tools/art-prompts.mjs` writes into
+ * STATUS is the same answer `tools/art-prompts.mjs` writes into
  * PAINT-STATUS.md, recomputed live: a painting in `painted/`, checked against
  * the slicer's receipt (`painted/.sliced.json`), whose `rev` is the first 12
- * hex of a sha1 over the clean reference it was cut against.
+ * hex of a sha1 over the clean reference it was cut against — plus a fifth
+ * state, SUPERSEDED (`–`), for a sheet every one of whose files is cut from
+ * another painting (`cut-from.json`).
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -145,6 +147,11 @@ export const scanJobs = (cfg) => {
   const index = readJson(cfg.indexFile, null)
   const byStem = indexByStem(index)
   const receipt = readJson(join(cfg.paintedDir, '.sliced.json'), {}).files ?? {}
+  // Which painting each file two sheets paint is cut from — the slicer reads the
+  // same file (`pnpm art:prompts` writes it from the manifest). A sheet whose
+  // every file is cut from ANOTHER painting is superseded: never "to paint",
+  // so the queue does not spend a generation on art the slicer will not cut.
+  const cutFrom = readJson(join(cfg.sheetsDir, 'cut-from.json'), {}).targets ?? {}
   const listImages = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => IMAGE_EXT.test(f)) : [])
   const paintings = listImages(cfg.paintedDir)
   const parked = listImages(join(cfg.paintedDir, 'stale'))
@@ -176,8 +183,17 @@ export const scanJobs = (cfg) => {
       const names = [stem, ...info.aliases].map((s) => s.toLowerCase())
       const painting = paintings.find((f) => names.includes(stemOf(f))) ?? null
       const paintingInfo = painting ? revOf(join(cfg.paintedDir, painting)) : null
-      const cells = info.cells.map((c) => ({ ...c, onDisk: existsSync(join(cfg.outDir, c.target)) }))
+      const cells = info.cells.map((c) => {
+        const from = cutFrom[c.target]?.from
+        return {
+          ...c,
+          onDisk: existsSync(join(cfg.outDir, c.target)),
+          // Set only when the file is cut from a painting other than this one.
+          ...(from && from.toLowerCase() !== stem.toLowerCase() ? { cutFrom: from } : {})
+        }
+      })
       const onDisk = cells.filter((c) => c.onDisk).length
+      const elsewhere = [...new Set(cells.filter((c) => c.cutFrom).map((c) => c.cutFrom))]
 
       let mark
       let state
@@ -185,7 +201,12 @@ export const scanJobs = (cfg) => {
       // A receipt line belongs to the painting it was written for; the same
       // name with different bytes is a re-roll nobody has sliced yet.
       if (seenBy?.painting && seenBy.painting !== paintingInfo?.rev) seenBy = null
-      if (!painting) {
+      // First, so nothing below can call it "to paint".
+      if (cells.length && cells.every((c) => c.cutFrom)) {
+        ;[mark, state] = ['–', `superseded — ${cells.length > 1 ? `all ${cells.length} files it paints are` : 'its file is'} cut from `
+          + `${elsewhere.length > 3 ? (elsewhere.every((s) => s.startsWith('still-')) ? 'their own stills' : `${elsewhere.length} other paintings`) : elsewhere.join(', ')}`
+          + ' (cut-from.json, from UI_CUT_FROM) — nothing to paint']
+      } else if (!painting) {
         const old = parked.find((f) => names.includes(stemOf(f)))
         ;[mark, state] = old ? ['!', 'repaint — the old one is parked in painted/stale/'] : ['·', 'not painted yet']
       } else if (seenBy?.rev && ref?.rev && seenBy.rev !== ref.rev) {

@@ -344,6 +344,28 @@ const paintCrumb = (
   ctx.restore()
 }
 
+/**
+ * One of the intro's picnic props, for the GAME board rather than a scene.
+ *
+ * The set pieces the cutscenes built are paid off on the board: the party pours
+ * out of the sandwich the colony stole in 01, the Spill twist tips the lemonade
+ * glass from its first shot, and every conga ant is carrying a crumb of it. Same
+ * painter, same painting-first rule, so the prop on the board and the prop in
+ * the scene are one object (`cutscenes.md` rule 5). `ctx` is in world units —
+ * the caller scales it by the board's px-per-u.
+ */
+export const paintPicnicProp = (
+  ctx: CanvasRenderingContext2D, id: 'glass' | 'sandwich' | 'plate' | 'crumb',
+  x: number, y: number, k = 1
+): void => {
+  switch (id) {
+    case 'glass': paintGlass(ctx, x, y); return
+    case 'sandwich': paintSandwich(ctx, x, y, k); return
+    case 'plate': paintPlate(ctx, x, y, k); return
+    case 'crumb': paintCrumb(ctx, x, y, 1, k); return
+  }
+}
+
 /** Loose crumbs, left behind. `n` of them scattered around a point. */
 const scatterCrumbs = (
   ctx: CanvasRenderingContext2D, x: number, y: number, n: number, seed: number
@@ -367,6 +389,14 @@ const scatterCrumbs = (
  * procedural gingham for the rest of the session — so the cache is checked
  * against the tile's identity rather than against a reset call it has to be
  * told about. Nothing has to remember to invalidate this.
+ *
+ * ── Per WORLD, in a game whose floors are per LEVEL ──
+ *
+ * Deliberately. A cutscene is about a PLACE — the picnic, the attic, the
+ * arcade — not about the level that happens to follow it, and `floorTile`
+ * handed a world gives that world's lead floor: the gingham blanket the intro
+ * was storyboarded on, the boards the attic door opens onto. The forty floors
+ * belong to the boards the player stomps on, not to the film.
  */
 const patterns = new Map<WorldId, { tile: HTMLCanvasElement; p: CanvasPattern | null }>()
 

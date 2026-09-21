@@ -328,7 +328,7 @@ export const pizzBass = ({ midi, vel, len }, rand) => {
  * Short by nature, which is the whole reason the hook lives on one: it can play
  * straight through a storm of squishes without holding a note on top of them.
  */
-const mallet = ({ midi, vel }, rand, { ratios, amps, decays, click, clickHz, maxSec }) => {
+const mallet = ({ midi, vel, len, damp }, rand, { ratios, amps, decays, click, clickHz, maxSec }) => {
   const f = mtof(midi)
   const t1 = decays[0](f)
   const seconds = Math.min(maxSec, t1 * 6)
@@ -348,6 +348,10 @@ const mallet = ({ midi, vel }, rand, { ratios, amps, decays, click, clickHz, max
     }
     const c = nz.process(rand() * 2 - 1, clickHz, 1) * Math.exp(-t / 0.0018) * click
     out[i] = (x + c) * attackEnv(t, 0.0012) * vel
+    // `_` in the score: a hand stops the bar at the end of the written length.
+    // Branch rather than multiply-by-one, so undamped notes (every note in the
+    // parade) take exactly the arithmetic they always did.
+    if (damp) out[i] *= gateEnv(t, len, 0.04)
   }
   return fadeTail(out, 20)
 }
@@ -480,4 +484,245 @@ export const brass = ({ midi, vel, len, fall }, rand) => {
     out[i] = flt.process(x, cutoff, 0.8) * env * vel
   }
   return fadeTail(out, 15)
+}
+
+// ═══ Added for the other four pieces ════════════════════════════════════════
+//
+// The attic, the boss, the fever stinger and the result sting share the band
+// above and add these. Same two rules: short where it can be, band-limited
+// where it cannot, and nothing that parks a bright sustained tone on top of the
+// board. None of the voices above were touched — the parade renders bit for bit.
+
+/**
+ * Chiptune pulse — the fever stinger's lead and arpeggios. A NES-style square
+ * at a chosen duty (`duty`: 0.125 thin, 0.25 the classic lead, 0.5 hollow),
+ * PolyBLEP band-limited like every oscillator here. An accented note starts a
+ * semitone sharp and drops in 18 ms — the "blip" of an 8-bit power-up — and a
+ * held one grows a vibrato. Low-passed at 6 k: bright enough to read as chip,
+ * not so bright that it fizzes over the squish.
+ */
+export const chip = ({ midi, vel, len, accent, duty = 0.25 }, rand) => {
+  const gate = Math.max(0.045, len * 0.82)
+  const out = alloc(gate + 0.06)
+  const o = new Osc(rand())
+  const hp = new SVF()
+  const lp = new SVF()
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    const vib = t > 0.12 ? Math.sin(TAU * 5.8 * (t - 0.12)) * Math.min(0.14, (t - 0.12) * 0.7) : 0
+    const m = midi + (accent ? Math.exp(-t / 0.018) : 0) + vib
+    const x = o.pulse(mtof(m), duty)
+    hp.process(x, 160, 0.7)
+    const y = lp.process(hp.hp, 6000, 0.7)
+    const env = attackEnv(t, 0.002) * (0.72 + 0.28 * Math.exp(-t / 0.06)) * gateEnv(t, gate, 0.02)
+    out[i] = y * env * vel * 0.55
+  }
+  return fadeTail(out, 10)
+}
+
+/**
+ * Timpani: a struck membrane is a handful of inharmonic modes (air-loaded, so
+ * they land near 1 : 1.5 : 2 : 2.44 : 2.94 of the principal), a dull thud under
+ * them, and a felt mallet. Pitched per note, so the boss can walk a bass line
+ * on it. The drive at the end is for the phone: an F2 principal is 87 Hz, and
+ * what a small speaker plays is the 2nd-4th harmonics the saturation adds.
+ */
+export const timpani = ({ midi, vel, len, damp }, rand) => {
+  const f = mtof(midi)
+  const t1 = clamp(1.3 * Math.pow(110 / f, 0.3), 0.6, 1.8)
+  const seconds = Math.min(2.4, Math.max(len + 0.3, t1 * 1.6))
+  const out = alloc(seconds)
+  const ratios = [1, 1.504, 1.742, 2.0, 2.245, 2.494]
+  const amps = [1, 0.5, 0.18, 0.34, 0.12, 0.16]
+  const taus = [t1, 0.55, 0.3, 0.42, 0.25, 0.3]
+  const ph = ratios.map(() => rand())
+  const mallet = new SVF()
+  let thud = 0
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    const glide = 1 + 0.015 * Math.exp(-t / 0.06)
+    let x = 0
+    for (let k = 0; k < ratios.length; k++) {
+      x += amps[k] * Math.sin(TAU * (f * ratios[k] * glide * t + ph[k])) * Math.exp(-t / taus[k])
+    }
+    thud += (TAU * f * 0.62) / SR
+    x += 0.55 * Math.sin(thud) * Math.exp(-t / 0.07)
+    const c = mallet.process(rand() * 2 - 1, 1100, 0.7) * Math.exp(-t / 0.006) * 0.5
+    out[i] = softClip((x * 0.6 + c) * attackEnv(t, 0.0015), 1.5) * vel
+    // `_`: the timpanist's hand on the head at the end of the written length.
+    if (damp) out[i] *= gateEnv(t, len, 0.07)
+  }
+  return fadeTail(out, 40)
+}
+
+/**
+ * Tuba: two saws a hair apart and a quiet square an octave down, through a
+ * low-pass that blats open on the attack and settles — the "oom" of an oom-pah
+ * and the lumbering villain's footsteps. The lips scoop into every note. Soft-
+ * clipped for the buzz, which is also what carries a 55 Hz F1 on a phone.
+ */
+export const tuba = ({ midi, vel, len, accent, fall }, rand) => {
+  const gate = Math.max(0.1, len * 0.85)
+  const fallSec = fall ? 0.3 : 0
+  const out = alloc(gate + fallSec + 0.12)
+  const a = new Osc(rand())
+  const b = new Osc(rand())
+  const s = new Osc(rand())
+  const flt = new SVF()
+  const bell = new SVF()
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    let m = midi - 0.5 * Math.exp(-t / 0.035)
+    if (fall && t > gate) m -= 7 * clamp((t - gate) / fallSec, 0, 1) ** 1.5
+    const f = mtof(m)
+    const x = a.saw(f * 1.003) * 0.45 + b.saw(f * 0.997) * 0.45 + s.pulse(f * 0.5, 0.5) * 0.18
+    const open = (1 - Math.exp(-t / 0.012)) * (0.45 + 0.55 * Math.exp(-t / 0.15))
+    const cutoff = 180 + f * 2.5 + (accent ? 1300 : 850) * open
+    const y = flt.process(x, cutoff, 0.9)
+    bell.process(y, 520, 1.6)
+    const env = attackEnv(t, 0.014) * gateEnv(t, gate + fallSec, 0.06)
+    out[i] = softClip((y + bell.bpn * 0.35) * env, 1.6) * vel * 0.8
+  }
+  return fadeTail(out, 20)
+}
+
+/**
+ * Music box: a plucked steel tine. A clamped-free bar rings at 1 : 6.27 : 17.55,
+ * so it is nearly a pure sine with a glassy ping that dies in milliseconds —
+ * which is exactly why it can play a melody in the attic without ever holding a
+ * bright note over the board. A breath of 2nd and 3rd harmonic from the comb
+ * and the soundboard keeps it from sounding like a test tone.
+ */
+export const musicBox = ({ midi, vel }, rand) => {
+  const f = mtof(midi)
+  const t1 = clamp(1.5 * Math.pow(523 / f, 0.6), 0.35, 2.2)
+  const out = alloc(Math.min(2.6, t1 * 4))
+  const ratios = [1, 2, 3, 6.27, 17.55]
+  const amps = [1, 0.08, 0.03, 0.22, 0.05]
+  const taus = [t1, t1 * 0.4, t1 * 0.25, 0.05, 0.012]
+  const ph = ratios.map(() => rand() * 0.25)
+  const nz = new SVF()
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    let x = 0
+    for (let k = 0; k < ratios.length; k++) {
+      const fk = f * ratios[k]
+      if (fk > 16000) continue
+      x += amps[k] * Math.sin(TAU * (fk * t + ph[k])) * Math.exp(-t / taus[k])
+    }
+    const c = nz.process(rand() * 2 - 1, 5200, 1.2) * Math.exp(-t / 0.0012) * 0.12
+    out[i] = (x + c) * attackEnv(t, 0.0007) * vel
+  }
+  return fadeTail(out, 30)
+}
+
+/**
+ * Theremin: the cartoon ghost. A sine with a little waveshaped warmth, a slow
+ * attack, a wide vibrato that blooms, and portamento — it swoops up into a note
+ * from below ("ooOOoo") unless it is gliding from the previous one. `fall`
+ * sinks it a fifth on release (the ghost going back into the wardrobe).
+ * Spooky the way a Saturday-morning cartoon is spooky: silly first.
+ */
+export const theremin = ({ midi, vel, len, glideFrom, fall }, rand) => {
+  const gate = Math.max(0.15, len * 0.95)
+  const rel = fall ? 0.45 : 0.16
+  const out = alloc(gate + rel + 0.05)
+  const lp = new SVF()
+  let ph = rand()
+  const vph0 = rand() * TAU
+  const from = glideFrom != null ? glideFrom - midi : -2.5
+  const tau = glideFrom != null ? 0.07 : 0.11
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    const depth = Math.min(0.42, Math.max(0, t - 0.08) * 1.1)
+    let m = midi + from * Math.exp(-t / tau) + Math.sin(vph0 + TAU * 6.1 * t) * depth
+    if (fall && t > gate) m -= 7 * clamp((t - gate) / rel, 0, 1) ** 1.3
+    ph += mtof(m) / SR
+    const s = Math.sin(TAU * ph)
+    const x = (Math.tanh(1.6 * s) / Math.tanh(1.6)) * 0.85 + 0.15 * s
+    const env = attackEnv(t, 0.07) * gateEnv(t, gate, rel * 0.45)
+    out[i] = lp.process(x, 3000, 0.7) * env * vel * 0.7
+  }
+  return fadeTail(out, 25)
+}
+
+/**
+ * Bassoon: the grandfather of every cartoon tiptoe. A narrow pulse and a saw
+ * pushed into a soft clip (the reed), through two fixed formants at a hollow
+ * "aw" (480 Hz and 1.15 kHz) — a double reed's formants do not follow the
+ * note, which is what makes the low notes sound comic. Staccato by nature.
+ */
+export const bassoon = ({ midi, vel, len, accent }, rand) => {
+  const gate = Math.max(0.06, len * 0.72)
+  const out = alloc(gate + 0.1)
+  const a = new Osc(rand())
+  const b = new Osc(rand())
+  const f1 = new SVF()
+  const f2 = new SVF()
+  const f3 = new SVF()
+  const body = new SVF()
+  const lp = new SVF()
+  const vph = rand() * TAU
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    const vib = t > 0.2 ? Math.sin(vph + TAU * 5 * t) * Math.min(0.12, (t - 0.2) * 0.5) : 0
+    const f = mtof(midi - (accent ? 0.45 : 0.25) * Math.exp(-t / 0.025) + vib)
+    const reed = Math.tanh(2 * (a.pulse(f, 0.28) * 0.6 + b.saw(f) * 0.4))
+    f1.process(reed, 480, 2.8)
+    f2.process(reed, 1150, 4)
+    f3.process(reed, 2600, 5)
+    body.process(reed, 700, 0.7)
+    const voiced = f1.bpn + f2.bpn * 0.5 + f3.bpn * 0.12 + body.lp * 0.5
+    const env = attackEnv(t, accent ? 0.012 : 0.022) * gateEnv(t, gate, 0.03)
+    out[i] = lp.process(voiced, 3600, 0.7) * env * vel * 0.85
+  }
+  return fadeTail(out, 12)
+}
+
+/**
+ * Toy organ: a little combo organ — drawbars at the octave, twelfth and
+ * fifteenth over the fundamental with a pinch of the nineteenth, a key click,
+ * and a tremolo wobbling the volume. The haunted fairground, not the
+ * cathedral. Only ever short stabs (a chord voice on the off-beats), parked in
+ * A3-G4 like every stab in the band.
+ */
+export const toyOrgan = ({ midi, vel, len }, rand) => {
+  const gate = Math.max(0.08, len * 0.7)
+  const out = alloc(gate + 0.09)
+  const f = mtof(midi)
+  const ratios = [1, 2, 3, 4, 6]
+  const amps = [1, 0.55, 0.35, 0.22, 0.08]
+  const ph = ratios.map(() => rand())
+  const click = new SVF()
+  const lp = new SVF()
+  const trem = rand() * TAU
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    let x = 0
+    for (let k = 0; k < ratios.length; k++) x += amps[k] * Math.sin(TAU * (f * ratios[k] * t + ph[k]))
+    const c = click.process(rand() * 2 - 1, 2500, 0.8) * Math.exp(-t / 0.002) * 0.3
+    const tr = 1 - 0.22 * (0.5 + 0.5 * Math.sin(trem + TAU * 6.4 * t))
+    const env = attackEnv(t, 0.005) * gateEnv(t, gate, 0.035) * tr
+    out[i] = lp.process((x * 0.4 + c) * env, 4200, 0.7) * vel
+  }
+  return fadeTail(out, 10)
+}
+
+/**
+ * Riser: band-passed noise whose centre climbs from `midi` to `toMidi` over the
+ * note and swells as it goes — the whoosh into a downbeat. Stops dead at the
+ * end (the downbeat it leads to covers the cut).
+ */
+export const riser = ({ midi = 60, toMidi = 96, vel, len }, rand) => {
+  const out = alloc(len + 0.02)
+  const bp = new SVF()
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR
+    const u = clamp(t / len, 0, 1)
+    const fc = mtof(midi + (toMidi - midi) * u * u)
+    bp.process(rand() * 2 - 1, fc, 2.2)
+    const env = u * u * attackEnv(t, 0.01) * gateEnv(t, len, 0.006)
+    out[i] = bp.bpn * env * vel
+  }
+  return fadeTail(out, 8)
 }

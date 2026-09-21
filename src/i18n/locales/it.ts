@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} stelle',
     'recordScore': '{n} punti',
     'recordBeat': 'Vecchio record: {n}',
-    'chestCoins': '+{n} monete'
+    'chestCoins': '+{n} monete',
+    'move': 'Nuova mossa!'
+  },
+  'moves': {
+    'spin': 'Giravolta',
+    'skid': 'Scivolata',
+    'quake': 'Pestone sismico',
+    'echo': 'Pestone eco'
+  },
+  'party': {
+    'title': 'Festa degli insetti!',
+    'count': '{n} insetti',
+    'best': 'Record: {n}',
+    'newBest': 'Nuovo record della festa!'
   },
   'fever': {
     'filling': 'Febbre Splat: {n}% piena',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Insetti schiacciati',
     'starsEarned': '{n} stelle su 3',
     'rankOf': 'su {n}',
-    'worldUnlocked': '{n} sbloccato!'
+    'worldUnlocked': '{n} sbloccato!',
+    'peekNext': 'Sbircia {n}',
+    'secondWind': 'Secondo fiato: il prossimo tentativo parte con la fiala piena',
+    'hintSlam': 'Suggerimento: tieni premuto per schiacciare i gusci',
+    'hintAvoid': 'Suggerimento: lascia stare quelli spinosi',
+    'missed': 'Mancavano {n} insetti'
   },
   'leaderboard': {
     'title': 'Classifica',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Tocca ovunque e il piede vola sull\'insetto più vicino.'
   },
   'loading': {
-    'boo': 'Bu!',
-    'laugh': 'Ih ih!',
+    'uhOh': 'Oh-oh!',
+    'missed': 'Mancato!',
     'tooLong': 'Ancora in caricamento… controlli la connessione?'
   },
   'saveStatus': {

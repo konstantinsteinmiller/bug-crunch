@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { nextTick } from 'vue'
@@ -77,10 +77,25 @@ const mountModal = (reward: CampaignReward | readonly CampaignReward[] | null) =
     global: { plugins: [i18n] }
   })
 
-/** Tap the overlay the way a player does — through `FReward`'s own event, so
- *  the test does not depend on that component's markup. */
+/**
+ * Tap the overlay the way a player does — through `FReward`'s own event, so the
+ * test does not depend on that component's markup. Since the queue became a
+ * montage this is the SKIP: one tap ends the whole run of prizes.
+ */
 const tapContinue = async (wrapper: ReturnType<typeof mountModal>): Promise<void> => {
   wrapper.findComponent(FReward).vm.$emit('continue')
+  await nextTick()
+}
+
+/**
+ * Let the card on screen hand over to the next one by itself.
+ *
+ * Comfortably past `DWELL_MS` in the component (1700 ms), which is not exported
+ * — a test that pinned the exact number would fail on a tuning change that is
+ * none of its business.
+ */
+const advanceCard = async (): Promise<void> => {
+  vi.advanceTimersByTime(2000)
   await nextTick()
 }
 
@@ -212,6 +227,11 @@ describe('the queue a level result earns', () => {
 // ─── The gift screen ────────────────────────────────────────────────────────
 
 describe('the reveal modal', () => {
+  // The queue plays itself now: a card dwells, then hands over. Fake timers so
+  // the handover is a step this test takes rather than a second it waits.
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
   it('presents a queue ONE AT A TIME, in order', async () => {
     const wrapper = mountModal([
       { kind: 'foe', bug: 'beetle' },
@@ -224,7 +244,7 @@ describe('the reveal modal', () => {
     // The second prize is NOT on screen at the same time as the first.
     expect(wrapper.text()).not.toContain('New place to stomp!')
 
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.text()).toContain('New place to stomp!')
     expect(wrapper.text()).toContain('Overgrown Backyard')
     expect(wrapper.text()).not.toContain('A new bug!')
@@ -237,10 +257,10 @@ describe('the reveal modal', () => {
     ])
     await nextTick()
 
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.emitted('done')).toBeUndefined()
 
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.emitted('done')).toHaveLength(1)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
@@ -275,7 +295,7 @@ describe('the reveal modal', () => {
     expect(wrapper.text()).toContain('Moths')
     expect(wrapper.emitted('done')).toBeUndefined()
 
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.text()).toContain('Treasure!')
     expect(wrapper.text()).toContain('+80 coins')
   })
@@ -288,9 +308,9 @@ describe('the reveal modal', () => {
       { kind: 'shoe', shoe: 'steelBoot' }
     ])
     await nextTick()
-    await tapContinue(wrapper)
-    await tapContinue(wrapper)
-    await tapContinue(wrapper)
+    await advanceCard()
+    await advanceCard()
+    await advanceCard()
 
     // A thing that is now YOURS → `unlock`; a number that went up → `star`.
     expect(fxSpy.mock.calls.map((c) => c[0])).toEqual(['unlock', 'star', 'star', 'unlock'])
@@ -306,7 +326,7 @@ describe('the reveal modal', () => {
     ])
     await nextTick()
     expect(wrapper.text()).toContain('Neon Arcade')
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.text()).toContain('Ants')
   })
 
@@ -319,11 +339,29 @@ describe('the reveal modal', () => {
     await nextTick()
     expect(wrapper.findAll('.reveal-card__pip')).toHaveLength(3)
     expect(wrapper.findAll('.reveal-card__pip.is-on')).toHaveLength(1)
-    await tapContinue(wrapper)
+    await advanceCard()
     expect(wrapper.findAll('.reveal-card__pip.is-on')).toHaveLength(2)
   })
 
-  /**
+  it('a tap ends the whole montage, not just the card on screen', async () => {
+    // Five prizes in a row after a boss was measured as five taps charged to a
+    // player who had just been having a good time, and the blind tester's note
+    // was "ok I get it, can I just play". A tap here means "give me the game
+    // back" — everything on the queue is already banked, so nothing is lost.
+    const wrapper = mountModal([
+      { kind: 'foe', bug: 'beetle' },
+      { kind: 'stars', stars: 24 },
+      { kind: 'world', world: 2 }
+    ])
+    await nextTick()
+    expect(wrapper.text()).toContain('A new bug!')
+
+    await tapContinue(wrapper)
+    expect(wrapper.emitted('done')).toHaveLength(1)
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
+  })
+
+/**
    * ─── The prize is drawn at OBJECT size, and says so ───────────────────────
    *
    * The three number-shaped kinds show a glyph instead of a drawing, and this

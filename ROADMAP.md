@@ -353,6 +353,27 @@ item says so.
   the boss's egg phase got its own wordless lesson. Scouted numbers are in the
   world-1 block of `stages.ts`.
 
+## Already built (the retention set pieces, 2026-09-18)
+
+`RETENTION-FEATURES.md` #1–10, retrofitted onto the cutscenes and front-loaded
+into the first five minutes. §0 of that document has the details and the scout
+numbers. Four of them displace items above:
+
+* **Peek** — a silhouette under a napkin on every result screen, naming the next
+  level's new thing, with crown pips counting down to the boss. **Replaces #1** (a
+  mystery instead of a three-item list).
+* **So Close!** — a near miss (≥ 60 %) shows the bugs it was short by as ghosts, and
+  its retry opens with a full vial and a hint glyph. **Covers #4 and #11.**
+* **Big Finish** — the last body is gilded. Tap it for confetti; slam it for a
+  board-clear jackpot. **Replaces #5 (Overtime).**
+* **Rush Lines**, **Growth Spurt**, **Shoebox Trials** (Steel Boot on 1-2),
+  **Bug Party** (after 1-3 and every x-6), **Beetle Bowling**, **Boss Trophies**
+  (Heel Spin, Skid, Quake Slam, Echo Stomp) and the **Uh-oh! Twists** (Spill on 1-7,
+  then one per world) — none of which were on this list.
+
+**#3 (the daily streak) is ruled out** by `RETENTION-FEATURES.md` §5: a visible streak
+is FOMO aimed at children, and a daily hook in disguise.
+
 ---
 
 ## What NOT to build

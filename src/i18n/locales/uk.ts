@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} зірок',
     'recordScore': '{n} очок',
     'recordBeat': 'Старий рекорд: {n}',
-    'chestCoins': '+{n} монет'
+    'chestCoins': '+{n} монет',
+    'move': 'Новий прийом!'
+  },
+  'moves': {
+    'spin': 'Розворот на п’ятці',
+    'skid': 'Занос',
+    'quake': 'Землетрус',
+    'echo': 'Луна-тупіт'
+  },
+  'party': {
+    'title': 'Жуча вечірка!',
+    'count': '{n} жуків',
+    'best': 'Рекорд: {n}',
+    'newBest': 'Новий рекорд вечірки!'
   },
   'fever': {
     'filling': 'Splat-гарячка: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Розчавлено комах',
     'starsEarned': '{n} із 3 зірок',
     'rankOf': 'з {n}',
-    'worldUnlocked': '{n} відкрито!'
+    'worldUnlocked': '{n} відкрито!',
+    'peekNext': 'Зазирнути в {n}',
+    'secondWind': 'Друге дихання: наступна спроба почнеться з повним флаконом',
+    'hintSlam': 'Порада: утримуй, щоб розбити панцири',
+    'hintAvoid': 'Порада: не чіпай колючих',
+    'missed': 'Залишилось {n} жуків'
   },
   'leaderboard': {
     'title': 'Таблиця лідерів',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Торкнись будь-де — нога полетить до найближчої комахи.'
   },
   'loading': {
-    'boo': 'Бу!',
-    'laugh': 'Хі-хі!',
+    'uhOh': 'Ой-ой!',
+    'missed': 'Мимо!',
     'tooLong': 'Досі вантажиться… перевір з\'єднання?'
   },
   'saveStatus': {

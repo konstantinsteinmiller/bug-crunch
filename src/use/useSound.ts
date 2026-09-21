@@ -1,5 +1,9 @@
 import { prependBaseUrl } from '@/utils/function'
-import useUser, { MUSIC_TRACK_FILES, DEFAULT_MUSIC_TRACK } from '@/use/useUser'
+import useUser, { DEFAULT_MUSIC_TRACK } from '@/use/useUser'
+import {
+  NO_SCENE, FEVER_STINGER_FILE, RESULT_STING_FILE, FEVER_BED_RETURN_MS, FEVER_STINGER_CUT_MS,
+  routeBedFile, bedFileToWarm, type MusicScene
+} from '@/game/musicRouting'
 import { getAudioContext, loadAudioBuffer, resourceCache, registerHtmlAudio, unregisterHtmlAudio, isAudioSuspended, registerOneShotSource } from '@/use/useAssets'
 import { isGamePaused } from '@/use/useGamePause'
 import { isPlatformAudioMuted } from '@/use/useGamePauseAudio'
@@ -57,7 +61,10 @@ export const resumeMusicAfterAd = (): void => {
   restartTrack?.()
 }
 
-export const forceStopMusic = (): void => {
+/** Returns whether the music was WANTED when it was cut — the ad layer uses it
+ *  to decide whether a late-opening ad owes the run its music back. */
+export const forceStopMusic = (): boolean => {
+  const wasWanted = shouldPlay.value
   shouldPlay.value = false
   try {
     bgMusic.value?.pause()
@@ -66,6 +73,7 @@ export const forceStopMusic = (): void => {
     }
   } catch { /* element gone / not ready */ }
   isPlaying.value = false
+  return wasWanted
 }
 
 /**
@@ -147,6 +155,316 @@ export const setMusicIntensity = (intensity: number): void => {
  */
 const MUSIC_VOLUME_SCALE = 0.125
 
+// ─── Fades ──────────────────────────────────────────────────────────────────
+
+/** The rate the player's fades have always run at: 0.005 of volume per 50 ms
+ *  step — the default slider's 0.075 in 750 ms. */
+const FADE_MS_PER_VOLUME = 50 / 0.005
+
+let fadeTimer: ReturnType<typeof setInterval> | null = null
+const cancelFade = (): void => {
+  if (fadeTimer !== null) clearInterval(fadeTimer)
+  fadeTimer = null
+}
+
+/**
+ * Move the music element's volume from `from` (default: where it is) to `to`
+ * over `ms`, in 50 ms steps, then call `onDone`. `alive` is re-checked every
+ * step; when it turns false the fade stops where it is, without `onDone`.
+ *
+ * ONE fade at a time: a new fade cancels the running one, so a stop's fade-out
+ * can no longer pause the NEXT level's track when the player taps through the
+ * result screen quickly. And it ends on TIME, never by reading the volume back:
+ * iOS ignores `volume` writes and reports 1 forever, and the fade-out that used
+ * to wait for the volume to reach 0 there never ended — the track played on
+ * under the result screen, and its interval leaked, once per level.
+ */
+const rampVolume = (to: number, ms: number, onDone?: () => void, alive?: () => boolean, from?: number): void => {
+  cancelFade()
+  const el = bgMusic.value
+  if (!el) { onDone?.(); return }
+  const start = from ?? el.volume
+  const steps = Math.max(1, Math.round(ms / 50))
+  let i = 0
+  const timer = setInterval(() => {
+    const cur = bgMusic.value
+    if (!cur) {
+      if (fadeTimer === timer) cancelFade()
+      onDone?.()
+      return
+    }
+    if (alive && !alive()) {
+      if (fadeTimer === timer) cancelFade()
+      return
+    }
+    i++
+    const v = start + (to - start) * Math.min(1, i / steps)
+    try { cur.volume = Math.max(0, Math.min(1, v)) } catch { /* element not ready */ }
+    if (i >= steps) {
+      if (fadeTimer === timer) cancelFade()
+      onDone?.()
+    }
+  }, 50)
+  fadeTimer = timer
+}
+
+// ─── Routing, and the two music cues ────────────────────────────────────────
+//
+// WHICH bed plays is decided in `game/musicRouting.ts` (a pure module with the
+// rules and their tests); the scene tells the player where the game is with
+// `setMusicScene`, and every start resolves the file through it. The beds all
+// play through the ONE element above.
+//
+// The fever stinger and the result sting are not beds. They are decoded
+// buffers played on the SHARED AudioContext from `useAssets` — the context the
+// ad/pause gate suspends — and registered with `registerOneShotSource`, so the
+// ad kill (`killOneShotSfx`) hard-stops them exactly as it stops an SFX. No
+// second element and no second context: the ad-mute guarantee covers them the
+// same way it covers every squish. (A second element would have needed its own
+// line in `forceStopMusic`; a buffer on the shared context needs nothing.)
+//
+// Why a buffer and not the element: the stinger has to land ON the button
+// press. A media element swapping its source starts 100-300 ms late; a decoded
+// buffer starts on the next audio quantum.
+
+let musicScene: MusicScene = NO_SCENE
+
+/**
+ * Tell the player where the game is: a level (`{ level }`), a Bug Party
+ * (`{ level, party: true }`). The next bed start resolves through it; a bed
+ * already playing is left alone until then.
+ */
+export const setMusicScene = (scene: MusicScene): void => {
+  musicScene = { ...scene }
+}
+
+/** The scene the player is routing for — for tests and the debug overlay. */
+export const getMusicScene = (): MusicScene => musicScene
+
+const musicSrc = (file: string): string => prependBaseUrl('audio/music/' + file)
+
+const warmedBeds = new Set<string>()
+
+/**
+ * Fetch ahead the bed the level after `level` will need — only ever the boss
+ * loop or the attic, only when this level does not already play it (see
+ * `bedFileToWarm`), and once per session. Neither is part of the first load:
+ * 1-3 warms the Queen's fight, 2-10 warms the attic. A best-effort HTTP-cache
+ * warm-up; the element streams the file on demand either way.
+ */
+export const warmMusicFor = (level: number): void => {
+  const { userMusicTrack } = useUser()
+  const file = bedFileToWarm(userMusicTrack.value, level, DEFAULT_MUSIC_TRACK)
+  if (!file || warmedBeds.has(file) || typeof fetch !== 'function') return
+  warmedBeds.add(file)
+  try {
+    void fetch(musicSrc(file), { priority: 'low' } as RequestInit)
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .catch(() => { warmedBeds.delete(file) })
+  } catch {
+    warmedBeds.delete(file)
+  }
+}
+
+/**
+ * Decode the stinger (99 KB) and the sting (30 KB) on the shared context. Called
+ * when a level starts — never on the first load — so both are ready long before
+ * the first vial fills.
+ */
+export const warmMusicCues = (): void => {
+  void loadAudioBuffer(musicSrc(FEVER_STINGER_FILE))
+  void loadAudioBuffer(musicSrc(RESULT_STING_FILE))
+}
+
+type CueKind = 'fever' | 'result'
+
+interface Cue {
+  kind: CueKind
+  source: AudioBufferSourceNode
+  gain: GainNode
+  /** `ctx.currentTime` at the start — the stinger is timed on the audio clock. */
+  startedAt: number
+}
+
+let cue: Cue | null = null
+
+/** The cues follow the MUSIC slider, on the scale the beds use: the files are
+ *  mastered on the beds' loudness scale, so the same gain lands them level. */
+const cueVolume = (): number => {
+  const { userMusicVolume } = useUser()
+  return Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * MUSIC_VOLUME_SCALE))
+}
+
+const startCue = (kind: CueKind, file: string, onEnd?: () => void): boolean => {
+  stopCue(0)
+  // The gates the bed's start obeys. Under an ad, a pause or a hidden tab the
+  // context is suspended, and a source started now would thaw later, out of its
+  // moment — so it is not started at all.
+  if (isAudioSuspended() || isGamePaused.value || isMobileAudioMuted.value || isPlatformAudioMuted.value) return false
+  const volume = cueVolume()
+  if (volume <= 0) return false
+  const src = musicSrc(file)
+  const ctx = getAudioContext()
+  const buffer = resourceCache.audioBuffers.get(src)
+  if (!ctx || !buffer || ctx.state !== 'running') {
+    // Not decoded yet (or no Web Audio): skip this one, be ready for the next.
+    if (ctx && !buffer) void loadAudioBuffer(src)
+    return false
+  }
+  try {
+    const source = ctx.createBufferSource()
+    source.buffer = buffer
+    const gain = ctx.createGain()
+    gain.gain.value = volume
+    source.connect(gain).connect(ctx.destination)
+    const entry: Cue = { kind, source, gain, startedAt: ctx.currentTime }
+    source.addEventListener('ended', () => {
+      if (cue === entry) cue = null
+      try { gain.disconnect() } catch { /* already gone */ }
+      onEnd?.()
+    }, { once: true })
+    source.start()
+    // THE line that puts the cue under the ad kill.
+    registerOneShotSource(source)
+    cue = entry
+    return true
+  } catch (e) {
+    console.warn('[music] cue start failed', e)
+    return false
+  }
+}
+
+const stopCue = (fadeMs: number): void => {
+  const c = cue
+  if (!c) return
+  cue = null
+  try {
+    const ctx = c.gain.context
+    const now = ctx.currentTime
+    if (fadeMs > 0 && ctx.state === 'running') {
+      c.gain.gain.cancelScheduledValues(now)
+      c.gain.gain.setValueAtTime(c.gain.gain.value, now)
+      c.gain.gain.linearRampToValueAtTime(0, now + fadeMs / 1000)
+      c.source.stop(now + fadeMs / 1000 + 0.02)
+    } else {
+      c.source.stop()
+    }
+  } catch { /* already stopped */ }
+}
+
+// ── The fever: the bed steps aside ──
+//
+// For the ten seconds of Splat Fever the stinger plays INSTEAD of the bed: the
+// bed dips for 90 ms and pauses (a pause, not a volume duck — iOS ignores
+// volume writes, and a ducked bed there would play at full level under the
+// stinger), and it comes back where it left off, fading in from the stinger's
+// last-beat hole. Played over the bed instead, the stinger (G) would sit on
+// whatever key and bar the bed was in (F, D minor, F minor, the old tracks'
+// keys) for ten seconds.
+
+/** True while the bed is paused for the stinger. `playWithFade` refuses to start
+ *  it, so no watcher (a closed modal, an unmute, a tab coming back) can bring it
+ *  back on top of the stinger. */
+let bedHeld = false
+let bedReturnPoll: ReturnType<typeof setInterval> | null = null
+/** Set by `useMusic()`: restart the bed through the normal gated start. */
+let resumeBed: (() => void) | null = null
+
+const clearBedReturn = (): void => {
+  if (bedReturnPoll !== null) clearInterval(bedReturnPoll)
+  bedReturnPoll = null
+}
+
+/** Let go of the bed without restarting it (a stop, a fresh start). */
+const dropBedHold = (): void => {
+  clearBedReturn()
+  bedHeld = false
+}
+
+const releaseBed = (): void => {
+  if (!bedHeld) { clearBedReturn(); return }
+  dropBedHold()
+  resumeBed?.()
+}
+
+const holdBed = (): void => {
+  bedHeld = true
+  const el = bgMusic.value
+  if (!el || el.paused) return
+  rampVolume(0, 90, () => {
+    if (!bedHeld || !bgMusic.value) return
+    bgMusic.value.pause()
+    isPlaying.value = false
+  })
+}
+
+/**
+ * Splat Fever began: play the stinger and step the bed aside. A no-op when the
+ * stinger is not decoded yet, the music slider is at zero, or anything has the
+ * audio muted — the bed simply plays on, as it always did.
+ */
+export const playFeverStinger = (): void => {
+  if (!startCue('fever', FEVER_STINGER_FILE, releaseBed)) return
+  const c = cue
+  if (!c) return
+  holdBed()
+  clearBedReturn()
+  const ctx = c.gain.context
+  const at = c.startedAt + FEVER_BED_RETURN_MS / 1000
+  // Polled on the AUDIO clock, not a timer: a pause freezes the context and the
+  // stinger with it, and a wall-clock timer would bring the bed back in the
+  // middle of a stinger that has not finished.
+  bedReturnPoll = setInterval(() => {
+    if (cue !== c) { releaseBed(); return }
+    if (ctx.currentTime >= at) releaseBed()
+  }, 50)
+}
+
+/**
+ * Splat Fever ended. Normally the stinger is ringing out by now and the bed is
+ * already back; a fever cut short (the six-second gilded laces) fades the
+ * stinger out and brings the bed back at once.
+ */
+export const endFeverStinger = (): void => {
+  if (cue?.kind === 'fever') stopCue(FEVER_STINGER_CUT_MS)
+  releaseBed()
+}
+
+// ── The result sting ──
+
+let stingTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Play the result sting, `delayMs` from now — see `resultStingDelayMs` for why
+ * it can wait. Dropped if a level has started by then.
+ */
+export const playResultSting = (delayMs = 0): void => {
+  cancelResultSting()
+  const go = (): void => {
+    stingTimer = null
+    if (shouldPlay.value) return
+    startCue('result', RESULT_STING_FILE)
+  }
+  if (delayMs > 0) stingTimer = setTimeout(go, delayMs)
+  else go()
+}
+
+/** The result screen went away: a sting that has not started never will, and
+ *  one that is playing gets out of the way. */
+export const cancelResultSting = (): void => {
+  if (stingTimer !== null) clearTimeout(stingTimer)
+  stingTimer = null
+  if (cue?.kind === 'result') stopCue(150)
+}
+
+// A sting is a moment: interrupted by a pause (a modal, an ad, a hidden tab) it
+// is dropped, not frozen and thawed seconds later on a different screen. The
+// fever stinger is the opposite — it freezes with the fever's own clock, which
+// the same pause stops. `sync`, so the stop lands before the context suspends.
+watch(isGamePaused, (paused) => {
+  if (paused && cue?.kind === 'result') stopCue(0)
+}, { flush: 'sync' })
+
 export const useMusic = () => {
   const { userMusicVolume, userMusicTrack } = useUser()
 
@@ -154,28 +472,53 @@ export const useMusic = () => {
     Math.max(0, Math.min(1, (userMusicVolume.value ?? 0.6) * MUSIC_VOLUME_SCALE))
 
   watch(userMusicVolume, () => {
+    if (cue) cue.gain.gain.value = cueVolume()
     if (!bgMusic.value) return
     bgMusic.value.volume = musicElementVolume()
   })
 
   // Live-swap the background track when the player picks a different one in
   // Options. Only reload if music is meant to be playing right now — otherwise
-  // the next `startBattleMusic()` naturally picks up the new choice.
+  // the next `startBattleMusic()` naturally picks up the new choice. Routed, so
+  // a new pick may not change the file at all (a boss level plays the boss loop
+  // whatever is picked) — then nothing restarts.
   watch(userMusicTrack, () => {
     if (!bgMusic.value || !shouldPlay.value) return
+    if (elementPlays(currentTrackFile())) return
     isPlaying.value = false
-    loadAndPlayTrack()
+    switchTrack()
   })
 
-  // Resolve the active track's filename, falling back to the default — a save
-  // can carry a track id this build no longer ships.
+  // The bed for where the game is (`setMusicScene`) and what the player picked
+  // — the rules are `routeBed` in `game/musicRouting.ts`. A save can carry a
+  // track id this build no longer ships; that falls back to the default.
   const currentTrackFile = (): string =>
-    MUSIC_TRACK_FILES[userMusicTrack.value] ?? MUSIC_TRACK_FILES[DEFAULT_MUSIC_TRACK]
+    routeBedFile(userMusicTrack.value, musicScene, DEFAULT_MUSIC_TRACK)
+
+  /** Is the element pointed at `file` right now? */
+  const elementPlays = (file: string): boolean =>
+    !!bgMusic.value?.src && bgMusic.value.src.endsWith('/audio/music/' + file)
+
+  /** Change beds while one is sounding: a 300 ms dip, then the new bed from its
+   *  top with the usual fade-in. One element, so a dip rather than an overlap —
+   *  and never two beds audible at once. */
+  const switchTrack = (): void => {
+    const el = bgMusic.value
+    if (!el || el.paused) { loadAndPlayTrack(); return }
+    rampVolume(0, 300, () => { if (shouldPlay.value) loadAndPlayTrack() })
+  }
+
+  resumeBed = () => {
+    if (shouldPlay.value && bgMusic.value && bgMusic.value.paused) playWithFade()
+  }
 
   // Point the music element at the active track and fade it in — using the
   // preloaded/decoded copy when available, otherwise fetching on demand.
   const loadAndPlayTrack = () => {
     if (!bgMusic.value) return
+    // A fade still running from the last stop would otherwise finish by pausing
+    // the track this is about to start.
+    cancelFade()
     const src = prependBaseUrl('audio/music/' + currentTrackFile())
     const cached = resourceCache.audio.get(src)
     bgMusic.value.pause()
@@ -257,6 +600,9 @@ export const useMusic = () => {
       })
     })
     onUnmounted(() => {
+      stopCue(0)
+      dropBedHold()
+      cancelFade()
       if (bgMusic.value) unregisterHtmlAudio(bgMusic.value)
       bgMusic.value?.pause()
       bgMusic.value?.removeAttribute('src')
@@ -271,9 +617,19 @@ export const useMusic = () => {
 
   const startBattleMusic = () => {
     if (!bgMusic.value) return
+    // A result sting still ringing gives way to the level's bed.
+    cancelResultSting()
     // Already playing a battle track — leave it alone so we don't restart
-    // mid-fight on extra calls.
-    if (shouldPlay.value && isPlaying.value) return
+    // mid-fight on extra calls. Unless it is the WRONG bed for where the game
+    // now is (`setMusicScene` moved on while it played): that is a transition.
+    if (shouldPlay.value && isPlaying.value) {
+      if (!elementPlays(currentTrackFile())) switchTrack()
+      return
+    }
+    // A fresh start owes nothing to a fever that was cut short (an ad kills
+    // the stinger): the bed is not being held for anything any more.
+    if (cue?.kind === 'fever') stopCue(FEVER_STINGER_CUT_MS)
+    dropBedHold()
     shouldPlay.value = true
     loadAndPlayTrack()
   }
@@ -282,10 +638,18 @@ export const useMusic = () => {
   // `useFirstLoadInterstitial`, which fires from the splash — can bring the
   // music back after an ad. Every `useMusic()` call closes over the same
   // module-level `bgMusic`, so a later overwrite is the same function.
-  restartTrack = startBattleMusic
+  restartTrack = () => {
+    // Something already brought it back (a watcher, the next round): a second
+    // start would reload the track under itself.
+    if (shouldPlay.value) return
+    startBattleMusic()
+  }
 
   const stopBattleMusic = () => {
     shouldPlay.value = false
+    // A fever stinger does not outlive its level.
+    if (cue?.kind === 'fever') stopCue(FEVER_STINGER_CUT_MS)
+    dropBedHold()
     if (!bgMusic.value) return
     fadeOut(() => {
       bgMusic.value?.pause()
@@ -329,6 +693,12 @@ export const useMusic = () => {
     // track when the portal unmutes.
     if (isPlatformAudioMuted.value) return
 
+    // The bed is stepped aside for the fever stinger. Every watcher above
+    // (a modal closing, an unmute, a tab coming back) funnels through here, so
+    // this one line keeps all of them from restarting it on top of the stinger;
+    // `releaseBed` brings it back in the stinger's last beat.
+    if (bedHeld) return
+
     // Browsers block autoplay until user interaction
     bgMusic.value.play().then(() => {
       isPlaying.value = true
@@ -341,44 +711,25 @@ export const useMusic = () => {
     })
   }
 
+  // Both fades run through `rampVolume`: the same 0.005-per-50 ms rate they
+  // always had, but one at a time, and ending on time rather than on a volume
+  // read-back that iOS never delivers (see `rampVolume`).
   const fadeIn = () => {
     if (!bgMusic.value) return
-    let vol = 0
     const target = musicElementVolume()
-    const interval = setInterval(() => {
-      if (!bgMusic.value || !shouldPlay.value) {
-        clearInterval(interval)
-        return
-      }
-      if (vol < target) {
-        vol += 0.005
-        bgMusic.value.volume = Math.min(vol, target)
-      } else {
-        clearInterval(interval)
-      }
-    }, 50)
+    rampVolume(target, target * FADE_MS_PER_VOLUME, undefined, () => shouldPlay.value, 0)
   }
 
   const fadeOut = (onDone?: () => void) => {
-    if (!bgMusic.value) {
+    const el = bgMusic.value
+    if (!el) {
       onDone?.()
       return
     }
-    const interval = setInterval(() => {
-      if (!bgMusic.value) {
-        clearInterval(interval)
-        onDone?.()
-        return
-      }
-      const v = bgMusic.value.volume
-      if (v > 0.005) {
-        bgMusic.value.volume = Math.max(0, v - 0.005)
-      } else {
-        bgMusic.value.volume = 0
-        clearInterval(interval)
-        onDone?.()
-      }
-    }, 50)
+    // From the level the fade-in aimed at, not from what the element reports:
+    // an iOS element reports 1 and would take ten seconds to "fade".
+    const from = Math.min(el.volume, musicElementVolume() || el.volume)
+    rampVolume(0, from * FADE_MS_PER_VOLUME, onDone, undefined, from)
   }
 
 

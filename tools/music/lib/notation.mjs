@@ -6,7 +6,8 @@
 //   notes   "C5 . C5 D5 Eb5:2 D5 C5 A4:2 F4 G4 A4:2 Bb4 B4"
 //           a note takes 1 step unless `:n`; `.` is a 1-step rest.
 //           flags: `!` accent, `?` ghost, `^` bend up a tone at the end,
-//                  `v` fall off (brass).
+//                  `v` fall off (brass), `_` damped (a mallet stopped by hand
+//                  at the end of its written length).
 //   degrees "1!:2 . 1? . . 8! 1? 5:2 . b7 8! . 1 ap?"
 //           the same, but relative to the bar's chord (bass): 1 3 b3 5 b7 7 8,
 //           and `ap` = a semitone under the NEXT bar's root (the funk pickup).
@@ -21,9 +22,9 @@ import { hashSeed, rng } from './dsp.mjs'
 
 export const STEPS = 16
 
-const NOTE_RE = /^([A-G])(#|b)?(-?\d)([!?^v]*)(?::(\d+))?([!?^v]*)$/
-const DEGREE_RE = /^(1|b3|3|5|b7|7|8|ap)([!?^v]*)(?::(\d+))?([!?^v]*)$/
-const HIT_RE = /^H([!?^v]*)(?::(\d+))?([!?^v]*)$/
+const NOTE_RE = /^([A-G])(#|b)?(-?\d)([!?^v_]*)(?::(\d+))?([!?^v_]*)$/
+const DEGREE_RE = /^(1|b3|3|5|b7|7|8|ap)([!?^v_]*)(?::(\d+))?([!?^v_]*)$/
+const HIT_RE = /^H([!?^v_]*)(?::(\d+))?([!?^v_]*)$/
 const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
 const DEGREE = { 1: 0, b3: 3, 3: 4, 5: 7, b7: 10, 7: 11, 8: 12 }
 const GRID_VEL = { X: 1, x: 0.8, o: 0.55, '-': 0.35, ',': 0.2 }
@@ -39,7 +40,8 @@ const flagsOf = (s) => ({
   accent: s.includes('!'),
   ghost: s.includes('?'),
   bend: s.includes('^') ? 2 : 0,
-  fall: s.includes('v')
+  fall: s.includes('v'),
+  damp: s.includes('_')
 })
 
 /** Parse one bar of a tokenised dialect into `{ step, lenSteps, ... }` items. */
@@ -86,6 +88,28 @@ const parseGrid = (line, where) => {
     out.push({ step: s, lenSteps: 1, vel })
   }
   return out
+}
+
+// ─── Transposition ──────────────────────────────────────────────────────────
+//
+// The leitmotif rule: every other piece in the game quotes Crunch Parade's hook
+// rather than re-typing it. A line from `score.mjs` shifted by `semis` keeps its
+// rhythm, flags and lengths exactly; only the pitches move. `spell` picks how a
+// black key is written ('sharp' or 'flat') — the harmony check reads MIDI
+// numbers, so spelling is for the reader only.
+
+const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+
+export const transpose = (line, semis, spell = 'sharp') => {
+  const names = spell === 'flat' ? FLAT_NAMES : SHARP_NAMES
+  return line.trim().split(/\s+/).map((tok) => {
+    const m = NOTE_RE.exec(tok)
+    if (!m) return tok
+    const midi = noteToMidi(m[1] + (m[2] ?? '') + m[3]) + semis
+    const name = `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`
+    return `${name}${m[4]}${m[5] ? `:${m[5]}` : ''}${m[6]}`
+  }).join(' ')
 }
 
 // ─── Arrangement geometry ───────────────────────────────────────────────────
@@ -192,6 +216,7 @@ export const expand = (score) => {
           ghost: it.ghost,
           bend: it.bend,
           fall: it.fall,
+          damp: it.damp,
           seed: hashSeed(SEED, partName, b, it.step, idx, 'voice'),
           ...(part.extra ?? {})
         }

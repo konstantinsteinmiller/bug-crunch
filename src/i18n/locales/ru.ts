@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} звёзд',
     'recordScore': '{n} очков',
     'recordBeat': 'Прошлый рекорд: {n}',
-    'chestCoins': '+{n} монет'
+    'chestCoins': '+{n} монет',
+    'move': 'Новый приём!'
+  },
+  'moves': {
+    'spin': 'Разворот на пятке',
+    'skid': 'Занос',
+    'quake': 'Землетрясение',
+    'echo': 'Эхо-топот'
+  },
+  'party': {
+    'title': 'Жучья вечеринка!',
+    'count': '{n} жуков',
+    'best': 'Рекорд: {n}',
+    'newBest': 'Новый рекорд вечеринки!'
   },
   'fever': {
     'filling': 'Splat-лихорадка: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Раздавлено насекомых',
     'starsEarned': '{n} из 3 звёзд',
     'rankOf': 'из {n}',
-    'worldUnlocked': '{n} открыт!'
+    'worldUnlocked': '{n} открыт!',
+    'peekNext': 'Заглянуть в {n}',
+    'secondWind': 'Второе дыхание: следующая попытка начнётся с полным флаконом',
+    'hintSlam': 'Совет: удерживай, чтобы расколоть панцири',
+    'hintAvoid': 'Совет: не трогай колючих',
+    'missed': 'Осталось {n} жуков'
   },
   'leaderboard': {
     'title': 'Таблица лидеров',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Нажми где угодно — нога полетит к ближайшему насекомому.'
   },
   'loading': {
-    'boo': 'Бу!',
-    'laugh': 'Хи-хи!',
+    'uhOh': 'Ой-ой!',
+    'missed': 'Мимо!',
     'tooLong': 'Всё ещё грузится… проверь соединение?'
   },
   'saveStatus': {

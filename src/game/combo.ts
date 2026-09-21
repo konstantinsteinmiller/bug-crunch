@@ -57,6 +57,45 @@ export const comboMultiplier = (n: number): number => {
 export const isComboStepUp = (n: number): boolean =>
   n > 1 && comboMultiplier(n) > comboMultiplier(n - 1)
 
+// ─── Growth Spurt: the chain made physical ──────────────────────────────────
+//
+// The chain was a number in a corner, "the whole of this game's skill
+// expression" and invisible in the fiction (`tutorial.ts` says so). So every
+// rung now INFLATES THE SHOE: the stomp circle grows with the multiplier, which
+// makes a chain feed itself — a bigger shoe takes two ants where it took one —
+// and a broken chain is felt as the shoe going *pfffft* back to size.
+//
+// Indexed by RUNG, not by squish count: the ladder has ten distinct rungs
+// (×1 ×2 ×3 ×5 ×8 ×12 ×20 ×30 ×40 ×50), and a growth per squish would make the
+// shoe creep instead of boing. Front-loaded, because the rungs a child actually
+// reaches are the first four; saturating at +40 %, because past that the ring
+// stops agreeing with the painted shoe and an ace's chain plays the level for
+// them. Pinned monotone and capped in `combo.test.ts`.
+
+/** Radius bonus per rung, as a fraction of the shoe's own radius. */
+export const GROWTH: readonly number[] = [0, 0.06, 0.12, 0.18, 0.24, 0.30, 0.34, 0.37, 0.39, 0.40] as const
+
+/** The distinct multipliers, in order — the rungs `GROWTH` is indexed by. */
+export const COMBO_RUNGS: readonly number[] = [1, 2, 3, 5, 8, 12, 20, 30, 40, 50] as const
+
+/** Which rung a multiplier stands on, 0-based. */
+export const chainRung = (multiplier: number): number => {
+  let rung = 0
+  for (let i = 0; i < COMBO_RUNGS.length; i++) if (multiplier >= COMBO_RUNGS[i]!) rung = i
+  return rung
+}
+
+/** How big the shoe is for a multiplier: 1 at no chain, 1.40 at ×50. */
+export const chainScale = (multiplier: number): number => 1 + (GROWTH[chainRung(multiplier)] ?? 0)
+
+/**
+ * The largest the stomp radius may ever be, as a multiple of the shoe's own
+ * radius — Fever and Growth Spurt stacked. The gilded boot stays the biggest
+ * thing in the game (2.35 alone), and a chain on top of it may push it a little
+ * further, never to "the whole board".
+ */
+export const MAX_RADIUS_SCALE = 2.6
+
 /**
  * Which comic word a chain earns. Four tiers, and they are the four words on the
  * reference sheet — the vocabulary is part of the game's identity, so the
@@ -112,6 +151,17 @@ export const comboMusicRate = (multiplier: number): number =>
  * of idling and cashed in at a moment that had nothing to do with earning it.
  */
 export const JUICE_DECAY_PER_S = 0.012
+
+/**
+ * …and it only bleeds once nothing has been squished for this long, ms.
+ *
+ * The header above always SAID "while nothing is being squished", and the code
+ * decayed on every step — so a 30-second 1-1 lost a third of a vial, most of it
+ * during lesson pauses the player was being told to watch. Measured in
+ * `RETENTION-FEATURES.md` §1: with this grace the first Fever lands around two
+ * minutes in for a median child instead of never.
+ */
+export const JUICE_DECAY_GRACE_MS = 2000
 
 /**
  * How much the chain multiplies juice gain.
@@ -181,11 +231,18 @@ export const feverReady = (s: FeverState): boolean =>
 export const startFever = (s: FeverState): FeverState =>
   feverReady(s) ? { juice: 0, remainMs: FEVER_MS } : s
 
-/** Advance the frenzy clock and the vial's decay by `dtMs`. */
-export const stepFever = (s: FeverState, dtMs: number): FeverState => {
+/**
+ * Advance the frenzy clock and the vial's decay by `dtMs`.
+ *
+ * `idleMs` is how long it has been since the last squish; the vial only bleeds
+ * once that passes `JUICE_DECAY_GRACE_MS`. Omitted, it decays as it always did
+ * — the pure tests of the decay itself do not have to invent a kill clock.
+ */
+export const stepFever = (s: FeverState, dtMs: number, idleMs = Infinity): FeverState => {
   if (s.remainMs > 0) {
     return { juice: 0, remainMs: Math.max(0, s.remainMs - dtMs) }
   }
+  if (idleMs < JUICE_DECAY_GRACE_MS) return s
   return { juice: decayJuice(s.juice, dtMs), remainMs: 0 }
 }
 

@@ -10,12 +10,21 @@ import {
   canonicalHeavy, crushPlan, crushSlotKey, estimateSlotBytes, hasCrushVoice, isBossSubject, startCrush,
   type CrushJob, type CrushKind, type CrushSlot, type CrushSubject
 } from '@/game/audio/crushSynth'
+import { COMBO_LADDER } from '@/game/combo'
+import {
+  holdSfxLoop, playSfx, playSfxLoopOnce, scheduleSfxTier2, stopSfxLoop, type LoopShape
+} from '@/use/useSfxSprites'
 
 /**
  * ─── Bug Crunch audio ──────────────────────────────────────────────────────────
  *
- * Three sources, one entry point (`playFx`):
+ * Four sources, one entry point (`playFx`):
  *
+ *   RENDERED  — most cues: the foot, the chain, the vial, the finisher, the
+ *               props, the set pieces and the boss's tells, rendered offline
+ *               from physical/modal models (`tools/audio/build-sfx.mjs`) into a
+ *               few Vorbis sprites and played by `useSfxSprites`. Tried first;
+ *               the two sources below are their fallbacks.
  *   SAMPLES   — where a recorded sound is unmistakably better: the coin, the
  *               level-clear fanfare, the time-up sting. These route through the
  *               shared `useSound` fast path (decoded AudioBuffers).
@@ -80,6 +89,10 @@ export type FxSound =
   | 'bossHit' | 'bossCounter' | 'bossPhase' | 'bossCharge' | 'bossBeam' | 'bossDie'
   // Flow
   | 'levelClear' | 'levelFail' | 'star' | 'countUp' | 'unlock' | 'tick'
+  // The set pieces (RETENTION-FEATURES.md)
+  | 'rushTell' | 'rushGo' | 'multi' | 'grow' | 'deflate' | 'heartbeat' | 'finisher'
+  | 'flip' | 'kick' | 'pins' | 'boxDrop' | 'boxHit' | 'boxOpen' | 'trialEnd'
+  | 'quake' | 'echo' | 'twistTell' | 'party'
 
 // ─── Throttling ─────────────────────────────────────────────────────────────
 //
@@ -113,7 +126,15 @@ const THROTTLES: Partial<Record<FxSound, Throttle>> = {
   podPop: { minGapMs: 70, maxPerWindow: 4, windowMs: 400 },
   // Eggs laid together hatch together. Two cracks a beat apart say "two eggs";
   // four on one frame say nothing a single one does not.
-  podHatch: { minGapMs: 120, maxPerWindow: 2, windowMs: 500 }
+  podHatch: { minGapMs: 120, maxPerWindow: 2, windowMs: 500 },
+  // Growth Spurt rides every chain step — capped like the step it rides.
+  grow: { minGapMs: 70, maxPerWindow: 6, windowMs: 500 },
+  multi: { minGapMs: 90, maxPerWindow: 4, windowMs: 500 },
+  // The heartbeat is a loop the scene re-fires; the gap IS its tempo.
+  heartbeat: { minGapMs: 520, maxPerWindow: 2, windowMs: 1100 },
+  boxHit: { minGapMs: 80, maxPerWindow: 4, windowMs: 400 },
+  flip: { minGapMs: 80, maxPerWindow: 4, windowMs: 400 },
+  kick: { minGapMs: 90, maxPerWindow: 3, windowMs: 400 }
 }
 
 const lastAt: Partial<Record<FxSound, number>> = {}
@@ -277,6 +298,8 @@ const noiseBurst = (ctx: AudioContext, o: NoiseOpts): void => {
   route(ctx, gain, o)
   src.start(now)
   src.stop(now + o.duration + 0.02)
+  // Tracked, so an ad hard-stops it instead of freezing it to thaw afterwards.
+  registerOneShotSource(src)
 }
 
 interface ToneOpts extends Route {
@@ -320,6 +343,7 @@ const tone = (ctx: AudioContext, o: ToneOpts): void => {
   route(ctx, gain, o)
   osc.start(now)
   osc.stop(now + o.duration + 0.02)
+  registerOneShotSource(osc)
 }
 
 /**
@@ -368,14 +392,38 @@ const crackle = (ctx: AudioContext, o: CrackleOpts): void => {
 const { playSound } = useSounds()
 
 /** Cues that map cleanly onto a shipped sample: `[file, volumeRatio]`. */
+//
+// The ratios were set as if every file were peak-normalised to −3 dBFS; they
+// are not (celebration-1 peaks at −12.6, level-up at −17.0), so measured at the
+// mix these sat 15–20 dB under everything else: the coin at −46.6 phone-dB
+// against a −27 squish, the level-clear fanfare at −47 under a finisher at −23.
+// Re-set on the phone-weighted meter (`pnpm audio:sfx` measures them) so the
+// stings sit with `lose`, the one sample that was already in the mix's frame
+// (≈ −29 ph400), and the coin just under a ricochet (≈ −34 ph50). `star` is now
+// a rendered set; its sample is the fallback, matched to the set.
 const SAMPLE_CUES: Partial<Record<FxSound, [string, number]>> = {
-  coin: ['coin-pickup', 0.05],
-  levelClear: ['celebration-1', 0.09],
-  bossDie: ['celebration-3', 0.1],
+  coin: ['coin-pickup', 0.21],
+  levelClear: ['celebration-1', 0.71],
   levelFail: ['lose', 0.1],
-  star: ['happy', 0.07],
-  unlock: ['level-up', 0.07]
+  star: ['happy', 0.21],
+  unlock: ['level-up', 0.77]
 }
+
+// ─── The boss's death ───────────────────────────────────────────────────────
+//
+// `bossDie` is NOT a row in the table above, and that absence is the design.
+// A sample row is played INSTEAD of the synth recipe, and this cue is four
+// layers deep — the blow, the body, the splatter, then the fanfare — so the
+// sample is one ingredient inside `synth`'s own `bossDie` case rather than a
+// substitute for it. Which is also why the cue is in `LAYERED`: a rendered take,
+// if one is ever built for it, layers over the body instead of replacing it.
+
+/** How much louder the boss's own crush is on its DEATH than on a counter.
+ *  The bank normalises every body to a phone loudness, so this is the one place
+ *  that says "and this time it is the last one". */
+const BOSS_DIE_BOOST = 1.35
+/** How long the fanfare waits for the squash to be heard, ms. */
+const BOSS_DIE_FANFARE_MS = 300
 
 /**
  * Pentatonic ladder for the Splat Chain.
@@ -399,6 +447,24 @@ export const chainFreq = (step: number): number => {
   const n = Math.max(0, Math.floor(step)) % LADDER_STEPS
   const semis = PENTATONIC[n % 5]! + Math.floor(n / 5) * 12
   return 392 * Math.pow(2, semis / 12)
+}
+
+/**
+ * The ladder step a chain RUNG plays, as the `power` `chainStep` takes.
+ *
+ * A rung is a multiplier step (×2, ×3, ×5 … ×50 — nine of them). Each plays the
+ * NEXT note up, spread over the whole fifteen-note ladder so the top note is
+ * the top rung's alone: A4 D5 E5 A5 D6 E6 A6 B6 E7. The first cut indexed the
+ * ladder by squish count, clamped — so ×12 already hit E7 and ×20, ×30, ×40 and
+ * ×50 all played that same 2.6 kHz note again: the dog whistle the wrap exists
+ * to prevent, arriving at exactly the rungs that are hardest to earn.
+ */
+const CHAIN_RUNGS = [...new Set(COMBO_LADDER)].filter((m) => m > 1)
+export const chainStepPower = (mult: number): number => {
+  const i = CHAIN_RUNGS.findIndex((m) => m >= mult)
+  const rung = i < 0 ? CHAIN_RUNGS.length - 1 : i
+  const step = Math.round(1 + (rung * (LADDER_STEPS - 2)) / Math.max(1, CHAIN_RUNGS.length - 1))
+  return step / (LADDER_STEPS - 1)
 }
 
 // ─── The crush bank ─────────────────────────────────────────────────────────
@@ -915,6 +981,9 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       // A warning, not a punishment: some ants got out, and the cue has to be
       // legible over whatever else is happening. The bank's crack-and-scurry
       // (`crushSynth` `hatch`) when it has rendered; the old rising buzz until then.
+      // Over it, the rendered "aww" (two ocarina notes falling a minor third):
+      // the bank says WHAT happened, the sting says it was a loss.
+      playSfx(ctx, 'podHatch', 0, pan, sfxRoute, vol)
       if (playCrush(ctx, 'hatch', 'crush', false, squishCfg.style, pan)) break
       tone(ctx, { freq: 220, toFreq: 330, duration: 0.24, gain: vol(0.09), type: 'sawtooth', filter: 1600, pan })
       break
@@ -942,9 +1011,93 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
         tone(ctx, { freq: 130, toFreq: 46, duration: 0.42, gain: vol(0.26), type: 'sine' })
         noiseBurst(ctx, { duration: 0.34, gain: vol(0.16), filterFrom: 7000, filterTo: 200 })
       }
+      // The rendered "ta-DAAH!" sting; the live chord only until it has loaded.
+      if (playSfx(ctx, 'bossCounter', 0, 0, sfxRoute, vol)) break
       for (const semis of [0, 7, 12]) {
         bell(ctx, { freq: 523 * Math.pow(2, semis / 12), duration: 0.7, gain: vol(0.07), delay: 0.03 })
       }
+      break
+    }
+    case 'bossDie': {
+      // ─── The squash, then the party ───────────────────────────────────────
+      //
+      // This cue used to be `celebration-3` with the boss's crush fired under it
+      // in the same millisecond, and the fanfare won: a 1.35 s brass sting
+      // starting on the same sample as the body means the body is never heard.
+      // The one moment the game has been building to for two minutes sounded
+      // like a menu confirming a purchase.
+      //
+      // So it is staged, the way the picture is (`bossDeath` in
+      // `useBugCrunchArt`): the BLOW, the BODY, the goo hitting the floor — and
+      // only once all three have landed, the fanfare. Three hundred milliseconds
+      // is long enough for a player to hear what they did and short enough that
+      // nobody waits for the reward.
+      const boss = squishCfg.bug && isBossSubject(squishCfg.bug) ? squishCfg.bug : null
+
+      // 1. THE BLOW — the shoe arriving, at full weight. The rendered take when
+      //    it has downloaded, the live recipe until then.
+      try {
+        if (!playRendered(ctx, 'stompHeavy', 1, 0)) synth(ctx, 'stompHeavy', 1)
+      } catch { /* node budget — the next two layers still carry it */ }
+
+      // 2. THE BODY — the boss's own crush from the bank, boosted: the queen's
+      //    jelly, the king's three-stage shell, the matriarch's ripple, Roach
+      //    Prime winding down. This is the sound the whole cue exists for, so it
+      //    is the one with a real fallback under it rather than a shrug.
+      if (!playCrush(ctx, boss, 'crush', true, squishCfg.style, 0, BOSS_DIE_BOOST)) {
+        tone(ctx, { freq: 128, toFreq: 40, duration: 0.5, gain: vol(0.28), type: 'sine' })
+        noiseBurst(ctx, { duration: 0.42, gain: vol(0.18), filterFrom: 7000, filterTo: 180 })
+        crackle(ctx, { count: 9, from: 0.02, to: 0.3, gain: vol(0.06), lo: 700, hi: 3400 })
+      }
+
+      // 3. THE SPLATTER — what the bank has no way to know about: the goo the
+      //    burst threw landing on the floor AROUND the player, three slaps
+      //    walked out in time and panned apart so the board feels wide. The
+      //    material follows the Juice Style, because a style changes the picture
+      //    and the sound and never a number.
+      for (let i = 0; i < 3; i++) {
+        const at = 0.1 + i * 0.09
+        const p = (i % 2 === 0 ? 1 : -1) * (0.34 + i * 0.18)
+        if (squishCfg.style === 'confetti') {
+          // Paper: a handful of chips coming down, and one late popper.
+          noiseBurst(ctx, {
+            duration: 0.14, gain: vol(0.07 - i * 0.015), filterFrom: 5200, filterTo: 2000,
+            type: 'bandpass', q: 1.1, delay: at, pan: p
+          })
+          crackle(ctx, { count: 5, from: at, to: at + 0.14, gain: vol(0.035), lo: 2200, hi: 6400, pan: p })
+        } else if (squishCfg.style === 'bubble') {
+          // Soap: three soft pops falling away, and nothing wet anywhere.
+          tone(ctx, {
+            freq: 520 - i * 90, toFreq: 300 - i * 60, duration: 0.11,
+            gain: vol(0.06 - i * 0.012), type: 'sine', delay: at, pan: p
+          })
+        } else {
+          // Goo: a fat wet slap — a low thump with a bright splat over it.
+          tone(ctx, {
+            freq: 190 - i * 34, toFreq: 70 - i * 12, duration: 0.13,
+            gain: vol(0.1 - i * 0.02), type: 'triangle', filter: 1200, delay: at, pan: p
+          })
+          noiseBurst(ctx, {
+            duration: 0.17, gain: vol(0.085 - i * 0.018), filterFrom: 2800, filterTo: 320,
+            type: 'bandpass', q: 0.9, delay: at + 0.005, pan: p
+          })
+        }
+      }
+
+      // 4. THE FANFARE, once the body has been heard.
+      //
+      // On a timer rather than scheduled into the graph, and that is deliberate:
+      // `playSound` re-asks `isAudioSuspended()` when it fires, so a commercial
+      // break that opens inside these 300 ms gets silence instead of a brass
+      // sting playing under it. A node scheduled at `currentTime + 0.3` would
+      // have been committed already. See `audioGuard`.
+      //
+      // The delay is paid for: a boss level holds `CELEBRATE_BOSS_MS` before
+      // anything covers the board, which is more than the sample's own 1.35 s
+      // tail plus this.
+      window.setTimeout(() => {
+        playSound('celebration-3', 0.9, 0.98 + Math.random() * 0.05)
+      }, BOSS_DIE_FANFARE_MS)
       break
     }
     case 'bossPhase':
@@ -970,9 +1123,194 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
       // panics makes a child panic.
       tone(ctx, { freq: 1400, duration: 0.03, gain: vol(0.05), type: 'square', filter: 4000 })
       break
+
+    // ── The set pieces ──
+    //
+    // All synthesised, all on the shared context — so the ad-mute guarantee
+    // covers them for free — and all SHORT: each rides a moment that already has
+    // a picture, and the sound's job is to say which moment it is.
+    case 'rushTell': {
+      // A snare roll rising over the tell: noise bursts, closer and closer,
+      // brighter and brighter. "Something is coming."
+      for (let i = 0; i < 14; i++) {
+        const t = 1 - Math.pow(1 - i / 14, 1.6)
+        noiseBurst(ctx, {
+          duration: 0.035, gain: vol(0.035 + t * 0.05), delay: t * 1.0,
+          filterFrom: 2600 + t * 3000, filterTo: 1800, type: 'bandpass', q: 1.6, pan
+        })
+      }
+      break
+    }
+    case 'rushGo':
+      // The whistle: here they come.
+      tone(ctx, { freq: 1180, toFreq: 1560, duration: 0.16, gain: vol(0.05), type: 'sine', pan, attack: 0.01 })
+      tone(ctx, { freq: 1560, duration: 0.12, gain: vol(0.04), type: 'sine', delay: 0.16, pan })
+      break
+    case 'multi': {
+      // A stacked chime: one bell per body the stomp took, a third apart, so a
+      // four-for-one SOUNDS like four.
+      const n = 2 + Math.round(p * 4)
+      for (let i = 0; i < n; i++) {
+        bell(ctx, { freq: 660 * Math.pow(2, (i * 4) / 12), duration: 0.32, gain: vol(0.05), delay: i * 0.035, pan })
+      }
+      break
+    }
+    case 'grow':
+      // Growth Spurt: a rubbery upward boing under the chain's note.
+      tone(ctx, { freq: 170 + p * 120, toFreq: 340 + p * 240, duration: 0.14, gain: vol(0.06), type: 'triangle', filter: 1800, pan })
+      break
+    case 'deflate':
+      // …and the *pfffft* when the chain breaks and the shoe goes back down.
+      noiseBurst(ctx, { duration: 0.32, gain: vol(0.06), filterFrom: 1800, filterTo: 380, type: 'bandpass', q: 3, pan })
+      tone(ctx, { freq: 300, toFreq: 120, duration: 0.3, gain: vol(0.05), type: 'sawtooth', filter: 900, pan })
+      break
+    case 'heartbeat':
+      // One to go: lub-dub, low, under everything.
+      tone(ctx, { freq: 70, toFreq: 48, duration: 0.12, gain: vol(0.12), type: 'sine' })
+      tone(ctx, { freq: 62, toFreq: 44, duration: 0.1, gain: vol(0.09), type: 'sine', delay: 0.16 })
+      break
+    case 'finisher':
+      // The jackpot sting: a bright rising arpeggio over a big low hit.
+      tone(ctx, { freq: 90, toFreq: 40, duration: 0.5, gain: vol(0.2 + p * 0.08), type: 'sine' })
+      noiseBurst(ctx, { duration: 0.5, gain: vol(0.12), filterFrom: 8000, filterTo: 400 })
+      for (let i = 0; i < 5; i++) {
+        bell(ctx, { freq: 523 * Math.pow(2, [0, 4, 7, 12, 16][i]! / 12), duration: 0.8, gain: vol(0.06), delay: 0.04 + i * 0.07 })
+      }
+      break
+    case 'flip':
+      // A shell going over: a hollow tok and a scrabble of legs.
+      tone(ctx, { freq: 260, toFreq: 180, duration: 0.08, gain: vol(0.08), type: 'triangle', filter: 2000, pan })
+      crackle(ctx, { count: 6, from: 0.05, to: 0.3, gain: vol(0.035), lo: 2200, hi: 5200, pan })
+      break
+    case 'kick':
+      // Thwock.
+      tone(ctx, { freq: 200, toFreq: 90, duration: 0.1, gain: vol(0.12), type: 'triangle', filter: 1600, pan })
+      noiseBurst(ctx, { duration: 0.06, gain: vol(0.08), filterFrom: 3200, filterTo: 900, pan })
+      break
+    case 'pins':
+      // A strike: a clatter of wooden pins.
+      for (let i = 0; i < 6; i++) {
+        tone(ctx, { freq: 700 + Math.random() * 500, duration: 0.07, gain: vol(0.05), type: 'square', filter: 3000, delay: i * 0.03, pan })
+      }
+      crackle(ctx, { count: 10, from: 0, to: 0.3, gain: vol(0.05), lo: 1200, hi: 4200, pan })
+      break
+    case 'boxDrop':
+      tone(ctx, { freq: 140, toFreq: 80, duration: 0.12, gain: vol(0.1), type: 'sine', pan })
+      noiseBurst(ctx, { duration: 0.08, gain: vol(0.06), filterFrom: 1600, filterTo: 400, pan })
+      break
+    case 'boxHit':
+      // Cardboard: a dry knock that rises a step per blow — a countdown you hear.
+      tone(ctx, { freq: 300 + p * 200, duration: 0.07, gain: vol(0.09), type: 'triangle', filter: 1400, pan })
+      noiseBurst(ctx, { duration: 0.05, gain: vol(0.05), filterFrom: 1800, filterTo: 700, pan })
+      break
+    case 'boxOpen':
+      // The lid flies: a sparkle run up.
+      noiseBurst(ctx, { duration: 0.2, gain: vol(0.07), filterFrom: 6000, filterTo: 9000, type: 'highpass', pan })
+      for (let i = 0; i < 4; i++) {
+        bell(ctx, { freq: 880 * Math.pow(2, i * 5 / 12), duration: 0.45, gain: vol(0.05), delay: i * 0.05, pan })
+      }
+      break
+    case 'trialEnd':
+      tone(ctx, { freq: 620, toFreq: 300, duration: 0.25, gain: vol(0.05), type: 'triangle', filter: 2400 })
+      break
+    case 'quake':
+      tone(ctx, { freq: 48, toFreq: 24, duration: 0.7, gain: vol(0.26), type: 'sine' })
+      noiseBurst(ctx, { duration: 0.6, gain: vol(0.14), filterFrom: 900, filterTo: 90 })
+      break
+    case 'echo':
+      // The slam again, softer, with a flutter on it.
+      tone(ctx, { freq: 58, toFreq: 30, duration: 0.24, gain: vol(0.16), type: 'sine', pan })
+      noiseBurst(ctx, { duration: 0.18, gain: vol(0.08), filterFrom: 2400, filterTo: 300, pan })
+      break
+    case 'twistTell':
+      // "Uh-oh!" — two falling notes, a comic little sting.
+      tone(ctx, { freq: 660, toFreq: 640, duration: 0.14, gain: vol(0.07), type: 'square', filter: 2600 })
+      tone(ctx, { freq: 494, toFreq: 440, duration: 0.24, gain: vol(0.07), type: 'square', filter: 2600, delay: 0.18 })
+      break
+    case 'party':
+      // The party starts: a whistle, a pop, and a crowd of little bells.
+      tone(ctx, { freq: 900, toFreq: 1800, duration: 0.3, gain: vol(0.05), type: 'sine' })
+      noiseBurst(ctx, { duration: 0.12, gain: vol(0.1), filterFrom: 6000, filterTo: 1500, delay: 0.3 })
+      for (let i = 0; i < 6; i++) {
+        bell(ctx, { freq: 784 * Math.pow(2, [0, 2, 4, 7, 9, 12][i]! / 12), duration: 0.4, gain: vol(0.045), delay: 0.34 + i * 0.05 })
+      }
+      break
     default:
       break
   }
+}
+
+// ─── The rendered cues ──────────────────────────────────────────────────────
+//
+// Most cues are rendered offline now (`tools/audio/build-sfx.mjs`, cue sheet in
+// `tools/audio/sfx/recipes.mjs`, design notes in sound-todo.md) and played out
+// of sprite files by `useSfxSprites` — on this same shared context, through this
+// same `route()`, registered for the ad's hard stop. `playFx` tries the
+// rendered take first; the SAMPLE_CUES row and the live `synth()` recipe below
+// stay as the fallbacks for a sprite that is still downloading or will not
+// decode, so no cue is ever silent.
+
+/** Cues that fire once the first level has ended — the cue to fetch tier 2. */
+const TIER2_AFTER = new Set<FxSound>(['finisher', 'levelClear', 'levelFail', 'bossDie', 'unlock'])
+
+/** Cues whose rendered take is LAYERED over the bank or the synth inside
+ *  `synth()`, rather than replacing it: the hatch's loss sting over the crush
+ *  bank's crack-and-scurry, the counter's fanfare over the boss's full crush,
+ *  and the boss's death, which is four layers deep and owns its own staging. */
+const LAYERED = new Set<FxSound>(['podHatch', 'bossCounter', 'bossDie'])
+
+/** Where a rendered voice goes: the same pan-and-destination as every voice. */
+const sfxRoute = (node: AudioNode, pan: number): void => route(node.context as AudioContext, node, { pan })
+
+/**
+ * The held loops. `charge` rises with the wind-up — playback rate carries the
+ * pitch AND the tremolo up together, about eight semitones over the charge —
+ * and swells from a bed to full; `slide` just holds.
+ */
+const LOOP_SHAPES: Record<'charge' | 'slide', LoopShape> = {
+  charge: { rate: [0.8, 1.26], gain: [0.5, 1], attack: 0.03 },
+  slide: { rate: [0.97, 1.03], gain: [1, 1], attack: 0.05 }
+}
+
+/** The same loops fired as ONE-SHOTS — the cutscenes' `charge` and `slide`
+ *  beats, which are 400–1200 ms long. */
+const LOOP_ONCE: Record<'charge' | 'slide', { dur: number; shape: LoopShape }> = {
+  charge: { dur: 0.7, shape: { rate: [0.8, 1.26], gain: [0.5, 1], attack: 0.04 } },
+  slide: { dur: 0.85, shape: { rate: [1, 1], gain: [1, 1], attack: 0.06 } }
+}
+
+const playRendered = (ctx: AudioContext, id: FxSound, power: number, pan: number): boolean => {
+  if (id === 'charge' || id === 'slide') {
+    const o = LOOP_ONCE[id]
+    return playSfxLoopOnce(ctx, id, o.dur, o.shape, pan, sfxRoute, vol)
+  }
+  return playSfx(ctx, id, power, pan, sfxRoute, vol)
+}
+
+let chargeFullRung = false
+
+/**
+ * Hold a foot loop for one more frame: `charge` at the wind-up's 0..1 (a small
+ * "ting" marks the moment it is full), `slide` while the skate ploughs. Call it
+ * every frame the state lasts and `stopFxLoop` when it ends — which stops it
+ * dead, so the slam lands on silence. A loop not held for 180 ms stops itself.
+ */
+export const holdFxLoop = (id: 'charge' | 'slide', level = 1, pan = 0): void => {
+  if (!canPlay()) { stopFxLoop(id); return }
+  const ctx = getAudioContext()
+  if (!ctx || ctx.state !== 'running') return
+  try {
+    holdSfxLoop(ctx, id, level, LOOP_SHAPES[id], pan, sfxRoute, vol)
+    if (id === 'charge' && level >= 0.999 && !chargeFullRung) {
+      chargeFullRung = true
+      playSfx(ctx, 'chargeReady', 0, pan, sfxRoute, vol)
+    }
+  } catch { /* node budget — the picture carries it */ }
+}
+
+export const stopFxLoop = (id: 'charge' | 'slide'): void => {
+  if (id === 'charge') chargeFullRung = false
+  stopSfxLoop(id)
 }
 
 /**
@@ -982,25 +1320,22 @@ const synth = (ctx: AudioContext, id: FxSound, power: number, pan = 0): void => 
 export const playFx = (id: FxSound, power = 0, pan = 0): void => {
   if (!canPlay()) return
   if (!passesThrottle(id)) return
+  // The first level is over: the rest of the rendered set can come down now.
+  if (TIER2_AFTER.has(id)) scheduleSfxTier2()
+
+  // The rendered take, when there is one and its sprite is decoded.
+  if (!LAYERED.has(id)) {
+    const rctx = getAudioContext()
+    if (rctx && rctx.state === 'running') {
+      try {
+        if (playRendered(rctx, id, power, pan)) return
+      } catch { /* fall through to the sample / live synth */ }
+    }
+  }
 
   const sample = SAMPLE_CUES[id]
   if (sample) {
     playSound(sample[0], sample[1], 0.94 + Math.random() * 0.12)
-    // The boss death gets BOTH: the fanfare sample and a synthesised blast
-    // under it, because a celebration jingle alone does not feel like a
-    // ten-metre beetle hitting the floor.
-    if (id === 'bossDie') {
-      const ctx = getAudioContext()
-      if (ctx && ctx.state === 'running') {
-        try {
-          synth(ctx, 'stompHeavy', 1)
-          // And the boss's own crush on top — the queen bursting, the king's
-          // shell going in three stages, the roach winding down.
-          const boss = squishCfg.bug && isBossSubject(squishCfg.bug) ? squishCfg.bug : null
-          playCrush(ctx, boss, 'crush', true, squishCfg.style, 0)
-        } catch { /* node budget — the visual carries it */ }
-      }
-    }
     return
   }
 

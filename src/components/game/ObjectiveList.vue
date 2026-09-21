@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GameIcon from '@/components/icons/GameIcon.vue'
 import type { GameIconName } from '@/components/icons/iconNames'
 import { objectiveLabel, progress01, type Objective, type ObjectiveTriple, type RunTally } from '@/game/stars'
+import { paintBug, BUG_R_FRAC } from '@/game/bugArt'
+import type { BugId } from '@/game/bugs'
 
 /**
  * ─── The three stars, live ──────────────────────────────────────────────────
@@ -60,11 +62,49 @@ const rows = computed(() => props.objectives.map((o, i) => {
   if (typeof args.bug === 'string') args.bug = t(args.bug as string)
   return {
     icon: ICON[o.kind],
+    // ── The row that asks for a SPECIES draws it ──
+    //
+    // "Squish 2 Piñata Flies" wore the same generic bug glyph as "Clear the
+    // level", so the only thing that said WHICH creature was a word — and a
+    // blind tester cleared that level having never knowingly seen one: "don't
+    // know what one looks like". The name is for the reader; the picture is for
+    // everybody else, and it costs one small canvas per row.
+    bug: o.kind === 'kind' ? o.id : null,
     text: t(label.key, args),
     fill: progress01(o, props.tally, props.quota),
     met: props.met[i] === true
   }
 }))
+
+/** One canvas per species row, in row order; nulls for the rows without one. */
+const faces = ref<(HTMLCanvasElement | null)[]>([])
+
+const setFace = (i: number, el: unknown): void => {
+  faces.value[i] = (el as HTMLCanvasElement | null) ?? null
+}
+
+const drawFaces = (): void => {
+  rows.value.forEach((row, i) => {
+    const c = faces.value[i]
+    if (!c || !row.bug) return
+    const rect = c.getBoundingClientRect()
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const side = Math.max(1, Math.round((rect.width || 22) * dpr))
+    if (c.width !== side || c.height !== side) { c.width = side; c.height = side }
+    const ctx = c.getContext('2d')
+    if (!ctx) return                       // jsdom has none, and the row still reads
+    ctx.clearRect(0, 0, side, side)
+    ctx.save()
+    ctx.translate(side / 2, side / 2)
+    // The drawn bug, not the painted strip: this is a 22 px mark beside a line
+    // of text, and it has to be legible at that size on every locale's row.
+    paintBug(ctx, row.bug as BugId, (side / 2) * BUG_R_FRAC, 0.25)
+    ctx.restore()
+  })
+}
+
+onMounted(() => { void nextTick(drawFaces) })
+watch(rows, () => { void nextTick(drawFaces) })
 </script>
 
 <template lang="pug">
@@ -72,7 +112,14 @@ const rows = computed(() => props.objectives.map((o, i) => {
     li.objectives__row(v-for="(row, i) in rows" :key="i" :class="{ 'is-met': row.met }")
       span.objectives__star
         GameIcon(:name="row.met ? 'star' : 'star-empty'")
-      GameIcon.objectives__icon(:name="row.icon")
+      //- TypeScript may not appear in a pug attribute — it ships as plain JS —
+      //- so the cast lives in `setFace` and the template only calls it.
+      canvas.objectives__face(
+        v-if="row.bug"
+        :ref="(el) => setFace(i, el)"
+        aria-hidden="true"
+      )
+      GameIcon.objectives__icon(v-else :name="row.icon")
       span.objectives__text {{ row.text }}
       span.objectives__bar(v-if="!compact" aria-hidden="true")
         span.objectives__bar-fill(:style="{ width: Math.round(row.fill * 100) + '%' }")
@@ -133,6 +180,11 @@ const rows = computed(() => props.objectives.map((o, i) => {
   // `star`, so this is a mood, not the whole difference.
   :deep(.is-painted)
     opacity: 0.45
+
+.objectives__face
+  flex: 0 0 auto
+  width: clamp(1.15rem, 4.4vmin, 1.5rem)
+  height: clamp(1.15rem, 4.4vmin, 1.5rem)
 
 .objectives__icon
   flex: 0 0 auto

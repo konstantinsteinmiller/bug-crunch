@@ -88,6 +88,24 @@ for (const [name, rel] of Object.entries(ART_BRAND)) {
 console.log(`\nbrand (painted, never probed \u2014 a placeholder from \`node scripts/make-brand.mjs\` counts):`)
 for (const line of brand) console.log(`  ${line}`)
 
+// ─── Files two sheets paint ─────────────────────────────────────────────────
+//
+// Every icon on a contact sheet also has a still of its own, so its file has two
+// possible paintings. Which one is on disk is not a question of what was sliced
+// last: `UI_CUT_FROM` in the manifest settles it, the slicer cuts only from that
+// one, and an unsettled file is refused from both — so an unsettled one is the
+// thing to report here, because the slicer will never (re)write it.
+const { cutSources } = await load('game/artSheet.ts')
+const twice = Object.entries(cutSources())
+if (twice.length) {
+  const open = twice.filter(([, s]) => !s.from)
+  const fromGrid = twice.filter(([, s]) => s.from?.startsWith('grid-')).length
+  console.log(`\npainted twice (a contact-sheet cell AND a still): ${twice.length} files —`
+    + ` ${twice.length - open.length - fromGrid} cut from their still, ${fromGrid} from a grid`
+    + (open.length ? `, ${open.length} UNSETTLED` : ', all settled in UI_CUT_FROM'))
+  for (const [t] of open) console.log(`    ✗ ${t} — the slicer refuses it until UI_CUT_FROM says which painting it ships from`)
+}
+
 if (ALL) console.log(rows.join('\n'))
 console.log(`\n${present} painted, ${absent} still drawn, ${present + absent} in the catalogue.`)
 if (absent) {

@@ -3,6 +3,9 @@ import { SHOES } from '@/game/shoes'
 import { BOSSES, EGG_STAGES, type BossId } from '@/game/bosses'
 import { HAZARDS } from '@/game/hazards'
 import { WORLDS } from '@/game/stages'
+import {
+  FLOOR_IDS, FLOOR_PALETTE, FLOOR_SUBJECT, floorField, isLeadFloor, worldOfFloor, type FloorId
+} from '@/game/floors'
 import { ART_FOLDERS, type ArtKind } from '@/game/art'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
 import {
@@ -360,6 +363,15 @@ const CAST: Record<BugId, { blurb: string; colour: string; motion: string }> = {
     motion: 'A RIPPLE travels down the body from head to tail: each bead swells a'
       + ' little and shrinks again, one after the other, so the hump moves along it.'
       + ' The beads never separate.'
+      // The first return painted a different caterpillar in every panel — six,
+      // seven, eight beads, bodies bent into an L, and twice a headless chunk
+      // standing beside the caterpillar — and the game played it as a creature
+      // that changed shape and split in two four times a second. The ripple is
+      // the ONLY thing allowed to change.
+      + ' It is the SAME caterpillar in all eight panels: the same head and the same'
+      + ' four beads behind it, in the same colour order, in ONE STRAIGHT vertical'
+      + ' line. Never a bead more or fewer, never a curve or a bend, never a second'
+      + ' body or a loose bead standing apart from it.'
   },
   stinkbug: {
     blurb: 'A shield bug from DIRECTLY ABOVE: a blunt five-sided shield-shaped back'
@@ -412,8 +424,18 @@ const CAST: Record<BugId, { blurb: string; colour: string; motion: string }> = {
       + ' antennae, two small sleepy eyes. Soft and dusty, never sinister.',
     colour: 'pale dove-grey and cream wings with a soft lavender wash at the edges,'
       + ' warm grey-brown body, cream eyespot rings with a soft dark centre.',
-    motion: 'The wings beat SLOWLY — up at the start, down in the middle, up again'
-      + ' at the end — and the antennae flick. The body drifts a hair up and down.'
+    // Panel by panel, and taken from the drawing (`bugArt.drawMoth`: the wings
+    // swing on sin(4πt), TWO beats per loop), because the sentence this replaced
+    // — "up at the start, down in the middle, up again at the end" — described
+    // ONE beat and contradicted the reference. The return that obeyed neither
+    // came back in the order down, down, up, up, down, up, down, down, which
+    // plays as a moth that stutters.
+    motion: 'TWO slow wing beats in the loop, and each panel says exactly where it is:'
+      + ' in panels 2 and 6 both wings are swept furthest BACK, their tips toward the'
+      + ' tail; in panels 4 and 8 they stand straight out to the sides at their'
+      + ' widest; in panels 1, 3, 5 and 7 they are halfway between. So the loop reads'
+      + ' halfway, back, halfway, wide, halfway, back, halfway, wide — the same pose'
+      + ' never twice in a row. The antennae flick; the body stays where it is.'
   },
   robobug: {
     blurb: 'A toy robot beetle from DIRECTLY ABOVE: a hard-edged hexagonal chassis of'
@@ -918,11 +940,18 @@ const HAZARD_BLURB: Record<string, string> = {
     + ' pointing to the RIGHT along the middle.',
   crumbs: 'A scattered pile of bread and biscuit crumbs seen from DIRECTLY ABOVE:'
     + ' eleven or so little golden rounded chunks of different sizes, loosely grouped,'
-    + ' each with a soft crust edge and a paler crumb face.'
+    + ' each with a soft crust edge and a paler crumb face.',
+  shoebox: 'A shoebox wrapped as a present, seen from DIRECTLY ABOVE: a candy-pink lid'
+    + ' a little wider than the box, a bright yellow ribbon crossing it both ways and a'
+    + ' fat yellow bow tied in the middle. It looks like a gift with something exciting'
+    + ' inside — a toy, not a parcel.'
 }
 
 const PROP_STILLS: StillSpec[] = [
-  ...HAZARDS.map((h) => still('prop', h.id, `Prop — ${h.id}`, HAZARD_BLURB[h.id] ?? '', {
+  // Every floor object but the SLICK lane: it is a strip as long as the board it
+  // is spilt across, and a square painting stretched down a lane is a smear —
+  // `paintHazard` never probes for one.
+  ...HAZARDS.filter((h) => h.id !== 'slick').map((h) => still('prop', h.id, `Prop — ${h.id}`, HAZARD_BLURB[h.id] ?? '', {
     ...(h.id === 'conveyor' || h.id === 'sweeper'
       ? {
         fill: true,
@@ -1092,6 +1121,32 @@ const FX_STILLS: StillSpec[] = [
     + ' from it are a soft mid grey. Grey and WHITE only, no colour anywhere. It'
     + ' is dry dust — loose, airy and soft-edged, with no hard outline around it.',
     { greyscale: true, fit: false }),
+  // The other tinted particle, and the loudest one: `useVfx`'s shape 4, thrown
+  // by every squish, every popped egg and — forty at a time — by a boss going
+  // down. Its box is 2:1 because the drawable IS a teardrop lying along +x, and
+  // the runtime rotates it to the droplet's own velocity and stretches it with
+  // the droplet's own speed. Painted head-at-the-right for that reason, and said
+  // so in as many words, because a model handed "a droplet" with no direction
+  // returns one falling downward and every drop in the game would fly sideways.
+  still('fx', 'goo-drop', 'Goo droplet',
+    'ONE fat droplet of thick cartoon slime in flight, seen from DIRECTLY ABOVE,'
+    + ' lying on its side so that it flies to the RIGHT: a fat rounded head at the'
+    + ' RIGHT-HAND end, its widest point about a third of the way in, tapering back'
+    + ' to a long thin pointed tail that reaches the LEFT edge of the frame. One'
+    + ' small bright specular highlight sits on the upper LEFT of the head. The body'
+    + ' is smooth, glossy and fluid, mid grey shading to pale at the rim, with soft'
+    + ' rounded edges and no hard outline. Grey and WHITE only, no colour anywhere.'
+    + ' It fills the frame end to end with a small margin, and there is nothing else'
+    + ' in the frame — no second droplet, no splash, no floor.',
+    { greyscale: true, fit: false,
+      // 2:1, and the runtime's bake is 192x96 — the same ratio, so a return that
+      // obeys the frame lands on the drawn droplet without being squashed.
+      w: STILL_PX, h: STILL_PX / 2, maxEdge: 192,
+      authored: 'flying to the RIGHT — the head at +x, the tail at −x',
+      live: 'The game tints it to the colour of the creature it came out of, turns it'
+        + ' to whichever way the droplet is flying and stretches it along that line'
+        + ' with the droplet\'s own speed — so the tail must be the LEFT end and the'
+        + ' head the RIGHT one, or every drop in the game flies backwards.' }),
   ...SPLAT_STILLS
 ]
 
@@ -1111,14 +1166,91 @@ const FLOOR_BLURB: Record<number, string> = {
     + ' horizontal scanlines and one soft magenta glow pooling in a cell.'
 }
 
-const FLOOR_STILLS: StillSpec[] = ([1, 2, 3, 4] as const).map((w) =>
+/** What every floor tile is told, lead or not. */
+const FLOOR_LIVE = 'The game stamps bright splats, shadows and props over this, so keep it'
+  + ' MID-TONE and quiet — texture, not objects. Nothing here may read as a thing'
+  + ' the player could stomp.'
+
+/**
+ * ─── The other thirty-six floors ────────────────────────────────────────────
+ *
+ * Every level has its own surface (`FLOORS` in `floors.ts` — ten per world),
+ * and until now only the four a world SHIPS with had a painting. The other
+ * thirty-six drew themselves, which was a deliberate stop rather than a
+ * decision: `floorTile` hung the world's lead painting on all ten of its levels
+ * once, which put the gingham blanket back on every picnic level, and the fix
+ * was to stop probing rather than to paint the rest.
+ *
+ * ── The colour clause is DERIVED, and that is the whole point ──
+ *
+ * `floors.ts` holds all forty to three legibility rules — a floor commits to a
+ * polarity and its field sits in that polarity's band, its own marks stay
+ * quieter than a body, and it is not the colour of the thing walking on it —
+ * and `tests/game/floorPalette.test.ts` enforces them on all forty.
+ *
+ * It enforces them on the PALETTE. A painted tile replaces `paintFloorTile`
+ * outright, so a painting is the one way into this game's floors that those
+ * fifteen cases cannot see. A brief that merely described the surface in words
+ * would be free to come back a shade that eats the bugs, and nothing would say
+ * so until a player on a phone in sunlight could not find an ant.
+ *
+ * So the prompt is not written per floor — it is COMPOSED from the floor's own
+ * palette, and the numbers in it are the same numbers the test reads. A floor
+ * whose palette changes gets a new prompt for free, and a prompt can never
+ * contradict the contract because it has no independent copy of it.
+ *
+ * `tools/check-floor-art.mjs` closes the other half: it measures what actually
+ * came back against those same rules.
+ */
+const floorColourClause = (id: FloorId): string => {
+  const p = FLOOR_PALETTE[id]
+  const field = floorField(id)
+  const dark = p.key === 'dark'
+  return `COLOUR — this is binding, and it is what the tile is graded on.`
+    + ` The overall surface must read as ${field}`
+    + ` (${dark ? 'a DARK floor: everything on it is lit, and the surface is the unlit thing'
+      : 'a LIGHT floor: bodies are read on it as dark silhouettes'}).`
+    + ` Its two field tones are ${p.base} and ${p.alt}.`
+    + ` The brightest mark may go to ${p.line} and the darkest to ${p.shade}, and no further.`
+    + (p.structure === true
+      ? ` The bright ${p.line} may be STRUCTURE only — a rule, a grid, a joint, a trace that`
+        + ' crosses the whole tile edge to edge. It may never be a compact bright blob:'
+        + ' a blob the size of a bug is read as a bug.'
+      : ` Keep every mark COMPACT and quiet — no mark may be brighter or darker than the`
+        + ' field by more than a whisker, because a bug is about a twentieth of this tile'
+        + ' across and anything with that much contrast at that size is read as one.')
+}
+
+/** The four a world ships with, painted first and unchanged since. */
+const LEAD_FLOOR_STILLS: StillSpec[] = ([1, 2, 3, 4] as const).map((w) =>
   still('bg', `floor-${w}`, `Floor — ${WORLDS[w].theme}`, FLOOR_BLURB[w]!, {
     w: 512, h: 512, maxEdge: 512, exact: true,
     bg: 'opaque', tile: 'xy', fill: true, fit: false,
-    live: 'The game stamps bright splats, shadows and props over this, so keep it'
-      + ' MID-TONE and quiet — texture, not objects. Nothing here may read as a thing'
-      + ' the player could stomp.'
+    live: FLOOR_LIVE
   }))
+
+/**
+ * …and the thirty-six level floors.
+ *
+ * `maxEdge` is 256 where the leads are 512, and that is a measurement rather
+ * than a saving: every consumer in the game reaches a floor through
+ * `floorTile()`, which draws it into a `FLOOR_TILE_PX` (256) canvas and makes
+ * the repeating pattern from that. A 512 painting has half its pixels thrown
+ * away on the way in, at four times the bytes. (The four leads are left at 512
+ * so their shipped files and receipts stay exactly as they are; re-cutting them
+ * at 256 is a free ~100 kB whenever someone wants it.)
+ */
+const LEVEL_FLOOR_STILLS: StillSpec[] = FLOOR_IDS
+  .filter((id) => !isLeadFloor(id))
+  .map((id) => still('bg', id, `Floor — ${WORLDS[worldOfFloor(id)].theme} — ${id}`,
+    `A seamless tile of ${FLOOR_SUBJECT[id]}, seen from DIRECTLY ABOVE.`
+      + ` ${floorColourClause(id)}`, {
+      w: 512, h: 512, maxEdge: 256, exact: true,
+      bg: 'opaque', tile: 'xy', fill: true, fit: false,
+      live: FLOOR_LIVE
+    }))
+
+const FLOOR_STILLS: StillSpec[] = [...LEAD_FLOOR_STILLS, ...LEVEL_FLOOR_STILLS]
 
 /**
  * The HUD's own art.
@@ -1545,7 +1677,8 @@ const GLYPH_STILLS: StillSpec[] = GAME_ICON_NAMES
 // what comes back is nine half-tinted things that belong to neither.
 //
 // These do not replace the single-icon sheets: those stay, and are how a cell
-// that came back wrong is re-rolled for one generation instead of nine.
+// that came back wrong is re-rolled for one generation instead of nine. Which of
+// the two a slot's file is actually cut from is `UI_CUT_FROM`, below the grids.
 
 /** The square ONE CELL of a contact sheet is authored in. */
 const GRID_CELL_PX = 256
@@ -1554,7 +1687,7 @@ const GRID_CELL_PX = 256
  * Cells per contact sheet, and the width of the grid.
  *
  * Three by three, because the grid is the part a model gets wrong. The queue
- * already runs with `--drop-borders` on because Gemini rules a plain eight-panel
+ * paints rules out (`--drop-borders-if-ruled`) because Gemini ruled a plain eight-panel
  * walk sheet like a comic strip perhaps one time in three; a lattice of nine
  * distinct objects is a stronger invitation to rule it still. Nine is the most
  * that came back clean, and the blast radius of a bad return is nine icons
@@ -1685,20 +1818,142 @@ export const GRIDS: GridSpec[] = [
 ]
 
 /**
+ * ─── A slot painted twice: which painting it is cut from ────────────────────
+ *
+ * Every slot on a contact sheet keeps its single-icon sheet as well (above), so
+ * each of them has TWO paintings aimed at one file: a cell of a grid, and a still
+ * of its own. Nothing said which one the file is cut from, so it was whichever
+ * the slicer happened to cut LAST. A full run cuts `grid-*` before `still-*`, so
+ * there the stills won; the desk slices one painting at a time, so there it was
+ * whatever it touched last. That is how `grid-ui-objects-2` ships — its painting
+ * was re-sliced after its nine stills — while the next full re-slice would have
+ * swapped all nine for the stills' entirely different designs (a cyan gem for
+ * the ruby, a green splat for the orange, a red-and-yellow gift for the dusty
+ * one), with nothing in any diff to say so.
+ *
+ * So the choice is written down, per slot, and every tool reads the same answer:
+ * `cutSources()` below, written beside the prompts as `art-sheets/cut-from.json`
+ * by `promptDocs`, which the slicer cuts by, and `PAINT-STATUS.md` and the Art
+ * Desk report by — a sheet whose every file is cut from another painting is
+ * SUPERSEDED, never "to paint", so the desk's queue does not repaint art nobody
+ * will ship.
+ *
+ * WHY A TABLE, AND NOT A RULE
+ *
+ *   · "Newest painting wins" does not reproduce what ships. The objects-2
+ *     painting is OLDER than its nine stills (11:50 on the 14th, against 19:19 to
+ *     21:55); it ships because it was re-SLICED last, and "last sliced wins" is
+ *     the bug, not a rule.
+ *   · Retiring the losing painting only postpones the race to the next re-roll of
+ *     it, and a painting parked in `retired/` reads as "repaint" to the status
+ *     tools — the desk would queue fifteen repaints of art nobody wants.
+ *   · Which of two paintings ships is a question only the person who painted them
+ *     can answer. The slicer already refuses to guess between two returns that
+ *     name one sheet; this is the same refusal one level up, and a table in the
+ *     manifest is where the answer is written.
+ *
+ * MEASURED, NOT ASSUMED. Each value below reproduces the file that shipped on
+ * 2026-09-18: that file's pristine original (`public-backup/`) is pixel-identical
+ * to a fresh cut of the painting named here, and nowhere near a cut of the other.
+ * The grids came out all-or-nothing — objects-2 from the grid, everything else
+ * from the stills that were painted one at a time after their grids.
+ *
+ * TO SWITCH A SLOT — the one-generation re-roll `PROMPTS-GRIDS.md` recommends for
+ * a single bad cell — set it here, run `pnpm art:prompts`, and slice the painting
+ * that now owns it. A slot on a grid that is missing here fails
+ * `artManifest.test.ts`, and the slicer refuses to cut it from either painting.
+ */
+export type CutFrom = 'grid' | 'still'
+
+export const UI_CUT_FROM: Readonly<Record<string, CutFrom>> = {
+  // grid-ui-marks-1
+  locker: 'still', fever: 'still', star: 'still', timer: 'still', target: 'still',
+  trophy: 'still', 'icon-play': 'still', 'icon-pause': 'still',
+  'icon-replay': 'still',
+  // grid-ui-marks-2
+  'icon-skip-forward': 'still', 'icon-skip-back': 'still', 'icon-stop': 'still',
+  'icon-menu': 'still', 'icon-home': 'still', 'icon-back': 'still',
+  'icon-forward': 'still', 'icon-close': 'still', 'icon-check': 'still',
+  // grid-ui-marks-3
+  'icon-settings': 'still', 'icon-shop': 'still', 'icon-info': 'still',
+  'icon-help': 'still', 'icon-music': 'still', 'icon-music-off': 'still',
+  'icon-sound': 'still', 'icon-sound-off': 'still', 'icon-chart': 'still',
+  // grid-ui-marks-4
+  'icon-leaderboard': 'still', 'icon-plus': 'still', 'icon-minus': 'still',
+  'icon-left': 'still', 'icon-right': 'still', 'icon-up': 'still',
+  'icon-down': 'still', 'icon-fullscreen': 'still', 'icon-share': 'still',
+  // grid-ui-objects-1
+  'icon-chest': 'still', 'icon-anvil': 'still', 'icon-video': 'still',
+  'icon-movie': 'still', 'icon-ads': 'still', 'icon-book': 'still',
+  'icon-lock': 'still', 'icon-unlock': 'still', 'icon-star-empty': 'still',
+  // grid-ui-objects-2 — the nine that ship from the grid painting. Their stills
+  // are complete, DIFFERENT designs (a cyan gem, not the ruby): cut both side by
+  // side with `pnpm slice-sheets <both> --ignore-cut-from --out <scratch>` and
+  // look before switching any of them.
+  'icon-coin': 'grid', 'icon-gem': 'grid', 'icon-heart': 'grid',
+  'icon-flask': 'grid', 'icon-wheel': 'grid', 'icon-gift': 'grid',
+  'icon-bug': 'grid', 'icon-splat': 'grid', 'icon-bolt': 'grid',
+  // grid-ui-objects-3
+  'icon-skull': 'still', 'icon-warning': 'still'
+}
+
+/** A file more than one sheet paints, and the one painting it is cut from. */
+export interface CutSource {
+  /** The stem (`grid-ui-objects-2`, `still-ui-icon-gem`) the file is cut from,
+   *  or null when nothing settles it — the slicer then refuses it outright. */
+  from: string | null
+  /** Every sheet that paints it, the one it is cut from included. */
+  sheets: string[]
+}
+
+/**
+ * Every file painted by more than one sheet, keyed by target, with the sheet it
+ * is cut from. Derived from the lattices rather than typed out, so a glyph added
+ * to the icon set lands here the day it lands on a grid — unsettled, until
+ * `UI_CUT_FROM` says which painting it ships from.
+ */
+export const cutSources = (): Record<string, CutSource> => {
+  const by = new Map<string, string[]>()
+  const add = (target: string, stem: string): void => {
+    const got = by.get(target) ?? []
+    if (!got.includes(stem)) by.set(target, [...got, stem])
+  }
+  for (const w of WALKS) add(w.target, w.file)
+  for (const s of STILLS) add(s.target, s.file)
+  for (const g of GRIDS) for (const m of g.members) add(m.target, g.file)
+  const out: Record<string, CutSource> = {}
+  for (const [target, sheets] of [...by].sort(([a], [b]) => a.localeCompare(b))) {
+    if (sheets.length < 2) continue
+    const still = STILLS.find((s) => s.target === target)
+    const grid = GRIDS.find((g) => g.members.some((m) => m.target === target))
+    const pick = still ? UI_CUT_FROM[still.id] : undefined
+    // Only the one shape this table can settle: exactly a grid cell and its own
+    // still. Anything else painted twice is unsettled until someone decides.
+    const settled = sheets.length === 2 && still && grid
+      ? (pick === 'grid' ? grid.file : pick === 'still' ? still.file : null)
+      : null
+    out[target] = { from: settled, sheets }
+  }
+  return out
+}
+
+/**
  * The greeter on the loading screen.
  *
  * The splash is the one screen every player sees before deciding whether to
- * stay, and what is on it is a gag: an ant floats out, shouts BOO, and then
- * cracks up at its own prank (`FLogoProgress.vue`). The mascot is the ant that
- * does it — the creature the player is about to spend the game stomping, which
- * is the whole point of putting it there. Two seconds of sympathy for the cast,
- * bought before the game has started.
+ * stay, and what is on it is a gag: the game's own stomp ring closes round an
+ * ant, the sneaker slams down, and the ant is already out from under it,
+ * taunting the shoe (`FLogoProgress.vue`). The mascot is the ant it happens to —
+ * the creature the player is about to spend the game stomping, and the crumb
+ * thief cutscene 01 opens on. A cheeky rival, set up before the game has
+ * started.
  *
  * TOP-DOWN like the rest of the cast, and that is deliberate rather than
- * convenient: the splash animates this one file with CSS — a float, a lunge on
- * the shout, a shoulder-shake on the laugh — and those beats are authored
- * against a creature seen from above. A front-facing character would also stop
- * being the bug on the blanket and start being a logo with a face.
+ * convenient: the splash animates this one file with CSS, under the game's own
+ * ring, shadow and shoe — a float, a tremble as the ring closes, a sideways
+ * scramble out from under the sole, a shoulder-shake on the taunt — and a stomp
+ * only reads from above. A front-facing character would also stop being the bug
+ * on the blanket and start being a logo with a face.
  *
  * Never probed at run time. The splash must be the same picture on every build,
  * including the portal ones that ship with the art layer OFF, so the file is read
@@ -1716,10 +1971,11 @@ const MASCOT_STILL: StillSpec = still('ui', 'mascot', 'Splash mascot',
     target: ART_BRAND.mascot,
     authored: 'Head to the TOP of the panel, seen from directly above — the same'
       + ' view every creature in this game is drawn in.',
-    live: 'The splash floats it, lunges it at the player, shakes it, and pops a DRAWN'
-      + ' speech bubble in beside it — so paint no bubble, no words, no shadow and no'
-      + ' ground, and leave a small even margin all round so an antenna is never'
-      + ' clipped by the frame.'
+    live: 'The splash floats it, shakes it as a drawn stomp ring and shadow close round'
+      + ' it, darts it sideways out from under a shoe, and pops a DRAWN speech bubble'
+      + ' in beside it — so paint no bubble, no words, no shadow and no ground, and'
+      + ' leave a small even margin all round so an antenna is never clipped by the'
+      + ' frame.'
   })
 
 /**
@@ -1940,28 +2196,127 @@ export const ALL_SHEETS: Array<WalkSpec | StillSpec> = [...WALKS, ...STILLS]
 
 // ─── Prompts ────────────────────────────────────────────────────────────────
 
+/**
+ * ─── One continuous ground: the rule a ruled return is thrown away for ─────
+ *
+ * Every multi-panel sheet is cut by arithmetic, so a line painted between two
+ * panels is not a help to the cut — it lands INSIDE a sprite and stays there.
+ * Six returns came back ruled anyway, each with "DO NOT DRAW THE GRID" in its
+ * prompt: the beetle and the robobug with black rules round every panel like a
+ * comic strip, the moth with a thin purple line between every pair, and the
+ * three 2x2 stills — the splat, the confetti, the egg — with a WHITE cross
+ * splitting the sheet into four. The slicer refuses all six; the Art Desk had
+ * only let them through because it paints rules out on every slice.
+ *
+ * The rule was in each of those prompts, and it lost for four reasons
+ * `PROMPT-ANATOMY.md` names, every one visible in the prompt that produced them:
+ *
+ *   · IT SAT IN THE MIDDLE. The top said "A SPRITE SHEET: 8 panels" and nothing
+ *     about the ground; the rule came after the subject, the colour, the view,
+ *     the anchor and the movement; the last thing read was a list of STYLE
+ *     failures. §1/§10/§11: what decides whether a return is usable at all is
+ *     stated first, and checked again last.
+ *   · IT NAMED ONE COLOUR. "every frame then carries a black bar" — so the
+ *     painter kept to the letter of it and ruled in WHITE, or in a darker
+ *     MAGENTA. §9: "in any colour, magenta included".
+ *   · IT DESCRIBED THE GROUND PER PANEL. "The background of every panel is
+ *     flat magenta, edge to edge" describes eight tiles with a ground each, and
+ *     a white gutter between two tiles satisfies it word for word. The ground is
+ *     ONE field that the drawings stand on.
+ *   · ITS HEADING WAS "THE GRID". A heading that names a grid reads as a grid to
+ *     be drawn.
+ *
+ * Hoisted into named constants that the walk, the multi-panel still and the
+ * contact-sheet builders all use (§8: diff the builders — "the weakest builder is
+ * the one that produces the bad batch"), because the contact-sheet builder had
+ * grown its own copy of the rule and the three had already begun to drift.
+ */
+
+/** A sheet's shape in words, both directions — `shapeLines` and the check reuse it. */
+const shapeOf = (w: number, h: number): { shape: string; ratio: string } => {
+  const r = w / h
+  return {
+    shape: r > 1.05 ? 'LANDSCAPE (wider than it is tall)'
+      : r < 0.95 ? 'PORTRAIT (TALLER THAN IT IS WIDE)'
+        : 'SQUARE',
+    ratio: r >= 1 ? `${(r).toFixed(2)} : 1` : `1 : ${(1 / r).toFixed(2)}`
+  }
+}
+
+/**
+ * The ground rule, stated right after the deliverable's shape — before the
+ * subject, which is where §2 puts the one exclusion a return is thrown away for.
+ * `unit` is what the sheet is divided into (`panel`, `cell`) and `what` the
+ * things standing on it.
+ */
+const continuousGround = (n: number, unit: string, what: string): string[] => [
+  'ONE CONTINUOUS MAGENTA GROUND — read this before the subject. It decides',
+  '  whether the sheet can be used at all, and more returns have been thrown away',
+  '  for it than for anything else.',
+  '· The whole image is ONE unbroken field of flat magenta #FF00FF, corner to',
+  `  corner, with the ${n} ${what} standing on it.`,
+  `  No ${unit} borders, no dividers, no frames, no boxes, no grid lines, no`,
+  '  gutters and no gaps between them — in ANY colour: not black, not white, not',
+  '  grey, and not a darker or lighter shade of magenta either.',
+  `· A "${unit}" below means only WHERE a drawing sits on that ground: an invisible`,
+  '  square the game measures by arithmetic. It is never drawn. The only thing',
+  `  that shows where one ${unit} ends is that the drawing in it ends.`,
+  '· Earlier returns came back ruled — black rules round every panel like a comic',
+  '  strip, a white cross splitting a sheet into four, a thin purple line between',
+  '  every pair of moths — and every one of them was thrown away whole. The game',
+  `  cuts along the ${unit} lines, so a rule lands INSIDE a sprite and stays in it`,
+  '  forever.',
+  ''
+]
+
+/**
+ * The same rule again as the LAST thing read (§11: a closing count-and-check beats
+ * the same facts stated once at the top). It repeats the deliverable's shape too
+ * (§1: "stated first and repeated last").
+ */
+const sheetCheck = (
+  n: number, cols: number, rows: number, unit: string, what: string, w: number, h: number
+): string[] => {
+  const { shape, ratio } = shapeOf(w, h)
+  return [
+    '',
+    'BEFORE YOU CALL IT FINISHED, count and check:',
+    `· ${n} ${what}, ${cols} across and ${rows} down — not one more, not one fewer.`,
+    `· The image is ${shape}, width to height ${ratio}.`,
+    `· Run your eye along every line where two ${unit}s meet, across and down: it is`,
+    '  flat magenta the whole way. No line, no bar, no frame, no white or grey gap,',
+    '  no darker or lighter magenta. If you can SEE where one ' + unit + ' ends and the',
+    '  next begins, the sheet cannot be used.',
+    '· Every pixel that is not a drawing is vivid #FF00FF — hold it against a pure',
+    '  magenta swatch, not against your memory of one.'
+  ]
+}
+
 const layoutRules = (cols: number, rows: number, frames: number): string[] => [
-  `THE GRID — ${cols} columns across, ${rows} row${rows > 1 ? 's' : ''} down,`
+  `WHERE THE PANELS SIT — ${cols} across, ${rows} down,`
   + ` EXACTLY ${frames} panels read left to right along the top row` + (rows > 1 ? ', then the next.' : '.'),
   `· ${frames} and not one more or one fewer. The game cuts the return into`
   + ` ${frames} equal panels by arithmetic, so a sheet with a different count is`
   + ' sliced through the middle of every frame — silently, and it looks like the'
   + ' animation broke rather than like the sheet did.',
-  '· DO NOT DRAW THE GRID. There are no panel borders, no outlines around a panel,',
-  '  no dividing lines, no gutters, no margins between panels, no drop shadows under',
-  '  a panel, no numbers and no labels. The panels TOUCH, edge to edge, and the only',
-  '  thing that says where one ends is that the creature in it ends. A sheet ruled',
-  '  like a comic strip is refused outright: the game cuts it by arithmetic, so every',
-  '  rule line lands INSIDE a frame and every frame of the animation then carries a',
-  '  black bar down one side of it.',
+  '· DO NOT DRAW THE PANELS. There are no panel borders, no outlines around a',
+  '  panel, no dividing lines, no gutters, no margins between panels, no drop',
+  '  shadows under a panel, no numbers and no labels — in any colour, magenta',
+  '  included. The panels TOUCH, edge to edge, and the only thing that says where',
+  '  one ends is that the drawing in it ends. A sheet ruled like a comic strip is',
+  '  refused outright: the game cuts it by arithmetic, so every rule line lands',
+  '  INSIDE a frame and every frame of the animation then carries a bar down one',
+  '  side of it.',
   '· Every panel is the SAME SIZE, to the pixel.',
   '· The subject is CENTRED in its panel and the SAME SIZE in every panel. It never',
   '  drifts, never grows, never leaves the panel.',
-  '· The background of every panel is FLAT MAGENTA #FF00FF, edge to edge, with',
-  '  nothing else on it — no shadow, no floor, no gradient, no vignette. The magenta',
-  '  is keyed out to transparency; anything else left on it becomes part of the',
-  '  sprite, and a soft shadow fading into the magenta becomes a pink fringe around',
-  '  the whole thing that no amount of keying can take off again.'
+  '· The ground under every drawing is that ONE field of FLAT MAGENTA #FF00FF: it',
+  '  runs straight on from one panel into the next with no seam, no line and no',
+  '  change of shade where two panels meet, and nothing else is on it — no shadow,',
+  '  no floor, no gradient, no vignette. The magenta is keyed out to transparency;',
+  '  anything else left on it becomes part of the sprite, and a soft shadow fading',
+  '  into the magenta becomes a pink fringe around the whole thing that no amount',
+  '  of keying can take off again.'
 ]
 
 /**
@@ -1979,15 +2334,34 @@ export type SheetFits = Record<string, { h: number; w: number; bottom: number; c
 
 const pct = (v: number): number => Math.round(v * 100)
 
-/** The SIZE IN FRAME clause, when the bench has measured one. */
-const fitLines = (fits: SheetFits | undefined, key: string): string[] => {
+/**
+ * The SIZE IN FRAME clause, when the bench has measured one.
+ *
+ * `multi` is a sheet of several panels. There a subject that reaches its panel's
+ * edge is one whose neighbour reaches the same edge from the other side — the
+ * moth's wings run the full width of their panel, so in the reference every wing
+ * tip meets the next moth's. "The panels touch, and the only thing that says
+ * where one ends is that the creature in it ends" cannot hold for two creatures
+ * that meet, and the return separated them the way a painter separates panels:
+ * a line between every pair. So such a sheet is told what to do at that edge.
+ */
+const fitLines = (fits: SheetFits | undefined, key: string, multi = false): string[] => {
   const f = fits?.[key]
   if (!f) return []
+  const wide = f.w >= 0.95
+  const tall = f.h >= 0.95
   return [
     `THE SIZE IN FRAME: in the reference the subject covers about ${pct(f.h)}% of its`
     + ` panel's height and ${pct(f.w)}% of its width. Paint it at that size. A subject`
     + ' drawn small in a big empty frame is scaled back up by the game and arrives'
-    + ' soft; one drawn past the edges is clipped.',
+    + ' soft; one drawn past the edges is clipped.'
+    + (multi && (wide || tall)
+      ? ` At its ${wide ? 'widest' : 'tallest'} it reaches the ${wide ? 'left and right' : 'top and bottom'}`
+        + ' edges of its panel, so where two panels meet the two drawings all but touch.'
+        + ' Keep a hair of flat magenta between them, and NEVER a line, a bar or a frame'
+        + ' to keep them apart — the game finds the panels by arithmetic, not by'
+        + ' looking for a border.'
+      : ''),
     ''
   ]
 }
@@ -2005,11 +2379,7 @@ const fitLines = (fits: SheetFits | undefined, key: string): string[] => {
  * So the ratio is spelled out in words, in both directions, every time.
  */
 const shapeLines = (w: number, h: number): string[] => {
-  const r = w / h
-  const shape = r > 1.05 ? 'LANDSCAPE (wider than it is tall)'
-    : r < 0.95 ? 'PORTRAIT (TALLER THAN IT IS WIDE)'
-    : 'SQUARE'
-  const ratio = r >= 1 ? `${(r).toFixed(2)} : 1` : `1 : ${(1 / r).toFixed(2)}`
+  const { shape, ratio } = shapeOf(w, h)
   return [
     `THE SHAPE OF THE IMAGE: ${shape}, width to height ${ratio}.`,
     '  The same shape as the attached reference, and it is not negotiable. Do NOT',
@@ -2049,6 +2419,7 @@ export const promptForWalk = (w: WalkSpec, fits?: SheetFits): string => [
   '     nothing else from it: not its line weight, its colours, its shading or its',
   '     style. It is a flat stand-in for a painting that does not exist yet.',
   '',
+  ...continuousGround(w.frames, 'panel', 'drawings of the one creature'),
   `WHAT IT IS: ${w.blurb}`,
   '',
   `COLOUR: ${w.colour}`,
@@ -2059,14 +2430,15 @@ export const promptForWalk = (w: WalkSpec, fits?: SheetFits): string => [
   '  draw it three-quarters on, and do not tilt it.',
   '',
   ...anchorLines('centre'),
-  ...fitLines(fits, `${w.kind}/${w.id}`),
+  ...fitLines(fits, `${w.kind}/${w.id}`, true),
   `THE MOVEMENT: ${w.motion}`,
   '· No two panels are the same. A sheet where four panels are identical is a sheet',
   '  the game plays as a creature that freezes four times a second.',
   '',
   ...layoutRules(w.cols, w.rows, w.frames),
   '',
-  HOUSE_STYLE
+  HOUSE_STYLE,
+  ...sheetCheck(w.frames, w.cols, w.rows, 'panel', 'drawings of ONE creature', w.w, w.h)
 ].join('\n')
 
 /** A ready-to-paste prompt for one still. */
@@ -2105,12 +2477,14 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
     '     stand-in for a painting that does not exist yet, and a repaint that keeps',
     '     its flatness has repainted the stand-in.',
     '',
+    // Only a sheet of panels has lines between panels to rule.
+    ...(n > 1 ? continuousGround(n, 'panel', 'drawings') : []),
     `WHAT IT IS: ${s.blurb}`,
     ''
   ]
   if (s.authored) lines.push(`ORIENTATION: ${s.authored}`, '')
   lines.push(...anchorLines(s.anchor, s.anchorNote))
-  if (s.fit !== false) lines.push(...fitLines(fits, `${s.kind}/${s.id}`))
+  if (s.fit !== false) lines.push(...fitLines(fits, `${s.kind}/${s.id}`, n > 1))
   if (s.live) lines.push(`WHAT THE GAME DRAWS OVER IT: ${s.live}`, '')
   if (s.tile) {
     lines.push(
@@ -2167,6 +2541,7 @@ export const promptForStill = (s: StillSpec, fits?: SheetFits): string => {
     lines.push('THE IMAGE IS FULLY OPAQUE: it has no transparent parts and no magenta.', '')
   }
   lines.push(houseStyle(s.wordmark))
+  if (n > 1) lines.push(...sheetCheck(n, colsOf(s), rowsOf(s), 'panel', 'drawings', s.w * colsOf(s), s.h * rowsOf(s)))
   return lines.join('\n')
 }
 
@@ -2208,6 +2583,7 @@ export const promptForGrid = (g: GridSpec): string => {
     '     SIZE IN THE CELL and the ORIENTATION of each one; take nothing else — not',
     '     its line weight, its colours or its shading.',
     '',
+    ...continuousGround(n, 'cell', 'icons'),
     `WHAT IS IN EACH CELL, in reading order — left to right along the top row${g.rows > 1 ? ', then the next' : ''}:`,
     '',
     ...roster,
@@ -2223,28 +2599,30 @@ export const promptForGrid = (g: GridSpec): string => {
       ? ['COLOURLESS BY CONTRACT: paint every cell in WHITE and GREY only. The game tints'
         + ' them per use, and any colour painted in here fights that tint.', '']
       : []),
-    `THE GRID — ${g.cols} columns across, ${g.rows} row${g.rows > 1 ? 's' : ''} down,`
+    `WHERE THE CELLS SIT — ${g.cols} across, ${g.rows} down,`
     + ` EXACTLY ${n} cells.`,
     `· ${n} and not one more or one fewer, and no empty cell. The game cuts the return`,
     `  into ${n} equal cells by arithmetic, so a sheet with a different count is sliced`,
     '  through the middle of every icon.',
-    '· DO NOT DRAW THE GRID. There are no cell borders, no outlines around a cell, no',
-    '  dividing lines, no gutters, no margins between cells, no drop shadows under a',
-    '  cell, no numbers, no captions and no labels. The cells TOUCH, edge to edge, and',
-    '  the only thing that says where one ends is that the icon in it ends. A sheet',
-    '  ruled like a comic strip is refused outright: the game cuts it by arithmetic,',
-    '  so every rule line lands INSIDE a cell and every icon then carries a black bar',
-    '  down one side of it.',
+    '· DO NOT DRAW THE CELLS. There are no cell borders, no outlines around a cell,',
+    '  no dividing lines, no gutters, no margins between cells, no drop shadows under',
+    '  a cell, no numbers, no captions and no labels — in any colour, magenta',
+    '  included. The cells TOUCH, edge to edge, and the only thing that says where',
+    '  one ends is that the icon in it ends. A sheet ruled like a comic strip is',
+    '  refused outright: the game cuts it by arithmetic, so every rule line lands',
+    '  INSIDE a cell and every icon then carries a bar down one side of it.',
     '· Every cell is the SAME SIZE, to the pixel.',
     '· Each icon is CENTRED in its own cell with an even margin, and nothing crosses',
     '  from one cell into its neighbour.',
-    '· The background of every cell is FLAT MAGENTA #FF00FF, edge to edge, with',
-    '  nothing else on it — no shadow, no floor, no gradient, no vignette. The magenta',
-    '  is keyed out to transparency; anything else left on it becomes part of the',
-    '  icon, and a soft shadow fading into the magenta becomes a pink fringe that no',
-    '  amount of keying can take off again.',
+    '· The ground under every icon is that ONE field of FLAT MAGENTA #FF00FF: it runs',
+    '  straight on from one cell into the next with no seam, no line and no change of',
+    '  shade where two cells meet, and nothing else is on it — no shadow, no floor, no',
+    '  gradient, no vignette. The magenta is keyed out to transparency; anything else',
+    '  left on it becomes part of the icon, and a soft shadow fading into the magenta',
+    '  becomes a pink fringe that no amount of keying can take off again.',
     '',
-    HOUSE_STYLE
+    HOUSE_STYLE,
+    ...sheetCheck(n, g.cols, g.rows, 'cell', 'DIFFERENT icons', g.cell * g.cols, g.cell * g.rows)
   ].join('\n')
 }
 
@@ -2372,7 +2750,10 @@ export const promptDocs = (fits?: SheetFits): Record<string, string> => ({
     '',
     'If one cell comes back wrong, do not re-roll the sheet: the single-icon sheet',
     'for that one slot is still in `PROMPTS-STILLS.md`, and re-rolling it costs one',
-    'generation instead of nine.',
+    'generation instead of nine. Then set that slot to `\'still\'` in `UI_CUT_FROM`',
+    '(`src/game/artSheet.ts`) and run `pnpm art:prompts`: every slot on a grid is',
+    'painted twice, and `cut-from.json` — not whichever was sliced last — decides',
+    'which painting its file is cut from.',
     '',
     ...GRIDS.map((g) => promptBlock(`${g.id} — ${g.name}`, g.file, null, promptForGrid(g)))
   ].join('\n'),
@@ -2414,6 +2795,20 @@ export const promptDocs = (fits?: SheetFits): Record<string, string> => ({
     + ` ${GRIDS.length} contact sheets — the last of which repaint`
     + ` ${GRIDS.reduce((n, g) => n + g.members.length, 0)} of those stills nine at a`
     + ' time, for the icon set.',
+    '',
+    'Every file that two sheets paint is cut from exactly one of them, and',
+    '`cut-from.json` (written from `UI_CUT_FROM` in `src/game/artSheet.ts`) says',
+    'which — never the order the slicer happened to run in.',
     ''
-  ].join('\n')
+  ].join('\n'),
+
+  // Not a prompt, but written by the same two routes for the same reason: the
+  // slicer and the Art Desk read files, not the manifest, and this is the one
+  // answer they have to agree on with `PAINT-STATUS.md`. See `UI_CUT_FROM`.
+  'cut-from.json': `${JSON.stringify({
+    note: 'Generated from UI_CUT_FROM in src/game/artSheet.ts by pnpm art:prompts — do not hand-edit.'
+      + ' Every file more than one sheet paints, and the one painting it is cut from.'
+      + ' `from: null` is unsettled: the slicer refuses to cut that file from anything.',
+    targets: cutSources()
+  }, null, 2)}\n`
 })

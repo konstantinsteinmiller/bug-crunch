@@ -26,6 +26,7 @@ import type { WorldId } from '@/game/stages'
 import { WORLD_COUNT } from '@/game/stages'
 import type { RunTally } from '@/game/stars'
 import { SHOES } from '@/game/shoes'
+import type { MoveId } from '@/game/moves'
 
 /**
  * One thing won, and everything the reveal needs to draw it.
@@ -51,6 +52,8 @@ export type CampaignReward =
   | { kind: 'chest'; coins: number; gold: boolean }
   /** A bug species met for the very first time. */
   | { kind: 'foe'; bug: BugId }
+  /** A Boss Trophy: a boss was beaten and dropped one of its moves, for keeps. */
+  | { kind: 'move'; move: MoveId }
 
 /** Narrow a reward to its kind, for the modal's per-kind picture. */
 export type CampaignRewardKind = CampaignReward['kind']
@@ -121,6 +124,10 @@ export interface LevelOutcome {
   previousBest: number
   /** Species the player had already met. Out of `SEEN_BUGS_KEY`. */
   seenBugs: readonly BugId[]
+  /** A Boss Trophy this clear won for the first time, or null. The caller
+   *  works it out (`moveForLevel`, against the moves already owned) so a replay
+   *  of a beaten boss is never handed the same trophy twice. */
+  newMove?: MoveId | null
 }
 
 /** Species squished in this run that the player had never met before, in the
@@ -183,6 +190,12 @@ export const rewardsForResult = (outcome: LevelOutcome): CampaignReward[] => {
   if (outcome.isRecord && outcome.previousBest > 0 && outcome.tally.score > outcome.previousBest) {
     out.push({ kind: 'record', score: outcome.tally.score, previous: outcome.previousBest })
   }
+
+  // A trophy is bigger than your own history and smaller than your collection:
+  // it is one new THING you can do, so it sits after the record and before the
+  // star milestone — and a boss clear that also opens a world still ends on
+  // the world, which is the biggest card there is.
+  if (outcome.newMove && outcome.tally.cleared) out.push({ kind: 'move', move: outcome.newMove })
 
   // At most one milestone can be crossed by one level (three stars is the most
   // a level can pay and the smallest gap in the ladder is six), but the highest

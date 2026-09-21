@@ -123,8 +123,15 @@ describe('the board ranks by POINTS, the way the game posts them', () => {
     // posts hundreds or thousands. `rankFromDist` then found nobody above them
     // and answered "#1 of 154 331" to everyone who had ever cleared a level —
     // on precisely the two portals whose whole board this file is.
+    //
+    // In the bottom quarter, not the bottom tenth. 1-1's quota went from 8 to 11
+    // when its Rush Line landed (the conga is part of the quota), which puts its
+    // score target level with 1-2 to 1-4's — and those four stages are where
+    // 38 % of the modelled population stops, so a first clear now sits in the
+    // middle of that crowd rather than below it. Still nowhere near the top of
+    // the board, which is the regression this guards.
     const firstClear = scoreTargetFor(1) as number
-    expect(rankFor(firstClear)).toBeGreaterThan(seed.total * 0.9)
+    expect(rankFor(firstClear)).toBeGreaterThan(seed.total * 0.75)
   })
 
   it('gives a better score a better rank, all the way up', () => {

@@ -4,17 +4,27 @@ import { useI18n } from 'vue-i18n'
 import GameIcon from '@/components/icons/GameIcon.vue'
 
 /**
- * ─── The Juice vial and the FEVER button ────────────────────────────────────
+ * ─── The Juice vial ─────────────────────────────────────────────────────────
  *
- * One control, three states, and the whole of the GDD's §6.2.
+ * One readout, three states, and the whole of the GDD's §6.2.
  *
  *   FILLING   a glass vial down the side of the screen, filling with the goo of
- *             whatever has been squished. Inert; nothing to press.
- *   READY     the vial is full, the glass glows, and the button under it comes
- *             alive and starts to bounce. This is the only moment in the game
- *             the HUD actively asks to be pressed.
+ *             whatever has been squished.
+ *   READY     the vial is full and the glass flares — for the one frame before
+ *             the game spends it. Nothing to press.
  *   RUNNING   the vial empties on a ten-second clock while the frenzy runs, so
  *             the player can see exactly how long they have left.
+ *
+ * ── Why there is no longer a button ──
+ *
+ * There was one: the vial filled, a flame lit up under it, and pressing it
+ * bought the frenzy. Four of five blind testers never worked out what it was
+ * for — the thirteen-year-old read the hint, went looking, and reported that it
+ * "pointed at nothing obvious"; the seven-year-old only found out when her shoe
+ * suddenly went giant. A control that has to be explained to be used, in a game
+ * whose whole tutorial is wordless, is a control the game is better off
+ * spending itself. Fever now fires the moment the vial is full (see
+ * `feverArmed`), and the glass is what tells the story: filling, flare, drain.
  *
  * ── Why it is a vial and not a bar ──
  *
@@ -44,7 +54,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), { calm: false })
-const emit = defineEmits<{ (e: 'fever'): void }>()
 const { t } = useI18n()
 
 const running = computed(() => props.feverMs > 0)
@@ -57,17 +66,14 @@ const fill = computed(() => {
 })
 
 const pct = computed(() => Math.round(fill.value * 100))
-
-const onPress = (): void => {
-  if (!ready.value) return
-  emit('fever')
-}
 </script>
 
 <template lang="pug">
-  div.vial(:class="{ 'is-ready': ready, 'is-running': running, 'is-calm': calm }")
-    //- The glass. `aria-hidden` because the button below carries the label and
-    //- the value — a screen reader announcing a decorative tube is noise.
+  div.vial(
+    :class="{ 'is-ready': ready, 'is-running': running, 'is-calm': calm }"
+    role="img"
+    :aria-label="running ? t('fever.running') : ready ? t('fever.ready') : t('fever.filling', { n: pct })"
+  )
     div.vial__glass(aria-hidden="true")
       div.vial__fill(:style="{ height: pct + '%' }")
         div.vial__surface
@@ -77,15 +83,10 @@ const onPress = (): void => {
       div.vial__ticks
         span(v-for="i in 3" :key="i")
 
-    button.vial__button(
-      type="button"
-      :disabled="!ready"
-      :aria-label="running ? t('fever.running') : ready ? t('fever.ready') : t('fever.filling', { n: pct })"
-      @click="onPress"
-    )
-      span.vial__button-shadow(aria-hidden="true")
-      span.vial__button-body
-        GameIcon.vial__button-icon(name="flame")
+    //- The flame is a MARK, not a control: it lights as the vial flares and
+    //- rides the frenzy out, so the player learns what the full glass buys.
+    div.vial__flame(aria-hidden="true")
+      GameIcon.vial__flame-icon(name="flame")
 </template>
 
 <style scoped lang="sass">
@@ -94,7 +95,9 @@ const onPress = (): void => {
   flex-direction: column
   align-items: center
   gap: clamp(0.2rem, 1vmin, 0.4rem)
-  pointer-events: auto
+  // A readout with nothing to press, so it lets the board have every tap that
+  // lands on it — a bug walking behind the glass is still stompable.
+  pointer-events: none
 
 .vial__glass
   position: relative
@@ -152,76 +155,62 @@ const onPress = (): void => {
 .is-running .vial__fill
   background-image: linear-gradient(180deg, #fff3b0 0%, #ffcd00 45%, #f7a000 100%)
 
-// ─── The button ─────────────────────────────────────────────────────────────
+// ─── The flame mark ─────────────────────────────────────────────────────────
 //
-// The same depth-plate construction as `FButton`, at a size that keeps a 44 px
-// touch target on the smallest screen the game supports.
+// What used to be a button, and the first cut of this kept the button's round
+// plate and border — so two testers tapped it, nothing happened, and it went
+// back on the list of things nobody understood. A control that cannot be
+// pressed must not be SHAPED like one. So the plate is gone: what is left is a
+// bare flame under the glass, the way a pilot light sits under a burner. It is
+// dim while the vial fills, blazes when the vial flares, and burns while the
+// frenzy runs.
 
-.vial__button
+.vial__flame
   position: relative
   display: inline-flex
   align-items: center
   justify-content: center
-  width: clamp(2.75rem, 12vmin, 3.6rem)
-  height: clamp(2.75rem, 12vmin, 3.6rem)
-  min-width: 2.75rem
-  min-height: 2.75rem
-  padding: 0
-  border: 0
-  background: none
-  cursor: pointer
-  touch-action: manipulation
-  -webkit-tap-highlight-color: transparent
-  transition: transform 90ms ease-out, filter 90ms ease-out
+  width: clamp(1.6rem, 6.5vmin, 2.1rem)
+  height: clamp(1.6rem, 6.5vmin, 2.1rem)
+  // Dim, not invisible: an unlit pilot light still has to be SEEN, or the
+  // player meets the flame for the first time in the same instant it fires and
+  // learns nothing from it. Checked against the palest floor in the game (the
+  // floured board) and the darkest (the arcade grid) — the ink outline is what
+  // carries it on both.
+  opacity: 0.72
+  transition: opacity 140ms ease-out, filter 140ms ease-out, scale 140ms ease-out
 
-  // Unavailable, not invisible. At 0.45 the ants walked straight through the
-  // button on a busy board and the control stopped reading as a control; the
-  // greyscale is what says "not yet", the opacity only softens it.
-  &:disabled
-    cursor: default
-    opacity: 0.78
-    filter: grayscale(0.85) brightness(0.72)
-
-  &:active:not(:disabled)
-    transform: translateY(2px) scale(0.94)
-
-.vial__button-shadow
-  position: absolute
-  inset: 0
-  translate: 0 3px
-  border-radius: 999px
-  background-color: #7a1f3a
-
-.vial__button-body
-  position: relative
-  display: flex
-  align-items: center
-  justify-content: center
+.vial__flame-icon
   width: 100%
   height: 100%
-  border: 2px solid #0f1a30
-  border-radius: 999px
-  background-image: linear-gradient(to bottom, #ff8fb8, #d4145a)
+  // Near-white with an ink outline, NOT a warm grey: the first cut was tinted
+  // #d8c6ae, which is within a shade of the picnic floors it sits on, and the
+  // lamp disappeared into the blanket. The outline is what makes one colour
+  // work on all forty floors — bright against the attic and the arcade, dark
+  // edged against the paper and the floured board.
+  color: #f2e7d5
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)) drop-shadow(1px 2px 0 rgba(0, 0, 0, 0.8))
 
-.vial__button-icon
-  width: 56%
-  height: 56%
-  color: #fff
-  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.75))
+.is-ready .vial__flame,
+.is-running .vial__flame
+  opacity: 1
 
-.is-ready .vial__button-body
-  background-image: linear-gradient(to bottom, #fff3b0, #f7a000)
+.is-ready .vial__flame-icon
+  color: #ffd24a
+  filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.95))
 
-.is-ready:not(.is-calm) .vial__button
-  animation: fever-bounce 0.6s infinite alternate
-  filter: drop-shadow(0 0 10px rgba(255, 205, 0, 0.85))
+.is-ready:not(.is-calm) .vial__flame
+  animation: fever-flare 0.45s ease-out
 
-.is-running .vial__button-body
-  background-image: linear-gradient(to bottom, #ffe27a, #ff7a18)
+.is-running .vial__flame-icon
+  color: #ff9c2a
+  filter: drop-shadow(0 0 8px rgba(255, 140, 24, 0.85))
 
-@keyframes fever-bounce
+@keyframes fever-flare
   from
-    translate: 0 0
+    scale: 1
+  50%
+    scale: 1.35
   to
-    translate: 0 -5px
+    scale: 1
 </style>

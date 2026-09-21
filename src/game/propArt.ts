@@ -77,6 +77,11 @@ export interface PropState {
   spent?: boolean
   /** Direction for the directional props (conveyor, sweeper), radians. */
   angle?: number
+  /** The shoebox: 0 whole … 1 about to burst. Drives the lid lifting. */
+  crack?: number
+  /** The slick lane: its half-LENGTH over its half-width, so the drawing
+   *  stretches along the lane rather than into a disc. */
+  stretch?: number
 }
 
 type HazardDraw = (ctx: CanvasRenderingContext2D, s: PropState, seed: number) => void
@@ -313,6 +318,117 @@ const drawCrumbs: HazardDraw = (ctx, _s, seed) => {
   }
 }
 
+/**
+ * The shoebox — a Shoebox Trial, seen from straight above.
+ *
+ * A present, not a crate: candy pink with a yellow ribbon crossing it and a bow
+ * on top, because the one thing it has to say at 30 px is "open me". It WOBBLES
+ * on its own clock (a box with something inside that wants out) and the lid
+ * lifts and skews as it takes blows — three stages a child can count down
+ * without a number: shut, ajar, bursting.
+ */
+const drawShoebox: HazardDraw = (ctx, s) => {
+  const spec = hazardSpec('shoebox')
+  const crack = Math.max(0, Math.min(1, s.crack ?? 0))
+  const wob = Math.sin(s.t * Math.PI * 2 * 3) * (0.05 + crack * 0.08)
+  ctx.save()
+  ctx.rotate(wob)
+  // The box body — only its rim shows under the lid, and more of it as the lid
+  // lifts.
+  ctx.beginPath()
+  ctx.roundRect(-0.92, -0.72, 1.84, 1.44, 0.16)
+  paint(ctx, spec.shade, 0.09)
+  // The lid, a touch larger than the box, lifting and turning as it cracks.
+  ctx.save()
+  ctx.translate(crack * 0.12, -crack * 0.22)
+  ctx.rotate(-crack * 0.18)
+  ctx.beginPath()
+  ctx.roundRect(-1, -0.8, 2, 1.6, 0.2)
+  paint(ctx, spec.body, 0.1)
+  // Upper-left light, the one key light every drawable in the game shares.
+  ctx.beginPath()
+  ctx.roundRect(-0.86, -0.68, 1.1, 0.34, 0.14)
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'
+  ctx.fill()
+  // The ribbon, both ways across.
+  ctx.fillStyle = spec.accent
+  ctx.fillRect(-0.16, -0.8, 0.32, 1.6)
+  ctx.fillRect(-1, -0.14, 2, 0.28)
+  inked(ctx, 0.05)
+  ctx.strokeRect(-0.16, -0.8, 0.32, 1.6)
+  ctx.strokeRect(-1, -0.14, 2, 0.28)
+  // The bow: two loops and a knot.
+  for (const side of [-1, 1]) {
+    ctx.beginPath()
+    ctx.ellipse(side * 0.3, -0.08, 0.3, 0.2, side * 0.5, 0, Math.PI * 2)
+    paint(ctx, spec.accent, 0.07)
+  }
+  ctx.beginPath()
+  ctx.arc(0, 0, 0.14, 0, Math.PI * 2)
+  paint(ctx, '#ffd23a', 0.06)
+  ctx.restore()
+  // A sparkle leaking out of the gap once it is ajar.
+  if (crack > 0.3) {
+    ctx.fillStyle = `rgba(255,248,190,${0.5 + crack * 0.5})`
+    for (let i = 0; i < 3; i++) {
+      const a = s.t * 6 + i * 2.1
+      ctx.beginPath()
+      ctx.arc(0.7 + Math.cos(a) * 0.12, -0.7 + Math.sin(a) * 0.1, 0.07 + crack * 0.05, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+/**
+ * The slick lane — spilt lemonade, laid as a strip across the board.
+ *
+ * Drawn at one unit = the lane's half-WIDTH, stretched along x by `stretch`, so
+ * the same drawing is a stubby puddle or a river depending on the board it was
+ * laid on. Glossy and a little translucent: the floor has to show through, or
+ * the bugs wading in it read as floating over a yellow road.
+ */
+const drawSlick: HazardDraw = (ctx, s, seed) => {
+  const spec = hazardSpec('slick')
+  const len = Math.max(1, s.stretch ?? 4)
+  ctx.save()
+  ctx.globalAlpha = 0.78
+  ctx.beginPath()
+  // A lane with lobed edges — a spill, not a road.
+  const n = Math.max(6, Math.round(len * 2))
+  ctx.moveTo(-len, 0)
+  for (let i = 0; i <= n; i++) {
+    const x = -len + (i / n) * len * 2
+    ctx.lineTo(x, -0.82 - hash(seed, i) * 0.24)
+  }
+  for (let i = n; i >= 0; i--) {
+    const x = -len + (i / n) * len * 2
+    ctx.lineTo(x, 0.82 + hash(seed + 3, i) * 0.24)
+  }
+  ctx.closePath()
+  const g = ctx.createLinearGradient(0, -1, 0, 1)
+  g.addColorStop(0, spec.accent)
+  g.addColorStop(0.5, spec.body)
+  g.addColorStop(1, spec.shade)
+  paint(ctx, g, 0.06)
+  ctx.globalAlpha = 1
+  // Glints, scattered and shimmering, so it reads WET. The first cut ran them in
+  // a dashed line down the middle and the spill read as a road with its lane
+  // markings painted on.
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  const n2 = Math.ceil(len * 1.6)
+  for (let i = 0; i < n2; i++) {
+    const x = -len + hash(seed + 5, i) * len * 2
+    const y = (hash(seed + 9, i) - 0.5) * 1.2
+    const tw = 0.5 + 0.5 * Math.sin((s.t + hash(seed + 13, i)) * Math.PI * 2)
+    ctx.beginPath()
+    ctx.ellipse(x, y, 0.22 + tw * 0.12, 0.08, -0.3, 0, Math.PI * 2)
+    ctx.globalAlpha = 0.35 + tw * 0.55
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
 const HAZARD_DRAW: Record<HazardId, HazardDraw> = {
   honey: drawHoney,
   magnet: drawMagnet,
@@ -320,7 +436,9 @@ const HAZARD_DRAW: Record<HazardId, HazardDraw> = {
   sweeper: drawSweeper,
   cobweb: drawCobweb,
   conveyor: drawConveyor,
-  crumbs: drawCrumbs
+  crumbs: drawCrumbs,
+  shoebox: drawShoebox,
+  slick: drawSlick
 }
 
 /**
@@ -332,10 +450,19 @@ const HAZARD_DRAW: Record<HazardId, HazardDraw> = {
 export const paintHazard = (
   ctx: CanvasRenderingContext2D, id: HazardId, r: number, state: PropState, seed = 0
 ): void => {
-  const painted = spriteFor('prop', id)
+  // The slick lane is never painted: it is a strip whose length is the board's,
+  // and a square still stretched down a lane reads as a smear.
+  const painted = id === 'slick' ? null : spriteFor('prop', id)
   if (painted && painted.naturalWidth > 0) {
     ctx.save()
     if (state.angle) ctx.rotate(state.angle)
+    // A painted shoebox still wobbles and swells as it takes blows — the
+    // countdown is the motion, and a painting cannot animate its own lid.
+    if (id === 'shoebox') {
+      const crack = state.crack ?? 0
+      ctx.rotate(Math.sin(state.t * Math.PI * 2 * 3) * (0.05 + crack * 0.08))
+      ctx.scale(1 + crack * 0.12, 1 + crack * 0.12)
+    }
     ctx.drawImage(painted, -r, -r, r * 2, r * 2)
     ctx.restore()
     return

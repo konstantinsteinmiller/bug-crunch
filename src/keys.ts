@@ -227,6 +227,32 @@ export const CHEST_DAY_KEY = 'bc_chest_day'
  */
 export const SEEN_BUGS_KEY = 'bc_bugs_seen'
 
+// ─── The retention set pieces (RETENTION-FEATURES.md) ───────────────────────
+
+/**
+ * Boss Trophies won, as a MoveId array (`game/moves.ts`). Written on the clear
+ * of a boss level that drops one. Also DERIVED from `bc_best_level` on read, so
+ * a save from before trophies existed owns exactly what it would have won.
+ */
+export const MOVES_KEY = 'bc_moves'
+
+/**
+ * How close each FAILED level came, as `{ [levelId]: 0..1 }` — So Close!'s
+ * memory. A retry of a level last lost at 60 % or better opens with the vial
+ * full (a Second Wind). Cleared on the level's clear. Persisted because the
+ * near miss that made a child close the tab is exactly the one worth a second
+ * wind when they come back.
+ */
+export const NEAR_MISS_KEY = 'bc_last_near_miss'
+
+/** Each Bug Party's best haul, as `{ [levelId]: kills }` — the party after
+ *  that level. The card shows the count against it. */
+export const PARTY_BEST_KEY = 'bc_party_best'
+
+/** Shoes the player has worn out of a Shoebox, as a ShoeId array — each one's
+ *  first trial shows its perk lesson, and the Locker glows with the last. */
+export const TRIALS_SEEN_KEY = 'bc_trials_seen'
+
 /**
  * Which cutscenes the player has already watched.
  *

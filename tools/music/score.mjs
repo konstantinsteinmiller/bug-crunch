@@ -77,6 +77,14 @@ const SNEAK_C = 'E5 . E5 F5 G5:2 F5 E5 C5:2 G4 A4 Bb4:2 . .'
 const CRUNCH_OPEN = 'A4!:2 . . C5!:2 . . Eb5!:2 . . . . . .' // ends on the 7th: leads on
 const HOOK = [SNEAK_F, CRUNCH_F, SNEAK_BB, CRUNCH_RISE, SNEAK_F, CRUNCH_F, SNEAK_C, CRUNCH_OPEN]
 
+/**
+ * The hook, for the rest of the score. The attic's music box plays it verbatim,
+ * the fever stinger and the result sting transpose it up a tone (`transpose` in
+ * `lib/notation.mjs`), and the boss and the attic re-mode it into minor. One
+ * source, so a child hears one song in five places.
+ */
+export const HOOK_LINES = { SNEAK_F, CRUNCH_F, SNEAK_BB, CRUNCH_RISE, SNEAK_C, CRUNCH_OPEN }
+
 // A' bars 37-40: the shout chorus — the hook's shape over new chords, ending on
 // four stomps instead of three.
 const SHOUT = [

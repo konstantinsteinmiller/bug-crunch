@@ -6,6 +6,7 @@ import { getState } from '@/use/useBugCrunchState'
 import { LEVEL_KEY } from '@/keys'
 import { artOverridesEnabled, preloadArtOverrides } from '@/game/art'
 import { criticalArtWants, preloadRemainingArt } from '@/game/artPreload'
+import { isAudioSuspended, trackAudioContext, __audioGuardSnapshot } from '@/use/audioGuard'
 
 // Bug Crunch draws all gameplay art programmatically (Canvas 2D) and uses inline
 // SVG for HUD icons, so the preloader has NO bitmaps of its own to decode. What
@@ -18,22 +19,50 @@ import { criticalArtWants, preloadRemainingArt } from '@/game/artPreload'
 const loadingProgress = ref(100)
 const areAllAssetsLoaded = ref(true)
 
+// ─── The splash's release ───────────────────────────────────────────────────
+//
+// The loading screen can outlast the load: it holds until its joke has landed,
+// so that every player sees the ant get away at least once (`FLogoProgress`).
+// Nothing may START under it while it holds. A level begun behind the splash
+// runs its clock and its bugs where nobody can see them, and the intro scene
+// plays its opening seconds to the backdrop — so the scene waits on THIS, not
+// on the load, before it starts anything.
+//
+// Settles once and stays settled: a scene mounted after the splash is gone
+// awaits a promise that is already resolved. The splash is mounted with the
+// router view on every route (`App.vue`), and its own 8 s fallback releases too,
+// so nothing that waits here can wait forever.
+let releaseSplashNow: () => void = () => {}
+export const splashReleased: Promise<void> = new Promise<void>((resolve) => {
+  releaseSplashNow = resolve
+})
+/** Called by the splash when it lets go of the game. Idempotent. */
+export const releaseSplash = (): void => releaseSplashNow()
+
 export const resourceCache = {
   images: new Map<string, HTMLImageElement>(),
   audio: new Map<string, HTMLAudioElement>(),
   audioBuffers: new Map<string, AudioBuffer>()
 }
 
+// ─── Silence is owned by `audioGuard` ─────────────────────────────────────────
+//
+// The suspend/resume stack, the element and one-shot registries and the kill
+// switch all live in `audioGuard.ts` now, which tracks EVERY AudioContext and
+// audio element the page creates rather than the handful registered here by
+// hand. They are re-exported under their old names so no importer changes.
+export {
+  suspendAllAudio,
+  resumeAllAudio,
+  isAudioSuspended,
+  registerHtmlAudio,
+  unregisterHtmlAudio,
+  registerOneShotSource,
+  killOneShotSfx
+} from '@/use/audioGuard'
+
 let sharedAudioCtx: AudioContext | null = null
 let resumeListenerArmed = false
-/** Counts every active reason the audio layer should be globally
- *  silent. The single driver is now `useGamePauseAudio`, which holds one
- *  slot for the whole `isGamePaused` gate (ad mid-show, tab hidden,
- *  platform SDK pause, app modal). Each `suspendAllAudio()` increments,
- *  each `resumeAllAudio()` decrements; the AudioContext only resumes when
- *  the counter hits 0 — so an overlapping suspend (e.g. modal opened
- *  during an ad) can never re-unmute early. */
-let suspendDepth = 0
 
 export const getAudioContext = (): AudioContext | null => {
   if (sharedAudioCtx) return sharedAudioCtx
@@ -44,23 +73,13 @@ export const getAudioContext = (): AudioContext | null => {
   } catch {
     return null
   }
-  // Born into an already-suspended world. A context constructed on a page that
-  // has seen a user gesture starts `running`, so one created AFTER a mute has
-  // landed (a portal `soundOff` at boot, a tab hidden before the first sound, an
-  // ad opening before any SFX has played) would come up audible underneath it —
-  // `suspendAllAudio` had already run and had nothing to suspend. The depth
-  // counter is the honest record of whether anything wants silence right now.
-  if (suspendDepth > 0) {
-    try { void sharedAudioCtx.suspend() } catch { /* older impls */ }
-  }
+  // Tracked by the guard (the hooked constructor already did, where installed —
+  // this is idempotent). A context built while anything holds silence is
+  // suspended at birth, so one created mid-ad cannot come up audible under it.
+  trackAudioContext(sharedAudioCtx)
   armResumeOnGesture()
   return sharedAudioCtx
 }
-
-/** True while engine audio is globally suspended (an ad is on-screen, the
- *  tab is hidden, etc.). SFX entry points (`useSound`) read this to refuse
- *  starting a new one-shot during an ad — so nothing leaks past the mute. */
-export const isAudioSuspended = (): boolean => suspendDepth > 0
 
 /**
  * The events that may carry the browser's user activation.
@@ -88,7 +107,9 @@ const armResumeOnGesture = (): void => {
     const ctx = sharedAudioCtx
     if (!ctx) return
     if (ctx.state === 'running' || ctx.state === 'closed') { disarm(); return }
-    if (suspendDepth > 0) return
+    // A tap during an ad must not wake the context under it. (The guard would
+    // defer this resume anyway; not asking is cheaper and keeps the listener.)
+    if (isAudioSuspended()) return
     try {
       // Old `webkitAudioContext`s return nothing; the `running` check on the
       // next gesture disarms those instead.
@@ -103,89 +124,6 @@ const armResumeOnGesture = (): void => {
   }
 }
 
-/** Bookkeeping for HTMLAudio elements (music, fallback SFX path) so
- *  the suspend/resume helpers can pause + restart them alongside the
- *  Web Audio context. Loops register on creation in useSound. */
-const trackedAudioElements = new Set<HTMLAudioElement>()
-const pausedByGlobalSuspend = new WeakSet<HTMLAudioElement>()
-
-export const registerHtmlAudio = (el: HTMLAudioElement) => {
-  trackedAudioElements.add(el)
-}
-export const unregisterHtmlAudio = (el: HTMLAudioElement) => {
-  trackedAudioElements.delete(el)
-  pausedByGlobalSuspend.delete(el)
-}
-
-/** Suspend all engine audio — Web Audio context goes to `suspended`
- *  and any registered HTMLAudio element is paused (and remembered so a
- *  later resume can restart only the ones we actually paused). Stacks:
- *  multiple `suspendAllAudio()` calls require matching `resume` calls
- *  before audio plays again. */
-export const suspendAllAudio = (): void => {
-  suspendDepth += 1
-  if (sharedAudioCtx && sharedAudioCtx.state === 'running') {
-    void sharedAudioCtx.suspend()
-  }
-  for (const el of trackedAudioElements) {
-    if (!el.paused) {
-      pausedByGlobalSuspend.add(el)
-      try { el.pause() } catch { /* ignore */ }
-    }
-  }
-}
-
-export const resumeAllAudio = (): void => {
-  suspendDepth = Math.max(0, suspendDepth - 1)
-  if (suspendDepth > 0) return
-  if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
-    void sharedAudioCtx.resume()
-  }
-  for (const el of trackedAudioElements) {
-    if (pausedByGlobalSuspend.has(el)) {
-      pausedByGlobalSuspend.delete(el)
-      void el.play().catch(() => { /* autoplay blocked / element gone */ })
-    }
-  }
-}
-
-// ─── Active one-shot SFX registry ─────────────────────────────────────────
-// Transient one-shot SFX (the Web Audio fast path in `useSound`) play on the
-// shared AudioContext and aren't HTMLAudio elements, so the suspend gate only
-// FREEZES them via `ctx.suspend()`. On an early gate-drop they'd resume and
-// tail audibly under an ad. We track them so an ad can hard-STOP them outright.
-const activeOneShotSources = new Set<AudioBufferSourceNode>()
-
-/** Register a one-shot Web Audio source so `killOneShotSfx()` can stop it.
- *  Auto-removes itself when the source finishes. */
-export const registerOneShotSource = (source: AudioBufferSourceNode): void => {
-  activeOneShotSources.add(source)
-  source.addEventListener('ended', () => activeOneShotSources.delete(source), { once: true })
-}
-
-/**
- * Hard-stop EVERY in-flight one-shot SFX so nothing tails into an ad — called
- * right before an interstitial / rewarded ad is requested. Covers:
- *   • Web Audio one-shots  (stopped outright), and
- *   • non-looping tracked HTMLAudio (the decode-fallback one-shots) — paused
- *     AND dropped from the auto-resume set so the gate's resume can't restart
- *     them under or after the ad.
- * Intentionally leaves the bg music (HTMLAudio with `loop=true` → owned by
- * `forceStopMusic`) and the gameplay Web Audio LOOP (owned by the scene's
- * pause watcher) alone, so each is restored by its proper lifecycle.
- */
-export const killOneShotSfx = (): void => {
-  for (const s of [...activeOneShotSources]) {
-    try { s.stop() } catch { /* already ended */ }
-    activeOneShotSources.delete(s)
-  }
-  for (const el of trackedAudioElements) {
-    if (el.loop) continue // bg music — forceStopMusic owns its stop/restart
-    pausedByGlobalSuspend.delete(el)
-    if (!el.paused) { try { el.pause() } catch { /* ignore */ } }
-  }
-}
-
 // Visibility-driven suspend used to live here (`armVisibilitySuspend`). It
 // moved into the unified pause gate: `useGamePause` owns the
 // `visibilitychange` listener (flipping `isVisibilityHidden`) and
@@ -194,17 +132,21 @@ export const killOneShotSfx = (): void => {
 
 // ⚠️ TEMP TEST HARNESS (remove before commit) — exposes the live audio state
 // so the Chrome MCP can assert "no sound during the fake interstitial". Reads
-// the module-private AudioContext + tracked-element registry that aren't
+// the module-private AudioContext + the guard's registries that aren't
 // otherwise observable from the page. Paired with `window.__testInterstitial`
 // / `window.__audioDebug` in `useAds.ts`.
-export const __audioDebugSnapshot = () => ({
-  audioCtxState: sharedAudioCtx ? sharedAudioCtx.state : 'none',
-  suspendDepth,
-  trackedAudioCount: trackedAudioElements.size,
-  trackedAudioPaused: [...trackedAudioElements].map((e) => e.paused),
-  anyTrackedAudioPlaying: [...trackedAudioElements].some((e) => !e.paused),
-  activeOneShotSfx: activeOneShotSources.size
-})
+export const __audioDebugSnapshot = () => {
+  const g = __audioGuardSnapshot()
+  return {
+    audioCtxState: sharedAudioCtx ? sharedAudioCtx.state : 'none',
+    suspendDepth: g.depth,
+    contextStates: g.contexts,
+    trackedAudioCount: g.elements.length,
+    trackedAudioPaused: g.elements.map((e) => e.paused),
+    anyTrackedAudioPlaying: g.elements.some((e) => !e.paused),
+    activeOneShotSfx: g.oneShots
+  }
+}
 
 export const getCachedImage = (src: string): HTMLImageElement => {
   // Route every bitmap src through `prependBaseUrl` so the URL matches

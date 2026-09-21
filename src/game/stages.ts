@@ -29,10 +29,13 @@
  */
 
 import type { BugId } from '@/game/bugs'
-import { rosterForLevel } from '@/game/bugs'
+import { bugSpec, rosterForLevel } from '@/game/bugs'
 import type { HazardId } from '@/game/hazards'
 import type { Objective, ObjectiveTriple } from '@/game/stars'
 import type { BossId } from '@/game/bosses'
+import type { ShoeId } from '@/game/shoes'
+import type { MoveId } from '@/game/moves'
+import type { TwistId } from '@/game/twists'
 
 export const LEVELS_PER_WORLD = 10
 export const WORLD_COUNT = 4
@@ -232,7 +235,67 @@ export interface LevelSpec {
   speed: number
   hazards: readonly HazardId[]
   objectives: ObjectiveTriple
+  /**
+   * The level's Rush Lines, in the order they fire — see `RushSpec`. Empty on a
+   * boss level: the boss is the set piece there.
+   */
+  rushes: readonly RushSpec[]
+  /** A Shoebox Trial: the shoe in the box, or a PAIR of boxes to choose from. */
+  trial?: ShoeId | readonly [ShoeId, ShoeId]
+  /** Where in the quota the box drops in, 0..1. */
+  trialAt?: number
+  /** The level's Uh-oh! Twist — see `game/twists.ts`. */
+  twist?: TwistId
+  /** A Bug Party, not a level: no stars, no fail, a fifteen-second clock that
+   *  ends in a WIN, and a board of ants that pour out of the stolen sandwich. */
+  party?: boolean
 }
+
+// ─── Rush Lines ─────────────────────────────────────────────────────────────
+//
+// At the turn of a level a snare roll draws a sugar trail across the board and a
+// tight conga of bugs marches down it — carrying crumbs of the sandwich from the
+// intro, because that is what they are doing on this blanket. One well-placed
+// stomp takes four. It is the answer to the fault `RETENTION-FEATURES.md` §1
+// measured first: a stomp was worth exactly ONE bug through the whole opening,
+// on a board too thin for the giant shoe the store tile sells.
+//
+// A rush is PART of the quota, never on top of it: the bodies it brings count
+// when they die, so a level with a rush in it is not a longer level, it is a
+// level with a shape — a trickle, a surge, a lull, and the close.
+
+export type RushShape =
+  /** Nose to tail down a lane across the board's short axis. */
+  | 'line'
+  /** A ring closing on the shoe — the formation the Heel Spin answers. */
+  | 'ring'
+  /** A V with an armoured body at the point: slam the point, tap the tail. */
+  | 'vee'
+
+export interface RushSpec {
+  /** Where it fires, as a share of the quota squished. */
+  at: number
+  /** What marches. */
+  bug: BugId
+  /** How many. */
+  count: number
+  shape: RushShape
+  /** `vee` only: the body at the point. */
+  lead?: BugId
+  /** The lane is laid past a live body of this kind when one is on the board —
+   *  1-2's conga walks right by the caterpillar: stomp the line, not the spikes. */
+  past?: BugId
+  /**
+   * A PRACTICE formation for a boss trophy: it fires only for a player who owns
+   * the move, and it is the move's lesson — a ring for the Heel Spin, a line for
+   * the Skid. A player replaying an old level without it simply never sees it.
+   */
+  practice?: MoveId
+}
+
+/** How much of a level's quota one rush may bring. A conga that is half the
+ *  level is the level. Pinned in `stages.test.ts`. */
+export const RUSH_MAX_SHARE = 0.4
 
 /** 0..1 along a world, eased so the last three levels do most of the work. */
 const ease = (index: number): number => {
@@ -368,15 +431,27 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
   // starter sneaker, no relief. "Of 240" on an entry is that pass.
 
   // ── 1-1: the lesson ──
-  // A guaranteed win, on purpose. The whole level is eight ants walking in
-  // straight lines with a generous clock and nothing that can punish a wrong
-  // tap. The three-beat tutorial runs over it, and the first thing a new player
-  // does in this game is succeed at it — which is the single highest-leverage
-  // decision in the whole retention funnel.
+  // A guaranteed win, on purpose. The whole level is ants walking in straight
+  // lines with a generous clock and nothing that can punish a wrong tap. The
+  // tutorial runs over it, and the first thing a new player does in this game is
+  // succeed at it — which is the single highest-leverage decision in the whole
+  // retention funnel.
+  //
+  // ── …and it has a SHAPE now ──
+  //
+  // Eight ants one at a time was the whole of 1-1, and `RETENTION-FEATURES.md`
+  // §1 measured what that costs: one kill per stomp, an empty board a fifth of
+  // the time, and nothing in the level louder than its first squish. So the
+  // quota is eleven, and the middle of it is a RUSH — after the third ant, a
+  // snare roll, a sugar trail, and a conga of five carrying the sandwich off in
+  // crumbs, straight out of the intro cutscene. One stomp in the middle of the
+  // line takes three. Three ants, a rush of five, three ants: the rush sits in
+  // the level instead of ending it, and the last ant is the Big Finish.
   1: {
-    quota: 8, time: 55, maxAlive: 4, spawnMs: [1500, 1050], speed: 0.72,
+    quota: 11, time: 55, maxAlive: 4, spawnMs: [1500, 1050], speed: 0.72,
     hazards: [],
-    objectives: [{ kind: 'clear' }, { kind: 'combo', n: 3 }, { kind: 'noMiss', n: 12 }]
+    objectives: [{ kind: 'clear' }, { kind: 'combo', n: 3 }, { kind: 'noMiss', n: 12 }],
+    rushes: [{ at: 0.27, bug: 'ant', count: 5, shape: 'line' }]
   },
   // ── 1-2: the caterpillar, and NOTHING else ──
   //
@@ -415,11 +490,27 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
   // on three `average` runs in ten and two `good` ones — a foot that lands beside
   // an ant lands on the caterpillar next to it too, which is the lesson) and a
   // small chain that says "and keep squishing the ants while you do it".
+  //
+  // ── The Steel Boot, in a box ──
+  //
+  // A quarter of the way in — after the spike lesson has said "not that one" —
+  // a present drops onto the blanket. Three taps and the foot is a big brown
+  // boot for twelve seconds: CRUNCH, the caterpillar it was just told to leave
+  // alone, no ouch. Then the sneaker is back and the Locker glows with the
+  // boot's picture. It is not the answer to the caterpillar (the answer is
+  // leaving it, and later buying the boot); it is the TASTE of the answer, at
+  // minute one and a half, which is where the funnel needs a reason to stay.
+  // The boot is spike-proof, so a trial never costs the `noSpike` star.
+  //
+  // The conga comes later, back in the sneaker, and walks right past a
+  // caterpillar when there is one: stomp the line, not the spikes.
   2: {
     quota: 12, time: 58, maxAlive: 9, spawnMs: [1350, 900], speed: 0.80,
     hazards: [],
     roster: [{ id: 'ant', weight: 88 }, { id: 'caterpillar', weight: 11 }],
-    objectives: [{ kind: 'clear' }, { kind: 'noSpike' }, { kind: 'combo', n: 4 }]
+    objectives: [{ kind: 'clear' }, { kind: 'noSpike' }, { kind: 'combo', n: 4 }],
+    trial: 'steelBoot', trialAt: 0.25,
+    rushes: [{ at: 0.6, bug: 'ant', count: 5, shape: 'line', past: 'caterpillar' }]
   },
   // ── 1-3: the beetle. The shell is the first "a tap is not enough". ──
   //
@@ -453,11 +544,20 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
   // The caterpillar comes down with it. At the world's 8 it was costing a weak
   // player a median of six spike hits here, on top of the jam; at 4 it is the
   // garnish 1-2 taught it to be.
+  //
+  // ── The V ──
+  //
+  // Its rush is a V with a beetle at the point: the tap bounces off the point,
+  // the slam lesson follows the bounce, and the slam that answers it flips the
+  // beetle onto its back (`BugSpec.flips`) — one more tap and it is done, and
+  // the ants behind it were in the circle too. A guaranteed shell on the level
+  // whose subject is shells, without weighting the beetle up (see above).
   3: {
     quota: 12, maxAlive: 12,
     hazards: [],
     roster: [{ id: 'ant', weight: 72 }, { id: 'caterpillar', weight: 4 }, { id: 'beetle', weight: 15 }],
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'beetle', n: 1 }, { kind: 'noSpike' }]
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'beetle', n: 1 }, { kind: 'noSpike' }],
+    rushes: [{ at: 0.4, bug: 'ant', count: 4, shape: 'vee', lead: 'beetle' }]
   },
   // ── 1-4: the Goliath Queen, at half strength (`BOSS_FIGHTS`) ──
   //
@@ -578,6 +678,13 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
     ],
     objectives: [
       { kind: 'clear' }, { kind: 'kind', id: 'sprinter', n: 4 }, { kind: 'noMiss', n: 10 }
+    ],
+    // It opens on the Queen's own trick: a ring of ants closing on the shoe, and
+    // the hand double-tapping — WHOOSH, the Heel Spin she dropped on 1-4. Then a
+    // conga, and from here on the slam is also a way to FINISH a level.
+    rushes: [
+      { at: 0.08, bug: 'ant', count: 6, shape: 'ring', practice: 'spin' },
+      { at: 0.55, bug: 'ant', count: 6, shape: 'line' }
     ]
   },
   // ── 1-6: the crumb pile ──
@@ -603,7 +710,15 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
       { id: 'ant', weight: 64 }, { id: 'caterpillar', weight: 3 },
       { id: 'beetle', weight: 2 }, { id: 'sprinter', weight: 31 }
     ],
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'sprinter', n: 5 }, { kind: 'combo', n: 12 }]
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'sprinter', n: 5 }, { kind: 'combo', n: 12 }],
+    // Beetle Bowling's level. The V's point is a beetle and its lane runs through
+    // the crumb pile, where the ants behind it knot up — slam the point over and
+    // flick it through the knot. The beetle is 2 % of this roll (see above), so
+    // the rush is where the ball comes from.
+    rushes: [
+      { at: 0.3, bug: 'ant', count: 6, shape: 'vee', lead: 'beetle' },
+      { at: 0.7, bug: 'ant', count: 6, shape: 'line' }
+    ]
   },
   // ── 1-7: the piñata fly ──
   // One target worth chasing — and the first level where chasing is the RIGHT
@@ -627,7 +742,16 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
       { id: 'ant', weight: 61 }, { id: 'caterpillar', weight: 3 }, { id: 'beetle', weight: 2 },
       { id: 'sprinter', weight: 24 }, { id: 'pinatafly', weight: 10 }
     ],
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'pinatafly', n: 2 }, { kind: 'combo', n: 12 }]
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'pinatafly', n: 2 }, { kind: 'combo', n: 12 }],
+    // The first Uh-oh! The lemonade glass from the intro tips over and a slick
+    // lane runs across the blanket: bodies wade in it, and a foot pressed and
+    // DRAGGED through it skids and ploughs the lot. The drag is met here, worn on
+    // 1-8 in the Roller Skate, and owned for good off the Queen on 1-10.
+    rushes: [
+      { at: 0.3, bug: 'sprinter', count: 5, shape: 'line' },
+      { at: 0.75, bug: 'ant', count: 7, shape: 'line' }
+    ],
+    twist: 'spill'
   },
   // ── 1-8: the flea ──
   // The first target that moves when you aim at it — a different question from
@@ -650,7 +774,14 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
       { id: 'ant', weight: 55 }, { id: 'caterpillar', weight: 3 }, { id: 'beetle', weight: 2 },
       { id: 'sprinter', weight: 21 }, { id: 'pinatafly', weight: 7 }, { id: 'flea', weight: 12 }
     ],
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 2 }, { kind: 'combo', n: 20 }]
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 2 }, { kind: 'combo', n: 20 }],
+    // The Roller Skate in a box: the drag from the spill, on any floor, for
+    // twelve seconds — a flea under a plough is a flea that did not get to leap.
+    trial: 'rollerSkate', trialAt: 0.25,
+    rushes: [
+      { at: 0.45, bug: 'sprinter', count: 6, shape: 'line' },
+      { at: 0.75, bug: 'ant', count: 7, shape: 'line' }
+    ]
   },
   // ── 1-9: honey ──
   // The answer to the flea, handed over one level after the problem, and to the
@@ -678,7 +809,11 @@ const OVERRIDES: Record<number, Partial<LevelSpec>> = {
       { id: 'ant', weight: 51 }, { id: 'caterpillar', weight: 3 }, { id: 'beetle', weight: 2 },
       { id: 'sprinter', weight: 25 }, { id: 'pinatafly', weight: 7 }, { id: 'flea', weight: 12 }
     ],
-    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 3 }, { kind: 'noSpike' }]
+    objectives: [{ kind: 'clear' }, { kind: 'kind', id: 'flea', n: 3 }, { kind: 'noSpike' }],
+    rushes: [
+      { at: 0.35, bug: 'ant', count: 7, shape: 'vee', lead: 'beetle' },
+      { at: 0.7, bug: 'sprinter', count: 7, shape: 'line' }
+    ]
   },
 
   // ── World 2 ──
@@ -770,8 +905,166 @@ export const BOSS_FIGHTS: Readonly<Record<number, BossFight>> = {
  * actually wants rather than interpolated.
  */
 const BOSS_LEVEL: Partial<LevelSpec> = {
-  quota: 0, maxAlive: 16, spawnMs: [1400, 900]
+  quota: 0, maxAlive: 16, spawnMs: [1400, 900], rushes: []
 }
+
+// ─── Something new on every level ───────────────────────────────────────────
+//
+// World 1 authors its set pieces entry by entry above. Past it, the new moments
+// are tables, keyed by level, so a reader asking "what is 3-4 about" finds it in
+// one line: the twist, the trial, the practice formation that follows a trophy.
+
+/**
+ * The formation that opens the level after a trophy, for a player who owns the
+ * move — the move's lesson, played rather than shown. 1-5's ring is authored in
+ * its own entry; these are the three that follow the world bosses.
+ */
+const PRACTICE: Readonly<Record<number, RushSpec>> = {
+  11: { at: 0.08, bug: 'ant', count: 6, shape: 'line', practice: 'skid' },
+  21: { at: 0.08, bug: 'beetle', count: 5, shape: 'ring', practice: 'quake' },
+  31: { at: 0.08, bug: 'flea', count: 5, shape: 'ring', practice: 'echo' }
+}
+
+/**
+ * Shoebox Trials past world 1 — about one level in three, and from world 2 in
+ * PAIRS on the seventh level: two boxes on opposite sides, open one and the
+ * other goes *poof*. A shoe the player already owns is swapped for one they do
+ * not at run time (see the sim's `startTrial`), so a box is never a shrug.
+ */
+const TRIALS: Readonly<Record<number, ShoeId | readonly [ShoeId, ShoeId]>> = {
+  13: 'bunnySlipper',
+  17: ['cleatBoot', 'electricSock'],
+  22: 'steelBoot',
+  28: ['rollerSkate', 'bunnySlipper'],
+  32: 'electricSock',
+  37: ['cleatBoot', 'steelBoot']
+}
+
+/** Where a trial's box drops in, as a share of the quota. */
+export const TRIAL_AT = 0.35
+
+/**
+ * The Uh-oh! Twists past world 1's spill — exactly the levels that had nothing
+ * new of their own: no creature debut, no floor object, no boss.
+ */
+const TWIST_LEVELS: Readonly<Record<number, TwistId>> = {
+  19: 'sprinkler',
+  24: 'blackout',
+  27: 'draft',
+  33: 'surge',
+  36: 'glitch'
+}
+
+/**
+ * The body a generated rush is made of: the lightest thing on the roster a tap
+ * kills cleanly — no armour, no spikes, no wings, no tail, no stink. A conga of
+ * caterpillars is a wall, and a conga of beetles is a different feature.
+ */
+const rushBody = (roster: readonly RosterEntry[]): BugId => {
+  let best: BugId = 'ant'
+  let size = Infinity
+  for (const r of roster) {
+    const b = bugSpec(r.id)
+    if (b.armor > 0 || b.spiky || b.airborne || b.segments > 0 || b.stinks || b.hp > 1) continue
+    if (b.size < size) { size = b.size; best = r.id }
+  }
+  return best
+}
+
+/**
+ * A level's rushes, off the curve: one at the turn early in a world, two (35 %
+ * and 70 %) from the fifth level on, five bodies growing to twelve along the
+ * world's own `ease`. Each world lines them up its own way — the backyard in
+ * V's with a beetle at the point to slam or bowl, the arcade with a robobug at
+ * the point — and never more than `RUSH_MAX_SHARE` of the quota in one.
+ */
+const generatedRushes = (
+  world: WorldId, index: number, quota: number, roster: readonly RosterEntry[]
+): RushSpec[] => {
+  if (quota <= 0) return []
+  const bug = rushBody(roster)
+  const count = Math.max(3, Math.min(Math.floor(quota * RUSH_MAX_SHARE), Math.round(lerp(5, 12, ease(index)))))
+  const has = (id: BugId): boolean => roster.some((r) => r.id === id)
+  const vee = world === 2 && has('beetle') ? 'beetle' : world === 4 && has('robobug') ? 'robobug' : null
+  const ats = index >= 5 ? [0.35, 0.7] : [0.5]
+  return ats.map((at, i) => vee && i === 0
+    ? { at, bug, count, shape: 'vee' as const, lead: vee }
+    : { at, bug, count, shape: 'line' as const })
+}
+
+// ─── Bug Party ──────────────────────────────────────────────────────────────
+//
+// After 1-2, and after the sixth level of every world, the ants throw a party
+// with the sandwich they stole in the intro — and the player crashes it in the
+// gilded boot for fifteen seconds with nothing to lose. It is not a level: no
+// stars, no fail, never a gate, and never followed by an interstitial. Two
+// learning levels, then pure release — the Candy Crush "sugar crush" moment.
+//
+// ── Why it moved from after 1-3 ──
+//
+// Measured. In a blind test of five first-time players the first party landed
+// at 36 s, 38 s and 63 s, and every player who reached one rated it the best
+// thing in the game and played on for minutes. The two who never saw one quit
+// at 33 s and 48 s — a few seconds short of it. The game's loudest promise was
+// sitting just past the edge of the shortest patience it has to survive, so it
+// moved one level earlier, which is about twenty seconds earlier in the run.
+//
+// It stays at 1-2 rather than 1-1 because a party is release, and release needs
+// something to be released FROM: 1-2 is the first board that can hurt (the
+// spike), so the party answers the game's first "ouch".
+
+/** Levels a party follows. */
+export const PARTY_AFTER: readonly number[] = [2, 6, 16, 26, 36]
+
+export const partyAfter = (level: number): boolean => PARTY_AFTER.includes(clampLevel(level))
+
+/** A party's clock, seconds, and the ceiling on bodies it pours out. */
+export const PARTY_SECONDS = 15
+export const PARTY_MAX_ALIVE = 40
+
+/**
+ * Who comes to the party, per world. Mostly ants — it is their party — with the
+ * world's own guest: beetles in the backyard (a gilded boot pops a shell like a
+ * grape), moths in the attic, robobugs in the arcade.
+ */
+const PARTY_GUESTS: Readonly<Record<WorldId, readonly RosterEntry[]>> = {
+  1: [{ id: 'ant', weight: 80 }, { id: 'sprinter', weight: 20 }],
+  2: [{ id: 'ant', weight: 70 }, { id: 'beetle', weight: 30 }],
+  3: [{ id: 'ant', weight: 65 }, { id: 'moth', weight: 35 }],
+  4: [{ id: 'ant', weight: 65 }, { id: 'robobug', weight: 35 }]
+}
+
+/**
+ * The party that follows `level`, as a level the sim can run. Its `id` is the
+ * level it follows, so the floor, the lighting and the world are that level's.
+ */
+export const partySpec = (level: number): LevelSpec => {
+  const id = clampLevel(level)
+  const world = worldOf(id)
+  const w = WORLDS[world]
+  return {
+    id,
+    world,
+    index: indexOf(id),
+    boss: null,
+    bossScale: 1,
+    time: PARTY_SECONDS,
+    quota: 0,
+    roster: PARTY_GUESTS[world],
+    maxAlive: PARTY_MAX_ALIVE,
+    spawnMs: [140, 110],
+    speed: w.speed[0],
+    hazards: [],
+    objectives: [{ kind: 'clear' }, { kind: 'clear' }, { kind: 'clear' }],
+    rushes: [],
+    party: true
+  }
+}
+
+/** Coins a party pays: one for every four bodies, capped so a party is a treat
+ *  and never the best-paying thing in the game. */
+export const partyPayout = (kills: number): number =>
+  Math.max(0, Math.min(40, Math.floor(Math.max(0, kills) / 4)))
 
 /**
  * A world boss's stars: the clear, no spikes, and a chain.
@@ -865,19 +1158,37 @@ export const levelSpec = (levelRaw: number): LevelSpec => {
     // in the world's own order so the first one a player meets is always the
     // same one.
     hazards: w.hazards.slice(0, Math.min(w.hazards.length, 1 + Math.floor(index / 4))),
-    objectives: [{ kind: 'clear' }, ...optionals(world, index, quota)] as unknown as ObjectiveTriple
+    objectives: [{ kind: 'clear' }, ...optionals(world, index, quota)] as unknown as ObjectiveTriple,
+    // Filled in below, once the override has had its say on the quota.
+    rushes: []
   }
 
+  const override = OVERRIDES[id] ?? {}
   const spec: LevelSpec = {
     ...base,
     ...(fight ? { ...BOSS_LEVEL, objectives: bossObjectives(world) } : {}),
-    ...(OVERRIDES[id] ?? {})
+    ...override
   }
 
   // A roster override may name a bug before its debut; re-filter so the debut
   // gate is the single authority and an override cannot accidentally leak the
   // robo-bug into world 1.
-  const final: LevelSpec = { ...spec, roster: rosterForLevel(spec.roster, id) }
+  const roster = rosterForLevel(spec.roster, id)
+  // The set pieces: an authored entry wins outright; everything else comes off
+  // the tables and the curve. A practice formation is prepended — it OPENS the
+  // level it belongs to.
+  const rushes = override.rushes
+    ?? (fight ? [] : generatedRushes(world, index, spec.quota, roster))
+  const practice = PRACTICE[id]
+  const trial = override.trial ?? TRIALS[id]
+  const twist = override.twist ?? TWIST_LEVELS[id]
+  const final: LevelSpec = {
+    ...spec,
+    roster,
+    rushes: practice ? [practice, ...rushes] : rushes,
+    ...(trial ? { trial, trialAt: override.trialAt ?? TRIAL_AT } : {}),
+    ...(twist ? { twist } : {})
+  }
   cache.set(id, final)
   return final
 }

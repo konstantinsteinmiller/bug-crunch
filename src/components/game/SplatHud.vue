@@ -105,17 +105,22 @@ const scoreText = computed(() => props.score.toLocaleString())
         span.sr-only {{ t('hud.time') }}
         span.hud__chip-value {{ timeText }}
 
-    //- The chain. Absolutely positioned under the row so a badge that grows to
-    //- twice its size never moves the score beside it.
-    Transition(name="chain")
-      div.hud__chain(v-if="chain > 1" :class="`tier-${tier}`")
-        svg.hud__chain-ring(viewBox="0 0 36 36" aria-hidden="true")
-          circle.hud__chain-track(cx="18" cy="18" r="15.9155")
-          circle.hud__chain-fill(cx="18" cy="18" r="15.9155" :stroke-dasharray="dash")
-        span.hud__chain-value
-          span.hud__chain-x ×
-          | {{ mult }}
-        span.sr-only {{ t('hud.chain', { n: chain }) }}
+    //- What hangs off the strip: the `under` slot (the boss bar), then the
+    //- chain. Absolutely positioned under the row so a badge that grows to
+    //- twice its size never moves the score beside it — and so a boss bar in
+    //- the slot sits in the band beside the wallet column instead of being
+    //- pushed down onto the board by it.
+    div.hud__under
+      slot(name="under")
+      Transition(name="chain")
+        div.hud__chain(v-if="chain > 1" :class="`tier-${tier}`")
+          svg.hud__chain-ring(viewBox="0 0 36 36" aria-hidden="true")
+            circle.hud__chain-track(cx="18" cy="18" r="15.9155")
+            circle.hud__chain-fill(cx="18" cy="18" r="15.9155" :stroke-dasharray="dash")
+          span.hud__chain-value
+            span.hud__chain-x ×
+            | {{ mult }}
+          span.sr-only {{ t('hud.chain', { n: chain }) }}
 
     //- The objective rail.
     div.hud__rail
@@ -211,12 +216,25 @@ const scoreText = computed(() => props.score.toLocaleString())
 // Hung off the strip's own box rather than placed in the row, so growing it by
 // half does not move the score. Centred, because the eye is in the middle of
 // the screen and this is the readout the player most wants in the corner of it.
+//
+// It rides in `.hud__under` BELOW whatever the slot holds: the boss bar is
+// there for the whole fight and the chain comes and goes, so it is the chain
+// that drops a row, never the bar that jumps every time a chain starts.
 
-.hud__chain
+.hud__under
   position: absolute
   top: 100%
-  left: 50%
-  translate: -50% 0.2rem
+  left: 0
+  right: 0
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 0.2rem
+  padding-top: 0.2rem
+  pointer-events: none
+
+.hud__chain
+  position: relative
   display: inline-flex
   align-items: center
   justify-content: center

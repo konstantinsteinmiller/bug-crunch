@@ -34,13 +34,35 @@ export interface JuiceStyleSpec {
   shape: 0 | 1 | 2 | 3
   /** Particles per squish, before the quality tier scales it. */
   burst: number
+  /**
+   * DROPLETS per squish — the shape-4 teardrops thrown alongside the cheap
+   * round burst, before the quality tier scales it.
+   *
+   * Deliberately a fraction of `burst` and never a replacement for it. A
+   * droplet costs a rotate and a blit where a dot costs an arc, so the burst
+   * stays the volume and these are the READ: a dozen wet spears flying out of
+   * the middle is what says "that was full of something", and forty of them is
+   * the same sentence at four times the price.
+   *
+   * Per style, because the styles disagree about whether anything is liquid at
+   * all. Confetti throws none — paper does not drip, and a style whose whole
+   * promise is "nothing bursts wetly" cannot be handed wet spears. Bubble
+   * throws a few, as beads of soap.
+   */
+  drops: number
   /** How long a burst particle lives, ms. */
   life: number
   /** Gravity on a burst particle, u/s². Negative falls. */
   gravity: number
   /** Opacity of the floor decal this style stamps. 0 = none. */
   decalAlpha: number
-  /** Decal radius as a multiple of the body radius. */
+  /**
+   * Decal radius as a multiple of the body radius — before `SPLAT_REACH`, which
+   * the painted mark reaches out by again. All three were cut by 35 % together
+   * (ooze from 2.1): at 2.1 an ant left a puddle four times its own width, and
+   * the splat read as a much bigger bug than the one under the shoe. Cut
+   * together so the three styles keep the proportions they were drawn with.
+   */
   decalScale: number
   /** Additive blending — bubbles glow, ooze does not. */
   additive: boolean
@@ -64,18 +86,18 @@ const BUBBLE_PALETTE = [
 
 export const JUICE_STYLE: Record<JuiceStyleId, JuiceStyleSpec> = {
   ooze: {
-    id: 'ooze', shape: 0, burst: 16, life: 620, gravity: -34,
-    decalAlpha: 0.86, decalScale: 2.1, additive: false,
+    id: 'ooze', shape: 0, burst: 16, drops: 9, life: 620, gravity: -34,
+    decalAlpha: 0.86, decalScale: 1.36, additive: false,
     palette: null, voice: 'wet'
   },
   confetti: {
-    id: 'confetti', shape: 1, burst: 22, life: 900, gravity: -22,
-    decalAlpha: 0.42, decalScale: 1.5, additive: false,
+    id: 'confetti', shape: 1, burst: 22, drops: 0, life: 900, gravity: -22,
+    decalAlpha: 0.42, decalScale: 0.97, additive: false,
     palette: CONFETTI_PALETTE, voice: 'paper'
   },
   bubble: {
-    id: 'bubble', shape: 0, burst: 13, life: 780, gravity: 10,
-    decalAlpha: 0.12, decalScale: 1.2, additive: true,
+    id: 'bubble', shape: 0, burst: 13, drops: 5, life: 780, gravity: 10,
+    decalAlpha: 0.12, decalScale: 0.78, additive: true,
     palette: BUBBLE_PALETTE, voice: 'pop'
   }
 }

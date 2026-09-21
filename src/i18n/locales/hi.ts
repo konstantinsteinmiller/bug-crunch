@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} सितारे',
     'recordScore': '{n} अंक',
     'recordBeat': 'पुराना रिकॉर्ड: {n}',
-    'chestCoins': '+{n} सिक्के'
+    'chestCoins': '+{n} सिक्के',
+    'move': 'नई चाल!'
+  },
+  'moves': {
+    'spin': 'एड़ी घुमाव',
+    'skid': 'फिसलन',
+    'quake': 'भूकंप पटक',
+    'echo': 'गूंज पटक'
+  },
+  'party': {
+    'title': 'कीड़ों की पार्टी!',
+    'count': '{n} कीड़े',
+    'best': 'सर्वश्रेष्ठ: {n}',
+    'newBest': 'पार्टी का नया रिकॉर्ड!'
   },
   'fever': {
     'filling': 'स्प्लैट फ़ीवर: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'कुचले गए कीड़े',
     'starsEarned': '3 में से {n} सितारे',
     'rankOf': 'में से {n}',
-    'worldUnlocked': '{n} खुल गया!'
+    'worldUnlocked': '{n} खुल गया!',
+    'peekNext': '{n} की झलक',
+    'secondWind': 'दूसरा मौका: अगली कोशिश भरी शीशी के साथ शुरू होगी',
+    'hintSlam': 'सुझाव: कवच तोड़ने के लिए दबाए रखें',
+    'hintAvoid': 'सुझाव: कांटेदार वालों को छोड़ दो',
+    'missed': '{n} कीड़े बाकी थे'
   },
   'leaderboard': {
     'title': 'लीडरबोर्ड',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'कहीं भी टैप करें, पैर सबसे पास के कीड़े पर चला जाएगा।'
   },
   'loading': {
-    'boo': 'भू!',
-    'laugh': 'ही ही!',
+    'uhOh': 'अरे बाप रे!',
+    'missed': 'चूक गए!',
     'tooLong': 'अभी भी लोड हो रहा है… कनेक्शन देखें?'
   },
   'saveStatus': {

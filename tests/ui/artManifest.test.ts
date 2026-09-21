@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ALL_SHEETS, GRIDS, STILLS, WALKS, promptDocs, sheetRows, type StillSpec
+  ALL_SHEETS, GRIDS, STILLS, UI_CUT_FROM, WALKS, cutSources, promptDocs, sheetRows, type StillSpec
 } from '@/game/artSheet'
 import {
   ART_BRAND, ART_CATALOGUE, TINTED_GLYPHS, UI_GLYPH_ART_IDS, UI_HUD_MARKS, UI_MARK_FOR_GLYPH,
@@ -13,7 +13,8 @@ import { GAME_ICON_NAMES } from '@/components/icons/iconNames'
 import { SPLAT_REACH, SPLAT_SHEET, UI_ICON_GLYPH } from '@/game/uiArt'
 import { JUICE_STYLES } from '@/game/juiceStyle'
 import { BOSSES, BOSS_IDS, EGG_STAGES } from '@/game/bosses'
-import { EGG_ART_ID, EGG_PROP_IDS, EGG_SHELL_ART_ID } from '@/game/artCatalogue'
+import { EGG_ART_ID, EGG_PROP_IDS, EGG_SHELL_ART_ID, floorArtIdFor } from '@/game/artCatalogue'
+import { FLOOR_IDS, type FloorId } from '@/game/floors'
 import {
   BUG_PART_ART, BUG_PART_ART_IDS, CENTIPEDE_SEGMENT_ART, bugPartWants
 } from '@/game/artCatalogue'
@@ -41,6 +42,10 @@ import { ALL_CUTSCENES, SCENE_ART_BOX, cutsceneArtWants } from '@/game/cutscene'
  *
  * Neither one fails anything at run time. This is the thing that fails.
  */
+
+/** Narrow a sheet id to a floor id, so the unpainted-floor exemption below
+ *  can ask `floorArtIdFor` rather than keep a list of its own. */
+const isFloorId = (id: string): id is FloorId => (FLOOR_IDS as readonly string[]).includes(id)
 
 /** Where the renderer probes for a painting of `(kind, id)`. */
 const probePath = (kind: ArtKind, id: string): string => `${ART_FOLDERS[kind]}/${id}.webp`
@@ -82,6 +87,24 @@ describe('the catalogue and the manifest', () => {
       .filter((s) => !fromGameData.has(s.kind))
       .filter((s) => s.target === probePath(s.kind, s.id))
       .filter((s) => !catalogued.has(`${s.kind}/${s.id}`))
+      // ── The one exemption: a level floor that has not been painted yet ──
+      //
+      // Thirty-six of the forty floors have a sheet whose target IS the probe
+      // path, and they arrive one painting at a time. The premise above — that
+      // such a sheet is "by definition something `spriteFor` can ask for" —
+      // stops holding for them, because `floorArtIdFor` is a gate in front of
+      // the probe: it returns null for a floor with no painting, and the
+      // renderer never asks. Cataloguing them anyway would make the preloader
+      // fetch thirty-six files that do not exist, which is a 404 storm on a
+      // portal that grades them.
+      //
+      // The exemption is asked of the GATE rather than of a hand-kept list, so
+      // it cannot go stale: the moment a floor is added to
+      // `LEVEL_FLOOR_ART_IDS`, `floorArtIdFor` stops returning null, the
+      // exemption lapses, and this test requires it in the catalogue again.
+      // `tests/game/floorArt.test.ts` holds the other end — that the list and
+      // `public/images/bg/` agree in both directions.
+      .filter((s) => !(s.kind === 'bg' && isFloorId(s.id) && floorArtIdFor(s.id) === null))
       .map((s) => `${s.kind}/${s.id}`)
     expect(orphans).toEqual([])
   })
@@ -235,6 +258,61 @@ describe('the contact sheets', () => {
 })
 
 /**
+ * ─── One file, two paintings ────────────────────────────────────────────────
+ *
+ * Every slot on a contact sheet keeps its single-icon still as well, so its file
+ * has two paintings aimed at it. Which one it was cut from used to be whichever
+ * the slicer happened to cut last — a full run and the Art Desk disagreed, and
+ * the nine `grid-ui-objects-2` icons that ship would have been silently swapped
+ * for their stills' different designs by the next full re-slice.
+ *
+ * `UI_CUT_FROM` settles it per slot, and the slicer cuts only from the painting
+ * it names (`cut-from.json`). What fails here is a file with two sources and no
+ * answer: a glyph added to the icon set lands on a grid AND gets a still the day
+ * it exists, and until somebody writes down which painting ships, this is red —
+ * and the slicer refuses to cut it from either.
+ */
+describe('a file two sheets paint', () => {
+  const sources = cutSources()
+
+  it('is cut from exactly one of them, settled in UI_CUT_FROM', () => {
+    const open = Object.entries(sources)
+      .filter(([, s]) => !s.from)
+      .map(([target, s]) => `${target} (${s.sheets.join(' + ')})`)
+    expect(open, 'painted twice with no settled source — add the slot to UI_CUT_FROM').toEqual([])
+  })
+
+  it('names a sheet that actually paints it', () => {
+    for (const [target, s] of Object.entries(sources)) expect(s.sheets, target).toContain(s.from)
+  })
+
+  it('is the whole set of files more than one sheet paints, counted independently', () => {
+    const painters = new Map<string, number>()
+    for (const r of sheetRows()) {
+      for (const t of new Set(r.targets ?? [r.target])) painters.set(t, (painters.get(t) ?? 0) + 1)
+    }
+    const twice = [...painters].filter(([, n]) => n > 1).map(([t]) => t).sort()
+    expect(twice.length).toBeGreaterThan(0)
+    expect(Object.keys(sources).sort()).toEqual(twice)
+  })
+
+  it('settles every slot on a contact sheet, and names nothing that is not one', () => {
+    // A stale key — a slot that left the grids — would read as a decision that
+    // is still being honoured when nothing reads it any more.
+    const onAGrid = GRIDS.flatMap((g) => g.members.map((m) => m.id)).sort()
+    expect(Object.keys(UI_CUT_FROM).sort()).toEqual(onAGrid)
+    for (const [id, from] of Object.entries(UI_CUT_FROM)) expect(['grid', 'still'], id).toContain(from)
+  })
+
+  it('is exactly what the slicer and the Art Desk read', () => {
+    // Both read `art-sheets/cut-from.json`, which the two prompt routes write
+    // from this — so a table the file disagrees with is a decision nobody reads.
+    const doc = JSON.parse(promptDocs()['cut-from.json']!) as { targets: unknown }
+    expect(doc.targets).toEqual(sources)
+  })
+})
+
+/**
  * ─── Variation sheets ───────────────────────────────────────────────────────
  *
  * A VARIATION sheet is a multi-panel still whose panels are different takes of
@@ -273,7 +351,7 @@ describe('a variation sheet', () => {
     for (const s of variants) {
       if (!s.variantBlurbs?.length) continue
       const block = doc.slice(doc.indexOf(`## ${s.id} — `))
-      const listed = [...block.slice(0, block.indexOf('THE GRID —'))
+      const listed = [...block.slice(0, block.indexOf('WHERE THE PANELS SIT —'))
         .matchAll(/^ {2}PANEL (\d+) — row (\d+), column (\d+):/gm)]
       expect(listed.length, s.id).toBe(s.variantBlurbs.length)
       listed.forEach((m, i) => {

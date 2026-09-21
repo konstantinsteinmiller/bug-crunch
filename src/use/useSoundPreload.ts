@@ -18,6 +18,7 @@
 
 import { prependBaseUrl } from '@/utils/function'
 import { loadAudioBuffer } from '@/use/useAssets'
+import { preloadSfx } from '@/use/useSfxSprites'
 
 // Every SFX the gameplay scene can fire. Kept as a flat list so a single
 // allSettled covers them all. Order doesn't matter — they decode in
@@ -51,9 +52,13 @@ let preloadDone: Promise<void> | null = null
 export const preloadGameplaySounds = (): Promise<void> => {
   if (preloadDone) return preloadDone
   preloadStarted = true
-  preloadDone = Promise.allSettled(
-    GAMEPLAY_SFX.map((name) => loadAudioBuffer(prependBaseUrl(`audio/sfx/${name}.ogg`)))
-  ).then(() => undefined)
+  preloadDone = Promise.allSettled([
+    ...GAMEPLAY_SFX.map((name) => loadAudioBuffer(prependBaseUrl(`audio/sfx/${name}.ogg`))),
+    // The rendered cues' tier-1 sprites (the shoe, the chain, the vial, the
+    // finisher, the stars, the clock — what level 1-1 can play); tier 2 follows
+    // once the first level has ended. See `useSfxSprites`.
+    preloadSfx()
+  ]).then(() => undefined)
   return preloadDone
 }
 

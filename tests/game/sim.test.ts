@@ -75,23 +75,34 @@ const footAt = (x: number, y: number): void => {
   f.z = 0.3
 }
 
-/** A complete quick stomp at (x, y): press, land, resolve. */
+/**
+ * A complete quick stomp at (x, y): press, release, land, resolve.
+ *
+ * The RELEASE is what fires the blow — a press no longer opens with one, so
+ * that a charge is always possible from anywhere including on top of a body
+ * (see `press`). The press and release are therefore back to back and the
+ * frames are run afterwards, which keeps a tap's total elapsed time exactly
+ * what it was before the control changed: the chain windows, the fever clock
+ * and every "two taps in quick succession" case are measured against it.
+ */
 const tapAt = (x: number, y: number): GameEvent[] => {
   footAt(x, y)
   sim.drainEvents()
   sim.press(x, y, performance.now())
-  run(140)
   sim.release()
+  run(140)
   return sim.drainEvents()
 }
 
 /**
  * A complete heavy slam at (x, y), through the real charge path.
  *
- * A press ALWAYS opens with a quick stomp (see `press`), so the charge only
- * begins once that tap has landed and recovered. The wait is therefore the
- * whole of drop + impact + cooldown + charge, and the opening tap's events are
- * drained away before the release so the caller sees the SLAM and nothing else.
+ * The wind-up now begins on the press itself — `TAP_MS` after it, with no
+ * opening stomp in front of it any more — so this waits only for the charge to
+ * saturate. The generous margin is kept deliberately: it used to cover an
+ * opening tap's drop, impact and cooldown, and leaving it in means this helper
+ * is not re-tuned every time a shoe's timings move. `drainEvents` before the
+ * release still costs nothing and guarantees the caller sees the SLAM alone.
  */
 const slamAt = (x: number, y: number): GameEvent[] => {
   const shoe = sim.getShoe()
@@ -658,16 +669,19 @@ describe('the Juice vial and Splat Fever', () => {
     start(19)
     const calm = sim.stompRadius()
     clearFloor()
-    // Fill it the honest way: squish until the vial reads full.
-    for (let i = 0; i < 400 && sim.juice.value < 1; i++) {
+    // Fill it the honest way: squish until the game spends it.
+    //
+    // It used to fill, sit there, and wait for `tryFever()` — the button under
+    // the vial. Four of five blind testers never worked out what that button
+    // was, so a full vial now fires the frenzy itself on the next frame with a
+    // body on the floor, and the loop below watches for the frenzy rather than
+    // for the full glass (which is never observable any more: the fill and the
+    // spend happen inside the same tap).
+    for (let i = 0; i < 400 && sim.feverMs.value <= 0; i++) {
       clearFloor()
       sim.spawnBug('pinatafly', 50, 90)
       tapAt(50, 90)
     }
-    expect(sim.juice.value).toBe(1)
-    expect(sim.feverCharged.value).toBe(true)
-
-    expect(sim.tryFever()).toBe(true)
     expect(sim.feverMs.value).toBeGreaterThan(0)
     expect(sim.isFever()).toBe(true)
     expect(sim.juice.value).toBe(0)
@@ -697,6 +711,9 @@ describe('finishing a level', () => {
       clearFloor()
       sim.spawnBug('ant', 50, 90)
       tapAt(50, 90)
+      // The last body's tap lands on RELEASE (the Big Finish holds the press so
+      // it can become a slam), so give the owed stomp its frames to land.
+      run(200)
     }
     expect(sim.phase.value).toBe('won')
     expect(sim.squished.value).toBeGreaterThanOrEqual(quota)
@@ -734,6 +751,29 @@ describe('finishing a level', () => {
     expect(ends).toHaveLength(1)
     sim.endLevel(false)
     expect(sim.drainEvents().filter((e) => e.k === 'end')).toHaveLength(0)
+  })
+
+  // ── The shot the win beat pushes the camera in on ──
+  //
+  // `end` carries the blow that ended the level so the celebration can look at
+  // it. The failure this pins is not a crash: a missing point silently becomes
+  // the middle of the board, and a camera pushing in on bare floor while the
+  // body that won the level sits in a corner is a bug nobody would report as
+  // one — it just looks wrong.
+  it('the end event points at the body that ended the level', () => {
+    start(1)
+    clearFloor()
+    // One to go, and the last body deliberately in a CORNER of the board — the
+    // whole assertion is that the point travels, and a body near the middle
+    // would pass against a stub that returns the middle.
+    sim.squished.value = sim.quota.value - 1
+    sim.spawnBug('ant', 22, 150)
+    const ev = tapAt(22, 150)
+    const end = ev.find((e) => e.k === 'end')
+    expect(end && end.k === 'end' && end.won).toBe(true)
+    if (end && end.k === 'end') {
+      expect(Math.hypot(end.x - 22, end.y - 150)).toBeLessThan(8)
+    }
   })
 })
 
@@ -1145,5 +1185,84 @@ describe('the event stream', () => {
       expect(stomp.r).toBeCloseTo(sim.stompRadius(), 6)
       expect(stomp.hit).toBe(false)
     }
+  })
+})
+
+/**
+ * ─── The press does not stomp; the release does ─────────────────────────────
+ *
+ * The control this game is played with, and the reason it changed.
+ *
+ * A press used to open with a quick stomp and only then begin winding up, which
+ * made a charge impossible over anything worth charging at: press on a beetle
+ * to slam its shell and the opening tap bounced off it first, press on a soft
+ * body and the opening tap killed the thing being wound up for. The only way to
+ * reach a slam was to hold over bare floor and walk the foot across — a control
+ * nobody discovers, and the reason the slam went untaught in practice.
+ *
+ * These four cases are the contract that replaced it. The first is the bug
+ * report; the rest are the things that must not break while fixing it.
+ */
+describe('a press winds up, wherever it lands', () => {
+  it('does NOT touch the body under it while the finger is still down', () => {
+    start(1)
+    clearFloor()
+    const bug = sim.spawnBug('ant', 50, 90)!
+    footAt(50, 90)
+    sim.drainEvents()
+    sim.press(50, 90, performance.now())
+    // Well past TAP_MS, so the wind-up has begun — directly on top of a body.
+    run(300)
+    expect(bug.alive, 'the press killed the body it was winding up at').toBe(true)
+    expect(sim.getFoot().charge, 'no charge accrued on top of a body').toBeGreaterThan(0)
+    expect(kinds(sim.drainEvents())).not.toContain('squish')
+    sim.release()
+  })
+
+  it('lands a HEAVY blow on a body it charged on top of', () => {
+    // The whole point: the same gesture that was impossible now works, and it
+    // arrives as a slam rather than as the tap the old opening blow produced.
+    start(1)
+    clearFloor()
+    const bug = sim.spawnBug('ant', 50, 90)!
+    const ev = slamAt(50, 90)
+    const squish = ev.find((e) => e.k === 'squish')
+    expect(squish, 'the charged release did not land').toBeDefined()
+    expect(squish && squish.k === 'squish' && squish.heavy).toBe(true)
+    expect(bug.alive).toBe(false)
+  })
+
+  it('still stomps on a quick tap — the blow is owed, not cancelled', () => {
+    start(1)
+    clearFloor()
+    const bug = sim.spawnBug('ant', 50, 90)!
+    const ev = tapAt(50, 90)
+    expect(kinds(ev)).toContain('squish')
+    expect(bug.alive).toBe(false)
+  })
+
+  it('still stomps when a wind-up is let go EARLY, below the slam threshold', () => {
+    // The cruellest possible input would be a partial charge that produced
+    // nothing: the player holds, sees the foot rise, lets go a moment too soon
+    // and the turn silently did not happen. A short charge owes a tap.
+    start(1)
+    clearFloor()
+    const bug = sim.spawnBug('ant', 50, 90)!
+    footAt(50, 90)
+    sim.drainEvents()
+    sim.press(50, 90, performance.now())
+    run(200)
+    const charge = sim.getFoot().charge
+    expect(charge, 'this case must release mid-charge to mean anything')
+      .toBeLessThan(0.34)
+    expect(charge).toBeGreaterThan(0)
+    sim.release()
+    run(200)
+    const ev = sim.drainEvents()
+    expect(kinds(ev)).toContain('squish')
+    const squish = ev.find((e) => e.k === 'squish')
+    expect(squish && squish.k === 'squish' && squish.heavy, 'a part charge is not a slam')
+      .toBe(false)
+    expect(bug.alive).toBe(false)
   })
 })

@@ -25,10 +25,12 @@
 import { BUG_IDS, type BugId } from '@/game/bugs'
 import { SHOE_IDS, STARTER_SHOE, isShoeId, type ShoeId } from '@/game/shoes'
 import { BOSSES, BOSS_IDS, type BossId } from '@/game/bosses'
-import { levelSpec, clampLevel, worldOf, WORLD_COUNT, TOTAL_LEVELS } from '@/game/stages'
+import { levelSpec, clampLevel, partyAfter, worldOf, WORLD_COUNT, TOTAL_LEVELS } from '@/game/stages'
 import {
-  ART_CATALOGUE, EGG_ART_ID, EGG_SHELL_ART_ID, UI_GLYPH_ART_IDS, UI_HUD_MARKS, bugPartWants
+  ART_CATALOGUE, EGG_ART_ID, EGG_SHELL_ART_ID, UI_GLYPH_ART_IDS, UI_HUD_MARKS,
+  bugPartWants, floorArtIdFor
 } from '@/game/artCatalogue'
+import { floorForLevel } from '@/game/floors'
 import { artSettled, artOverridesEnabled, type ArtWant } from '@/game/art'
 import { ALL_CUTSCENES, FINALE, cutsceneArtWants, openingCutscene, type CutsceneSpec } from '@/game/cutscene'
 import { getState } from '@/use/useBugCrunchState'
@@ -76,7 +78,8 @@ const bootShoe = (): ShoeId => {
  * permanent rather than momentary.
  */
 const STOMP_FX: readonly string[] = [
-  'ring-stomp', 'ring-slam', 'burst', 'spark', 'smoke', 'splat', 'splat-confetti'
+  'ring-stomp', 'ring-slam', 'burst', 'spark', 'smoke', 'goo-drop',
+  'splat', 'splat-confetti'
 ]
 
 /**
@@ -95,7 +98,12 @@ export const criticalArtWants = (): ArtWant[] => {
   // and whose tail segments arrive later is the pop-in this tier exists to stop.
   for (const r of spec.roster) wants.push(['bug', r.id], ...bugPartWants(r.id))
   wants.push(['shoe', bootShoe()])
-  wants.push(['bg', `floor-${worldOf(level)}`])
+  // The floor this LEVEL is on, not its world's lead tile: every level has its
+  // own surface, and 1-4's is the picnic table rather than the blanket.
+  // `floorArtIdFor` returns null for a floor whose painting has not landed, and
+  // that floor draws itself rather than asking for a file that is not there.
+  const floorArt = floorArtIdFor(floorForLevel(level))
+  if (floorArt) wants.push(['bg', floorArt])
   for (const id of STOMP_FX) wants.push(['fx', id])
   // The HUD's own marks only. The glyph slots (`icon-*`) outnumber them five to
   // one, sit on buttons rather than on the field, and every one of them has a
@@ -126,10 +134,39 @@ const broodWants = (boss: BossId): ArtWant[] => {
   ]
 }
 
+/**
+ * The paintings a level's SET PIECES draw — the ones `RETENTION-FEATURES.md`
+ * put on the board, which neither the roster nor the hazard list names:
+ *
+ *   · a world-1 conga carries crumbs of the intro's sandwich (`scene/crumb`);
+ *   · a Shoebox Trial drops a present (`prop/shoebox`) and puts the foot in the
+ *     shoe inside it;
+ *   · the Spill tips the intro's lemonade glass (`scene/glass`);
+ *   · a Bug Party pours out of the stolen sandwich (`scene/sandwich`) — wanted
+ *     by the level the party FOLLOWS, which is the one being warmed.
+ *
+ * Each of those arrives mid-level, and a drawn prop that turns into paint in
+ * front of the player is the pop-in this module exists to stop.
+ */
+const setPieceWants = (level: number): ArtWant[] => {
+  const spec = levelSpec(level)
+  const wants: ArtWant[] = []
+  if (spec.world === 1 && spec.rushes.some((r) => !r.practice)) wants.push(['scene', 'crumb'])
+  if (spec.trial) {
+    wants.push(['prop', 'shoebox'])
+    const shoes = Array.isArray(spec.trial) ? spec.trial : [spec.trial as ShoeId]
+    for (const s of shoes) wants.push(['shoe', s])
+  }
+  if (spec.twist === 'spill') wants.push(['scene', 'glass'])
+  if (partyAfter(level)) wants.push(['scene', 'sandwich'])
+  return wants
+}
+
 /** TIER 1 — the rest of what THIS level can put on screen. */
 const levelArtWants = (): ArtWant[] => {
   const spec = levelSpec(bootLevel())
   const wants: ArtWant[] = []
+  wants.push(...setPieceWants(bootLevel()))
   for (const id of spec.hazards) wants.push(['prop', id])
   if (spec.boss) {
     wants.push(['boss', spec.boss])
@@ -147,7 +184,9 @@ const remainingArtWants = (): ArtWant[] => {
   for (const id of SHOE_IDS) wants.push(['shoe', id])
   for (const id of BOSS_IDS) wants.push(['boss', id])
   for (const id of ART_CATALOGUE.prop) wants.push(['prop', id])
-  for (let w = 1; w <= WORLD_COUNT; w++) wants.push(['bg', `floor-${w}`])
+  // Every floor with a painting: the four leads, and whichever of the
+  // thirty-six level tiles have landed (`LEVEL_FLOOR_ART_IDS`).
+  for (const id of ART_CATALOGUE.bg) wants.push(['bg', id])
   // The button glyphs, last of everything: a painted glyph that arrives after
   // the vector one has been on screen for a second is a button that got nicer,
   // not a glitch — which is the opposite of a bug design popping in mid-walk.
@@ -233,8 +272,12 @@ export const warmNextLevelArt = (nextLevel: number): void => {
   for (const r of spec.roster) {
     for (const [k, id] of [['bug', r.id] as const, ...bugPartWants(r.id)]) artSettled(k, id, 'high')
   }
-  artSettled('bg', `floor-${worldOf(nextLevel)}`, 'high')
+  // The next level's OWN floor — the one thing on that board guaranteed to
+  // cover every pixel of it, so it is the worst possible pop-in.
+  const nextFloorArt = floorArtIdFor(floorForLevel(nextLevel))
+  if (nextFloorArt) artSettled('bg', nextFloorArt, 'high')
   for (const id of spec.hazards) artSettled('prop', id, 'low')
+  for (const [k, id] of setPieceWants(nextLevel)) artSettled(k, id, 'high')
   if (spec.boss) artSettled('boss', spec.boss, 'high')
   // Its eggs at the same priority: the first one lands within seconds of the
   // fight opening, and its crack stages are a four-panel strip that swaps whole.
@@ -272,7 +315,9 @@ export const allArtWants = (): ArtWant[] => {
   for (const id of ART_CATALOGUE.fx) wants.push(['fx', id])
   for (const id of ART_CATALOGUE.ui) wants.push(['ui', id])
   for (const id of ART_CATALOGUE.scene) wants.push(['scene', id])
-  for (let w = 1; w <= WORLD_COUNT; w++) wants.push(['bg', `floor-${w}`])
+  // Every floor with a painting: the four leads, and whichever of the
+  // thirty-six level tiles have landed (`LEVEL_FLOOR_ART_IDS`).
+  for (const id of ART_CATALOGUE.bg) wants.push(['bg', id])
   return wants
 }
 

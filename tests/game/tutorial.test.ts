@@ -46,7 +46,7 @@ describe('the lesson list', () => {
     expect(outranks('goal', 'chain')).toBe(true)
     // And the board before the meta: a shop lesson must never outrank the
     // lesson that teaches the game it is a shop for.
-    for (const meta of ['stars', 'chest', 'locker', 'buy'] as const) {
+    for (const meta of ['stars', 'locker', 'buy'] as const) {
       expect(outranks('move', meta)).toBe(true)
     }
   })
@@ -62,12 +62,13 @@ describe('the lesson list', () => {
   // single frame.
   it('runs exactly the meta lessons through a pause', () => {
     const paused = LESSONS.filter((l) => l.whilePaused).map((l) => l.id).sort()
-    expect(paused).toEqual(['buy', 'chest', 'locker', 'stars'])
+    // `peek` and `secondWind` live on the result screen, like `stars`.
+    expect(paused).toEqual(['buy', 'locker', 'peek', 'secondWind', 'stars'])
   })
 
   it('never dims a lesson that lands on a modal', () => {
     for (const l of LESSONS) {
-      if (l.id === 'stars' || l.id === 'buy') expect(l.scrim).toBe('none')
+      if (['stars', 'buy', 'peek', 'secondWind'].includes(l.id)) expect(l.scrim).toBe('none')
     }
   })
 
@@ -77,10 +78,69 @@ describe('the lesson list', () => {
     // header of `game/tutorial.ts`.
     for (const id of [
       'move', 'stomp', 'goal', 'chain', 'slam', 'spike', 'dodge', 'fever',
-      'boss', 'pods', 'stars', 'quests', 'chest', 'locker', 'buy'
+      'boss', 'pods', 'stars', 'quests', 'locker', 'buy',
+      // The retention set pieces (RETENTION-FEATURES.md #1-10), every one of
+      // them with a wordless beat of its own.
+      'rush', 'grow', 'finish', 'bigFinish', 'secondWind', 'peek', 'shoebox',
+      'perkSteelBoot', 'perkBunnySlipper', 'perkRollerSkate', 'perkCleatBoot',
+      'perkElectricSock', 'party', 'kick', 'spin', 'skid', 'quake', 'echo',
+      'twistSpill', 'twistSprinkler', 'twistBlackout', 'twistDraft', 'twistSurge',
+      'twistGlitch'
     ] as LessonId[]) {
       expect(LESSON_IDS).toContain(id)
     }
+  })
+
+  it('leaves the treasure chest untaught, for the curious to find', () => {
+    // The chest is an opt-in bonus, not a step. Its lesson — a ring round it and
+    // a pointer at it, running through pauses — was too pushy for that, and as a
+    // paused lesson it showed through the reward reveals. It must not come back.
+    expect(isLessonId('chest')).toBe(false)
+  })
+
+  it('gives every twist a lesson of its own, and every trial shoe a perk beat', async () => {
+    const { TWIST_IDS } = await import('@/game/twists')
+    const { SHOES, STARTER_SHOE } = await import('@/game/shoes')
+    for (const t of TWIST_IDS) {
+      expect(LESSON_IDS).toContain(`twist${t[0]!.toUpperCase()}${t.slice(1)}` as LessonId)
+    }
+    for (const s of SHOES) {
+      if (s.id === STARTER_SHOE) continue
+      expect(LESSON_IDS).toContain(`perk${s.id[0]!.toUpperCase()}${s.id.slice(1)}` as LessonId)
+    }
+  })
+})
+
+/**
+ * ─── Lessons whose moment can pass ──────────────────────────────────────────
+ *
+ * A conga that walked off, a beetle that righted itself, a level that closed on
+ * a tap: the player never had a go. Those three come back with the next set
+ * piece instead of retiring on the bail-out — and then stop, like everything.
+ */
+describe('lessons with retries', () => {
+  it('are exactly the three armed by a passing set piece', () => {
+    const retrying = LESSONS.filter((l) => (l.retries ?? 0) > 0).map((l) => l.id).sort()
+    expect(retrying).toEqual(['bigFinish', 'kick', 'rush'])
+  })
+
+  it('come back untaught after a miss, and retire after their last one', () => {
+    const tries = lessonSpec('rush').retries!
+    for (let i = 0; i < tries; i++) {
+      tutor.arm('rush')
+      tutor.missed('rush')
+      expect(tutor.isTaught('rush')).toBe(false)
+      expect(tutor.activeLesson.value).toBeNull()
+    }
+    tutor.arm('rush')
+    tutor.missed('rush')
+    expect(tutor.isTaught('rush')).toBe(true)
+  })
+
+  it('a bail-out on the director clock spends a retry rather than teaching', () => {
+    tutor.arm('kick')
+    tutor.step(lessonSpec('kick').bailoutMs + 1)
+    expect(tutor.isTaught('kick')).toBe(false)
   })
 })
 

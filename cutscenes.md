@@ -3,7 +3,7 @@
 ## The problem this solves
 
 The game currently explains **nothing**. A player arrives from a portal tile,
-watches a loading ant say "Boo!", and is dropped onto a gingham blanket with a
+watches a loading ant dodge a stomp, and is dropped onto a gingham blanket with a
 shoe. The tutorial teaches the *controls* well — wordlessly, one gesture at a
 time — but nothing anywhere says **why there is a shoe** or **why the bugs must
 go**. The store copy carries the premise ("Squish the bugs before they take the
@@ -128,13 +128,13 @@ over a board that already exists.
 
 ### Why it opens on the mascot
 
-The loading screen already stars a cheerful worker ant who waves at the player
-and shouts "Boo!". That ant is *already painted*, already on screen for several
-seconds before every session, and is currently a decoration with no connection to
-anything.
+The loading screen already stars a cheerful worker ant who waves at the player,
+dodges the stomp that comes for it, and taunts the shoe: "Missed me!". That ant
+is *already painted*, already on screen for several seconds before every
+session, and is currently a decoration with no connection to anything.
 
-**It is the ant that takes the crumb.** The greeter waves at you on the loading
-screen, and the first thing it does in the game is rob you. That single link
+**It is the ant that takes the crumb.** The greeter gets away from you on the
+loading screen, and the first thing it does in the game is rob you. That single link
 turns the splash from furniture into a setup, costs nothing, and gives the player
 a face to be annoyed at.
 

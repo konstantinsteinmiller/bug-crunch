@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} yıldız',
     'recordScore': '{n} puan',
     'recordBeat': 'Eski rekor: {n}',
-    'chestCoins': '+{n} altın'
+    'chestCoins': '+{n} altın',
+    'move': 'Yeni hareket!'
+  },
+  'moves': {
+    'spin': 'Topuk Dönüşü',
+    'skid': 'Kayma',
+    'quake': 'Deprem Darbesi',
+    'echo': 'Yankı Darbesi'
+  },
+  'party': {
+    'title': 'Böcek Partisi!',
+    'count': '{n} böcek',
+    'best': 'En iyi: {n}',
+    'newBest': 'Yeni parti rekoru!'
   },
   'fever': {
     'filling': 'Splat Ateşi: %{n} dolu',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Ezilen böcek',
     'starsEarned': '3 yıldızdan {n} tanesi',
     'rankOf': '/ {n}',
-    'worldUnlocked': '{n} açıldı!'
+    'worldUnlocked': '{n} açıldı!',
+    'peekNext': '{n} seviyesine göz at',
+    'secondWind': 'İkinci nefes: sonraki denemen dolu şişeyle başlar',
+    'hintSlam': 'İpucu: kabukları ezmek için basılı tut',
+    'hintAvoid': 'İpucu: dikenlilere dokunma',
+    'missed': '{n} böcek kaldı'
   },
   'leaderboard': {
     'title': 'Sıralama',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Nereye dokunursan dokun, ayağın en yakın böceğe uçar.'
   },
   'loading': {
-    'boo': 'Bö!',
-    'laugh': 'Hi hi!',
+    'uhOh': 'Eyvah!',
+    'missed': 'Iskaladın!',
     'tooLong': 'Hâlâ yükleniyor… bağlantını kontrol eder misin?'
   },
   'saveStatus': {

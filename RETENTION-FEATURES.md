@@ -9,6 +9,89 @@ This document is about the **run itself**. Where a feature here replaces a roadm
 
 ---
 
+## 0. Status — #1 to #10 are built (2026-09-18)
+
+The first ten features in §3 are in the game, retrofitted onto the cutscenes and
+onto the world-1 order that shipped while this document was being written
+(1-1 ant · 1-2 caterpillar · 1-3 beetle · 1-4 half-strength Queen · 1-5 sprinter ·
+1-6 crumbs · 1-7 piñata · 1-8 flea · 1-9 honey · 1-10 full Queen). The brief for
+the retrofit was: **front-load it.** Stretching new ideas out is not the goal; hooking
+as many players as possible in the first three to five minutes is, and after that
+every level should still have something new on it, so stopping always feels like
+missing the next thing.
+
+So several features enter EARLIER than §3 first proposed, and the ones that tie
+into the cutscenes now pay them off on the board:
+
+| # | Feature | Enters (as built) | Was | Tied to the cutscenes by |
+|---|---|---|---|---|
+| 1 | Rush Lines | 1-1 (conga of 5, the `rush` lesson) | 1-1 | every world-1 conga ant **carries a crumb of the sandwich** from 01 "The Crumb" |
+| 2 | Big Finish | 1-1 tap finish; slam finish taught from 1-5 | 1-1 / 1-5 | — |
+| 3 | Growth Spurt | 1-1 (lesson on the first rung after the chain lesson) | 1-1 | — |
+| 4 | So Close! | first fail at ≥ 60 % of a level | first fail | — |
+| 5 | Peek | every result screen from 1-1 | 1-1 | the **party** peek is the stolen sandwich; a world's last level peeks the next world's floor |
+| 6 | Shoebox Trials | **1-2 (Steel Boot)**, 1-8 (Roller Skate), then about one level in three; pairs from 2-7 | 1-7 | — |
+| 7 | Bug Party | after 1-3, then after every x-6 | same | the ants **party with the sandwich** they stole in 01; it sits at the top of the board and they pour out of it |
+| 8 | Beetle Bowling | a slam flips a beetle from 1-3; the kick lesson from 1-6 | 1-6 | — |
+| 9 | Boss Trophies | Heel Spin off the half-Queen (1-4), Skid off the full Queen (1-10), Quake (2-10), Echo (3-10) | same | the trophy is **the boss's own trick** |
+| 10 | Uh-oh! Twists | **Spill on 1-7**, Sprinkler 2-9, Blackout 3-4, Draft 3-7, Surge 4-3, Glitch 4-6 | Spill on 1-9 | the Spill **tips the lemonade glass from 01's opening shot** |
+
+**What moved, and why.**
+
+- **The Steel Boot trial moved from 1-7 to 1-2.** The caterpillar level is the first
+  "no" in the game. A box on it turns that into "no… but with THIS you can", and it
+  plants the Locker's first real want at minute one and a half, three or four levels
+  before the boot is affordable (9 stars, 350 coins, around 1-5/1-6). That is the
+  missing-out feeling the retrofit is about. It is still not *the answer* to the
+  caterpillar (the answer is leaving it alone, then buying the boot), so the "problem
+  one level ahead of its answer" rule in `stages.ts` still holds. The boot is spike-proof, so a trial never costs 1-2's
+  `noSpike` star.
+- **The Spill moved from 1-9 to 1-7**, so that one gesture — press and drag — runs
+  through four levels in a row: met in the spill (1-7), worn in the Roller Skate trial
+  (1-8), found again on honey's rim (1-9), owned for good as the Queen's Skid trophy
+  (1-10). 1-8 stays bare of anything that grounds a flea, as its own note asks; 1-9
+  keeps honey as its headline.
+- **The beetle flips from 1-3, not 1-6.** A slam that cracks a shell turns the beetle
+  over, and one tap finishes it. That is what un-jams 1-3, the measured wall. The
+  *kick* (the flick that bowls it) is still taught on 1-6's crumb knot, as planned.
+
+**Everything is keyed to progress, not the clock**, and every set piece has its own
+wordless lesson (the rule: a feature is not done until a textless beat teaches it):
+`rush`, `grow`, `finish`, `bigFinish`, `secondWind`, `peek`, `shoebox`, one
+`perk<Shoe>` per trial shoe, `kick`, `spin`, `skid`, `quake`, `echo`, one
+`twist<Id>` per twist, and `party`. Three of them (`rush`, `kick`, `bigFinish`) come
+back with the next set piece if the moment passed, rather than retiring on the bail-out.
+
+**Measured.** `pnpm scout` (new: `tools/scout/`, the `_drive.mjs` players ported to
+Node) plays each level headlessly. Same harness, 40 seeds, the `average` player in
+the starter sneaker, wins per 40:
+
+| | 1-1 | 1-2 | 1-3 | 1-4 | 1-5 | 1-6 | 1-7 | 1-8 | 1-9 | 1-10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| before | 38 | 40 | 11 | 37 | 22 | 26 | 23 | 21 | 15 | 28 |
+| after | 37 | 40 | 39 | 37 | 40 | 40 | 39 | 39 | 38 | 25 |
+
+Kills per stomp went from 0.21–0.58 to 0.66–1.26 on 1-3 to 1-9 (§1's headline
+fault), with 1.5–6 multi-kill stomps a level. The `good` player went from 0–2 wins
+in 20 to 18–20 in 20 on the first three levels of worlds 2, 3 and 4. Those were
+walls of unkillable shells before the flip. Still open, and older than this work: the
+`average` player in the SNEAKER still loses 2-1..2-3 and 4-1..4-3. World 2's roll is
+22 % caterpillars, and a caterpillar nobody may stomp holds its `maxAlive` slot for
+good. It needs its own pass: the same garnish rule world 1 uses, or a check that
+assumes the Steel Boot by then.
+
+**Two bugs the scout turned up on the way, both fixed:** a press still held when a
+level ended leaked into the next one, so the new foot sat in a charge it could never
+leave. And the Electric Sock's arcs killed bodies inside the loop that was resolving
+the stomp, which walked the pool's live count below zero and crashed the sim. The
+Shoebox trials, which hand the sock out, found that one.
+
+**Not built from §4:** Step 0 (instrumentation). `useAnalytics.ts` is still wired to
+nothing and still speaks another game's vocabulary, so none of the "success signal"
+lines below can be read yet. It is the next thing to do before #11–20.
+
+---
+
 ## 1. Diagnosis
 
 ### How this was measured
@@ -92,6 +175,8 @@ a seven-year-old, so read the ratios.
 | **Progression that changes play** | first real shoe around 1-6 | Shoebox Trials, Boss Trophies, Bug Buddies |
 | **A kind retry** | a fail is a wall | So Close! |
 
+> *(§1 describes the game BEFORE the retrofit — see §0 for what changed.)*
+>
 > **Instrumentation gap.** `src/use/useAnalytics.ts` is imported nowhere, and its six event
 > names come from another game (`stage_start { squad }`, `gate_pass`, `upgrade_buy`). None of
 > the success signals below can be read today. See step 0 of the build order.
@@ -104,61 +189,58 @@ a seven-year-old, so read the ratios.
 
 ---
 
-## 2. The first 10 minutes, beat by beat
+## 2. The first 10 minutes, beat by beat — as built
 
-**Assumptions.**
-- World 1 follows the parallel re-cut as it stands in the working tree (still a draft):
-  1-1 ant · 1-2 caterpillar · 1-3 beetle · 1-4 half-strength Queen · 1-5 sprinter · 1-6 crumbs · 1-7 piñata · 1-8 flea · 1-9 honey · 1-10 Queen, with salt moved to world 2.
-  The measurements in §1 used the committed table. Every beat below hangs off level progress, so it survives further reshuffles.
-- Times are for a median child: somewhere between the two bots, plus about 10 s per level for lessons and screens.
-
-**Beats are keyed to level progress, not the clock**, so they land at the same point in the story for a fast
-child and a slow one. Each level gets a four-beat shape (*kishōtenketsu*):
-**open** (a seeded board) → **build** (a trickle of bugs, the chain) → **turn** (a rush, twist or cameo at ~50 %) → **close** (Big Finish).
+Times are for a median child: somewhere between the scout's `average` and `good`,
+plus about 10 s per level for lessons and screens. Every beat hangs off level
+progress, so a fast child and a slow one meet them at the same point in the story.
+Each level has a shape (*kishōtenketsu*): **open** (a seeded board) → **build** (a
+trickle, the chain) → **turn** (a rush, twist or trial) → **close** (Big Finish).
 
 | Time | Where | What the player sees, does, feels | Feature firing |
 |---|---|---|---|
-| 0:00 | intro | Ants swarm the sandwich (parallel work). The first tap skips. *Stakes.* | cutscene 01 |
-| 0:10 | 1-1 open | The board is already alive. Drag, stomp, first squish. | existing lessons |
-| 0:18 | 1-1 build | Third quick squish: the shoe puffs up with a *boing*. *My skill is visible.* | **Growth Spurt** |
-| 0:25 | 1-1 turn | A snare roll. A sugar trail draws itself and five ants conga down it. One stomp takes three or four; the chain hits ×3 and the vial glugs. *Whoa.* | **Rush Lines** (hosts the `chain` lesson) |
-| 0:38 | 1-1 close | The last ant turns gold and the music drops to a heartbeat. Stomp → slow-motion confetti, coins fly to the wallet. *Peak, then the end.* | **Big Finish** |
-| 0:45 | result | Stars, and under them a napkin with something fuzzy and spiky wriggling. *What is that?* | **Peek** |
-| 0:55 | 1-2 | It was a spiky caterpillar: the first thing you shouldn't stomp. | parallel debut, `spike` lesson |
-| 1:15 | 1-2 turn | An ant conga marches right past the caterpillar. Stomp the line, not the spikes. *I aimed.* | **Rush Lines** × caterpillar |
-| 1:30 | 1-2 | An arrow flows from the chain badge into the shoe. | Growth Spurt lesson |
-| 1:45 | 1-3 turn | A beetle leads the conga. The tap bounces, the hold-to-slam lesson follows, and the slam takes the beetle and two ants behind it. | Rush Lines (beetle point), parallel debut, `slam` lesson |
-| 2:00 | 1-3 | The vial is full; the hand points at it; the gilded boot. First Fever. | existing `fever` lesson + tuning |
-| 2:15 | party | The basket tips: forty ants, a giant gold boot for 15 s, no way to lose. *Screaming.* | **Bug Party #1** |
-| 2:40 | 1-4 | The half-strength Queen. The first real fight. | parallel boss, `boss` lesson |
-| (3:20) | if lost | The boss bar freezes one tick short. The retry button pulses with a hold-hand and a full vial. *So close, and now I'm stronger.* | **So Close!** |
-| 3:40 | 1-4 won | The Queen pops and drops a shining sticker of a spinning shoe. | **Boss Trophy**: Heel Spin |
-| 4:00 | 1-5 turn | Teal sprinters bolt when a stomp lands near them (parallel debut). Then a ring of ants closes around the shoe; the hand double-taps: WHOOSH. | Rush Lines (ring) + `spin` lesson |
-| 4:30 | 1-5 close | One to go: the hand holds on the gold shoe, and a slam finisher wipes the board. *Jackpot.* | **Big Finish** (slam) |
-| 4:50 | 1-6 | Crumbs pull the ants into a knot. A slam flips a beetle, legs waving; flick it through the knot like a bowling ball. | **Beetle Bowling** |
-| 5:35 | party | Party #2, after 1-6. | Bug Party |
-| 5:55 | 1-7 | A piñata fly worth chasing. At 35 % a shoebox wobbles: three taps, then a Steel Boot for 12 s. Crunch the caterpillars you've avoided since 1-2. The Locker glows. | **Shoebox Trials** |
-| 6:50 | 1-8 turn | Fleas leap away. Then the ground shakes: the Queen marches across with her guards. Slam her crown off. | **Boss Cameo** |
-| 7:45 | 1-9 turn | Honey puddles hold the fleas. Then the lemonade glass tips, leaving a slick lane: press and drag to skid through a row. | **Twist**: Spill |
-| 8:30 | 1-10 | The full Queen, crownless if you knocked it off. Peek has shown her crown for two levels. | Cameo payoff, Peek |
-| 9:40 | 1-10 won | Trophy: Skid (slide on any floor). The world-2 cutscene plays. | Boss Trophy |
-| 10:00 | 2-1 | Tall grass. A bump wriggles; stomp it, *boing*, and a dizzy ant pops out (or a piñata). | **Mystery Bumps** |
-| 10:40 | 2-2 | Anthills keep pouring ants until you slam them shut. | **Nests** |
+| 0:00 | intro | 01 "The Crumb": the greeter ant takes a crumb, the colony carries the sandwich off. The first tap skips. *Stakes.* | cutscene 01 |
+| 0:10 | 1-1 open | The shoe hangs where the cutscene left it. Drag, stomp, first squish; the arrow says what the bar is for. | `move` · `stomp` · `goal` |
+| 0:18 | 1-1 build | A chain of two: the shoe *boings* up a size, and an arrow runs from the chain badge to the shoe. *My skill is visible.* | **Growth Spurt** (`grow`) |
+| 0:22 | 1-1 turn | A snare roll; a trail of sandwich crumbs draws itself across the blanket; five ants conga down it, each carrying a crumb. The hand drops on the middle of the line: three in one stomp. *Whoa.* | **Rush Lines** (`rush`, `multi`) |
+| 0:35 | 1-1 close | One to go. Every ant on the board turns gold and a heartbeat takes over the music. Stomp: slow-motion confetti, coins. | **Big Finish** (`finish`) |
+| 0:45 | result | Stars, and under them a picnic napkin with something long and knobbly wriggling under it. Tap it and it hops. The crown pips: three to the Queen. | **Peek** (`peek`) |
+| 0:55 | 1-2 | It was a caterpillar: the hand recoils from it. | `spike` |
+| 1:05 | 1-2 | A present drops onto the blanket. Three taps: the foot is a **Steel Boot**. The hand drops onto the caterpillar it was just told to avoid: CRUNCH, no ouch. Twelve seconds, a draining gold ring, then the sneaker is back and the Locker button glows. | **Shoebox Trial** (`shoebox`, `perkSteelBoot`) |
+| 1:25 | 1-2 turn | A conga walks right past a caterpillar. Stomp the line, not the spikes. | Rush Lines (`past`) |
+| 1:50 | 1-3 turn | A V with a beetle at the point. The tap bounces; the slam lesson follows; the slam flips the beetle on its back, legs waving, and the ants behind it were in the circle too. One tap finishes it. | Rush (vee) · `slam` · **the flip** |
+| 2:10 | 1-3 close | The slam finish: let it fill, slam the gold one — if the slam is already theirs. | Big Finish (slam) |
+| 2:20 | **party** | The sandwich from the intro sits at the top of the board, crawling with ants, and they pour out. Gilded boot for 15 s, nothing to lose. A card: the haul and the best to beat. | **Bug Party #1** (`party`) |
+| 2:45 | 1-4 | The Queen's stinger, then the half-strength Queen. | stinger · `boss` · `pods` |
+| (3:25) | if lost | "Time's up", but the bar shows how close they got and the retry button has a full vial on its shoulder (and a slam glyph, if they kept clanging). The retry opens with the vial full. | **So Close!** (`secondWind`) |
+| 3:40 | 1-4 won | **New move! Heel Spin.** A gold medal with her trick on it. | **Boss Trophy** |
+| 3:50 | 1-5 open | A ring of ants closes on the shoe; the hand double-taps: WHOOSH. Then the sprinter. | practice ring · `spin` |
+| 4:30 | 1-5 close | One to go: the hand holds on the gold shoe. Let the board fill, slam the last one: every body on the floor goes in one shockwave. *Jackpot.* | Big Finish (`bigFinish`) |
+| 4:45 | 1-6 | Crumbs pull a conga into a knot; the V's point is a beetle. Slam it over, flick it through the knot: bowling pins. | **Beetle Bowling** (`kick`) |
+| 5:35 | **party** | Party #2. | Bug Party |
+| 5:55 | 1-7 | A piñata fly worth chasing, a sprinter line, then: Uh-oh! The lemonade glass from the intro tips over and a slick lane runs across the blanket. Press and drag through it: a skid that ploughs the lot. | **Twist: Spill** (`twistSpill`, `skid`) |
+| 6:50 | 1-8 | The flea. A present again: the **Roller Skate**. The drag from the spill, on any floor. | Shoebox Trial (`perkRollerSkate`) |
+| 7:45 | 1-9 | Honey holds the fleas. Two rushes: a V and a sprinter line that bolts as one. | honey · Rush Lines |
+| 8:30 | 1-10 | "Seconds": the Queen eats the sandwich and grows. The full fight. | cutscene · boss |
+| 9:40 | 1-10 won | **New move! Skid**: slide on any floor. The world-2 cutscene. | Boss Trophy |
+| 10:00 | 2-1 | A line of ants to skid through (the Skid's practice formation); a V with a beetle at the point. | practice line · Rush (vee) |
 
-**Rhythm check.** The longest stretch without a new or unexpected beat is the 1-4 fight
-(2:40–3:40), and that fight has three phases, each asking a new question about every 20 s.
+**Rhythm check.** From 0:18 to 2:20 there is a new beat roughly every 20–30 seconds,
+and the longest stretch without one is the 1-4 fight, whose three phases each ask a
+new question. Past world 1, every level still has its own new thing: a debut, a
+twist, a trial or trial pair, a party, a trophy's practice formation, or a new rush
+formation. The Peek announces each one on the screen before it.
 
-**Tuning this timeline depends on**
-- **1-1 quota 8 → 11**, so the rush sits in the middle of the level instead of ending it (3 ants, a rush of 5, 3 ants). Re-scout.
-- **Decay juice only after 2 s without a squish**, which is what `combo.ts` already says it does. Together with rush kills and Growth Spurt, this puts the first Fever at about 2:00 for a median child.
+### Past ten minutes
 
-### Past ten minutes: new ideas return to every level
-
-| World | New moment per level (existing new creature/prop in brackets) |
+| World | Set pieces by level (as built) |
 |---|---|
-| 2 | 2-1 Mystery Bumps · 2-2 Nests (if salt lands here too, salt panics the ants pouring out of a mound into a line) · 2-3 Picnic Heist · 2-4 (stink bug) + Fever Flavours · 2-5 (mower) + Mower Pedal · 2-6 Fizzy Bug · *party* · 2-7 (magnet) + Shoebox **pairs** · 2-8 King cameo · 2-9 Twist: Sprinkler · 2-10 King → Quake Slam |
-| 3 | 3-1 (centipede, cobweb) + rushes from floor cracks · 3-2 Splat Stencils · 3-3 (moth) · 3-4 Twist: Blackout · 3-5 Firefly buddy · 3-6 (dark) · *party* · 3-7 Twist: Draft · 3-8 Matriarch cameo · 3-9 stencil pairs · 3-10 Matriarch → Echo Stomp |
-| 4 | 4-1 (robobug, conveyor) · 4-2 On-Beat dance floor · 4-3 Twist: Surge · 4-4 Robo-snail buddy · 4-5 (full tilt) · 4-6 Twist: Glitch · *beat party* · 4-7 Robo Laser fever · 4-8 Roach cameo · 4-9 · 4-10 Roach → Endless |
+| 2 | 2-1 Skid practice · 2-3 trial: Bunny Slipper · 2-4 (stink bug) · 2-5 (mower) · 2-6 → party · 2-7 trial pair: Cleat / Electric Sock · 2-9 twist: Sprinkler · 2-10 King → Quake Slam · V's with a beetle point throughout |
+| 3 | 3-1 Quake practice (a beetle knot) · 3-2 trial: Steel Boot · 3-4 twist: Blackout · 3-6 → party · 3-7 twist: Draft · 3-8 trial pair: Roller Skate / Bunny Slipper · 3-10 Matriarch → Echo Stomp · gilded last bodies run from the shoe |
+| 4 | 4-1 Echo practice (a flea ring) · 4-2 trial: Electric Sock · 4-3 twist: Surge · 4-6 twist: Glitch → party · 4-7 trial pair: Cleat / Steel Boot · V's with a robobug point |
+
+A trial whose shoe the player already owns holds the next shoe they do not. A player
+who owns every shoe gets gilded laces: a six-second Fever that costs the vial nothing.
 
 ---
 
@@ -191,6 +273,9 @@ child and a slow one. Each level gets a four-beat shape (*kishōtenketsu*):
 | 18 | Fever Flavours | variety in the big payoff | 2-4 | M | 3 | 4.5 |
 | 19 | Bug Buddies | companionship, nurture | 3-5 | L | 3.5 | 4.1 |
 | 20 | On-Beat Stomps | rhythm entrainment | feel from launch; mechanic 4-2 | M | 2.5 | 3.1 |
+
+**#1–10 are built** — §0 has where each one entered and what moved; the entries below
+are the original specs, with an *As built* line wherever the shipped version differs.
 
 Every new player-visible label below is an `aria-label` or a bug name. Add each key to
 `src/i18n/locales/en.ts` first, then to the other 20 locale files. Every new lesson row
@@ -486,6 +571,7 @@ the napkin; tap it and the silhouette hops. Retires on the tap, or on bail-out.
 
 **Enters / escalates**
 - 1-7: the Steel Boot, the answer to the 1-2 caterpillar. It arrives five levels after the problem, which keeps the owner's "answer at least two levels later" rule.
+- *As built:* the Steel Boot box is on **1-2** itself, a quarter of the way in, after the spike lesson. It is a taste of the answer rather than the answer, and it is the Locker's first want at minute one and a half. The Roller Skate follows on 1-8, then about one level in three (`TRIALS` in `stages.ts`).
 - 2-7 onward: **pairs**, pick one, the other box goes *poof*.
 - Boss phase 2 gets a box from 2-10.
 - About one level in three after that.
@@ -600,6 +686,7 @@ like a bowling ball, flattening everything in its path.*
 
 **Enters / escalates**
 - 1-6, three levels after the beetle (1-3), on the crumb level, where the pile gathers a knot worth bowling into.
+- *As built:* the FLIP is live from 1-3 (a slam that cracks a shell turns it over, and one tap finishes it), which is what took 1-3 from the scout's worst level to one of its easiest. The KICK lesson waits for 1-6 as specified. 1-6's V rush puts a beetle at the point, because the level's roll is only 2 % beetle.
 - World 2: the Beetle King's adds can be bowled, and a shell bowled into the King during his spin phase counts as a hit.
 - World 4: robobugs become pinballs that ricochet three times.
 - Throughout: a bowled shell is a second answer to the caterpillar.
@@ -707,7 +794,7 @@ Each retires on use. The trophy itself arrives as a new `RewardRevealModal` card
 
 | Twist | Level | What happens | Reuses |
 |---|---|---|---|
-| Lemonade Spill | 1-9 | a slick lane: bugs slow down, press-drag skids | honey's `bugSpeed`, `onSlickFloor()` slide, `paintGlass` (cutsceneArt) |
+| Lemonade Spill | 1-7 *(as built — was 1-9)* | a slick lane: bugs slow down, press-drag skids | honey's `bugSpeed`, `onSlickFloor()` slide, `paintGlass` (cutsceneArt) |
 | Sprinkler | 2-9 | water arcs herd the bugs into a line along the wet stripe | salt `panic` + a heading override |
 | Blackout | 3-4 | 8 s lit only by a torch, glowing eyes; lights back on = 1 s freeze | the `dark`/`torch` grade pass in `cutsceneArt.ts` |
 | Draft | 3-7 | wind drifts bodies and the landing point sideways | the conveyor's drift, applied to the whole board |
@@ -1175,7 +1262,7 @@ calls it. Its vocabulary belongs to another game. Replace it with:
 Ship each arm behind a boot-frozen flag, using the pattern in `src/use/perfVariants.ts`, so a control arm and a
 feature arm can be compared on one portal. Without step 0, none of the success signals above can be read.
 
-### The first five (about 5.5 engineer-days)
+### The first five (about 5.5 engineer-days) — built
 
 | Order | Feature | Days | Why now | Depends on |
 |---|---|---|---|---|
@@ -1189,7 +1276,9 @@ feature arm can be compared on one portal. Without step 0, none of the success s
 none needs new painted art (the art pipeline is the bottleneck, with 19 of 100 slots painted); and they
 make every later feature land harder: rushes carry trophies, finishers pay out trials, Peek sells twists.
 
-### The next wave, in order
+### The next wave, in order — built
+
+Step 0 is the one piece of this section still open.
 
 | Feature | Days | Depends on |
 |---|---|---|

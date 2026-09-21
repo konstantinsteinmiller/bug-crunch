@@ -36,6 +36,9 @@
 import { ref } from 'vue'
 import { isGamePaused, getActivePauseReasons, onPauseChange } from '@/use/useGamePause'
 import { suspendAllAudio, resumeAllAudio, killOneShotSfx } from '@/use/useAssets'
+// Imported from the guard directly, not through `useAssets`: this must run on
+// every build even where a test replaces the asset layer with a stub.
+import { installAudioGuard } from '@/use/audioGuard'
 import { isDebug } from '@/use/useMatch'
 
 const TAG = '[pause]'
@@ -82,6 +85,10 @@ const sync = (paused: boolean): void => {
  * boots into a hidden tab starts muted without waiting for a transition.
  */
 export const installGamePauseAudio = (): (() => void) => {
+  // The page-level hooks first: from here on every AudioContext and <audio>
+  // element — including ones other modules create later, mid-ad or not — is
+  // covered by the same slots this orchestrator holds. Idempotent.
+  installAudioGuard()
   if (installed) return uninstallGamePauseAudio
   installed = true
   // Seed from the live gate so we don't miss a pause that is already

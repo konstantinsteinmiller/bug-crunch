@@ -275,6 +275,14 @@ const runQueue = async () => {
         auto.queue.shift()
         continue
       }
+      // Every file it paints is cut from another painting (cut-from.json), so
+      // the slicer would write nothing and the queue would count a good return
+      // as unusable and re-roll it: two generations for art that never ships.
+      if (job.mark === '–') {
+        log(`✗ skipped — ${job.state}. Switch the slot in UI_CUT_FROM (src/game/artSheet.ts) and run pnpm art:prompts to paint this one instead.`, 'err', stem)
+        auto.queue.shift()
+        continue
+      }
       // Its other images are part of the job, not extras: a death painted from
       // the layout alone comes back as a creature nobody has met.
       const missing = (job.also ?? []).filter((a) => !a.exists).map((a) => a.rel)
@@ -544,7 +552,7 @@ const address = `http://127.0.0.1:${port}/`
 const sheets = jobs.filter((j) => j.kind !== 'single')
 const tally = sheets.reduce((a, j) => ((a[j.mark] = (a[j.mark] ?? 0) + 1), a), {})
 console.log(`Art Desk — ${cfg.project}  ${address}`)
-console.log(`  ${sheets.length} references: ${tally['·'] ?? 0} to paint, ${tally['!'] ?? 0} to repaint, ${tally['?'] ?? 0} painted but not sliced, ${tally['✓'] ?? 0} done`
+console.log(`  ${sheets.length} references: ${tally['·'] ?? 0} to paint, ${tally['!'] ?? 0} to repaint, ${tally['?'] ?? 0} painted but not sliced, ${tally['✓'] ?? 0} done, ${tally['–'] ?? 0} superseded`
   + ` (+ ${jobs.length - sheets.length} single-object prompts, ${jobs.filter((j) => j.kind === 'single' && j.ref).length} with a reference exported)`)
 console.log(`  watching ${cfg.watchDir ?? '(no Downloads folder)'} for returns`)
 if (!argv.includes('--no-open')) {

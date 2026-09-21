@@ -16,6 +16,84 @@ Never delete a row — supersede it.
 
 ## Experiments
 
+### 2026-09-20 squish-juice — goo droplets, a flattened body ghost and a staged boss death   [SHIPPED — NULL RESULT ON FRAME TIME]
+- Area:        `useBugCrunchArt.ts` (`gooSpray`, `pushSquash`/`drawSquashes`, `bossDeath`),
+               `useVfx.ts` (particle shape 4 + its per-colour tinted bake), flag `juice-legacy`
+- Hypothesis:  this one is a FEATURE with a cost, not an optimization, so the
+               question is a BUDGET and not a win: does the new juice cost a
+               throttled phone frames? Per kill it adds up to 9 velocity-aligned
+               droplets (one `drawImage` each, from a bake cached per goo colour
+               exactly as the dust puff is) and one flattened body ghost (one
+               `drawImage` for 170 ms); a boss death adds four staged beats, ~40
+               droplets and five extra decal stamps, once a level.
+               Every count is tier-scaled: `DROP_SCALE` is 1 / 0.7 / 0.45 / 0.22
+               and the ghost is skipped entirely at `min`.
+- Setup:       interleaved A/B, 3 reps, 4x CPU, 360x800 DPR 3, headless Chrome,
+               `?tier=high` pinned on BOTH arms, level 1-3, a stomp on a random
+               live body every 480 ms, 12 s unthrottled settle, 32 s recorded.
+               A = `perf=juice-legacy` (droplets, ghost and staged death all off,
+               the old three-line boss ring kept verbatim), B = shipping.
+               Out-of-tree driver, because `scripts/perf-play.mjs` cannot run this
+               game: its `--stage` save fixture is the CHASSIS's (`ts_upgrades:
+               { squad, power, … }`), so a fresh profile opens on the intro
+               cutscene, there is no `<canvas>` at six seconds and the input
+               driver dies with "no canvas". Same procedure otherwise.
+- Result 4x:   median-of-rep over 3 reps, A → B:
+               `workP50` 3.20 → 3.30 ms (+3.1 %) · `workP95` 6.50 → 6.20 (−4.6 %)
+               `workP99` 9.40 → 9.10 · `intervalP50` 16.70 → 16.70 (0.0 %)
+               `intervalP95` 47.70 → 34.10 · `longTasks` 42 → 18.
+               `workP95` ranges OVERLAP almost completely — A [5.3, 8.8],
+               B [5.9, 8.0] — and the two directions disagree, so the work
+               numbers are noise. `intervalP95` and `longTasks` are dominated by
+               one bad rep that was bad in BOTH arms (rep 3: A 66.6 / 101,
+               B 50.0 / 65) and carry no signal either.
+               Frame counts are healthy and even: 1 116–1 467 over 32 s.
+- Result 6x:   **INVALID on this machine — no delta may be read out of it.**
+               Two attempts at 2 reps x 36 s; neither completed a clean set (one
+               was killed by another process on the desk, the re-run lost a B rep
+               to a page that came up without the probe). What the surviving rows
+               establish is the noise floor, and it is disqualifying on its own:
+               two runs of the SAME arm (A) returned `workP50` 24.4 and 12.2 ms
+               at `intervalP50` 99.8 and 50.6 ms, on 96 and 306 recorded frames.
+               A 2x A-versus-A spread is wider than any effect this change could
+               have, and the `workP95` ranges overlap — A [29.6, 53.3],
+               B [29.5, 64.6]. Same failure mode as the hud-per-frame row below:
+               at 6x on a busy desktop the page is paced by something outside the
+               game. No 6x number from this session is a result.
+- Verdict:     **SHIP. Null at 4x; OPEN at 6x.** At 4x both arms hold
+               `intervalP50` 16.7 ms — a clean 60 fps — and nothing clears the
+               ~5 % noise floor, which for a feature is the pass. The 6x regime,
+               which is the one a cheap Android actually lives in, has NOT been
+               measured: the flag stays for that, against the procedure's usual
+               "delete the losing branch", for the same reason hud-per-frame's
+               did. The branch is three early returns at emitter level, so it
+               cannot rot into a hot loop while it waits.
+               Shipping on the design argument the flag exists to test later: the
+               per-kill cost is bounded and tier-scaled (`DROP_SCALE` 1 / 0.7 /
+               0.45 / 0.22, no ghost at `min`), and the droplet uses the same
+               cached-blit path the dust puff was already measured to WIN with
+               (2026-09-04 row).
+- Also fixed:  **the probe was never running.** `usePerfProbe` has always
+               exported `frameStart` / `frameEnd` / `phaseStart` / `phaseEnd` and
+               `main.ts` has always installed the probe, but NOTHING in the game
+               called them — so `frames` was 0, every percentile was 0, and every
+               A/B this project has run measured nothing. (That is the
+               "INVALID — no usable numbers" row below, in one line.) They are
+               now called from `GameScene`'s `loop`, with `step` and `draw` as
+               the two phases. All four compile to no-op arrows unless
+               `?perfprobe=1` is set, so a player pays two empty calls a frame.
+- Follow-up:   **re-run the 6x arm on a quiet machine or a real phone**, and
+               check the A reps agree with EACH OTHER before reading any delta:
+                 `node juice-ab.mjs --base <host> --reps 4 --seconds 36 --throttle 6`
+               (driver in the session scratchpad; keep `--mute-audio` on the
+               Chrome launch — the game unmutes itself on the synthetic gesture
+               and a headless bench is otherwise audible across the room).
+               If it is null there too, delete `JUICE_LEGACY` and its three
+               branches. If the juice costs frames at 6x, the cheapest lever is
+               `DROP_SCALE` at `low`/`min` — the droplets are the only part of
+               this whose count is worth tuning, and the ghost already skips
+               `min` entirely.
+
 ### 2026-09-17 hud-per-frame — the clock chip and the chain ring stop taking a fresh float every frame   [SHIPPED, FRAME-TIME UNMEASURED]
 - Area:        `useBugCrunchGame.ts` — `timeLeft` / `chainLeft`, flag `hud-per-frame-legacy`
 - Hypothesis:  the standing conclusion below says the biggest main-thread cost in

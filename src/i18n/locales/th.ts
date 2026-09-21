@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} ดาว',
     'recordScore': '{n} คะแนน',
     'recordBeat': 'สถิติเดิม: {n}',
-    'chestCoins': '+{n} เหรียญ'
+    'chestCoins': '+{n} เหรียญ',
+    'move': 'ท่าใหม่!'
+  },
+  'moves': {
+    'spin': 'หมุนส้นเท้า',
+    'skid': 'สไลด์',
+    'quake': 'กระทืบแผ่นดินไหว',
+    'echo': 'กระทืบสะท้อน'
+  },
+  'party': {
+    'title': 'ปาร์ตี้แมลง!',
+    'count': '{n} ตัว',
+    'best': 'ดีที่สุด: {n}',
+    'newBest': 'สถิติปาร์ตี้ใหม่!'
   },
   'fever': {
     'filling': 'Splat ฟีเวอร์: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'แมลงที่บี้ได้',
     'starsEarned': '{n} จาก 3 ดาว',
     'rankOf': 'จาก {n}',
-    'worldUnlocked': 'ปลดล็อก {n} แล้ว!'
+    'worldUnlocked': 'ปลดล็อก {n} แล้ว!',
+    'peekNext': 'แอบดู {n}',
+    'secondWind': 'ลมหายใจที่สอง: รอบหน้าเริ่มด้วยขวดเต็ม',
+    'hintSlam': 'เคล็ดลับ: กดค้างเพื่อทุบกระดอง',
+    'hintAvoid': 'เคล็ดลับ: อย่าเหยียบตัวที่มีหนาม',
+    'missed': 'เหลืออีก {n} ตัว'
   },
   'leaderboard': {
     'title': 'กระดานผู้นำ',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'แตะตรงไหนก็ได้ แล้วเท้าจะพุ่งไปหาแมลงที่ใกล้ที่สุด'
   },
   'loading': {
-    'boo': 'บู๊!',
-    'laugh': 'ฮิ ฮิ!',
+    'uhOh': 'อุ๊ย!',
+    'missed': 'พลาดแล้ว!',
     'tooLong': 'ยังโหลดอยู่… ลองเช็กสัญญาณไหม?'
   },
   'saveStatus': {

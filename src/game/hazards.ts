@@ -35,6 +35,14 @@ export type HazardId =
   /** Breadcrumbs. Not a hazard at all: ants path TOWARDS them, which is how a
    *  level makes a swarm walk into one place the player can slam. */
   | 'crumbs'
+  /** A shoebox with a ribbon on it — a Shoebox Trial. Stomp it open (three taps,
+   *  a slam counts two) and the foot wears the shoe inside for `TRIAL_MS`.
+   *  Never laid out by `hazards`: the level drops it in at `trialAt`. */
+  | 'shoebox'
+  /** A slick lane of spilt lemonade — the Spill twist. Bodies in it wade at half
+   *  speed and cannot leap; a foot that lands in it and drags SKIDS. Laid by the
+   *  twist and taken up again when it ends. */
+  | 'slick'
 
 export interface HazardSpec {
   id: HazardId
@@ -50,6 +58,8 @@ export interface HazardSpec {
   lethal: boolean
   /** The player can trigger it by stomping it. */
   stompable: boolean
+  /** Blows to break it open, where it breaks at all (the shoebox). A slam is two. */
+  hp?: number
   /** Body colours for the procedural drawing. */
   body: string
   shade: string
@@ -93,6 +103,18 @@ export const HAZARDS: readonly HazardSpec[] = [
     id: 'crumbs', size: 6, bugSpeed: 1, footAgility: 1,
     grounds: false, lethal: false, stompable: false,
     body: '#e0b877', shade: '#a97f41', accent: '#fff0c9'
+  }),
+  hz({
+    id: 'shoebox', size: 5, bugSpeed: 1, footAgility: 1,
+    grounds: false, lethal: false, stompable: true, hp: 3,
+    body: '#ff6b8f', shade: '#b8325a', accent: '#ffe45e'
+  }),
+  hz({
+    // Half a honey. Enough to make a flea stand still and a line of ants wade,
+    // not so much that a spill turns a level into a floor of statues.
+    id: 'slick', size: 9, bugSpeed: 0.5, footAgility: 1,
+    grounds: true, lethal: false, stompable: false,
+    body: '#ffe066', shade: '#e0a800', accent: '#fff8c8'
   })
 ] as const
 

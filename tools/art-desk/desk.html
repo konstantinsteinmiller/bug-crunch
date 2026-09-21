@@ -54,6 +54,7 @@ main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr minmax(290
 .m-repaint { color: var(--bad); border-color: #7a3a3a; }
 .m-unsliced { color: var(--warn); border-color: #7a6030; }
 .m-done { color: var(--ok); border-color: #2f6e4c; }
+.m-super { color: var(--dim); border-color: var(--line); }
 .badge.q { color: var(--accent); border-color: #3e4f86; }
 .badge.busy { color: #fff; background: #3e4f86; border-color: #5a6fc0; }
 .badge.warn { color: var(--warn); border-color: #7a6030; }
@@ -184,10 +185,12 @@ let pending = []
 const FILTERS = [
   ['todo', 'To paint', (j) => j.mark === '·' || j.mark === '!'],
   ['unsliced', 'Not sliced', (j) => j.mark === '?'],
-  ['done', 'Done', (j) => j.mark === '✓'],
+  // Superseded counts as done: every file it paints is cut from another
+  // painting (cut-from.json), so there is nothing to paint — see UI_CUT_FROM.
+  ['done', 'Done', (j) => j.mark === '✓' || j.mark === '–'],
   ['all', 'All', () => true]
 ]
-const MARK = { '·': ['m-todo', 'to paint'], '!': ['m-repaint', 'repaint'], '?': ['m-unsliced', 'not sliced'], '✓': ['m-done', 'done'] }
+const MARK = { '·': ['m-todo', 'to paint'], '!': ['m-repaint', 'repaint'], '?': ['m-unsliced', 'not sliced'], '✓': ['m-done', 'done'], '–': ['m-super', 'superseded'] }
 const file = (rel, v) => `/file?p=${encodeURIComponent(rel)}${v ? `&v=${v}` : ''}`
 const sheetsRel = () => S.sheetsRel ?? 'art-sheets'
 
@@ -308,7 +311,7 @@ const renderDetail = async () => {
     ${j.cells.length ? `<h3>Sprites on disk — ${j.onDisk}/${j.cells.length}</h3><div class="sprites">${j.cells.map((c) => `
       <div class="sprite${c.onDisk ? '' : ' miss'}" title="${esc(c.target)}">
         ${c.onDisk ? `<img src="${file(`${S.outRel}/${c.target}`, at)}" alt="">` : '<div class="box">not cut</div>'}
-        <span>${esc([c.label, c.variant].filter(Boolean).join(' · ') || c.id)}</span></div>`).join('')}</div>` : ''}
+        <span>${esc([c.label, c.variant].filter(Boolean).join(' · ') || c.id)}${c.cutFrom ? ` <em title="cut-from.json">— cut from ${esc(c.cutFrom)}</em>` : ''}</span></div>`).join('')}</div>` : ''}
     <h3>Prompt</h3>
     <details class="prompt" ${store.get('promptOpen', false) ? 'open' : ''}><summary>${(j.promptChars / 1000).toFixed(1)}k characters — show</summary><pre id="ptext">loading…</pre></details>`
   const p = await getPrompt(j.stem).catch(() => null)

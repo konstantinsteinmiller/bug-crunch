@@ -12,6 +12,7 @@ import { paintFloorTile, FLOOR_TILE_PX } from '@/game/floorArt'
 import { onArtChanged, type ArtChange } from '@/game/art'
 import { WORLDS } from '@/game/stages'
 import type { CampaignReward } from '@/game/campaignRewards'
+import { moveSpec } from '@/game/moves'
 
 /**
  * ─── The gift screen ────────────────────────────────────────────────────────
@@ -104,16 +105,43 @@ const present = (): void => {
   // `immediate`, which fires DURING setup — before `draw` below has been
   // initialised — and `nextTick(draw)` would read it in its temporal dead zone.
   void nextTick(() => draw())
+  stopDwell()
+  dwell = setTimeout(advance, DWELL_MS)
+}
+
+/**
+ * ── Why the queue plays itself ──
+ *
+ * It used to need one tap per prize, and a good run wins several at once: a
+ * blind tester counted FIVE screens in a row after the world-1 boss — new move,
+ * new zone, new bug, best score, level clear — and wrote "ok I get it, can I
+ * just play". That is five taps charged at the exact moment the game had just
+ * earned his attention, and the celebration turned into paperwork.
+ *
+ * So the chain is a MONTAGE now. Each card dwells long enough to be read and
+ * then hands over to the next one on its own, and a tap ends the whole queue
+ * rather than advancing it by one — because a player who taps here is not
+ * asking for the next prize, they are asking for the game back. Nothing is
+ * lost by skipping: every prize is already banked before this screen opens.
+ */
+const DWELL_MS = 1700
+
+let dwell: ReturnType<typeof setTimeout> | null = null
+const stopDwell = (): void => {
+  if (dwell !== null) { clearTimeout(dwell); dwell = null }
 }
 
 const finish = (): void => {
+  stopDwell()
   queue.value = []
   index.value = 0
   emit('update:modelValue', false)
   emit('done')
 }
 
+/** Hand over to the next prize, or end the montage. Called by the dwell timer. */
 const advance = (): void => {
+  stopDwell()
   if (index.value < queue.value.length - 1) {
     index.value += 1
     present()
@@ -121,6 +149,9 @@ const advance = (): void => {
   }
   finish()
 }
+
+/** A tap anywhere: the player wants the board back, not the next card. */
+const skipAll = (): void => { finish() }
 
 /**
  * The last `reward` prop this component acted on.
@@ -369,7 +400,7 @@ watch(canvasRef, (el) => {
   ro = new ResizeObserver(() => draw())
   ro.observe(el)
 })
-onBeforeUnmount(() => { ro?.disconnect(); ro = null; stopWalk(); offArt() })
+onBeforeUnmount(() => { ro?.disconnect(); ro = null; stopWalk(); offArt(); stopDwell() })
 
 // ─── The words ──────────────────────────────────────────────────────────────
 
@@ -398,7 +429,15 @@ const caption = computed(() => {
     case 'stars': return t('reveal.starsTotal', { n: r.stars })
     case 'record': return t('reveal.recordScore', { n: r.score })
     case 'chest': return t('reveal.chestCoins', { n: r.coins })
+    case 'move': return t(`moves.${r.move}`)
   }
+  return ''
+})
+
+/** A Boss Trophy's glyph — the move's own mark from the shared icon set. */
+const moveIcon = computed(() => {
+  const r = current.value
+  return r?.kind === 'move' ? moveSpec(r.move).icon : 'star'
 })
 
 /** The small grey line under the caption, where there is something more to
@@ -410,13 +449,14 @@ const subCaption = computed(() => {
 </script>
 
 <template lang="pug">
-  //- `showContinue` is always on: a gift screen with no way out is a trap, and
-  //- the tap that dismisses it is the same tap that advances the queue.
+  //- `showContinue` is always on: a gift screen with no way out is a trap. The
+  //- tap it carries now ends the whole montage rather than advancing it by one
+  //- — see the note on `DWELL_MS`.
   FReward(
     :model-value="modelValue"
     :show-continue="true"
     :reveal="true"
-    @continue="advance"
+    @continue="skipAll"
   )
     template(#ribbon)
       span {{ headline }}
@@ -447,6 +487,11 @@ const subCaption = computed(() => {
         //- colours, it is already true and changes nothing.
         GameIcon.reveal-card__glyph(v-else-if="current.kind === 'stars'" name="star" hero)
         GameIcon.reveal-card__glyph.is-trophy(v-else-if="current.kind === 'record'" name="trophy" hero)
+        //- A Boss Trophy: the boss's own trick, as the move's glyph, on a gold
+        //- disc — it is a thing the player can now DO, so it gets the trophy's
+        //- gold rather than a plain mark.
+        div.reveal-card__move(v-else-if="current.kind === 'move'")
+          GameIcon.reveal-card__glyph.is-move(:name="moveIcon" hero)
         GameIcon.reveal-card__glyph.is-chest(v-else name="chest" hero)
 
       //- ── The name ────────────────────────────────────────────────────
@@ -532,6 +577,23 @@ const subCaption = computed(() => {
 
   &.is-chest
     color: #f5a842
+
+  &.is-move
+    width: 62%
+    height: 62%
+    color: #2b1b2e
+    filter: none
+
+// The trophy's disc: a gold medal the move's glyph is struck into.
+.reveal-card__move
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 80%
+  height: 80%
+  border-radius: 999px
+  background: radial-gradient(circle at 35% 30%, #fff3b0 0%, #ffd93c 45%, #e8a200 100%)
+  box-shadow: 0 0 0 0.18em #2b1b2e, 0 0.2em 0 0.14em rgba(43, 27, 46, 0.55), 0 0 1.4em rgba(255, 217, 60, 0.6)
 
 .reveal-card__caption
   margin: 0

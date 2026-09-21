@@ -68,12 +68,66 @@ export interface RunTally {
   bestFeverKills: number
   /** Final score. */
   score: number
+  /**
+   * Blows that rang off armour the shoe could not open.
+   *
+   * Not a mistake — a ricochet keeps the chain (see `combo.ts`) — but a lot of
+   * them is the clearest thing a failed run can say about what to try next: a
+   * player who clanged a shell thirty times needed the slam. `missHint` reads it.
+   */
+  ricochets: number
+  /** Stomps that squished two or more bodies at once. The density the Rush
+   *  Lines and Growth Spurt exist to create, counted so a test can see it. */
+  multiKills: number
 }
 
 export const emptyTally = (): RunTally => ({
   cleared: false, squishes: 0, byKind: {}, bestCombo: 0, timeLeft: 0,
-  misses: 0, hits: 0, spikes: 0, fevers: 0, bestFeverKills: 0, score: 0
+  misses: 0, hits: 0, spikes: 0, fevers: 0, bestFeverKills: 0, score: 0,
+  ricochets: 0, multiKills: 0
 })
+
+// ─── So Close! — what a failed run says about the next one ─────────────────
+
+/**
+ * The one TOOL a failed run most needed, or null.
+ *
+ * Read off the tally rather than guessed: a run that clanged armour again and
+ * again was a run that needed the slam, and a run that kept landing on spikes
+ * was a run that needed to leave the caterpillars alone. Both thresholds are
+ * "this happened a lot", not "this happened": a single clang is how a player
+ * finds a shell, and a single spike is how they learn the caterpillar.
+ */
+export type MissHint = 'slam' | 'avoid'
+
+export const MISS_HINT_RICOCHETS = 8
+export const MISS_HINT_SPIKES = 3
+
+export const missHint = (t: RunTally): MissHint | null => {
+  if (t.ricochets >= MISS_HINT_RICOCHETS) return 'slam'
+  if (t.spikes >= MISS_HINT_SPIKES) return 'avoid'
+  return null
+}
+
+/**
+ * How close a failed run came, 0..1.
+ *
+ * `bossHp` is the boss bar's remaining fraction on a boss level — the only
+ * progress a boss level has — and is ignored everywhere else.
+ */
+export const nearMiss01 = (t: RunTally, quota: number, bossHp?: number): number => {
+  if (bossHp !== undefined) return Math.max(0, Math.min(1, 1 - bossHp))
+  return quota > 0 ? Math.max(0, Math.min(1, t.squishes / quota)) : 0
+}
+
+/**
+ * The bar a failed run must clear for a Second Wind: most of the way there.
+ *
+ * Below it the level was a wall rather than a near thing, and the existing
+ * relief (slower bugs, a longer clock — `reliefFor`) is the right help. Above
+ * it the player was one push away, and a full vial on the retry is that push.
+ */
+export const SECOND_WIND_AT = 0.6
 
 /**
  * Did this run meet this objective?

@@ -1,6 +1,6 @@
 {
   "name": "bug-crunch",
-  "version": "0.3.1",
+  "version": "2.0.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -39,12 +39,15 @@
     "art:prompts": "node --import ./tools/ts-resolve.mjs tools/art-prompts.mjs",
     "art:models": "node tools/art-models.mjs",
     "art:status": "node --import ./tools/ts-resolve.mjs tools/art-status.mjs",
+    "art:floors": "node --import ./tools/ts-resolve.mjs tools/check-floor-art.mjs",
     "art:measure": "python tools/measure-art.py",
     "art:desk": "node tools/art-desk/server.mjs",
     "art:promotion": "node --import ./tools/ts-resolve.mjs tools/art-promotion.mjs",
     "preview:video": "node tools/preview-video/record.mjs",
     "audio:render": "node --import ./tools/ts-resolve.mjs tools/audio/render-sfx.mjs",
+    "audio:sfx": "node --import ./tools/ts-resolve.mjs tools/audio/build-sfx.mjs",
     "music:render": "node tools/music/render.mjs",
+    "scout": "vitest run --config vitest.scout.config.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -85,7 +88,8 @@
     "vite-plugin-javascript-obfuscator": "^3.1.0",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.0",
-    "vue-tsc": "^3.2.5"
+    "vue-tsc": "^3.2.5",
+    "wrangler": "^4.135.0"
   },
   "engines": {
     "node": "^25.5.0 || >=22.12.0"

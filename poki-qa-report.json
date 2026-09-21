@@ -1,8 +1,8 @@
 {
-  "version": "Bug Crunch 0.3.1",
-  "versionId": "7c1e046f-e8e4-4499-b91b-0d0b60a40060",
-  "when": "2026-09-15T18:32:59.770Z",
-  "inspector": "https://inspector.poki.dev/?game=poki-7c1e046f-e8e4-4499-b91b-0d0b60a40060",
+  "version": "Bug Crunch 2.0.2",
+  "versionId": "7e643ab1-03c0-45ad-a2ca-4f33102a577a",
+  "when": "2026-09-20T23:21:17.378Z",
+  "inspector": "https://inspector.poki.dev/?game=poki-7e643ab1-03c0-45ad-a2ca-4f33102a577a",
   "evidence": {
     "sdkInit": {
       "verdict": "pass",
@@ -17,20 +17,20 @@
       "evidence": "fired after a trusted pointer gesture"
     },
     "pauseBracket": {
-      "verdict": "pass",
-      "evidence": "a gameplayStop followed another tab taking the foreground"
+      "verdict": "unproven",
+      "evidence": "no gameplayStop when the tab lost the foreground — check by hand whether the game pauses on visibility loss"
     },
     "commercialBreak": {
-      "verdict": "pass",
-      "evidence": "Event log: commercial break, with \"Force show ads\" on"
+      "verdict": "unproven",
+      "evidence": "no commercial break within 120 s of play, even with \"Force show ads\" on"
     },
     "adAudioMuted": {
-      "verdict": "fail",
-      "evidence": "1 audible element(s), 1 running AudioContext(s) of 3 tracked, sampled during the break"
+      "verdict": "unproven",
+      "evidence": "no break occurred to sample audio during"
     },
     "adNotInterrupted": {
-      "verdict": "pass",
-      "evidence": "space, arrow and escape did not end the break"
+      "verdict": "unproven",
+      "evidence": "no break occurred to interrupt"
     },
     "gameplayStop": {
       "verdict": "pass",
@@ -38,15 +38,15 @@
     },
     "noDuplicates": {
       "verdict": "pass",
-      "evidence": "sequence: start → stop → start → stop → start → stop"
+      "evidence": "sequence: start → stop"
     },
     "rewardedBreak": {
       "verdict": "unproven",
       "evidence": "no `hooks.triggerRewarded` configured — only the player can open a rewarded ad"
     },
     "noCrashes": {
-      "verdict": "unproven",
-      "evidence": "still running, but 3 console error(s): %cPOKI:%c game error font-weight: bold  NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41 | NotFoundError: Fa"
+      "verdict": "pass",
+      "evidence": "no uncaught errors, canvas still alive after the pass"
     },
     "noBreakingBugs": {
       "verdict": "unproven",
@@ -62,7 +62,7 @@
     },
     "noExternal": {
       "verdict": "pass",
-      "evidence": "8 host(s) requested, all Poki or its ad stack"
+      "evidence": "5 host(s) requested, all Poki or its ad stack"
     },
     "cookieLabels": {
       "verdict": "pass",
@@ -143,8 +143,8 @@
       "module": "SDK Basics",
       "match": {},
       "probe": "pauseBracket",
-      "verdict": "pass",
-      "action": "ticked (proven by this run)"
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
     },
     {
       "id": "no-duplicates",
@@ -159,8 +159,8 @@
       "module": "Technical Stability",
       "match": {},
       "probe": "noCrashes",
-      "verdict": "unproven",
-      "action": "ticked (not decidable by the harness — your declaration)"
+      "verdict": "pass",
+      "action": "ticked (proven by this run)"
     },
     {
       "id": "no-breaking-bugs",
@@ -271,8 +271,8 @@
       "module": "Ad Implementation",
       "match": {},
       "probe": "commercialBreak",
-      "verdict": "pass",
-      "action": "ticked (proven by this run)"
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
     },
     {
       "id": "rewarded-breaks",
@@ -287,16 +287,16 @@
       "module": "Ad Implementation",
       "match": {},
       "probe": "adAudioMuted",
-      "verdict": "fail",
-      "action": "ticked — but THIS RUN DISPROVED IT, see the report"
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
     },
     {
       "id": "ad-not-interrupted",
       "module": "Ad Implementation",
       "match": {},
       "probe": "adNotInterrupted",
-      "verdict": "pass",
-      "action": "ticked (proven by this run)"
+      "verdict": "unproven",
+      "action": "ticked (not decidable by the harness — your declaration)"
     },
     {
       "id": "pointer-lock",
@@ -310,27 +310,15 @@
   "warnings": [],
   "hosts": [
     [
-      "api.poki.com",
-      1
-    ],
-    [
-      "a.poki-cdn.com",
-      7
-    ],
-    [
-      "v.poki-cdn.com",
-      1
-    ],
-    [
-      "t.poki.io",
-      2
-    ],
-    [
       "65a6c74e-f283-4b8b-b72e-78206eaeb581.gdn.poki.com",
-      283
+      341
     ],
     [
       "game-cdn.poki.com",
+      4
+    ],
+    [
+      "a.poki-cdn.com",
       4
     ],
     [
@@ -342,8 +330,5 @@
       2
     ]
   ],
-  "consoleErrors": [
-    "%cPOKI:%c game error font-weight: bold  NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41",
-    "NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.\n    at a (https://game-cdn.poki.com/scripts/968b41952cd3d19a0720e382263d418ba1425bf9/poki-sdk-core-968b41952cd3d19a0720e382263d418ba1425bf9.js:1:155850)\n    at https://game-cdn.poki.com/scripts/968b41952cd3d19a0720e382263d418ba1425bf9/poki-sdk-core-968b41952cd3d19a0720e382263d418ba1425bf9.js:1:156356"
-  ]
+  "consoleErrors": []
 }

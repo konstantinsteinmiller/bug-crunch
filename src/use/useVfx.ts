@@ -1,8 +1,8 @@
 import { ref } from 'vue'
 import {
-  bakeRadialSprite, getRamp, getSprite, putRamp, putSprite, rgbString
+  bakeRadialSprite, clearSprites, getRamp, getSprite, putRamp, putSprite, rgbString
 } from '@/use/useGradientRamps'
-import { spriteFor } from '@/game/art'
+import { onArtChanged, spriteFor } from '@/game/art'
 
 /**
  * ─── VFX: pooled particles, floating text, decals, quality ladder ───────────
@@ -358,7 +358,8 @@ const prot = new Float32Array(MAX_PARTICLES)
 const pvrot = new Float32Array(MAX_PARTICLES)
 /** 0 = normal blend, 1 = additive. */
 const padd = new Uint8Array(MAX_PARTICLES)
-/** 0 = soft round, 1 = shard/quad, 2 = spark streak, 3 = smoke puff. */
+/** 0 = soft round, 1 = shard/quad, 2 = spark streak, 3 = smoke puff,
+ *  4 = goo droplet (a wet teardrop flying head-first along its own velocity). */
 const pshape = new Uint8Array(MAX_PARTICLES)
 const pr = new Uint8Array(MAX_PARTICLES)
 const pg = new Uint8Array(MAX_PARTICLES)
@@ -379,7 +380,7 @@ export interface EmitOptions {
   gravity?: number
   drag?: number
   additive?: boolean
-  shape?: 0 | 1 | 2 | 3
+  shape?: 0 | 1 | 2 | 3 | 4
   rot?: number
   vrot?: number
 }
@@ -560,6 +561,144 @@ export const paintSmokeRef = (ctx: CanvasRenderingContext2D, r: number): void =>
   ctx.fill()
 }
 
+// ─── The goo droplet ────────────────────────────────────────────────────────
+//
+// Shape 4, and the one piece of the burst that is LIQUID rather than a coloured
+// dot. A squish already threw a cloud of round particles, and a cloud of round
+// particles is what a puff of smoke is: nothing in it says "wet". A droplet does
+// two things a dot cannot — it flies HEAD FIRST (the fat end leads, the tail
+// stretches behind it, and the stretch grows with speed) and it carries a
+// specular highlight, which is the only cue a flat cartoon has for "this is a
+// fluid and it is shiny".
+//
+// It costs a rotate and a blit, so it is deliberately the SMALL half of a burst:
+// a dozen of them at `high`, four at `min`, thrown alongside the cheap dots
+// rather than instead of them. See `gooSpray` in `useBugCrunchArt`.
+
+/** This module's second slice of the shared ramp cache's key space. The puff
+ *  tags with `SMOKE_RAMP`, so a droplet in the same colour cannot collide with
+ *  the puff baked for it. */
+const DROP_RAMP = 0x2000000
+
+/** The droplet bake's box: twice as wide as it is tall, because the drawable IS
+ *  a teardrop lying along +x with its head at the right. `DROP_H / 2` is the `r`
+ *  the reference is drawn at, so the shape fills the box exactly. */
+const DROP_W = 192
+const DROP_H = 96
+
+/**
+ * ONE droplet, white, centred on the origin in a box `4r` wide and `2r` tall,
+ * nose at +2r and tail at −2r — the reference the painted droplet is made from
+ * AND the shape the bake rasterises when there is no painting.
+ *
+ * Greyscale by contract: the game tints it to the goo of whatever it came out of,
+ * exactly as it tints the dust puff. Centred on the origin, because the runtime
+ * blits it into a box centred on the particle and rotated to its velocity — a
+ * shape drawn off-centre here would orbit its own position as it turned.
+ */
+export const paintGooDropRef = (ctx: CanvasRenderingContext2D, r: number): void => {
+  // The body: a round nose at +x tapering to a point at −x. Four quadratics, so
+  // the shoulders bulge behind the nose and the tail is a genuine spike rather
+  // than a cone — which is the difference between thrown liquid and a comet.
+  ctx.beginPath()
+  ctx.moveTo(-r * 2, 0)
+  ctx.quadraticCurveTo(r * 0.2, -r * 0.95, r * 1.1, -r * 0.8)
+  ctx.quadraticCurveTo(r * 2.05, -r * 0.42, r * 2, 0)
+  ctx.quadraticCurveTo(r * 2.05, r * 0.42, r * 1.1, r * 0.8)
+  ctx.quadraticCurveTo(r * 0.2, r * 0.95, -r * 2, 0)
+  ctx.closePath()
+  // OPAQUE, and that is a contract rather than a taste. The bench renders this
+  // on a transparent canvas and then lays it on the magenta key, so a body drawn
+  // at 90 % alpha comes out PINK on the reference sheet — under a prompt whose
+  // next line says "grey and white only, no colour anywhere". The transparency a
+  // droplet has in play is the emitter's (`alpha`) and the pool's own fade, and
+  // both of them are applied over this.
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  // The shine, on the shoulder rather than the nose. Small and hot: on a tinted
+  // multiply this is the only part that survives as a wet spot, and anything
+  // bigger turns the whole drop pale — the lesson `SPLAT_GLOSS` already paid for.
+  ctx.beginPath()
+  ctx.ellipse(r * 0.95, -r * 0.34, r * 0.52, r * 0.24, -0.22, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+}
+
+/**
+ * The droplet sprite for a colour: the painted droplet tinted to it when the art
+ * pipeline has delivered one, otherwise the same teardrop rasterised here.
+ *
+ * Tinted with the puff's own three ops (multiply, then `destination-in` to cut
+ * the silhouette back out) for the reason `bakePuffSprite` gives: a droplet is a
+ * shape plus a highlight, and a `destination-in` mask alone would throw the
+ * highlight away and hand back a flat blob.
+ */
+const bakeDropSprite = (
+  key: number, r: number, g: number, b: number
+): HTMLCanvasElement | null => {
+  let made: HTMLCanvasElement | null = null
+  try {
+    const c = document.createElement('canvas')
+    c.width = DROP_W
+    c.height = DROP_H
+    const t = c.getContext('2d')
+    if (t) {
+      const painted = spriteFor('fx', 'goo-drop')
+      if (painted) t.drawImage(painted, 0, 0, DROP_W, DROP_H)
+      else {
+        t.save()
+        t.translate(DROP_W * 0.5, DROP_H * 0.5)
+        paintGooDropRef(t, DROP_H * 0.5)
+        t.restore()
+      }
+      t.globalCompositeOperation = 'multiply'
+      t.fillStyle = rgbString(r, g, b)
+      t.fillRect(0, 0, DROP_W, DROP_H)
+      t.globalCompositeOperation = 'destination-in'
+      if (painted) t.drawImage(painted, 0, 0, DROP_W, DROP_H)
+      else {
+        t.save()
+        t.translate(DROP_W * 0.5, DROP_H * 0.5)
+        paintGooDropRef(t, DROP_H * 0.5)
+        t.restore()
+      }
+      made = c
+    }
+  } catch {
+    made = null
+  }
+  return putSprite(key, made)
+}
+
+/** The droplet sprite the particle bucket blits for a colour — and the
+ *  playground's way of showing the painted droplet through the game's own
+ *  tinting path. */
+export const dropSpriteFor = (r: number, g: number, b: number): HTMLCanvasElement | null => {
+  const key = DROP_RAMP | (r << 16) | (g << 8) | b
+  let spr = getSprite(key)
+  if (spr === undefined) spr = bakeDropSprite(key, r, g, b)
+  return spr
+}
+
+// ─── …and dropping them when the painting lands ─────────────────────────────
+//
+// Both tinted bakes above read `spriteFor('fx', …)` ONCE, at bake time, and then
+// cache the result per colour for the life of the page. Which means a painting
+// that finishes decoding after the first burst — the ordinary case, since the fx
+// tier is not what the splash waits on — would never be seen: the cache only
+// turns over at its own 64-entry cap, and a level with four goo colours never
+// reaches it.
+//
+// Scoped, per `scoped-art-invalidation`: only the two paintings these bakes are
+// MADE from stale them, and everything else the art layer delivers is handled by
+// the cache that owns it. A flag flip or a refresh passes null and drops the lot.
+const TINTED_FX = new Set(['smoke', 'goo-drop'])
+
+onArtChanged((change) => {
+  if (!change) { clearSprites(); return }
+  if (change.kind === 'fx' && TINTED_FX.has(change.id)) clearSprites()
+})
+
 const drawBucket = (
   ctx: CanvasRenderingContext2D,
   toX: (wx: number) => number,
@@ -646,6 +785,35 @@ const drawBucket = (
         ctx.beginPath()
         ctx.arc(0, 0, qr, 0, Math.PI * 2)
         ctx.fill()
+        ctx.restore()
+        break
+      }
+      case 4: { // goo droplet — a wet teardrop, head first along its velocity
+        const vlen = Math.hypot(pvx[i]!, pvy[i]!)
+        // A drop that has stalled is a bead, not a streak: the stretch is the
+        // SPEED, so a burst reads as long spears on the way out and fat round
+        // beads by the time it settles. Capped, or a fast fling draws a hair.
+        const stretch = 1 + Math.min(1.3, vlen / 42)
+        const spr = dropSpriteFor(pr[i]!, pg[i]!, pb[i]!)
+        ctx.save()
+        ctx.translate(sx, sy)
+        // World +y is screen down (`toY` is a scale, not a flip), so the
+        // velocity angle is the screen angle unchanged.
+        if (vlen > 0.001) ctx.rotate(Math.atan2(pvy[i]!, pvx[i]!))
+        else ctx.rotate(prot[i]!)
+        if (spr) {
+          // The bake is 2:1 with the head at +x, so the box is `size * stretch`
+          // out in front and half as tall — the same centre the arc would have.
+          ctx.drawImage(spr, -size * stretch, -size * 0.5, size * 2 * stretch, size)
+        } else {
+          // No offscreen context to bake into — jsdom under test, or a lost
+          // context. One ellipse: the head reads, the shine does not, and this
+          // path is off the real-browser hot path either way.
+          ctx.fillStyle = rgbString(pr[i]!, pg[i]!, pb[i]!)
+          ctx.beginPath()
+          ctx.ellipse(0, 0, size * 0.55 * stretch, size * 0.42, 0, 0, Math.PI * 2)
+          ctx.fill()
+        }
         ctx.restore()
         break
       }

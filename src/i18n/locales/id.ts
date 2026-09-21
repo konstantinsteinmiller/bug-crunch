@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} bintang',
     'recordScore': '{n} poin',
     'recordBeat': 'Rekor lama: {n}',
-    'chestCoins': '+{n} koin'
+    'chestCoins': '+{n} koin',
+    'move': 'Gerakan baru!'
+  },
+  'moves': {
+    'spin': 'Putaran Tumit',
+    'skid': 'Seluncur',
+    'quake': 'Hentakan Gempa',
+    'echo': 'Hentakan Gema'
+  },
+  'party': {
+    'title': 'Pesta Serangga!',
+    'count': '{n} serangga',
+    'best': 'Terbaik: {n}',
+    'newBest': 'Rekor pesta baru!'
   },
   'fever': {
     'filling': 'Demam Splat: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Serangga diremukkan',
     'starsEarned': '{n} dari 3 bintang',
     'rankOf': 'dari {n}',
-    'worldUnlocked': '{n} terbuka!'
+    'worldUnlocked': '{n} terbuka!',
+    'peekNext': 'Intip {n}',
+    'secondWind': 'Napas kedua: percobaan berikutnya dimulai dengan botol penuh',
+    'hintSlam': 'Tips: tahan untuk menghantam cangkang',
+    'hintAvoid': 'Tips: biarkan yang berduri',
+    'missed': 'Kurang {n} serangga'
   },
   'leaderboard': {
     'title': 'Papan peringkat',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Ketuk di mana saja dan kakimu melayang ke serangga terdekat.'
   },
   'loading': {
-    'boo': 'Dor!',
-    'laugh': 'Hihi!',
+    'uhOh': 'Gawat!',
+    'missed': 'Meleset!',
     'tooLong': 'Masih memuat… cek koneksimu?'
   },
   'saveStatus': {

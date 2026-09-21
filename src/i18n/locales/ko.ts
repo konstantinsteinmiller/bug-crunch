@@ -132,7 +132,20 @@ export default {
     'starsTotal': '별 {n}개',
     'recordScore': '{n}점',
     'recordBeat': '이전 기록: {n}',
-    'chestCoins': '+{n} 코인'
+    'chestCoins': '+{n} 코인',
+    'move': '새 기술!'
+  },
+  'moves': {
+    'spin': '뒤꿈치 회전',
+    'skid': '미끄럼',
+    'quake': '지진 강타',
+    'echo': '메아리 밟기'
+  },
+  'party': {
+    'title': '벌레 파티!',
+    'count': '{n}마리',
+    'best': '최고: {n}',
+    'newBest': '파티 신기록!'
   },
   'fever': {
     'filling': '스플랫 피버: {n}%',
@@ -227,7 +240,12 @@ export default {
     'squishes': '뭉갠 벌레',
     'starsEarned': '3개 중 {n}개 별',
     'rankOf': '/ {n}',
-    'worldUnlocked': '{n} 해금!'
+    'worldUnlocked': '{n} 해금!',
+    'peekNext': '{n} 미리 보기',
+    'secondWind': '재도전 보너스: 다음 도전은 병이 가득 찬 채로 시작해요',
+    'hintSlam': '팁: 길게 눌러 껍질을 부수세요',
+    'hintAvoid': '팁: 가시 있는 벌레는 피하세요',
+    'missed': '벌레 {n}마리 남음'
   },
   'leaderboard': {
     'title': '순위표',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': '아무 데나 탭하면 발이 가장 가까운 벌레로 날아가요.'
   },
   'loading': {
-    'boo': '와!',
-    'laugh': '히히!',
+    'uhOh': '헉!',
+    'missed': '못 밟았지!',
     'tooLong': '아직 불러오는 중… 연결을 확인해 볼까요?'
   },
   'saveStatus': {

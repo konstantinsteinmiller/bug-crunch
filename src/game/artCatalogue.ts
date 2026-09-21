@@ -2,6 +2,39 @@ import type { ArtKind, ArtWant } from '@/game/art'
 import type { EggLook } from '@/game/bosses'
 import type { BugId } from '@/game/bugs'
 import { GAME_ICON_NAMES, type GameIconName } from '@/components/icons/iconNames'
+import { isLeadFloor, worldOfFloor, type FloorId } from '@/game/floors'
+
+// ─── Which level floors have a painting yet ─────────────────────────────────
+//
+// Thirty-six of the forty floors are a level's OWN surface and, unlike the four
+// a world ships with, they arrive one painting at a time over days. This list
+// is the ship manifest for that batch, and it is explicit rather than derived
+// for one reason: `spriteFor` probes the network the first time a floor is
+// drawn, so an id named here that has no file behind it is a 404 on the level
+// that uses it — and CrazyGames' QA console reports every 404 as a broken
+// build. A floor that is NOT named here never probes and simply draws itself,
+// which is what all thirty-six did before any of them were painted.
+//
+// So the rule is: add an id the moment its `.webp` lands in
+// `public/images/bg/`, and never before.
+// `tests/game/floorArt.test.ts` holds this list and that folder together in
+// both directions, and `pnpm art:floors` prints the array to paste.
+export const LEVEL_FLOOR_ART_IDS: readonly FloorId[] = []
+
+const LEVEL_FLOOR_ART = new Set<string>(LEVEL_FLOOR_ART_IDS)
+
+/**
+ * The art id a floor is painted under, or null when nothing is painted for it.
+ *
+ * ONE rule, used by the renderer's probe and by the preloader alike, because
+ * two copies of it drift into either a 404 storm or a painting nobody fetches.
+ * A world's lead floor keeps the id it has always shipped under; a level floor
+ * uses its own id, and only once its painting is actually in the manifest.
+ */
+export const floorArtIdFor = (floor: FloorId): string | null => {
+  if (isLeadFloor(floor)) return `floor-${worldOfFloor(floor)}`
+  return LEVEL_FLOOR_ART.has(floor) ? floor : null
+}
 
 /**
  * ─── Every still the renderer can ask for, by kind ──────────────────────────
@@ -156,7 +189,7 @@ export const UI_GLYPH_ART_IDS: readonly string[] = GAME_ICON_NAMES
 export const ART_BRAND = {
   /** The wordmark. The PWA manifest and every portal read it at fixed sizes. */
   logo: 'images/logo/logo_512x512.png',
-  /** The greeter on the loading screen — the ant that shouts BOO and giggles. */
+  /** The greeter on the loading screen — the ant that dodges a stomp and taunts the shoe. */
   mascot: 'images/logo/mascot.webp'
 } as const
 
@@ -197,6 +230,9 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, re
   prop: [
     // The seven floor objects, in the order a campaign meets them.
     'crumbs', 'honey', 'salt', 'sweeper', 'magnet', 'cobweb', 'conveyor',
+    // The Shoebox Trial's present, dropped in by a level rather than laid out.
+    // (Its sibling the SLICK lane is never painted — see `paintHazard`.)
+    'shoebox',
     // The boss egg pod, and the coin the piñata fly drops.
     'pod', 'coin',
     // The brood: the ant egg and Roach Prime's capsule, each a four-panel crack
@@ -213,9 +249,10 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, re
     // The burst behind a comic word, the stink bug's haze, the salt cloud, and
     // the spark a ricochet throws.
     'burst', 'haze', 'salt-cloud', 'spark',
-    // The scorch a Fever stomp leaves, and the soft puff every particle bucket
-    // tints per emitter (greyscale by contract — see `artSheet.ts`).
-    'scorch', 'smoke',
+    // The scorch a Fever stomp leaves, the soft puff every particle bucket
+    // tints per emitter, and the goo droplet every burst throws (both greyscale
+    // by contract — see `artSheet.ts`).
+    'scorch', 'smoke', 'goo-drop',
     // The floor decals, one four-panel VARIATION strip each. Two and not three:
     // `ooze` and `bubble` already share one picture in `paintSplat` and share
     // this one, while `confetti` branches to chips and gets its own. Greyscale
@@ -223,10 +260,22 @@ export const ART_CATALOGUE: Record<Exclude<ArtKind, 'bug' | 'shoe' | 'boss'>, re
     // of, which is why there cannot be one file per bug colour.
     'splat', 'splat-confetti'
   ],
-  // One seamless floor tile per world. The ids are keyed on the world NUMBER
-  // rather than its theme name so `floorArt` can build the id from the level
-  // without a lookup table that could drift out of step with `stages.ts`.
-  bg: ['floor-1', 'floor-2', 'floor-3', 'floor-4'],
+  // ── One seamless tile per FLOOR, and there are forty floors ──
+  //
+  // The four a world ships with keep ids built from the world NUMBER rather
+  // than its theme name, so `floorArt` can derive them from the level without a
+  // lookup table that could drift out of step with `stages.ts`.
+  //
+  // The other thirty-six are keyed on the floor's own id, because that is what
+  // they are paintings OF — `picnic-planks` is the picnic table with the
+  // blanket off it, and no formula relates it to the level it appears on. They
+  // were deliberately absent from this list while they were procedural: a
+  // catalogue entry is what makes the preloader ask for a file, and thirty-six
+  // entries with no files behind them is thirty-six 404s on a portal that
+  // grades them. They belong here now because they are being painted; an id
+  // whose painting has not landed yet is still free at runtime (the floor draws
+  // itself) but WILL be fetched, so keep this list and the folder in step.
+  bg: ['floor-1', 'floor-2', 'floor-3', 'floor-4', ...LEVEL_FLOOR_ART_IDS],
   // The DOM's own art — the result banner and the six HUD marks, shown through
   // `ArtIcon` and `FReward` (see `uiArt.ts`) — and then one slot for every other
   // glyph in the icon set, shown through `GameIcon`.

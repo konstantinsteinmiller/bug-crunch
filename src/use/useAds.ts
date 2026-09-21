@@ -26,8 +26,9 @@ import { isRewardedThrottled, recordRewardedGranted } from '@/use/useRewardedThr
 import { isAdShowing, isGamePaused, acquireAppPause } from '@/use/useGamePause'
 import { installGamePauseAudio } from '@/use/useGamePauseAudio'
 import { __audioDebugSnapshot, killOneShotSfx } from '@/use/useAssets'
+import { holdSilence } from '@/use/audioGuard'
 import { isDebug } from '@/use/useMatch'
-import { forceStopMusic } from '@/use/useSound'
+import { forceStopMusic, resumeMusicAfterAd } from '@/use/useSound'
 
 const provider: AdProvider = resolveAdProvider({
   flags: { isCrazyWeb, isWaveDash, isItch, isGlitch, isGameDistribution, isPlaygama, isGamepix, isGameMonetize, isYandex, isPoki },
@@ -147,11 +148,28 @@ const AUDIO_DRAIN_MS = 200
 //   • AD_MAX_MS   — it opened, but never reported finishing. A generous ceiling
 //     that no legitimate interstitial reaches.
 //
-// Hitting either cap only releases the WAIT. The provider's own promise is left
-// alone to settle whenever it likes; `isAdShowing` is dropped in the `finally`
-// below either way, so audio and the loop always come back.
+// Hitting either cap releases the WAIT and the gameplay gate — never the ad
+// itself. The provider's promise is left to settle whenever it likes, and that
+// is where the second half of the job starts; see `runAd`.
 const AD_OPEN_MS = 6000
 const AD_MAX_MS = 60000
+
+/**
+ * How long the AUDIO stays held for a break that has neither opened nor
+ * answered — measured from the request, and deliberately longer than
+ * `AD_OPEN_MS`.
+ *
+ * "Never opened within 6 s" is not "never going to open". Measured against the
+ * real Poki core in Inspector mode, with the house-ad video slow to arrive: the
+ * ad overlay was already up and loading, `onStart` came 7.7 s after the call —
+ * and the old code, having handed everything back at 6 s, resumed the
+ * AudioContext and restarted the music UNDER that overlay. SDK-internal
+ * timeouts (Poki's own 5 s VAST fetch, IMA's load timeouts) bound how late a
+ * real ad can still open; 20 s covers them. An SDK that truly never answers
+ * (the Edge case above) costs the player that much silence on the result
+ * screen — not a frozen game, and not audio under an ad.
+ */
+const AD_AUDIO_GRACE_MS = 20000
 
 /**
  * Resolve when `call` settles, or when the caps above expire — whichever comes
@@ -195,6 +213,121 @@ const awaitAdBounded = (call: Promise<unknown>, hasOpened: () => boolean): Promi
     maxTimer = setTimeout(() => finish('never finished'), AD_MAX_MS)
   })
 
+// ─── The ad gate ────────────────────────────────────────────────────────────
+//
+// `isAdShowing` is one flag, but more than one hold can want it at once: the
+// request in flight, and a break that OPENED after its own request had already
+// been let go by a cap. A counter, so neither can drop the other's.
+let adGateHolds = 0
+const holdAdGate = (): (() => void) => {
+  adGateHolds += 1
+  isAdShowing.value = true
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    adGateHolds = Math.max(0, adGateHolds - 1)
+    if (adGateHolds === 0) isAdShowing.value = false
+  }
+}
+
+/**
+ * Run ONE provider call as an ad, under the full audio guarantee. Every
+ * placement on every provider goes through here.
+ *
+ *  1. Before the SDK is even asked: the music is hard-stopped (its play intent
+ *     cleared, so nothing can restart it under the ad), in-flight one-shots are
+ *     killed, and TWO holds are taken — the gameplay gate (`isAdShowing` →
+ *     `isGamePaused` → render loop, gameplay bracket, and one audio slot via
+ *     `useGamePauseAudio`) and a silence slot of the ad's own. While either is
+ *     held every AudioContext on the page is suspended and every <audio>
+ *     element paused (`audioGuard`), including ones created mid-ad.
+ *
+ *  2. The WAIT ends when the provider settles or a cap expires, and the gate is
+ *     released with it so the game is never stranded. The silence slot is NOT:
+ *     it is held until the provider settles, or `AD_AUDIO_GRACE_MS` passes
+ *     with no ad on screen, or `AD_MAX_MS` passes regardless. A break the caps
+ *     gave up on is still a break the SDK is running.
+ *
+ *  3. An ad that opens AFTER the wait was released takes both holds again and
+ *     keeps them until the provider settles (or `AD_MAX_MS` from the open).
+ *     This used to call the audio kill and flip `isAdShowing` true from the
+ *     impression callback AFTER the `finally` that clears it had already run:
+ *     nothing ever cleared it again, and the game sat paused and silent for
+ *     the rest of the session. If that late open cut music that was meant to
+ *     be playing, the music is restarted when the late ad is done — the only
+ *     restart that can still happen, because the caller's own post-ad restart
+ *     already ran at the cap.
+ *
+ * Every hold is released exactly once, whichever path gets there first.
+ */
+const runAd = async <T>(
+  kind: 'rewarded' | 'interstitial',
+  start: (onImpression: () => void) => Promise<T>
+): Promise<void> => {
+  forceStopMusic()
+  killOneShotSfx()
+  const releaseGate = holdAdGate()
+  const releaseAudio = holdSilence()
+
+  let opened = false
+  let settled = false
+  let waitOver = false
+  const timers: Array<ReturnType<typeof setTimeout>> = []
+  const clearTimers = (): void => { for (const t of timers.splice(0)) clearTimeout(t) }
+
+  let lateRelease: (() => void) | null = null
+  let musicCutLate = false
+  const endLate = (): void => {
+    if (!lateRelease) return
+    const release = lateRelease
+    lateRelease = null
+    release()
+    if (musicCutLate) {
+      musicCutLate = false
+      resumeMusicAfterAd()
+    }
+  }
+
+  const onImpression = (): void => {
+    const lateOpen = waitOver && !settled && !lateRelease && !opened
+    opened = true
+    // An ad is on screen: whatever started sounding since the request goes too.
+    const musicWasWanted = forceStopMusic() === true
+    killOneShotSfx()
+    if (!lateOpen) return
+    musicCutLate = musicWasWanted
+    const gate = holdAdGate()
+    const audio = holdSilence()
+    const ceiling = setTimeout(endLate, AD_MAX_MS)
+    lateRelease = () => { clearTimeout(ceiling); gate(); audio() }
+    console.warn(`${TAG} ${kind} opened AFTER its wait was released — holding the gate until the SDK finishes`)
+  }
+
+  let call: Promise<T> | null = null
+  try {
+    await new Promise<void>((resolve) => setTimeout(resolve, AUDIO_DRAIN_MS))
+    dlog(`${TAG} ▶ ${kind} START (provider=${provider.name})`)
+    call = start(onImpression)
+    const onSettled = (): void => {
+      settled = true
+      clearTimers()
+      releaseAudio()
+      endLate()
+    }
+    call.then(onSettled, onSettled)
+    timers.push(setTimeout(() => { if (!opened) releaseAudio() }, AD_AUDIO_GRACE_MS))
+    timers.push(setTimeout(releaseAudio, AD_MAX_MS))
+    await awaitAdBounded(call, () => opened)
+  } finally {
+    waitOver = true
+    releaseGate()
+    // The SDK was never reached (or threw before handing back a promise): there
+    // is no break in flight to keep silent for.
+    if (!call) releaseAudio()
+  }
+}
+
 export const showRewardedAd = async (): Promise<boolean> => {
   // Throttle gate: refuse the SDK call once the player has burned
   // their 10-min budget. Returning `false` here matches the
@@ -202,36 +335,21 @@ export const showRewardedAd = async (): Promise<boolean> => {
   // already hidden via `isRewardedReady`, so this branch only fires
   // if a placement somehow bypassed that check.
   if (isRewardedThrottled.value) return false
-  // Flip `isAdShowing` BEFORE the await. It OR's into `isGamePaused`,
-  // which the audio orchestrator (`useGamePauseAudio`) watches with
-  // `flush: 'sync'` — so the renderer pause AND the audio suspend both
-  // fire inside THIS call stack, before the SDK call yields. GamePix's
-  // rewarded ad opens its overlay synchronously and never fires the
-  // platform pause callback for rewarded placements, so this flip is the
-  // only signal that mutes audio + physics underneath the ad.
-  // Kill any in-flight one-shot SFX before requesting the ad so nothing tails
-  // into it (the ctx-suspend below only freezes Web Audio; an early gate-drop
-  // would otherwise let a stray one-shot resume under the ad).
-  forceStopMusic()
-  killOneShotSfx()
-  dlog(`${TAG} ▶ rewarded START (provider=${provider.name})`)
-  isAdShowing.value = true
+  // The gate + audio holds are taken synchronously inside `runAd`, before its
+  // first await — so the renderer pause AND the audio suspend both fire in THIS
+  // call stack, before the SDK call yields. GamePix's rewarded ad opens its
+  // overlay synchronously and never fires the platform pause callback for
+  // rewarded placements, so this is the only signal that mutes audio + physics
+  // underneath the ad. The same 200 ms drain the midgame path takes runs before
+  // the provider is asked: a player who claims the ×3 on a stage-clear jingle
+  // would otherwise hear the tail cut into the ad.
+  let granted = false
   try {
-    // Same drain the midgame path takes, and for the same reason GamePix QA
-    // gave us: `suspend()` and `pause()` apply synchronously on the main
-    // thread, but the audio device can still be holding a buffer or two. The
-    // rewarded path was skipping it purely because it was written first — a
-    // player who claims the ×3 on a stage-clear jingle would hear the tail cut
-    // into the ad exactly as they would have on a midgame.
-    await new Promise((r) => setTimeout(r, AUDIO_DRAIN_MS))
-    // Bounded like the interstitial below — a rewarded that never answers would
-    // otherwise hold `adInFlight` forever, leaving the button dead and the game
-    // paused behind a video that never plays.
-    let opened = false
-    let granted = false
-    const call = provider.showRewardedAd(() => { opened = true })
-    call.then((ok) => { granted = ok }, () => { granted = false })
-    await awaitAdBounded(call, () => opened)
+    await runAd('rewarded', (onImpression) => {
+      const call = provider.showRewardedAd(onImpression)
+      call.then((ok) => { granted = ok }, () => { granted = false })
+      return call
+    })
     if (granted) {
       recordRewardedGranted()
     } else if (provider.isAdsBlocked.value && !provider.ownsAdBlockUi) {
@@ -247,67 +365,25 @@ export const showRewardedAd = async (): Promise<boolean> => {
     // gameplay resume — the "cut off due to error" case QA called out.
     console.warn(`${TAG} ✖ rewarded ERROR (provider=${provider.name}) — resuming`, e)
     return false
-  } finally {
-    // Dropping `isAdShowing` clears the gate (assuming no other reason is
-    // active) → orchestrator resumes audio synchronously, render loop
-    // restarts. Runs on success, no-fill, AND the throw path above.
-    isAdShowing.value = false
   }
 }
 
 export const showMidgameAd = async (): Promise<void> => {
-  // The audio kill: hard-stop the music, cut every in-flight one-shot SFX so
-  // nothing tails into the ad, and flip the pause gate (`isAdShowing` →
-  // `isGamePaused`, which `useGamePauseAudio` watches with `flush: 'sync'` to
-  // suspend Web Audio + pause every tracked HTMLAudio in this same call
-  // stack). Hard-stopping the music means it's never queued for auto-resume,
-  // so it can't restart UNDER the ad; the next round's `startBattleMusic()`
-  // brings it back.
-  const killAudioForAd = (): void => {
-    forceStopMusic()
-    killOneShotSfx()
-    isAdShowing.value = true
-  }
-  // Set from the provider's impression callback: the ad genuinely opened, so the
-  // short "never opened" cap must not fire on a real video.
-  let opened = false
+  // Audio is killed UP FRONT on every provider — including the ones that set
+  // `managesMidgameAudio` (Poki, Yandex), as it already was in practice — and
+  // again on the impression edge. See `runAd` for the whole guarantee. GamePix-
+  // style SDKs resolve `interstitialAd()` before the ad visually closes, so up
+  // front is the only safe moment; and a hard-stopped track is never queued for
+  // auto-resume, so it cannot restart UNDER the ad. The next round's
+  // `startBattleMusic()` brings it back (or `resumeMusicAfterAd()`, for the
+  // placements that interrupt a live run).
   try {
-    if (provider.managesMidgameAudio) {
-      // Provider mutes audio only when the ad ACTUALLY opens — it invokes
-      // `killAudioForAd` from its impression callback. A no-fill (Yandex
-      // flashes the container open + closed, or it never opens) therefore
-      // leaves the win/lose result stinger + music untouched, instead of
-      // cutting them for an ad the player never saw. The reward-screen
-      // interstitial is already delayed by REWARD_AD_DELAY_MS in GameScene so
-      // the sound gets its window before we even request the ad.
-      killAudioForAd()
-      await new Promise<void>((resolve) => setTimeout(resolve, AUDIO_DRAIN_MS))
-      dlog(`${TAG} ▶ interstitial START (provider=${provider.name}, mute-on-open)`)
-      await awaitAdBounded(
-        provider.showMidgameAd(() => { opened = true; killAudioForAd() }),
-        () => opened
-      )
-    } else {
-      // Default: kill audio BEFORE the SDK shows. GamePix-style SDKs resolve
-      // `interstitialAd()` before the ad visually closes, so up front is the
-      // only safe moment to mute; then yield AUDIO_DRAIN_MS so the audio
-      // thread flushes its buffer before the ad layer paints (GamePix
-      // submission is rejected if any background audio is still audible).
-      killAudioForAd()
-      await new Promise<void>((resolve) => setTimeout(resolve, AUDIO_DRAIN_MS))
-      dlog(`${TAG} ▶ interstitial START (provider=${provider.name})`)
-      await awaitAdBounded(
-        provider.showMidgameAd(() => { opened = true }),
-        () => opened
-      )
-    }
+    await runAd('interstitial', (onImpression) => provider.showMidgameAd(onImpression))
     dlog(`${TAG} ⏹ interstitial END (provider=${provider.name})`)
   } catch (e) {
     // Same "cut off due to error" safety net as the rewarded path: never
     // leave the game muted/paused if the interstitial backend throws.
     console.warn(`${TAG} ✖ interstitial ERROR (provider=${provider.name}) — resuming`, e)
-  } finally {
-    isAdShowing.value = false
   }
 }
 

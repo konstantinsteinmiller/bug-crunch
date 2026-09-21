@@ -115,6 +115,24 @@ const flowStyle = computed(() => ({
   width: `${flow.value.length}px`,
   rotate: `${flow.value.angle}deg`
 }))
+
+/**
+ * The flick's line: THROUGH the target and on toward the group it is aimed at.
+ * Drawn from a little behind the target so the swipe visibly starts before it,
+ * and never shorter than a readable throw.
+ */
+const flickStyle = computed(() => {
+  const len = Math.max(120, flow.value.length)
+  const back = 48
+  const a = (flow.value.angle * Math.PI) / 180
+  return {
+    left: `${props.x - Math.cos(a) * back}px`,
+    top: `${props.y - Math.sin(a) * back}px`,
+    width: `${len + back}px`,
+    rotate: `${flow.value.angle}deg`,
+    '--flick-a': `${flow.value.angle}deg`
+  }
+})
 </script>
 
 <template lang="pug">
@@ -134,12 +152,33 @@ const flowStyle = computed(() => ({
         div.tut__flow-dot
         div.tut__flow-head
 
+      //- ── flick: a swipe THROUGH the target, and the ball it sends ────────
+      //- The same rotated-bar trick as the flow, run fast: a hand swipes the
+      //- length of it and a ghost of the body rolls on down the line after it.
+      div.tut__flick(v-if="gesture === 'flick'" :style="flickStyle")
+        div.tut__flick-line
+        div.tut__flick-ball
+        div.tut__flick-hand(:class="isTouch ? 'is-touch' : 'is-mouse'")
+          svg(v-if="isTouch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round")
+            path(d="M9 11V6a2 2 0 1 1 4 0v5")
+            path(d="M13 8a2 2 0 1 1 4 0v6a6 6 0 0 1-6 6h-1a5 5 0 0 1-4.3-2.4L4 15a1.6 1.6 0 0 1 2.6-1.9L8 15")
+          svg(v-else viewBox="0 0 24 24" fill="currentColor")
+            path(d="M5 3l14 7.5-6 1.6L10.6 19z")
+
       div.tut__stage(:style="stageStyle" :class="`is-${gesture}`")
-        //- drag — the track the hand slides along.
-        div.tut__track(v-if="gesture === 'drag'")
+        //- drag — the track the hand slides along. The skid shares it: the
+        //- difference is that the hand is PRESSED the whole way along.
+        div.tut__track(v-if="gesture === 'drag' || gesture === 'skid'")
 
         //- Everything except a drag lands ON something, so it gets a target.
-        div.tut__target(v-if="gesture !== 'drag' && gesture !== 'flow'")
+        div.tut__target(v-if="gesture !== 'drag' && gesture !== 'flow' && gesture !== 'skid'")
+
+        //- double — the swirl the second tap sets off, round the target.
+        div.tut__swirl(v-if="gesture === 'double'")
+
+        //- skid — the press ring riding along under the hand: a tap that never
+        //- lifted, dragged.
+        div.tut__press(v-if="gesture === 'skid'")
 
         //- hold — the charge METER, drawn a good deal wider than the target it
         //- rings so it reads as a thing that FILLS rather than as a second
@@ -153,7 +192,7 @@ const flowStyle = computed(() => ({
         //- The hand. One glyph, animated per gesture. `watch` and `flow` have
         //- none: there is nothing to do, only something to see.
         div.tut__hand(
-          v-if="gesture !== 'watch' && gesture !== 'flow'"
+          v-if="gesture !== 'watch' && gesture !== 'flow' && gesture !== 'flick'"
           :class="isTouch ? 'is-touch' : 'is-mouse'"
         )
           svg(v-if="isTouch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round")
@@ -164,7 +203,7 @@ const flowStyle = computed(() => ({
 
         //- The ripple, on the gesture that lands: it fires on the same clock
         //- the hand lands on, so cause and effect are one animation.
-        div.tut__ripple(v-if="gesture === 'tap'")
+        div.tut__ripple(v-if="gesture === 'tap' || gesture === 'double'")
 
         //- hold — the payoff, in three pieces on one clock. The ECHO is the
         //- light stomp the press itself lands (the real `press()` does exactly
@@ -740,6 +779,196 @@ const flowStyle = computed(() => ({
     left: 100%
     opacity: 0
 
+// ─── double — the Heel Spin ─────────────────────────────────────────────────
+//
+// Two drops on one spot, fast, and then a swirl goes round the target: the
+// second tap is what makes the spin, so the swirl is on the SECOND drop's
+// frame and not the first. 1.8 s, which is a double tap slowed about four
+// times, like every other gesture here.
+
+.is-double .tut__hand
+  animation: tut-double 1.8s ease-in-out infinite
+
+@keyframes tut-double
+  0%
+    translate: -20% -120%
+    scale: 1
+  18%, 22%
+    translate: -20% -46%
+    scale: 0.88
+  30%
+    translate: -20% -80%
+    scale: 0.96
+  38%, 44%
+    translate: -20% -46%
+    scale: 0.88
+  70%, 100%
+    translate: -20% -120%
+    scale: 1
+
+.tut__swirl
+  position: absolute
+  left: 50%
+  top: 50%
+  translate: -50% -50%
+  width: clamp(6rem, 28vmin, 9.5rem)
+  height: clamp(6rem, 28vmin, 9.5rem)
+  border-radius: 999px
+  border: 4px solid transparent
+  border-top-color: rgba(190, 230, 255, 0.95)
+  border-right-color: rgba(190, 230, 255, 0.55)
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.7))
+  opacity: 0
+  animation: tut-swirl 1.8s ease-out infinite
+
+@keyframes tut-swirl
+  0%, 40%
+    opacity: 0
+    rotate: 0deg
+    scale: 0.6
+  46%
+    opacity: 1
+  80%
+    opacity: 0.8
+    rotate: 540deg
+    scale: 1.1
+  92%, 100%
+    opacity: 0
+    rotate: 720deg
+    scale: 1.2
+
+// ─── skid — press, and DRAG ─────────────────────────────────────────────────
+//
+// The drag lesson's track and the tap lesson's press, on one clock: the hand
+// comes down at the left end, STAYS down, and slides right with the press ring
+// riding under it. Faster across than the move lesson's drag, because a skid is
+// a quick plough and a slow one never starts (the foot has to be moving).
+
+.is-skid .tut__hand
+  animation: tut-skid 2.2s ease-in-out infinite
+
+@keyframes tut-skid
+  0%
+    translate: -180% -130%
+    scale: 1
+  14%
+    translate: -180% -46%
+    scale: 0.88
+  24%
+    translate: -180% -46%
+    scale: 0.88
+  54%
+    translate: 80% -46%
+    scale: 0.88
+  66%, 100%
+    translate: 80% -130%
+    scale: 1
+
+.tut__press
+  position: absolute
+  left: 50%
+  top: 50%
+  width: clamp(2.4rem, 11vmin, 3.8rem)
+  height: clamp(2.4rem, 11vmin, 3.8rem)
+  border: 3px solid rgba(255, 217, 60, 0.95)
+  border-radius: 999px
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8))
+  opacity: 0
+  animation: tut-press 2.2s ease-in-out infinite
+
+@keyframes tut-press
+  0%, 13%
+    translate: -210% -50%
+    opacity: 0
+  16%, 24%
+    translate: -210% -50%
+    opacity: 1
+  54%
+    translate: 110% -50%
+    opacity: 1
+  60%, 100%
+    translate: 110% -50%
+    opacity: 0
+
+// ─── flick — the kick ───────────────────────────────────────────────────────
+
+.tut__flick
+  position: absolute
+  height: 0
+  transform-origin: 0 0
+  pointer-events: none
+
+.tut__flick-line
+  position: absolute
+  left: 0
+  top: -1.5px
+  width: 100%
+  height: 3px
+  border-radius: 999px
+  background: repeating-linear-gradient(90deg, rgba(255, 217, 60, 0.95) 0 8px, rgba(255, 217, 60, 0) 8px 16px)
+  opacity: 0.85
+
+// A ghost of the body, rolling on down the line AFTER the hand has swiped
+// through it — the swipe and the roll are cause and effect, so the roll starts
+// on the swipe's frame.
+.tut__flick-ball
+  position: absolute
+  top: 50%
+  width: clamp(1.2rem, 5vmin, 1.8rem)
+  height: clamp(1.2rem, 5vmin, 1.8rem)
+  translate: -50% -50%
+  border-radius: 999px
+  border: 3px dashed rgba(255, 255, 255, 0.95)
+  background: rgba(66, 225, 122, 0.35)
+  opacity: 0
+  animation: tut-flick-ball 1.7s cubic-bezier(0.2, 0.7, 0.3, 1) infinite
+
+@keyframes tut-flick-ball
+  0%, 34%
+    left: 48px
+    opacity: 0
+    rotate: 0deg
+  38%
+    opacity: 1
+  90%
+    opacity: 0.9
+  100%
+    left: 100%
+    opacity: 0
+    rotate: 720deg
+
+.tut__flick-hand
+  position: absolute
+  top: 0
+  width: clamp(1.9rem, 8.5vmin, 2.8rem)
+  height: clamp(1.9rem, 8.5vmin, 2.8rem)
+  color: #ffd93c
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.85))
+  // Counter-rotated so the hand stays upright whatever angle the line is at —
+  // a hand swiping upside down reads as a different gesture.
+  rotate: calc(-1 * var(--flick-a, 0deg))
+  animation: tut-flick-hand 1.7s ease-in infinite
+
+  svg
+    width: 100%
+    height: 100%
+
+@keyframes tut-flick-hand
+  0%
+    left: 0
+    translate: -40% -60%
+    opacity: 0
+  8%
+    opacity: 1
+  36%
+    left: 96px
+    translate: -40% -60%
+    opacity: 1
+  46%, 100%
+    left: 140px
+    translate: -40% -60%
+    opacity: 0
+
 // ─── The progress ring ──────────────────────────────────────────────────────
 
 .tut__ring
@@ -774,6 +1003,7 @@ const flowStyle = computed(() => ({
 // teaches the opposite of the thing.
 @media (prefers-reduced-motion: reduce)
   .tut__hand, .tut__target, .tut__ripple, .tut__charge-fill, .tut__charge-mark,
-  .tut__no, .tut__flow-dot, .tut__echo, .tut__flash, .tut__wave
+  .tut__no, .tut__flow-dot, .tut__echo, .tut__flash, .tut__wave,
+  .tut__swirl, .tut__press, .tut__flick-ball, .tut__flick-hand
     animation-duration: 4.8s
 </style>

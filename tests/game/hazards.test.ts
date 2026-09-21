@@ -62,8 +62,11 @@ describe('the hazard set', () => {
   })
 
   it('every hazard actually appears somewhere in the campaign', () => {
-    const used = new Set(allLevels().flatMap((l) => l.hazards))
-    for (const h of HAZARDS) expect(used.has(h.id)).toBe(true)
+    // Laid out by a level, dropped in by a Shoebox Trial, or spilt by a twist.
+    const used = new Set<string>(allLevels().flatMap((l) => l.hazards))
+    if (allLevels().some((l) => l.trial)) used.add('shoebox')
+    if (allLevels().some((l) => l.twist === 'spill')) used.add('slick')
+    for (const h of HAZARDS) expect(used.has(h.id), h.id).toBe(true)
   })
 })
 

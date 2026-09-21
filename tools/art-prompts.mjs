@@ -112,9 +112,48 @@ const parked = [
 const stemOf = (f) => basename(f).replace(/\.[^.]+$/, '')
 const paintingFor = (stem) => paintings.find((f) => stemOf(f) === stem)
 
-const stateOf = (stem) => {
+// ─── A file two sheets paint ─────────────────────────────────────────────────
+//
+// Every icon on a contact sheet also has a still of its own, and `UI_CUT_FROM`
+// in the manifest says which of the two its file is cut from (the slicer reads
+// the same answer out of `cut-from.json`). A sheet EVERY one of whose files is
+// cut from another painting is SUPERSEDED: whether it is painted, stale or not
+// painted at all changes nothing that ships, so it must never read as "to paint"
+// — the Art Desk queues exactly those, and would spend a generation per sheet on
+// art the slicer will not cut.
+const cutSources = manifest.cutSources()
+const ownership = (row) => {
+  const targets = row.targets ?? [row.target]
+  const elsewhere = targets.filter((t) => cutSources[t]?.from && cutSources[t].from !== row.stem)
+  const open = targets.filter((t) => cutSources[t] && !cutSources[t].from)
+  return { targets, elsewhere, open }
+}
+
+const stateOf = (row) => {
+  const stem = row.stem
   const ref = join(OUT, `${stem}.png`)
   const rev = revOf(ref)
+  const own = ownership(row)
+  if (own.targets.length && own.elsewhere.length === own.targets.length) {
+    const from = [...new Set(own.elsewhere.map((t) => cutSources[t].from))]
+    return {
+      mark: '–',
+      state: `superseded — ${own.targets.length > 1 ? `all ${own.targets.length} files it paints are` : 'the file it paints is'}`
+        + ` cut from ${from.length > 3
+          ? (from.every((f) => f.startsWith('still-')) ? 'their own single-icon stills' : `${from.length} other paintings`)
+          : from.map((f) => `\`${f}\``).join(', ')}`
+        + ' (`UI_CUT_FROM`); nothing to paint',
+      rev
+    }
+  }
+  const s = paintState(stem, rev)
+  const notes = []
+  if (own.elsewhere.length) notes.push(`${own.elsewhere.length} of its ${own.targets.length} files are cut from another painting (\`UI_CUT_FROM\`)`)
+  if (own.open.length) notes.push(`**${own.open.length} file(s) two sheets paint and nothing settles — the slicer refuses them; set \`UI_CUT_FROM\`**`)
+  return notes.length ? { ...s, state: `${s.state}; ${notes.join('; ')}` } : s
+}
+
+const paintState = (stem, rev) => {
   const painting = paintingFor(stem)
   if (!painting) {
     const old = parked.find((p) => stemOf(p.f) === stem)
@@ -141,9 +180,9 @@ const stateOf = (stem) => {
 
 const base = manifest.sheetRows()
 const rowTarget = new Map(base.map((r) => [r.stem, r.target]))
-const rows = base.map((r) => ({ ...r, ...stateOf(r.stem) }))
+const rows = base.map((r) => ({ ...r, ...stateOf(r) }))
 
-const tally = { '✓': 0, '!': 0, '?': 0, '·': 0 }
+const tally = { '✓': 0, '!': 0, '?': 0, '·': 0, '–': 0 }
 for (const r of rows) tally[r.mark]++
 
 const status = [
@@ -153,7 +192,8 @@ const status = [
   'slicer\'s receipt at the moment it was written. Re-run `pnpm art:prompts`',
   'after painting or slicing anything.',
   '',
-  `**${tally['✓']} sliced · ${tally['!']} need a repaint · ${tally['?']} painted, unreceipted · ${tally['·']} outstanding**`,
+  `**${tally['✓']} sliced · ${tally['!']} need a repaint · ${tally['?']} painted, unreceipted · ${tally['·']} outstanding`
+    + ` · ${tally['–']} superseded**`,
   '',
   '| | Sheet | Prompt block in | Reference | State |',
   '| --- | --- | --- | --- | --- |',
@@ -170,12 +210,16 @@ const status = [
   '  run `pnpm slice-sheets --dry` and read what it says it would write.',
   '* **·** nothing painted for this one yet — attach the reference and paste its',
   '  block from the prompt file named above.',
+  '* **–** superseded: every file this sheet paints is cut from ANOTHER painting —',
+  '  each icon on a contact sheet also has a still of its own, and `UI_CUT_FROM` in',
+  '  `src/game/artSheet.ts` says which of the two ships (the slicer reads it from',
+  '  `cut-from.json`). Nothing to paint; switch a slot there to use this one.',
   ''
 ].join('\n')
 
 if (!CHECK) {
   writeFileSync(join(OUT, 'PAINT-STATUS.md'), status, 'utf-8')
-  console.log(`  ✓ PAINT-STATUS.md  ${tally['✓']} sliced, ${tally['!']} stale, ${tally['?']} uncut, ${tally['·']} outstanding`)
+  console.log(`  ✓ PAINT-STATUS.md  ${tally['✓']} sliced, ${tally['!']} stale, ${tally['?']} uncut, ${tally['·']} outstanding, ${tally['–']} superseded`)
 }
 
 const count = (what) => base.filter((r) => r.what === what).length

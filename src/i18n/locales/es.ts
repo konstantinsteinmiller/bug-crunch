@@ -132,7 +132,20 @@ export default {
     'starsTotal': '{n} estrellas',
     'recordScore': '{n} puntos',
     'recordBeat': 'Récord anterior: {n}',
-    'chestCoins': '+{n} monedas'
+    'chestCoins': '+{n} monedas',
+    'move': '¡Nuevo movimiento!'
+  },
+  'moves': {
+    'spin': 'Giro de talón',
+    'skid': 'Derrape',
+    'quake': 'Pisotón sísmico',
+    'echo': 'Pisotón eco'
+  },
+  'party': {
+    'title': '¡Fiesta de bichos!',
+    'count': '{n} bichos',
+    'best': 'Récord: {n}',
+    'newBest': '¡Nuevo récord de fiesta!'
   },
   'fever': {
     'filling': 'Fiebre Splat: {n}% llena',
@@ -227,7 +240,12 @@ export default {
     'squishes': 'Bichos aplastados',
     'starsEarned': '{n} de 3 estrellas',
     'rankOf': 'de {n}',
-    'worldUnlocked': '¡{n} desbloqueado!'
+    'worldUnlocked': '¡{n} desbloqueado!',
+    'peekNext': 'Echa un vistazo a {n}',
+    'secondWind': 'Segundo aire: tu próximo intento empieza con el frasco lleno',
+    'hintSlam': 'Consejo: mantén pulsado para aplastar los caparazones',
+    'hintAvoid': 'Consejo: no pises los que tienen pinchos',
+    'missed': 'Faltaban {n} bichos'
   },
   'leaderboard': {
     'title': 'Clasificación',
@@ -289,8 +307,8 @@ export default {
     'singleTapHint': 'Toca donde sea y tu pie vuela al bicho más cercano.'
   },
   'loading': {
-    'boo': '¡Bu!',
-    'laugh': '¡Ji ji!',
+    'uhOh': '¡Oh, oh!',
+    'missed': '¡No me diste!',
     'tooLong': 'Sigue cargando… ¿revisas tu conexión?'
   },
   'saveStatus': {

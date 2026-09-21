@@ -11,9 +11,10 @@
  * the published rows stop at 100, so on a board of thousands almost everyone is
  * below the cut and could otherwise only be told "#100+".
  *
- * THE SCORE IS THE HIGHEST STAGE REACHED. Not a point total — the game's whole
- * progression is "how deep did you get", so the board is a depth chart and
- * `score` is a small integer that grows by one at a time.
+ * THE SCORE IS THE BEST SINGLE-LEVEL POINT TOTAL (`bestScore` in the client) —
+ * hundreds for a first session, tens of thousands for an ace. `squad` is the
+ * wire name of the second column, kept so the schema matches the other games'
+ * boards; Bug Crunch puts the deepest level cleared (`bestLevel`, 1–40) in it.
  *
  * Design rules, in the order they matter:
  *
@@ -67,22 +68,27 @@ const WRITE_COOLDOWN_MS = 3_000
 /**
  * The only real cheat cap, and it is deliberately generous.
  *
- * Stages are unbounded by design (the generator runs forever), so this cannot
- * be "the last stage" — it is a bound on the absurd. A player physically cannot
- * clear a stage in under ~30 s, so 2 000 stages is well over a day of unbroken
- * play; anything past it is a fabricated request. A false reject silently loses
- * somebody's genuine best, which is far worse than admitting an outlier, so the
- * bound is set where no honest run can ever reach it.
+ * A bound on the absurd, not on the good. The biggest level quota is ~120 bugs,
+ * the richest bug is worth 120, the chain saturates at ×50 and Fever adds ×1.5,
+ * so even a physically impossible run — every squish on the richest bug at a
+ * full chain in Fever, plus a boss — lands around a million. Real aces post in
+ * the tens of thousands. A false reject silently loses somebody's genuine best,
+ * which is far worse than admitting an outlier, so the bound is set where no
+ * honest run can ever reach it.
+ *
+ * (This was `MAX_STAGE = 2 000`, inherited from a board whose score was a stage
+ * count. Against Bug Crunch's point totals it refused every run over 2 000 —
+ * i.e. every good player.)
  */
-const MAX_STAGE = 2_000
-/** Squad is capped in the client at `MAX_SQUAD` = 4 000 (raised from 1 600 when
- *  the road went endless); the headroom here is for the next raise. */
-const MAX_SQUAD = 100_000
+const MAX_SCORE = 10_000_000
+/** Deepest level cleared. The campaign is 40 levels; the headroom is for more
+ *  worlds. */
+const MAX_LEVEL = 1_000
 
 const plausible = (score: number, squad: number): boolean =>
   Number.isInteger(score) && Number.isInteger(squad) &&
-  score >= 0 && score <= MAX_STAGE &&
-  squad >= 0 && squad <= MAX_SQUAD
+  score >= 0 && score <= MAX_SCORE &&
+  squad >= 0 && squad <= MAX_LEVEL
 
 /** `[a-zA-Z0-9_-]`, 8–64 — the same shape the client mints. */
 const validId = (id: unknown): id is string =>
